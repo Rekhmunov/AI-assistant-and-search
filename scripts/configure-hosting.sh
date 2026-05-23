@@ -49,6 +49,7 @@ fi
 
 cat > .env <<EOF
 # Сгенерировано scripts/configure-hosting.sh $(date -Iseconds)
+PROXY_PORT=${PROXY_PORT}
 ENVIRONMENT=production
 DEBUG=false
 SKIP_INIT_DATA_VALIDATION=false
