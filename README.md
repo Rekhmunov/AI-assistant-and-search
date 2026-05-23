@@ -11,12 +11,24 @@ admin/       — React SPA для рассылок и метрик
 nginx/       — reverse proxy (production)
 ```
 
-## Быстрый старт (Docker)
+## Быстрый старт (локально)
 
 ```bash
 cp .env.example .env
 docker compose up --build
 ```
+
+## Деплой на VPS (production)
+
+Полная инструкция: **[docs/DEPLOY.md](docs/DEPLOY.md)**
+
+```bash
+cp .env.production.example .env   # заполнить секреты и домены
+nano nginx/nginx.prod.conf        # app / api / admin хосты
+docker compose -f docker-compose.prod.yml up -d --build
+```
+
+ISPmanager: reverse proxy каждого поддомена → `http://127.0.0.1:8080`, SSL через Let's Encrypt.
 
 | Сервис   | URL                    |
 |----------|------------------------|
