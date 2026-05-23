@@ -1,4 +1,8 @@
 .env
+hosting.config
+nginx/nginx.prod.conf
+backups/
+*.tar.gz
 *.pyc
 __pycache__/
 .venv/

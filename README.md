@@ -18,17 +18,22 @@ cp .env.example .env
 docker compose up --build
 ```
 
-## Деплой на VPS (production)
+## Перенос на хостинг (VPS)
 
-Полная инструкция: **[docs/DEPLOY.md](docs/DEPLOY.md)**
+**Инструкция:** [docs/HOSTING.md](docs/HOSTING.md) · [docs/DEPLOY.md](docs/DEPLOY.md)
 
 ```bash
-cp .env.production.example .env   # заполнить секреты и домены
-nano nginx/nginx.prod.conf        # app / api / admin хосты
-docker compose -f docker-compose.prod.yml up -d --build
+cp hosting.config.example hosting.config
+nano hosting.config              # домены app / api / admin
+make configure                   # .env + nginx
+nano .env                        # BOT_TOKEN, Yandex
+make up
+make check
 ```
 
-ISPmanager: reverse proxy каждого поддомена → `http://127.0.0.1:8080`, SSL через Let's Encrypt.
+Архив для SFTP без Git: `make pack`
+
+ISPmanager → proxy на `127.0.0.1:8080`, SSL Let's Encrypt. Сниппет: `hosting/ispmanager-proxy.conf`
 
 | Сервис   | URL                    |
 |----------|------------------------|

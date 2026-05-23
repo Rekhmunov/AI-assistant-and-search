@@ -1,5 +1,7 @@
 # Деплой на VPS (REG.RU + ISPmanager)
 
+> **Быстрый старт переноса:** [HOSTING.md](./HOSTING.md) · чеклист [HOSTING_CHECKLIST.md](../HOSTING_CHECKLIST.md)
+
 ## Готово ли в репозитории?
 
 | Компонент | Статус |
