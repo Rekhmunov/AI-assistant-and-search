@@ -84,6 +84,24 @@ def create_refresh_token(subject: str, settings: Settings | None = None) -> str:
     )
 
 
+def hash_password(password: str) -> str:
+    return pwd_context.hash(password)
+
+
+def verify_password(plain: str, hashed: str) -> bool:
+    return pwd_context.verify(plain, hashed)
+
+
+def create_admin_token(subject: str, settings: Settings | None = None) -> str:
+    settings = settings or get_settings()
+    expire = datetime.now(timezone.utc) + timedelta(hours=settings.admin_session_expire_hours)
+    return jwt.encode(
+        {"sub": subject, "exp": expire, "type": "admin"},
+        settings.jwt_secret,
+        algorithm=settings.jwt_algorithm,
+    )
+
+
 def decode_token(token: str, expected_type: str, settings: Settings | None = None) -> dict[str, Any] | None:
     settings = settings or get_settings()
     try:

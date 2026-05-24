@@ -1,10 +1,11 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user, get_db, get_rate_limiter
+from app.api.deps import get_current_user, get_db, get_rate_limiter, get_redis
+from app.services.app_settings import get_setting
 from app.core.limiter import RateLimiter
 from app.models.user import User
 from app.schemas.search import SearchRequest
@@ -20,6 +21,10 @@ async def search_stream(
     user: Annotated[User, Depends(get_current_user)],
     limiter: Annotated[RateLimiter, Depends(get_rate_limiter)],
 ):
+    redis = await get_redis()
+    if await get_setting("maintenance_mode", db, redis):
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Maintenance mode")
+
     flow = SearchFlowService()
 
     async def event_generator():

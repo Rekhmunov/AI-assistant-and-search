@@ -60,7 +60,10 @@ async def _send_broadcast_async(broadcast_id: str) -> None:
 
         broadcast.sent_count = sent
         broadcast.failed_count = failed
-        broadcast.status = BroadcastStatus.DONE if failed == 0 else BroadcastStatus.DONE
+        if sent == 0 and failed > 0:
+            broadcast.status = BroadcastStatus.FAILED
+        else:
+            broadcast.status = BroadcastStatus.DONE
         await db.commit()
 
     await engine.dispose()

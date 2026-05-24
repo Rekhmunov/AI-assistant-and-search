@@ -40,7 +40,7 @@ ADMIN_KEY_VAL="${ADMIN_API_KEY:-$(gen_secret_24)}"
 POSTGRES_PW_VAL="${POSTGRES_PASSWORD:-$(gen_secret)}"
 
 VITE_URL="https://${API_HOST}"
-CORS="https://${APP_HOST},https://${API_HOST}"
+CORS="https://${APP_HOST},https://${API_HOST},https://${ADMIN_HOST}"
 
 if [ -f .env ] && [ "${FORCE:-0}" != "1" ]; then
   echo ".env уже существует. Для перезаписи: FORCE=1 bash scripts/configure-hosting.sh"
@@ -59,6 +59,8 @@ CORS_ORIGINS=${CORS}
 
 JWT_SECRET=${JWT_SECRET_VAL}
 ADMIN_API_KEY=${ADMIN_KEY_VAL}
+ADMIN_BOOTSTRAP_EMAIL=${ADMIN_BOOTSTRAP_EMAIL:-admin@${DOMAIN}}
+ADMIN_BOOTSTRAP_PASSWORD=${ADMIN_BOOTSTRAP_PASSWORD:-$(gen_secret_24)}
 POSTGRES_USER=postgres
 POSTGRES_PASSWORD=${POSTGRES_PW_VAL}
 POSTGRES_DB=aisearch
@@ -100,6 +102,10 @@ echo "Домены:"
 echo "    Миниапп (MAX): https://${APP_HOST}"
 echo "    API:           https://${API_HOST}"
 echo "    Admin:         https://${ADMIN_HOST}"
+echo ""
+echo "Первый вход в админку (создаётся при старте API, если нет админов):"
+echo "    Email:    ${ADMIN_BOOTSTRAP_EMAIL:-admin@${DOMAIN}}"
+echo "    Пароль:   см. ADMIN_BOOTSTRAP_PASSWORD в .env"
 echo ""
 echo "Дальше:"
 echo "    1) Пропишите BOT_TOKEN и Yandex-ключи в .env (если нужно)"

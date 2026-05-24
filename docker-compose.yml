@@ -67,7 +67,6 @@ services:
       context: ./admin
       args:
         VITE_API_URL: ""
-        VITE_ADMIN_API_KEY: dev-admin-key
     ports:
       - "5174:80"
     depends_on:

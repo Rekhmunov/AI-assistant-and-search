@@ -7,7 +7,7 @@ Perplexity-like мини-приложение в мессенджере MAX: п�
 ```
 backend/     — FastAPI, PostgreSQL, Redis, Celery
 frontend/    — React миниапп (Vite)
-admin/       — React SPA для рассылок и метрик
+admin/       — React SPA: дашборд, рассылки, пользователи, платежи, настройки, аудит
 nginx/       — reverse proxy (production)
 ```
 
@@ -98,7 +98,8 @@ cd admin && npm install && npm run dev
 - `JWT_SECRET` — секрет для JWT
 - `SKIP_INIT_DATA_VALIDATION=false`
 - `YANDEX_FOLDER_ID`, `YANDEX_API_KEY` — без них работают mock-источники и ответы
-- `ADMIN_API_KEY` — заголовок `X-Admin-Key` для админки
+- `ADMIN_BOOTSTRAP_EMAIL` / `ADMIN_BOOTSTRAP_PASSWORD` — первый админ (owner), создаётся при старте, если таблица пуста
+- `ADMIN_API_KEY` — опционально, legacy API-ключ (предпочтительно вход по email/паролю в админке)
 
 ## MAX Bot
 

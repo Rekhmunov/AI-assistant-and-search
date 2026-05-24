@@ -68,6 +68,8 @@ sudo bash scripts/install-docker.sh
 | `api` | A | IP VPS |
 | `admin` | A | IP VPS |
 
+Админка: вход по email/паролю (`ADMIN_BOOTSTRAP_*` в `.env`, первый запуск создаёт owner). В `CORS_ORIGINS` должен быть `https://admin.ваш-домен`.
+
 Подождите 5–30 минут, проверьте: `dig +short app.ваш-домен.ru`
 
 ---

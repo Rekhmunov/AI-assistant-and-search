@@ -40,6 +40,9 @@ class Settings(BaseSettings):
     pro_duration_days: int = 30
 
     admin_api_key: str = ""
+    admin_session_expire_hours: int = 12
+    admin_bootstrap_email: str = ""
+    admin_bootstrap_password: str = ""
 
     @property
     def cors_origin_list(self) -> list[str]:

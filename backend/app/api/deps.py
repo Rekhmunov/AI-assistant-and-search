@@ -11,6 +11,7 @@ from app.core.config import get_settings
 from app.core.database import get_db
 from app.core.limiter import RateLimiter
 from app.core.security import decode_token
+from app.models.admin_user import AdminUser
 from app.models.user import User
 
 security = HTTPBearer(auto_error=False)
@@ -63,9 +64,37 @@ async def get_current_user(
     return user
 
 
+async def get_current_admin(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    creds: Annotated[HTTPAuthorizationCredentials | None, Depends(security)],
+    admin_token: Annotated[str | None, Cookie(alias="admin_token")] = None,
+) -> AdminUser:
+    settings = get_settings()
+    token: str | None = None
+    if creds and creds.credentials:
+        token = creds.credentials
+    elif admin_token:
+        token = admin_token
+
+    if not token:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
+
+    payload = decode_token(token, "admin", settings)
+    if not payload or not payload.get("sub"):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+
+    admin_id = uuid.UUID(payload["sub"])
+    result = await db.execute(select(AdminUser).where(AdminUser.id == admin_id))
+    admin = result.scalar_one_or_none()
+    if not admin or not admin.is_active:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Admin not found")
+    return admin
+
+
 async def verify_admin_api_key(
     x_admin_key: Annotated[str | None, Header(alias="X-Admin-Key")] = None,
 ) -> None:
+    """Legacy header auth; prefer admin session cookie."""
     settings = get_settings()
     if not settings.admin_api_key or x_admin_key != settings.admin_api_key:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")

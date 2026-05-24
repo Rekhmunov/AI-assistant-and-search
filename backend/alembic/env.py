@@ -8,7 +8,16 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from app.core.config import get_settings
 from app.core.database import Base
-from app.models import broadcast, message, subscription, thread, user  # noqa: F401
+from app.models import (  # noqa: F401
+    admin_audit,
+    admin_user,
+    app_setting,
+    broadcast,
+    message,
+    subscription,
+    thread,
+    user,
+)
 
 config = context.config
 if config.config_file_name is not None:

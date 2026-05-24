@@ -18,12 +18,20 @@ class RateLimiter:
         self.redis = redis_client
         self.settings = settings or get_settings()
 
+    async def _search_limit_for_plan(self, plan: Plan) -> int:
+        if plan == Plan.PRO:
+            key = "setting:pro_searches_per_day"
+            default = self.settings.pro_searches_per_day
+        else:
+            key = "setting:free_searches_per_day"
+            default = self.settings.free_searches_per_day
+        cached = await self.redis.get(key)
+        if cached is not None:
+            return int(cached)
+        return default
+
     async def check_search_limit(self, user_id: str, plan: Plan) -> tuple[bool, int, int]:
-        limit = (
-            self.settings.pro_searches_per_day
-            if plan == Plan.PRO
-            else self.settings.free_searches_per_day
-        )
+        limit = await self._search_limit_for_plan(plan)
         key = _day_key("search", user_id)
         count = await self.redis.incr(key)
         if count == 1:
@@ -48,14 +56,21 @@ class RateLimiter:
         val = await self.redis.get(key)
         return int(val) if val else 0
 
+    async def _global_yandex_limit(self) -> int:
+        cached = await self.redis.get("setting:global_yandex_requests_per_day")
+        if cached is not None:
+            return int(cached)
+        return self.settings.global_yandex_requests_per_day
+
     async def check_global_yandex_limit(self) -> bool:
+        limit = await self._global_yandex_limit()
         key = _day_key("yandex_global", "all")
         count = await self.redis.incr(key)
         if count == 1:
             now = datetime.now(MSK)
             midnight = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
             await self.redis.expireat(key, int(midnight.timestamp()))
-        if count > self.settings.global_yandex_requests_per_day:
+        if count > limit:
             await self.redis.decr(key)
             return False
         return True
