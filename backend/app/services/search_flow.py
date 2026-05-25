@@ -15,6 +15,8 @@ from app.models.uploaded_file import UploadedFile
 from app.models.user import User
 from app.services.llm_provider import SearchSource
 from app.services.query_router import QueryRouter
+from app.services.query_rewriter import QueryRewriter
+from app.services.retrieval_quality import assess_retrieval
 from app.services.search_debug import build_debug_trace, build_gpt_messages_preview
 from app.services.search_query import enhance_search_query, is_howto_query, normalize_user_query
 from app.services.source_ranking import rank_sources
@@ -59,11 +61,17 @@ async def _messages_have_debug_trace(db: AsyncSession) -> bool:
     return _debug_trace_column_ok
 
 
+_VALID_INTENTS: frozenset[str] = frozenset(
+    {"factual_current", "howto", "document", "edit_prior", "compare_analyze", "chitchat"}
+)
+
+
 class SearchFlowService:
     def __init__(self):
         self.search = YandexSearchService()
         self.llm = YandexGPTProvider()
         self.router = QueryRouter()
+        self.rewriter = QueryRewriter()
 
     async def _resolve_attachments(
         self,
@@ -173,6 +181,8 @@ class SearchFlowService:
                 "needs_search": route.needs_search,
                 "answer_model": route.answer_model,
                 "reason": route.reason,
+                "intent": route.intent,
+                "policy_version": route.policy_version,
             },
         )
 
@@ -182,33 +192,81 @@ class SearchFlowService:
         sources: list[SearchSource] = []
         sources_json: list[dict] = []
         search_q_sent: str | None = None
+        rewrite_trace: dict | None = None
+        search_attempts: list[dict] = []
+        retrieval_trace: dict | None = None
+        clarification_only = False
 
         try:
             if route.needs_search:
-                search_q_sent = enhance_search_query(
-                    route.search_query,
-                    for_howto=is_howto_query(llm_query) or route.reason.startswith("rules:howto"),
-                )
-                raw_sources = await self.search.search(search_q_sent)
-                sources = rank_sources(
-                    raw_sources,
-                    howto=is_howto_query(llm_query) or route.answer_model == "pro",
-                )
-                sources_json = sources_to_json(sources)
-                yield sse_event("sources", {"sources": sources_json})
+                rewrite = await self.rewriter.rewrite(llm_query, thread_ctx)
+                rewrite_trace = {
+                    "search_queries": rewrite.search_queries,
+                    "needs_clarification": rewrite.needs_clarification,
+                    "clarification_question": rewrite.clarification_question,
+                    "intent": rewrite.intent,
+                    "reason": rewrite.reason,
+                }
+                if rewrite.intent in _VALID_INTENTS:
+                    route.intent = rewrite.intent  # type: ignore[assignment]
+                if rewrite.intent == "howto":
+                    route.answer_model = "pro"
 
+                if rewrite.needs_clarification and rewrite.clarification_question:
+                    clarification_only = True
+                else:
+                    howto = (
+                        route.intent == "howto"
+                        or is_howto_query(llm_query)
+                        or route.reason.startswith("rules:howto")
+                    )
+                    for base_q in rewrite.search_queries[:2]:
+                        search_q_sent = enhance_search_query(base_q, for_howto=howto)
+                        raw_sources = await self.search.search(search_q_sent)
+                        ranked = rank_sources(raw_sources, howto=howto or route.answer_model == "pro")
+                        assessment = assess_retrieval(ranked, llm_query)
+                        search_attempts.append(
+                            {
+                                "query": search_q_sent,
+                                "sources_count": len(ranked),
+                                "retrieval_ok": assessment.ok,
+                                "retrieval_score": assessment.score,
+                                "retrieval_reason": assessment.reason,
+                            }
+                        )
+                        sources = ranked
+                        retrieval_trace = {
+                            "ok": assessment.ok,
+                            "score": assessment.score,
+                            "reason": assessment.reason,
+                        }
+                        if assessment.ok:
+                            break
+
+                    sources_json = sources_to_json(sources)
+                    if sources_json:
+                        yield sse_event("sources", {"sources": sources_json})
+
+            answer_via_search = route.needs_search and not clarification_only
             gpt_preview = build_gpt_messages_preview(
                 self.llm,
                 llm_query=llm_query,
                 sources=sources,
                 history=history,
                 prior_sources_block=prior_sources_block,
-                needs_search=route.needs_search,
+                needs_search=answer_via_search,
                 model=route.answer_model,
             )
 
             full_answer = ""
-            if route.needs_search:
+            if clarification_only and rewrite_trace:
+                text = str(rewrite_trace.get("clarification_question") or "").strip()
+                full_answer = text
+                step = max(1, len(text) // 24)
+                for i in range(0, len(text), step):
+                    chunk = text[i : i + step]
+                    yield sse_event("token", {"text": chunk})
+            elif route.needs_search:
                 async for chunk in self.llm.stream_answer(
                     llm_query,
                     sources,
@@ -245,9 +303,12 @@ class SearchFlowService:
             search_query_sent=search_q_sent,
             sources=sources,
             sources_json=sources_json,
-            needs_search=route.needs_search,
+            needs_search=route.needs_search and not clarification_only,
             answer_model=route.answer_model,
             gpt_messages_preview=gpt_preview,
+            rewrite=rewrite_trace,
+            search_attempts=search_attempts or None,
+            retrieval=retrieval_trace,
         )
 
         trace_payload = debug_trace if await _messages_have_debug_trace(db) else None

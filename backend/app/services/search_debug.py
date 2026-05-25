@@ -44,6 +44,9 @@ def build_debug_trace(
     needs_search: bool,
     answer_model: str,
     gpt_messages_preview: list[dict[str, str]],
+    rewrite: dict[str, Any] | None = None,
+    search_attempts: list[dict[str, Any]] | None = None,
+    retrieval: dict[str, Any] | None = None,
     settings: Settings | None = None,
 ) -> dict[str, Any]:
     s = settings or get_settings()
@@ -56,11 +59,16 @@ def build_debug_trace(
             "search_query": route.search_query,
             "answer_model": route.answer_model,
             "reason": route.reason,
+            "intent": route.intent,
+            "policy_version": route.policy_version,
         },
+        "query_rewrite": rewrite,
         "yandex_search": None
         if not needs_search
         else {
             "query_sent": search_query_sent,
+            "attempts": search_attempts or [],
+            "retrieval": retrieval,
             "sources_count": len(sources),
             "sources": sources_json,
         },
