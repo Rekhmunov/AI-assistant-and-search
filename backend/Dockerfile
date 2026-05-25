@@ -1,5 +1,8 @@
 FROM python:3.12-slim
 
+ARG GIT_COMMIT=unknown
+ENV GIT_COMMIT=${GIT_COMMIT}
+
 WORKDIR /app
 
 RUN apt-get update && apt-get install -y --no-install-recommends build-essential curl \

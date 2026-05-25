@@ -6,9 +6,30 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_db, get_redis
 from app.core.config import get_settings
+from app.services.query_router import POLICY_VERSION
 from app.services.yandex_probe import probe_yandex
 
 router = APIRouter(tags=["health"])
+
+
+def _build_features() -> dict[str, bool]:
+    try:
+        from app.services import currency_rates  # noqa: F401
+
+        currency_cbr = True
+    except ImportError:
+        currency_cbr = False
+    try:
+        from app.services import source_page_fetch  # noqa: F401
+
+        page_fetch = True
+    except ImportError:
+        page_fetch = False
+    return {
+        "policy_v4_persona": POLICY_VERSION.startswith("v4"),
+        "currency_cbr": currency_cbr,
+        "page_fetch": page_fetch,
+    }
 
 
 @router.get("/health")
@@ -74,6 +95,23 @@ async def api_health(db: Annotated[AsyncSession, Depends(get_db)]):
             if settings.yandex_configured
             else "Добавьте YANDEX_FOLDER_ID и YANDEX_API_KEY в .env — см. docs/YANDEX_SETUP.md"
         ),
+    }
+
+
+@router.get("/health/version")
+async def api_health_version():
+    """
+    Версия backend для проверки деплоя (curl /api/health/version).
+    GIT_COMMIT задаётся при сборке образа или в .env.
+    """
+    import os
+
+    settings = get_settings()
+    return {
+        "app": settings.app_name,
+        "policy_version": POLICY_VERSION,
+        "git_commit": os.environ.get("GIT_COMMIT") or "unknown",
+        "features": _build_features(),
     }
 
 

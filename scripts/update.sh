@@ -30,7 +30,8 @@ fi
 echo "==> nginx.prod.conf from hosting.config"
 bash scripts/render-nginx.sh || true
 
-echo "==> Build & restart containers"
+export GIT_COMMIT="$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
+echo "==> Build & restart containers (GIT_COMMIT=${GIT_COMMIT})"
 $COMPOSE build
 $COMPOSE up -d --remove-orphans
 
