@@ -393,10 +393,12 @@ body:has(.page-thread) {
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  width: 40px;
-  height: 40px;
+  width: 32px;
+  height: 32px;
+  margin-left: 2px;
+  padding: 0;
   border: none;
-  border-radius: 12px;
+  border-radius: 8px;
   background: var(--accent);
   color: #fff;
   cursor: pointer;
