@@ -20,9 +20,11 @@ router = APIRouter(prefix="/users", tags=["admin-users"])
 
 
 def _user_out(user: User, searches_today: int = 0) -> UserAdminOut:
+    is_guest = bool(user.guest_key) and not user.email
     return UserAdminOut(
         id=user.id,
         max_user_id=user.max_user_id,
+        email=user.email,
         first_name=user.first_name,
         last_name=user.last_name,
         username=user.username,
@@ -31,6 +33,7 @@ def _user_out(user: User, searches_today: int = 0) -> UserAdminOut:
         created_at=user.created_at,
         deleted_at=user.deleted_at,
         searches_today=searches_today,
+        is_guest=is_guest,
     )
 
 
@@ -49,7 +52,7 @@ async def list_users(
         q = q.where(User.deleted_at.is_(None))
     if search:
         term = f"%{search.strip()}%"
-        filters = [User.username.ilike(term)]
+        filters = [User.username.ilike(term), User.email.ilike(term), User.first_name.ilike(term)]
         if search.strip().isdigit():
             filters.append(User.max_user_id == int(search.strip()))
         q = q.where(or_(*filters))

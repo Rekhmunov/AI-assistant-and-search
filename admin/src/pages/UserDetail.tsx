@@ -5,7 +5,8 @@ import { useAuth } from "../AuthContext";
 
 interface UserRow {
   id: string;
-  max_user_id: number;
+  max_user_id: number | null;
+  email: string | null;
   username: string | null;
   first_name: string | null;
   last_name: string | null;
@@ -13,6 +14,7 @@ interface UserRow {
   plan_expires_at: string | null;
   searches_today: number;
   deleted_at: string | null;
+  is_guest: boolean;
 }
 
 interface ThreadRow {
@@ -64,8 +66,13 @@ export function UserDetailPage() {
     <div>
       <Link to="/users">← Пользователи</Link>
       <h1>
-        {user.first_name} {user.last_name} ({user.max_user_id})
+        {user.first_name || "Пользователь"} {user.last_name || ""}
       </h1>
+      <p className="hint">
+        {user.email && <>Email: {user.email} · </>}
+        {user.max_user_id != null ? <>MAX ID: {user.max_user_id}</> : "MAX не привязан"}
+        {user.is_guest && " · гостевая сессия"}
+      </p>
       <p>
         План: <strong>{user.plan}</strong> · Поисков сегодня: {user.searches_today}
         {user.deleted_at && <span className="badge bad">забанен</span>}

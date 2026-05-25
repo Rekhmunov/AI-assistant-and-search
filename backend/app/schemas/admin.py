@@ -83,7 +83,8 @@ class AudiencePreview(BaseModel):
 
 class UserAdminOut(BaseModel):
     id: UUID
-    max_user_id: int
+    max_user_id: int | None = None
+    email: str | None = None
     first_name: str | None
     last_name: str | None
     username: str | None
@@ -92,6 +93,7 @@ class UserAdminOut(BaseModel):
     created_at: datetime
     deleted_at: datetime | None
     searches_today: int = 0
+    is_guest: bool = False
 
     model_config = {"from_attributes": True}
 
