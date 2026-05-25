@@ -10,6 +10,12 @@ _TYPO_FIXES: list[tuple[re.Pattern[str], str]] = [
 ]
 
 _HOWTO_MARKERS = (
+    "распиш",
+    "составь",
+    "опиши",
+    "расскажи подроб",
+    "курс на",
+    "курс по",
     "как настроить",
     "как подключить",
     "как использовать",
@@ -145,10 +151,31 @@ def query_has_place(query: str, history: list[tuple[str, str]] | None = None) ->
     return False
 
 
+def is_course_program_query(query: str) -> bool:
+    from app.services.currency_rates import is_course_program_query as _is
+
+    return _is(query)
+
+
 def is_currency_rate_query(query: str) -> bool:
     from app.services.currency_rates import is_currency_rate_query as _is
 
     return _is(query)
+
+
+def build_course_search_queries(user_query: str, llm_queries: list[str]) -> list[str]:
+    """Поиск программ/курсов (похудение, обучение), не курс валют."""
+    base = (llm_queries[0] if llm_queries else user_query).strip()
+    u = user_query.lower()
+    b = base.lower()
+    parts = [base]
+    if "программ" not in b and "план" not in b:
+        parts.append("программа")
+    if "похуден" in u and "похуден" not in b:
+        parts.extend(["похудение", "план питания"])
+    primary = " ".join(parts).strip()[:400]
+    secondary = f"{primary} этапы рекомендации"[:400]
+    return [primary, secondary]
 
 
 def build_currency_search_queries(user_query: str, llm_queries: list[str]) -> list[str]:
@@ -226,6 +253,15 @@ def enhance_search_query(
         for token in ("прогноз", "температура"):
             if token not in low:
                 parts.append(token)
+        return " ".join(parts)[:400]
+
+    if is_course_program_query(text):
+        low = text.lower()
+        parts = [text]
+        if "программ" not in low:
+            parts.append("программа")
+        if "похуден" in low:
+            parts.append("похудение план")
         return " ".join(parts)[:400]
 
     if for_currency or is_currency_rate_query(text):

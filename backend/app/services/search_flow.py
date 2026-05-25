@@ -21,9 +21,11 @@ from app.services.facts.pipeline import FactPipeline
 from app.services.facts.verify import verify_answer_against_facts
 from app.services.search_debug import build_debug_trace, build_gpt_messages_preview
 from app.services.search_query import (
+    build_course_search_queries,
     build_currency_search_queries,
     build_weather_search_queries,
     enhance_search_query,
+    is_course_program_query,
     is_currency_rate_query,
     is_howto_query,
     is_weather_query,
@@ -227,13 +229,21 @@ class SearchFlowService:
                     hint_clarify = rewrite.clarification_question
 
                 queries = list(rewrite.search_queries or [route.search_query])
-                howto = route.intent == "howto" or is_howto_query(llm_query)
+                course_program = is_course_program_query(llm_query)
+                howto = (
+                    route.intent == "howto"
+                    or is_howto_query(llm_query)
+                    or course_program
+                )
                 weather = is_weather_query(llm_query)
                 currency = is_currency_rate_query(llm_query)
                 if weather:
                     queries = build_weather_search_queries(llm_query, queries)
                 elif currency:
                     queries = build_currency_search_queries(llm_query, queries)
+                elif course_program:
+                    queries = build_course_search_queries(llm_query, queries)
+                    route.answer_model = "pro"
 
                 def _enhance(q: str) -> str:
                     return enhance_search_query(

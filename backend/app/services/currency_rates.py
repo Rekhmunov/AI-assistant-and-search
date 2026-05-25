@@ -1,6 +1,7 @@
 """Актуальный курс валют ЦБ РФ — без «списка сайтов»."""
 
 import logging
+import re
 from datetime import datetime, timezone
 
 import httpx
@@ -11,6 +12,48 @@ logger = logging.getLogger(__name__)
 
 _CBR_JSON_URL = "https://www.cbr-xml-daily.ru/daily_json.js"
 _TIMEOUT = 8.0
+
+# «Курс» = программа обучения / похудения, не валюта
+_COURSE_PROGRAM_RE = re.compile(
+    r"курс\s+(?:на|по|для)\s+|"
+    r"(?:распиш|составь|опиши|расскажи)\s+.{0,40}курс|"
+    r"курс\s+.{0,30}(?:похуден|обучен|трениров|марафон|программ|урок|интенсив|"
+    r"репетитор|экзамен|английск|python|программир|нутрициолог|диетолог)",
+    re.I,
+)
+
+_COURSE_TOPIC_MARKERS = (
+    "похуден",
+    "обучен",
+    "трениров",
+    "марафон",
+    "интенсив",
+    "урок",
+    "лекци",
+    "репетитор",
+    "нутрициолог",
+    "диетолог",
+    "план питания",
+    "программ похуд",
+)
+
+_FX_EXPLICIT_PHRASES = (
+    "курс доллар",
+    "курс евро",
+    "курс usd",
+    "курс eur",
+    "курс валют",
+    "курс юан",
+    "курс фунт",
+    "доллар к руб",
+    "евро к руб",
+    "usd/rub",
+    "eur/rub",
+    "сколько стоит доллар",
+    "сколько стоит евро",
+    "курс цб",
+    "курс центробанк",
+)
 
 _CURRENCY_CODES = {
     "доллар": "USD",
@@ -31,39 +74,40 @@ _CURRENCY_CODES = {
 }
 
 
+def is_course_program_query(query: str) -> bool:
+    """Курс как программа/обучение, не биржевой курс."""
+    q = query.strip().lower()
+    if _COURSE_PROGRAM_RE.search(q):
+        return True
+    if "курс" in q and any(m in q for m in _COURSE_TOPIC_MARKERS):
+        return True
+    return False
+
+
 def detect_currency_codes(query: str) -> list[str]:
     q = query.lower()
+    if is_course_program_query(q):
+        return []
     found: list[str] = []
     for token, code in _CURRENCY_CODES.items():
         if token in q and code not in found:
             found.append(code)
-    if not found and any(
-        m in q
-        for m in ("курс", "валют", "рубл", "обмен", "доллар", "евро", "usd", "eur")
-    ):
+    if not found and any(p in q for p in _FX_EXPLICIT_PHRASES):
         found.append("USD")
     return found[:3]
 
 
 def is_currency_rate_query(query: str) -> bool:
     q = query.lower()
-    if detect_currency_codes(q):
+    if is_course_program_query(q):
+        return False
+    if any(token in q for token in _CURRENCY_CODES):
         return True
-    return any(
-        m in q
-        for m in (
-            "курс доллар",
-            "курс евро",
-            "курс usd",
-            "курс eur",
-            "курс валют",
-            "доллар к руб",
-            "usd/rub",
-            "eur/rub",
-            "сколько стоит доллар",
-            "сколько стоит евро",
-        )
-    )
+    if any(p in q for p in _FX_EXPLICIT_PHRASES):
+        return True
+    if "курс" in q and any(m in q for m in ("валют", "рубл", "обмен", "цб", "центробанк", "cbr")):
+        return True
+    return False
 
 
 async def fetch_cbr_rates(codes: list[str] | None = None) -> tuple[str, str] | None:

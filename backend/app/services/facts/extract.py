@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 
 from app.services.facts.models import Fact, FactPack
 from app.services.llm_provider import SearchSource
+from app.services.currency_rates import is_course_program_query
 from app.services.page_depth import is_financial_query
 
 if TYPE_CHECKING:
@@ -38,6 +39,11 @@ _EXTRACT_USER_TEMPLATE = """Вопрос пользователя:
 - source_index — номер источника из блока выше.
 - Если для ответа на вопрос нет данных — facts пустой, опиши в gaps.
 - Максимум 12 фактов."""
+
+_EXTRACT_COURSE_ADDON = """
+Запрос про программу/курс (обучение, похудение, тренировки) — НЕ про курс валют:
+- Извлекай шаги, рекомендации, длительность, питание, тренировки из источников.
+- Не подставляй курс доллара, ЦБ, котировки."""
 
 _EXTRACT_FINANCIAL_ADDON = """
 Дополнительно для финансовых вопросов (оборот, выручка, прибыль):
@@ -109,7 +115,9 @@ async def extract_facts_from_sources(
 
     prefilled_text = "\n".join(f"- [{f.source_index}] {f.claim}" for f in prefilled) or "(нет)"
     template = _EXTRACT_USER_TEMPLATE
-    if is_financial_query(query):
+    if is_course_program_query(query):
+        template += _EXTRACT_COURSE_ADDON
+    elif is_financial_query(query):
         template += _EXTRACT_FINANCIAL_ADDON
     user_text = template.format(
         query=query[:900],
