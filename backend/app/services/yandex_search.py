@@ -66,7 +66,7 @@ def _parse_yandex_xml(xml_bytes: bytes, limit: int) -> list[SearchSource]:
                 index=i,
                 url=url,
                 title=title or domain,
-                snippet=snippet[:500],
+                snippet=snippet[:900],
                 domain=domain,
             )
         )
@@ -94,7 +94,7 @@ def _parse_search_documents(decoded: dict, limit: int) -> list[SearchSource]:
                 index=i,
                 url=url,
                 title=doc.get("title", domain),
-                snippet=str(snippet)[:500],
+                snippet=str(snippet)[:900],
                 domain=domain,
             )
         )
@@ -105,7 +105,7 @@ class YandexSearchService:
     def __init__(self, settings: Settings | None = None):
         self.settings = settings or get_settings()
 
-    async def search(self, query: str, limit: int = 8) -> list[SearchSource]:
+    async def search(self, query: str, limit: int = 10) -> list[SearchSource]:
         if not self.settings.yandex_configured:
             return [s for s in MOCK_SOURCES[:limit]]
 
@@ -120,7 +120,7 @@ class YandexSearchService:
             },
             "folderId": self.settings.yandex_folder_id.strip(),
             "responseFormat": "FORMAT_XML",
-            "maxPassages": "2",
+            "maxPassages": "4",
             "region": "225",
             "l10n": "LOCALIZATION_RU",
             "groupSpec": {

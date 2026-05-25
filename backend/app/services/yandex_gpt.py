@@ -14,22 +14,35 @@ logger = logging.getLogger(__name__)
 
 AnswerModel = Literal["lite", "pro"]
 
-SYSTEM_PROMPT_SEARCH = """Ты — поисковый ассистент Glosix. Отвечай точно и по делу на русском языке.
-Используй только предоставленные источники и цитируй их номерами [1], [2] и т.д.
-Не выдумывай факты, которых нет в источниках."""
+SYSTEM_PROMPT_SEARCH = """Ты — экспертный поисковый ассистент Glosix (уровень качества как Perplexity). Язык ответа: русский.
+
+Правила содержания:
+- Опирайся ТОЛЬКО на предоставленные источники; цитируй факты номерами [1], [2] и т.д.
+- Не выдумывай шаги, URL, роли IAM и параметры API, которых нет в источниках.
+- Если в источниках мало деталей — честно скажи, что именно не покрыто, и предложи уточнить сценарий.
+
+Структура ответа (обязательно для инструкций и «как настроить»):
+1. Короткое вступление: для кого ответ (без кода / API / бизнес) — 1–2 предложения.
+2. Разделы с заголовками ## (например: «Без программирования», «Через Yandex Cloud API», «Практические сценарии»).
+3. В технических разделах — нумерованные шаги (1. 2. 3.), конкретные действия из источников.
+4. Приоритет официальной документации (yandex.cloud, cloud.yandex.ru, ya.ru) при цитировании.
+5. В конце — один уточняющий вопрос пользователю, если возможны разные сценарии (бот, API, n8n, только чат).
+
+Стиль: развёрнуто и экспертно, но без воды; markdown-списки и **жирный** для ключевых терминов допустимы."""
 
 SYSTEM_PROMPT_DIRECT = """Ты — ассистент Glosix. Отвечай на русском по делу, используя контекст диалога.
 Если в контексте есть ранее найденные источники — можешь ссылаться на [1], [2].
 Не выдумывай актуальные факты (курсы валют, новости, цены) — предложи уточнить или выполнить поиск."""
 
 
-def _format_sources(sources: list[SearchSource]) -> str:
+def _format_sources(sources: list[SearchSource], max_snippet: int = 900) -> str:
     if not sources:
         return "Нет новых источников (опирайся на диалог и ранее найденные данные)."
     lines = []
     for s in sources:
-        lines.append(f'[{s.index}] {s.domain} — "{s.title}": {s.snippet}')
-    return "\n".join(lines)
+        snippet = (s.snippet or "")[:max_snippet]
+        lines.append(f'[{s.index}] {s.domain} — "{s.title}"\nURL: {s.url}\n{snippet}')
+    return "\n\n".join(lines)
 
 
 def _text_from_completion_json(data: dict) -> str:
@@ -172,12 +185,12 @@ class YandexGPTProvider(LLMProvider):
             "Authorization": f"Api-Key {self.settings.yandex_api_key}",
             "Content-Type": "application/json",
         }
-        max_tokens = 3000 if model == "pro" else 2000
+        max_tokens = 4500 if model == "pro" else 2800
         payload = {
             "modelUri": self._model_uri(model),
             "completionOptions": {
                 "stream": True,
-                "temperature": 0.3,
+                "temperature": 0.35 if model == "pro" else 0.3,
                 "maxTokens": max_tokens,
             },
             "messages": self._build_messages_search(query, sources, history, prior_sources_block),

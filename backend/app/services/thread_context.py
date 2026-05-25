@@ -35,15 +35,16 @@ def build_thread_context(messages: list[Message]) -> ThreadContext:
     )
 
 
-def format_sources_for_prompt(sources: list[dict] | None, max_items: int = 5) -> str:
+def format_sources_for_prompt(sources: list[dict] | None, max_items: int = 8) -> str:
     if not sources:
         return ""
     lines = []
     for s in sources[:max_items]:
         idx = s.get("index", "?")
         title = s.get("title", "")
-        snippet = (s.get("snippet") or "")[:400]
-        lines.append(f"[{idx}] {title}: {snippet}")
+        url = s.get("url", "")
+        snippet = (s.get("snippet") or "")[:700]
+        lines.append(f"[{idx}] {title}\nURL: {url}\n{snippet}")
     return "Ранее найденные источники:\n" + "\n".join(lines)
 
 

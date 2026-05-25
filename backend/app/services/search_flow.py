@@ -13,6 +13,8 @@ from app.models.uploaded_file import UploadedFile
 from app.models.user import User
 from app.services.llm_provider import SearchSource
 from app.services.query_router import QueryRouter
+from app.services.search_query import enhance_search_query, is_howto_query, normalize_user_query
+from app.services.source_ranking import rank_sources
 from app.services.thread_context import build_thread_context, format_sources_for_prompt
 from app.services.yandex_errors import YandexServiceError
 from app.services.yandex_gpt import YandexGPTProvider
@@ -100,7 +102,9 @@ class SearchFlowService:
             return
 
         try:
-            llm_query, display_content = await self._resolve_attachments(db, user, query, attachment_ids)
+            llm_query, display_content = await self._resolve_attachments(
+                db, user, normalize_user_query(query), attachment_ids
+            )
         except ValueError:
             yield sse_event("error", {"code": "attachment", "message": "Файл не найден или истёк"})
             return
@@ -155,7 +159,15 @@ class SearchFlowService:
 
         try:
             if route.needs_search:
-                sources = await self.search.search(route.search_query[:400])
+                search_q = enhance_search_query(
+                    route.search_query,
+                    for_howto=is_howto_query(llm_query) or route.reason.startswith("rules:howto"),
+                )
+                raw_sources = await self.search.search(search_q)
+                sources = rank_sources(
+                    raw_sources,
+                    howto=is_howto_query(llm_query) or route.answer_model == "pro",
+                )
                 sources_json = sources_to_json(sources)
                 yield sse_event("sources", {"sources": sources_json})
 

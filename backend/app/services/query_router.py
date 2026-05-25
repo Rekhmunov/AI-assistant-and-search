@@ -8,6 +8,7 @@ from typing import Literal
 
 from app.core.config import Settings, get_settings
 from app.models.user import Plan
+from app.services.search_query import enhance_search_query, is_howto_query, normalize_user_query
 from app.services.thread_context import ThreadContext, format_history_compact
 from app.services.yandex_gpt import YandexGPTProvider
 
@@ -69,6 +70,21 @@ PRO_KEYWORDS = (
     "стратег",
 )
 
+HOWTO_KEYWORDS = (
+    "как настроить",
+    "как подключить",
+    "как использовать",
+    "как создать",
+    "как установить",
+    "настройка",
+    "настроить",
+    "подключить",
+    "инструкция",
+    "пошагов",
+    "quickstart",
+    "getting started",
+)
+
 PRO_MIN_QUERY_LEN = 120
 
 
@@ -86,6 +102,16 @@ def _has_attachment_marker(query: str) -> bool:
 
 def _rule_route(query: str, ctx: ThreadContext, has_attachments: bool, user_plan: Plan) -> RouteDecision | None:
     q = query.strip().lower()
+    normalized = normalize_user_query(query)
+
+    if any(k in q for k in HOWTO_KEYWORDS):
+        search_q = enhance_search_query(normalized, for_howto=True)
+        return RouteDecision(
+            needs_search=True,
+            search_query=search_q,
+            answer_model="pro",
+            reason="rules:howto_guide",
+        )
 
     if has_attachments or _has_attachment_marker(query):
         return RouteDecision(
@@ -183,6 +209,7 @@ class QueryRouter:
         has_attachments: bool = False,
         user_plan: Plan = Plan.FREE,
     ) -> RouteDecision:
+        query = normalize_user_query(query)
         ruled = _rule_route(query, ctx, has_attachments, user_plan)
         if ruled:
             return ruled
@@ -211,7 +238,8 @@ class QueryRouter:
 - needs_search=true если нужны актуальные факты, новости, цены, имена, сравнение компаний, первый вопрос по фактам.
 - needs_search=false если переформулировка, сокращение, уточнение по уже данному ответу в истории.
 - search_query: короткий запрос для Yandex Search (с контекстом темы из истории).
-- answer_model: "pro" для сложного анализа, файлов, длинных сравнений; иначе "lite".
+- answer_model: "pro" для инструкций «как настроить/подключить», сложного анализа, файлов; иначе "lite".
+- search_query: для how-to добавь контекст (официальная документация, Yandex Cloud API).
 
 Ответь ТОЛЬКО JSON:
 {{"needs_search": true, "search_query": "...", "answer_model": "lite", "reason": "..."}}"""
@@ -232,9 +260,10 @@ class QueryRouter:
         except Exception:
             logger.exception("Query classifier failed")
 
+        search_q = enhance_search_query(query, for_howto=is_howto_query(query))
         return RouteDecision(
             needs_search=not ctx.is_continuation or not ctx.prior_search_used,
-            search_query=query[:400],
+            search_query=search_q,
             answer_model=_model_from_complexity(query, user_plan),
             reason="fallback:default",
         )
