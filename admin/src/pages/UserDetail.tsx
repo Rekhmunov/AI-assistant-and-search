@@ -39,6 +39,11 @@ export function UserDetailPage() {
   const [showDeleted, setShowDeleted] = useState(true);
   const [days, setDays] = useState(30);
   const [msg, setMsg] = useState("");
+  const [systemStatus, setSystemStatus] = useState<{
+    messages_debug_trace_column: boolean;
+    thread_debug_api: boolean;
+    hint: string | null;
+  } | null>(null);
 
   const load = () => {
     if (!id) return;
@@ -50,6 +55,16 @@ export function UserDetailPage() {
   };
 
   useEffect(load, [id, showDeleted]);
+
+  useEffect(() => {
+    apiFetch<{
+      messages_debug_trace_column: boolean;
+      thread_debug_api: boolean;
+      hint: string | null;
+    }>("/api/admin/system/status")
+      .then(setSystemStatus)
+      .catch(() => setSystemStatus(null));
+  }, []);
 
   const grantPro = async (e: FormEvent) => {
     e.preventDefault();
@@ -118,9 +133,25 @@ export function UserDetailPage() {
       )}
 
       <h2>Треды и отладка ({threads.length})</h2>
+
+      {systemStatus && !systemStatus.messages_debug_trace_column && (
+        <p className="error card">
+          <strong>БД не обновлена.</strong> {systemStatus.hint || "alembic upgrade head"}
+          <br />
+          Без миграции 006 расшифровка не сохраняется.
+        </p>
+      )}
+
+      {systemStatus === null && (
+        <p className="error card">
+          <strong>Старый backend.</strong> Нет <code>/api/admin/system/status</code> — обновите backend и
+          admin на сервере (<code>git pull && docker compose up -d --build backend admin</code>).
+        </p>
+      )}
+
       <p className="hint">
-        Раскройте тред: вопрос пользователя, запрос в Search/GPT, модель, промпт. Удалённые пользователем
-        треды остаются в админке для аудита (скрыты в его истории).
+        <strong>Нажмите на строку треда</strong> (▶ слева) — откроется вопрос, ответ, запрос в Yandex Search
+        и GPT. Если видите только список без ▶ — пересоберите контейнер <code>admin</code>.
       </p>
       <label className="checkbox">
         <input

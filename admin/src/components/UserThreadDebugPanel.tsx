@@ -80,6 +80,7 @@ export function UserThreadDebugPanel({ userId, thread }: Props) {
             {thread.message_count} сообщ. ·{" "}
             {new Date(thread.last_message_at).toLocaleString("ru-RU")}
           </span>
+          <span className="thread-panel-cta">▶ Нажмите — расшифровка Yandex (Search + GPT)</span>
         </span>
       </button>
 
@@ -94,11 +95,11 @@ export function UserThreadDebugPanel({ userId, thread }: Props) {
               <DebugBlock title="Вопрос пользователя (в UI)" content={turn.user_message.content} />
               {turn.assistant_message ? (
                 <>
-                  <DebugTrace trace={turn.assistant_message.debug_trace} />
                   <DebugBlock
                     title="Ответ ассистента"
                     content={turn.assistant_message.content}
                   />
+                  <DebugTrace trace={turn.assistant_message.debug_trace} />
                   {turn.assistant_message.follow_up_questions &&
                     turn.assistant_message.follow_up_questions.length > 0 && (
                       <div className="debug-meta">
@@ -112,11 +113,14 @@ export function UserThreadDebugPanel({ userId, thread }: Props) {
               )}
             </div>
           ))}
-          {data && !data.turns.some((t) => t.assistant_message?.debug_trace) && (
-            <p className="hint">
-              debug_trace пуст — диалог создан до обновления. Новые запросы будут с полной расшифровкой.
-            </p>
-          )}
+          {data &&
+            data.turns.length > 0 &&
+            !data.turns.some((t) => t.assistant_message?.debug_trace) && (
+              <p className="error">
+                debug_trace пуст. Проверьте: backend обновлён и выполнена миграция{" "}
+                <code>alembic upgrade head</code>, затем сделайте новый поиск.
+              </p>
+            )}
         </div>
       )}
     </div>
@@ -133,7 +137,17 @@ function DebugBlock({ title, content }: { title: string; content: string }) {
 }
 
 function DebugTrace({ trace }: { trace: Record<string, unknown> | null }) {
-  if (!trace) return null;
+  if (!trace) {
+    return (
+      <div className="debug-trace debug-trace-empty">
+        <div className="debug-block-title">Пайплайн Yandex</div>
+        <p className="hint">
+          Нет сохранённой расшифровки (запрос до деплоя или миграция 006 не применена). Сделайте новый
+          поиск после обновления backend.
+        </p>
+      </div>
+    );
+  }
 
   const route = trace.route as Record<string, unknown> | undefined;
   const search = trace.yandex_search as Record<string, unknown> | null | undefined;

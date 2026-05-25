@@ -303,6 +303,14 @@ pre.small {
   margin-top: 4px;
 }
 
+.thread-panel-cta {
+  display: block;
+  margin-top: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #2563eb;
+}
+
 .thread-panel-body {
   padding: 12px 14px 16px 36px;
   border-top: 1px solid #f3f4f6;

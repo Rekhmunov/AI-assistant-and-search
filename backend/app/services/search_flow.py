@@ -1,9 +1,11 @@
 import json
+import logging
 import uuid
 from collections.abc import AsyncIterator
 from datetime import datetime, timezone
 
-from sqlalchemy import select
+from sqlalchemy import select, text
+from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.limiter import RateLimiter
@@ -37,6 +39,24 @@ def sources_to_json(sources: list[SearchSource]) -> list[dict]:
 
 def sse_event(event: str, data: dict) -> str:
     return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
+
+
+logger = logging.getLogger(__name__)
+
+_debug_trace_column_ok: bool | None = None
+
+
+async def _messages_have_debug_trace(db: AsyncSession) -> bool:
+    global _debug_trace_column_ok
+    if _debug_trace_column_ok is not None:
+        return _debug_trace_column_ok
+    try:
+        await db.execute(text("SELECT debug_trace FROM messages LIMIT 0"))
+        _debug_trace_column_ok = True
+    except ProgrammingError:
+        _debug_trace_column_ok = False
+        logger.warning("Column messages.debug_trace missing — run alembic upgrade head")
+    return _debug_trace_column_ok
 
 
 class SearchFlowService:
@@ -230,13 +250,14 @@ class SearchFlowService:
             gpt_messages_preview=gpt_preview,
         )
 
+        trace_payload = debug_trace if await _messages_have_debug_trace(db) else None
         assistant_msg = Message(
             thread_id=thread.id,
             role=MessageRole.ASSISTANT,
             content=full_answer.strip(),
             sources=sources_json if sources_json else None,
             follow_up_questions=follow_ups,
-            debug_trace=debug_trace,
+            debug_trace=trace_payload,
         )
         db.add(assistant_msg)
         thread.message_count = (thread.message_count or 0) + 2
