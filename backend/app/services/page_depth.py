@@ -4,6 +4,7 @@ import logging
 import re
 from collections.abc import Sequence
 
+from app.services.currency_rates import is_course_program_query
 from app.services.llm_provider import SearchSource
 from app.services.source_page_fetch import fetch_page_full_text
 
@@ -24,12 +25,17 @@ _FINANCIAL_MARKERS = (
     "прибыл",
     "убыт",
     "ebitda",
-    "инн",
     "огрн",
     "бухгалтер",
     "финансов",
     "отчёт",
     "отчет",
+)
+
+_INN_RE = re.compile(r"\bинн\s*\d{10}\b", re.I)
+_INN_CONTEXT_RE = re.compile(
+    r"\bинн\b.{0,40}\b(?:огрн|ооо|ао|компан|организац|юрлиц)",
+    re.I,
 )
 
 FINANCIAL_NUMBER_RE = re.compile(
@@ -40,6 +46,10 @@ FINANCIAL_NUMBER_RE = re.compile(
 
 def is_financial_query(query: str) -> bool:
     q = query.lower()
+    if is_course_program_query(q):
+        return False
+    if _INN_RE.search(q) or _INN_CONTEXT_RE.search(q):
+        return True
     return any(m in q for m in _FINANCIAL_MARKERS)
 
 

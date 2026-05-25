@@ -103,8 +103,27 @@ _PLACE_IN_RE = re.compile(
 )
 
 
+_WEATHER_EXCLUDE_MARKERS = (
+    "прогноз продаж",
+    "прогноз рынк",
+    "прогноз выруч",
+    "прогноз прибыл",
+    "экономическ",
+    "бизнес",
+    "курс на",
+    "курс по",
+    "похуден",
+)
+
+
 def is_weather_query(query: str) -> bool:
     q = query.lower()
+    if is_course_program_query(q):
+        return False
+    if any(m in q for m in _WEATHER_EXCLUDE_MARKERS):
+        return False
+    if "прогноз" in q and not any(m in q for m in _WEATHER_MARKERS if m != "прогноз"):
+        return False
     return any(m in q for m in _WEATHER_MARKERS)
 
 

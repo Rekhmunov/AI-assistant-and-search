@@ -55,23 +55,15 @@ _FX_EXPLICIT_PHRASES = (
     "курс центробанк",
 )
 
-_CURRENCY_CODES = {
-    "доллар": "USD",
-    "доллара": "USD",
-    "доллару": "USD",
-    "usd": "USD",
-    "бакс": "USD",
-    "евро": "EUR",
-    "eur": "EUR",
-    "юань": "CNY",
-    "cny": "CNY",
-    "фунт": "GBP",
-    "gbp": "GBP",
-    "иена": "JPY",
-    "jpy": "JPY",
-    "тенге": "KZT",
-    "kzt": "KZT",
-}
+# Только целые слова (не «евро» в «европейский», «фунт» в «фунтик»)
+_CURRENCY_PATTERNS: list[tuple[re.Pattern[str], str]] = [
+    (re.compile(r"\b(?:usd|доллар\w*|бакс)\b", re.I), "USD"),
+    (re.compile(r"\b(?:eur|евро)\b", re.I), "EUR"),
+    (re.compile(r"\b(?:cny|юан\w*)\b", re.I), "CNY"),
+    (re.compile(r"\b(?:gbp|фунт)\b", re.I), "GBP"),
+    (re.compile(r"\b(?:jpy|иен\w*|йен\w*)\b", re.I), "JPY"),
+    (re.compile(r"\b(?:kzt|тенге)\b", re.I), "KZT"),
+]
 
 
 def is_course_program_query(query: str) -> bool:
@@ -89,8 +81,8 @@ def detect_currency_codes(query: str) -> list[str]:
     if is_course_program_query(q):
         return []
     found: list[str] = []
-    for token, code in _CURRENCY_CODES.items():
-        if token in q and code not in found:
+    for pattern, code in _CURRENCY_PATTERNS:
+        if pattern.search(q) and code not in found:
             found.append(code)
     if not found and any(p in q for p in _FX_EXPLICIT_PHRASES):
         found.append("USD")
@@ -101,7 +93,7 @@ def is_currency_rate_query(query: str) -> bool:
     q = query.lower()
     if is_course_program_query(q):
         return False
-    if any(token in q for token in _CURRENCY_CODES):
+    if any(pat.search(q) for pat, _ in _CURRENCY_PATTERNS):
         return True
     if any(p in q for p in _FX_EXPLICIT_PHRASES):
         return True
