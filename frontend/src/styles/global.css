@@ -241,8 +241,8 @@ body:has(.page-thread) {
 .composer-row {
   display: flex;
   align-items: flex-end;
-  gap: 6px;
-  min-height: 40px;
+  gap: 2px;
+  min-height: 36px;
 }
 
 .composer-attachments {
@@ -256,10 +256,10 @@ body:has(.page-thread) {
 .composer-attachment {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   max-width: 100%;
-  padding: 8px 10px;
-  border-radius: 12px;
+  padding: 5px 2px 5px 8px;
+  border-radius: 10px;
   background: var(--bg);
   border: 1px solid var(--border-subtle);
   font-size: 0.85rem;
@@ -284,12 +284,12 @@ body:has(.page-thread) {
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  width: 28px;
-  height: 28px;
-  margin: -4px -6px -4px 0;
+  width: 22px;
+  height: 22px;
+  margin: 0;
   padding: 0;
   border: none;
-  border-radius: 8px;
+  border-radius: 6px;
   background: transparent;
   color: var(--muted);
   cursor: pointer;
@@ -363,10 +363,11 @@ body:has(.page-thread) {
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  width: 40px;
-  height: 40px;
+  width: 32px;
+  height: 32px;
+  padding: 0;
   border: none;
-  border-radius: 12px;
+  border-radius: 8px;
   background: transparent;
   color: var(--muted);
   cursor: pointer;
