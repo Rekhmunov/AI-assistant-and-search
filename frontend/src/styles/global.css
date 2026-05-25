@@ -321,6 +321,17 @@ body {
   letter-spacing: 0.04em;
 }
 
+.route-badge {
+  display: inline-block;
+  margin-top: 8px;
+  font-size: 0.75rem;
+  color: var(--accent);
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+}
+
 .query-text {
   margin: 4px 0 0;
   color: var(--text);

@@ -32,6 +32,7 @@ export function Thread() {
   const [followUps, setFollowUps] = useState<string[]>([]);
   const [streaming, setStreaming] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [routeLabel, setRouteLabel] = useState<string | null>(null);
   const started = useRef(false);
 
   const { data: thread } = useQuery({
@@ -62,11 +63,21 @@ export function Thread() {
       setAnswer("");
       setSources([]);
       setFollowUps([]);
+      setRouteLabel(null);
 
       await streamSearch(token, text, existingThreadId, attachmentIds, {
         onThread: (tid) => {
           setThreadId(tid);
           if (!id) navigate(`/thread/${tid}`, { replace: true });
+        },
+        onRoute: (route) => {
+          if (route.needs_search) {
+            setRouteLabel(
+              route.answer_model === "pro" ? t("routeSearchPro") : t("routeSearchLite")
+            );
+          } else {
+            setRouteLabel(t("routeDirect"));
+          }
         },
         onSources: setSources,
         onToken: (chunk) => setAnswer((a) => a + chunk),
@@ -128,6 +139,7 @@ export function Thread() {
         <div className="query-box">
           <span className="query-label">{t("queryLabel")}</span>
           <p className="query-text">{query}</p>
+          {routeLabel && <span className="route-badge">{routeLabel}</span>}
         </div>
       )}
 

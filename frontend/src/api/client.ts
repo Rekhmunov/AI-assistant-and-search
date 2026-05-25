@@ -201,8 +201,15 @@ export async function deleteAccount(token: string): Promise<void> {
   });
 }
 
+export interface RouteInfo {
+  needs_search: boolean;
+  answer_model: string;
+  reason?: string;
+}
+
 export interface SSEHandlers {
   onThread?: (id: string) => void;
+  onRoute?: (route: RouteInfo) => void;
   onSources?: (sources: Source[]) => void;
   onToken?: (text: string) => void;
   onFollowUps?: (questions: string[]) => void;
@@ -294,6 +301,9 @@ export async function streamSearch(
       switch (event) {
         case "thread":
           handlers.onThread?.(parsed.thread_id);
+          break;
+        case "route":
+          handlers.onRoute?.(parsed as RouteInfo);
           break;
         case "sources":
           handlers.onSources?.(parsed.sources);
