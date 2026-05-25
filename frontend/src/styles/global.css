@@ -336,10 +336,6 @@ body {
   margin-bottom: 12px;
 }
 
-.thread-scroll-anchor {
-  height: 1px;
-}
-
 .page-thread .search-composer,
 .page-thread > .search-bar-wrap {
   flex-shrink: 0;
@@ -446,6 +442,17 @@ body {
   color: var(--text);
 }
 
+.answer-toolbar-btn-icon {
+  justify-content: center;
+  padding: 8px;
+  min-width: 36px;
+  min-height: 36px;
+}
+
+.answer-toolbar-btn-icon span {
+  display: none;
+}
+
 .sources-collapsible {
   margin: 8px 0 20px;
 }
@@ -529,8 +536,17 @@ body {
 
 .thread-actions {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-start;
   margin-bottom: 12px;
+}
+
+.icon-btn-back {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 40px;
+  min-height: 40px;
+  padding: 8px;
 }
 
 .query-label {

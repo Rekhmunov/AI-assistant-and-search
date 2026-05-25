@@ -36,13 +36,23 @@ export function AnswerToolbar({ answer, title }: Props) {
 
   return (
     <div className="answer-toolbar">
-      <button type="button" className="answer-toolbar-btn" onClick={share} aria-label={t("share")}>
+      <button
+        type="button"
+        className="answer-toolbar-btn answer-toolbar-btn-icon"
+        onClick={share}
+        aria-label={t("share")}
+        title={t("share")}
+      >
         <ShareIcon />
-        <span>{t("share")}</span>
       </button>
-      <button type="button" className="answer-toolbar-btn" onClick={copy} aria-label={t("copyAnswer")}>
+      <button
+        type="button"
+        className="answer-toolbar-btn answer-toolbar-btn-icon"
+        onClick={copy}
+        aria-label={copied ? t("copied") : t("copyAnswer")}
+        title={copied ? t("copied") : t("copyAnswer")}
+      >
         <CopyIcon />
-        <span>{copied ? t("copied") : t("copyAnswer")}</span>
       </button>
     </div>
   );

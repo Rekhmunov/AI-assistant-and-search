@@ -1,7 +1,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { fetchThread, saveThread, streamSearch, type Source } from "../api/client";
+import { fetchThread, streamSearch } from "../api/client";
 import { AnswerToolbar } from "../components/AnswerToolbar";
 import { GlosixHeader } from "../components/GlosixHeader";
 import { SearchComposer, type ComposerAttachment } from "../components/SearchComposer";
@@ -42,14 +42,13 @@ export function Thread() {
   const [turns, setTurns] = useState<ThreadTurn[]>([]);
   const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
   const [streaming, setStreaming] = useState(false);
-  const [saved, setSaved] = useState(false);
   const [needsSearch, setNeedsSearch] = useState(true);
   const [searchPhase, setSearchPhase] = useState<SearchPhase>("idle");
   const [composerQuery, setComposerQuery] = useState("");
   const started = useRef(false);
   const streamingRef = useRef(false);
   const activeThreadIdRef = useRef<string | null>(id ?? null);
-  const scrollBottomRef = useRef<HTMLDivElement>(null);
+  const scrollTurnKeyRef = useRef<string | null>(null);
 
   const { data: thread } = useQuery({
     queryKey: ["thread", id ?? threadId],
@@ -63,14 +62,18 @@ export function Thread() {
 
   useEffect(() => {
     if (thread && !streamingRef.current) {
-      setSaved(thread.is_saved);
       setTurns(messagesToTurns(thread.messages));
     }
   }, [thread]);
 
+  /** Прокрутка только при новом вопросе — ответ читаем с начала, без ухода вниз при стриме. */
   useEffect(() => {
-    scrollBottomRef.current?.scrollIntoView({ behavior: streaming ? "auto" : "smooth" });
-  }, [turns, streaming, searchPhase]);
+    const active = turns.find((t) => t.streaming);
+    if (!active || scrollTurnKeyRef.current === active.key) return;
+    scrollTurnKeyRef.current = active.key;
+    const el = document.getElementById(`turn-${active.key}`);
+    el?.scrollIntoView({ block: "start", behavior: "smooth" });
+  }, [turns.length]);
 
   const runSearch = useCallback(
     async (text: string, existingThreadId: string | null, attachmentIds: string[]) => {
@@ -149,12 +152,6 @@ export function Thread() {
     }
   }, [initialQuery, initialFiles, id, runSearch]);
 
-  const handleSave = async () => {
-    if (!threadId || !token) return;
-    await saveThread(token, threadId);
-    setSaved(true);
-  };
-
   const onComposerSubmit = (payload: { query: string; attachmentIds: string[] }) => {
     runSearch(payload.query, threadId, payload.attachmentIds);
   };
@@ -166,17 +163,14 @@ export function Thread() {
       <div className="thread-top">
         <GlosixHeader showLimits={false} />
         <div className="thread-actions">
-          <button type="button" className="icon-btn" onClick={() => navigate("/")}>
-            ← {t("back")}
-          </button>
           <button
             type="button"
-            className="icon-btn"
-            onClick={handleSave}
-            disabled={!token || !threadId || saved}
-            title={!token ? t("loginToSave") : undefined}
+            className="icon-btn icon-btn-back"
+            onClick={() => navigate("/")}
+            aria-label={t("back")}
+            title={t("back")}
           >
-            {saved ? t("saved") : t("save")}
+            <BackIcon />
           </button>
         </div>
       </div>
@@ -199,7 +193,7 @@ export function Thread() {
             !isActive;
 
           return (
-            <article key={turn.key} className="thread-turn">
+            <article key={turn.key} id={`turn-${turn.key}`} className="thread-turn">
               <div className="thread-query">
                 <p className="thread-query-text">{turn.query}</p>
               </div>
@@ -240,7 +234,6 @@ export function Thread() {
             </article>
           );
         })}
-        <div ref={scrollBottomRef} className="thread-scroll-anchor" aria-hidden />
       </div>
 
       <SearchComposer
@@ -256,5 +249,19 @@ export function Thread() {
         onAttachmentsChange={setAttachments}
       />
     </div>
+  );
+}
+
+function BackIcon() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        d="M15 6l-6 6 6 6"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
   );
 }
