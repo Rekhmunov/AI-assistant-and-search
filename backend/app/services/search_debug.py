@@ -4,6 +4,7 @@ from typing import Any
 
 from app.core.config import Settings, get_settings
 from app.services.llm_provider import SearchSource
+from app.services.facts.models import FactPack
 from app.services.query_router import RouteDecision
 from app.services.yandex_gpt import YandexGPTProvider
 
@@ -26,10 +27,16 @@ def build_gpt_messages_preview(
     needs_search: bool,
     model: str,
     hint_clarify: str | None = None,
+    fact_pack: FactPack | None = None,
 ) -> list[dict[str, str]]:
     if needs_search:
         raw = llm._build_messages_search(
-            llm_query, sources, history, prior_sources_block, hint_clarify=hint_clarify
+            llm_query,
+            sources,
+            history,
+            prior_sources_block,
+            hint_clarify=hint_clarify,
+            fact_pack=fact_pack,
         )
     else:
         raw = llm._build_messages_direct(llm_query, history, prior_sources_block)
@@ -50,6 +57,7 @@ def build_debug_trace(
     rewrite: dict[str, Any] | None = None,
     search_attempts: list[dict[str, Any]] | None = None,
     retrieval: dict[str, Any] | None = None,
+    fact_pack: dict[str, Any] | None = None,
     settings: Settings | None = None,
 ) -> dict[str, Any]:
     s = settings or get_settings()
@@ -75,6 +83,7 @@ def build_debug_trace(
             "sources_count": len(sources),
             "sources": sources_json,
         },
+        "fact_pack": fact_pack,
         "yandex_gpt": {
             "mode": "search" if needs_search else "direct",
             "model": answer_model,

@@ -17,14 +17,9 @@ from app.services.llm_provider import SearchSource
 from app.services.answer_guard import is_template_evasion
 from app.services.query_router import QueryRouter
 from app.services.query_rewriter import QueryRewriter
-from app.services.retrieval_quality import assess_retrieval
-from app.services.source_page_fetch import enrich_sources_with_pages
+from app.services.facts.pipeline import FactPipeline
+from app.services.facts.verify import verify_answer_against_facts
 from app.services.search_debug import build_debug_trace, build_gpt_messages_preview
-from app.services.currency_rates import (
-    cbr_source_from_facts,
-    detect_currency_codes,
-    fetch_cbr_rates,
-)
 from app.services.search_query import (
     build_currency_search_queries,
     build_weather_search_queries,
@@ -34,7 +29,6 @@ from app.services.search_query import (
     is_weather_query,
     normalize_user_query,
 )
-from app.services.source_ranking import rank_sources
 from app.services.thread_context import build_thread_context, format_sources_for_prompt
 from app.services.yandex_errors import YandexServiceError
 from app.services.yandex_gpt import YandexGPTProvider
@@ -87,6 +81,7 @@ class SearchFlowService:
         self.llm = YandexGPTProvider()
         self.router = QueryRouter()
         self.rewriter = QueryRewriter()
+        self.fact_pipeline = FactPipeline(self.search, self.llm)
 
     async def _resolve_attachments(
         self,
@@ -211,6 +206,7 @@ class SearchFlowService:
         search_attempts: list[dict] = []
         retrieval_trace: dict | None = None
         hint_clarify: str | None = None
+        fact_pack = None
 
         try:
             if route.needs_search:
@@ -239,79 +235,28 @@ class SearchFlowService:
                 elif currency:
                     queries = build_currency_search_queries(llm_query, queries)
 
-                cbr_facts: str | None = None
-                if currency:
-                    codes = detect_currency_codes(llm_query)
-                    cbr = await fetch_cbr_rates(codes)
-                    if cbr:
-                        cbr_facts, _ = cbr
-
-                for base_q in queries[:2]:
-                    search_q_sent = enhance_search_query(
-                        base_q,
+                def _enhance(q: str) -> str:
+                    return enhance_search_query(
+                        q,
                         for_howto=howto,
                         for_weather=weather,
                         for_currency=currency,
                     )
-                    raw_sources = await self.search.search(search_q_sent)
-                    ranked = rank_sources(
-                        raw_sources,
-                        howto=howto or route.answer_model == "pro",
-                        weather=weather,
-                        currency=currency,
-                    )
-                    assessment = assess_retrieval(ranked, llm_query)
-                    search_attempts.append(
-                        {
-                            "query": search_q_sent,
-                            "sources_count": len(ranked),
-                            "retrieval_ok": assessment.ok,
-                            "retrieval_score": assessment.score,
-                            "retrieval_reason": assessment.reason,
-                        }
-                    )
-                    sources = ranked
-                    retrieval_trace = {
-                        "ok": assessment.ok,
-                        "score": assessment.score,
-                        "reason": assessment.reason,
-                    }
-                    if assessment.ok:
-                        break
 
-                if cbr_facts:
-                    cbr_src = cbr_source_from_facts(cbr_facts)
-                    rest = [s for s in sources if "cbr.ru" not in (s.url or "")]
-                    merged = [cbr_src] + rest[:7]
-                    sources = [
-                        SearchSource(
-                            index=i,
-                            url=s.url,
-                            title=s.title,
-                            snippet=s.snippet,
-                            domain=s.domain,
-                        )
-                        for i, s in enumerate(merged, start=1)
-                    ]
-
-                if sources:
-                    max_pages = 3 if route.answer_model == "pro" else 2
-                    sources = await enrich_sources_with_pages(sources, max_pages=max_pages)
-                    reassess = assess_retrieval(sources, llm_query)
-                    retrieval_trace = {
-                        "ok": reassess.ok,
-                        "score": reassess.score,
-                        "reason": f"after_page_fetch:{reassess.reason}",
-                    }
-                    search_attempts.append(
-                        {
-                            "query": "(page_fetch)",
-                            "sources_count": len(sources),
-                            "retrieval_ok": reassess.ok,
-                            "retrieval_score": reassess.score,
-                            "retrieval_reason": retrieval_trace["reason"],
-                        }
-                    )
+                pipeline_result = await self.fact_pipeline.run(
+                    llm_query,
+                    queries,
+                    enhance_fn=_enhance,
+                    howto=howto,
+                    weather=weather,
+                    currency=currency,
+                    answer_model=route.answer_model,
+                )
+                sources = pipeline_result.sources
+                fact_pack = pipeline_result.fact_pack
+                search_attempts = pipeline_result.search_attempts
+                retrieval_trace = pipeline_result.retrieval_trace
+                search_q_sent = pipeline_result.last_search_query
 
                 sources_json = sources_to_json(sources)
                 if sources_json:
@@ -326,6 +271,7 @@ class SearchFlowService:
                 needs_search=route.needs_search,
                 model=route.answer_model,
                 hint_clarify=hint_clarify,
+                fact_pack=fact_pack,
             )
 
             full_answer = ""
@@ -342,11 +288,17 @@ class SearchFlowService:
                         prior_sources_block=prior_sources_block,
                         hint_clarify=hint_clarify,
                         strict_facts=strict or weak_retrieval,
+                        fact_pack=fact_pack,
                     ):
                         text += chunk
                     return text
 
                 full_answer = await _collect_answer(strict=False)
+                if fact_pack and fact_pack.facts:
+                    ok, unsupported = verify_answer_against_facts(full_answer, fact_pack)
+                    if not ok:
+                        logger.info("Answer verify failed, unsupported numbers: %s", unsupported)
+                        full_answer = await _collect_answer(strict=True)
                 if is_template_evasion(full_answer):
                     full_answer = await _collect_answer(strict=True)
                 for i in range(0, len(full_answer), 48):
@@ -384,6 +336,7 @@ class SearchFlowService:
             rewrite=rewrite_trace,
             search_attempts=search_attempts or None,
             retrieval=retrieval_trace,
+            fact_pack=fact_pack.to_dict() if fact_pack else None,
         )
 
         trace_payload = debug_trace if await _messages_have_debug_trace(db) else None

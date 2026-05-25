@@ -25,8 +25,15 @@ def _build_features() -> dict[str, bool]:
         page_fetch = True
     except ImportError:
         page_fetch = False
+    try:
+        from app.services import facts  # noqa: F401
+
+        fact_pipeline = True
+    except ImportError:
+        fact_pipeline = False
     return {
-        "policy_v4_persona": POLICY_VERSION.startswith("v4"),
+        "policy_v5_factpack": POLICY_VERSION.startswith("v5"),
+        "fact_pipeline": fact_pipeline,
         "currency_cbr": currency_cbr,
         "page_fetch": page_fetch,
     }

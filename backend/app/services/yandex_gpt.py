@@ -10,6 +10,8 @@ from app.core.config import Settings, get_settings
 from app.services.llm_provider import LLMProvider, SearchSource
 from app.services.search_query import is_meta_assistant_query
 from app.services.answer_guard import strict_answer_addon
+from app.services.facts.format import format_fact_pack_for_prompt
+from app.services.facts.models import FactPack
 from app.services.yandex_errors import YandexServiceError
 
 logger = logging.getLogger(__name__)
@@ -35,6 +37,7 @@ SYSTEM_PROMPT_SEARCH = """Ты — Glosix: умный собеседник-эк�
 - пустые фразы «в интернете можно найти…» без конкретики из источников.
 - Если данных мало — честно что удалось выяснить из [n] + один уточняющий вопрос (город, дата), не «сделайте поиск сами».
 - Курс валют: сразу цифры (официальный ЦБ и при необходимости биржевой), без списка banki.ru / cbr.ru «где посмотреть».
+- Блок «Проверенные факты»: цифры и даты только оттуда; источники [n] для цитат.
 
 Структура ответа:
 1. Суть — 1–3 предложения, прямой ответ.
@@ -128,6 +131,35 @@ class YandexGPTProvider(LLMProvider):
     def _model_uri(self, model: AnswerModel = "lite") -> str:
         return self.settings.yandex_model_uri(model)
 
+    def _build_messages_from_fact_pack(
+        self,
+        query: str,
+        sources: list[SearchSource],
+        fact_pack: FactPack,
+        history: list[tuple[str, str]],
+        prior_sources_block: str = "",
+        *,
+        hint_clarify: str | None = None,
+        strict_facts: bool = False,
+    ) -> list[dict]:
+        extra = f"\n\n{prior_sources_block}" if prior_sources_block else ""
+        clarify_block = ""
+        if hint_clarify:
+            clarify_block = (
+                f"\n\nПодсказка: в выдаче может не хватать данных. "
+                f"В конце ответа задай уточнение: {hint_clarify}"
+            )
+        strict_block = strict_answer_addon() if strict_facts else ""
+        facts_block = format_fact_pack_for_prompt(fact_pack, sources)
+        user_content = f"""{facts_block}
+{_format_history(history)}{extra}{clarify_block}{strict_block}
+
+Вопрос: {query}"""
+        return [
+            {"role": "system", "text": SYSTEM_PROMPT_SEARCH},
+            {"role": "user", "text": user_content},
+        ]
+
     def _build_messages_search(
         self,
         query: str,
@@ -137,7 +169,18 @@ class YandexGPTProvider(LLMProvider):
         *,
         hint_clarify: str | None = None,
         strict_facts: bool = False,
+        fact_pack: FactPack | None = None,
     ) -> list[dict]:
+        if fact_pack is not None:
+            return self._build_messages_from_fact_pack(
+                query,
+                sources,
+                fact_pack,
+                history,
+                prior_sources_block,
+                hint_clarify=hint_clarify,
+                strict_facts=strict_facts,
+            )
         extra = f"\n\n{prior_sources_block}" if prior_sources_block else ""
         clarify_block = ""
         if hint_clarify:
@@ -220,6 +263,7 @@ class YandexGPTProvider(LLMProvider):
         *,
         hint_clarify: str | None = None,
         strict_facts: bool = False,
+        fact_pack: FactPack | None = None,
     ) -> AsyncIterator[str]:
         if not self.settings.yandex_configured:
             mock = (
@@ -249,6 +293,7 @@ class YandexGPTProvider(LLMProvider):
                 prior_sources_block,
                 hint_clarify=hint_clarify,
                 strict_facts=strict_facts,
+                fact_pack=fact_pack,
             ),
         }
 
