@@ -15,7 +15,7 @@ PROXY_PORT=8080
 
 # Репозиторий для deploy.sh (если клонируете с GitHub)
 REPO_URL=https://github.com/Rekhmunov/AI-assistant-and-search.git
-GIT_BRANCH=cursor/initial-service-scaffold-f0d8
+GIT_BRANCH=main
 
 # Каталог установки на сервере
 APP_DIR=/opt/aisearch
