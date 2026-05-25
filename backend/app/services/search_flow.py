@@ -18,7 +18,12 @@ from app.services.query_router import QueryRouter
 from app.services.query_rewriter import QueryRewriter
 from app.services.retrieval_quality import assess_retrieval
 from app.services.search_debug import build_debug_trace, build_gpt_messages_preview
-from app.services.search_query import enhance_search_query, is_howto_query, normalize_user_query
+from app.services.search_query import (
+    enhance_search_query,
+    is_howto_query,
+    is_weather_query,
+    normalize_user_query,
+)
 from app.services.source_ranking import rank_sources
 from app.services.thread_context import build_thread_context, format_sources_for_prompt
 from app.services.yandex_errors import YandexServiceError
@@ -220,10 +225,17 @@ class SearchFlowService:
                         or is_howto_query(llm_query)
                         or route.reason.startswith("rules:howto")
                     )
+                    weather = is_weather_query(llm_query)
                     for base_q in rewrite.search_queries[:2]:
-                        search_q_sent = enhance_search_query(base_q, for_howto=howto)
+                        search_q_sent = enhance_search_query(
+                            base_q, for_howto=howto, for_weather=weather
+                        )
                         raw_sources = await self.search.search(search_q_sent)
-                        ranked = rank_sources(raw_sources, howto=howto or route.answer_model == "pro")
+                        ranked = rank_sources(
+                            raw_sources,
+                            howto=howto or route.answer_model == "pro",
+                            weather=weather,
+                        )
                         assessment = assess_retrieval(ranked, llm_query)
                         search_attempts.append(
                             {
@@ -248,6 +260,7 @@ class SearchFlowService:
                         yield sse_event("sources", {"sources": sources_json})
 
             answer_via_search = route.needs_search and not clarification_only
+            weather_q = is_weather_query(llm_query)
             gpt_preview = build_gpt_messages_preview(
                 self.llm,
                 llm_query=llm_query,
@@ -256,6 +269,7 @@ class SearchFlowService:
                 prior_sources_block=prior_sources_block,
                 needs_search=answer_via_search,
                 model=route.answer_model,
+                weather_query=weather_q,
             )
 
             full_answer = ""
@@ -273,6 +287,7 @@ class SearchFlowService:
                     history,
                     model=route.answer_model,
                     prior_sources_block=prior_sources_block,
+                    weather_query=is_weather_query(llm_query),
                 ):
                     full_answer += chunk
                     yield sse_event("token", {"text": chunk})

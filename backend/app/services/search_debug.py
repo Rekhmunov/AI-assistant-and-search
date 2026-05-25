@@ -25,9 +25,12 @@ def build_gpt_messages_preview(
     prior_sources_block: str,
     needs_search: bool,
     model: str,
+    weather_query: bool = False,
 ) -> list[dict[str, str]]:
     if needs_search:
-        raw = llm._build_messages_search(llm_query, sources, history, prior_sources_block)
+        raw = llm._build_messages_search(
+            llm_query, sources, history, prior_sources_block, weather_query=weather_query
+        )
     else:
         raw = llm._build_messages_direct(llm_query, history, prior_sources_block)
     return [{"role": m["role"], "text": _clip(m["text"])} for m in raw]

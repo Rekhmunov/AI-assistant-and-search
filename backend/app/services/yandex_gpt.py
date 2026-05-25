@@ -34,6 +34,12 @@ SYSTEM_PROMPT_SEARCH = """Ты — экспертный поисковый ас�
 - Не используй жирный и курсив через звёздочки — выделяй смысл формулировками, не разметкой.
 - Абзацы отделяй пустой строкой."""
 
+_WEATHER_ANSWER_BLOCK = """
+Запрос про погоду:
+- Ответь фактами из источников: температура, осадки, ветер, облачность — с цитатами [1], [2].
+- ЗАПРЕЩЕНО: «перейдите на сайт», «воспользуйтесь сервисом», нумерованный список погодных порталов без цифр прогноза.
+- Если в сниппетах нет чисел прогноза — одной фразой скажи об этом и спроси город (если не указан)."""
+
 SYSTEM_PROMPT_DIRECT = """Ты — ассистент Glosix. Отвечай на русском по делу, используя контекст диалога.
 Если в контексте есть ранее найденные источники — можешь ссылаться на [1], [2].
 Не выдумывай актуальные факты (курсы валют, новости, цены) — предложи уточнить или выполнить поиск.
@@ -119,11 +125,14 @@ class YandexGPTProvider(LLMProvider):
         sources: list[SearchSource],
         history: list[tuple[str, str]],
         prior_sources_block: str = "",
+        *,
+        weather_query: bool = False,
     ) -> list[dict]:
         extra = f"\n\n{prior_sources_block}" if prior_sources_block else ""
+        weather_block = _WEATHER_ANSWER_BLOCK if weather_query else ""
         user_content = f"""Источники:
 {_format_sources(sources)}
-{_format_history(history)}{extra}
+{_format_history(history)}{extra}{weather_block}
 
 Вопрос: {query}"""
         return [
@@ -194,6 +203,8 @@ class YandexGPTProvider(LLMProvider):
         history: list[tuple[str, str]],
         model: AnswerModel = "lite",
         prior_sources_block: str = "",
+        *,
+        weather_query: bool = False,
     ) -> AsyncIterator[str]:
         if not self.settings.yandex_configured:
             mock = (
@@ -216,7 +227,9 @@ class YandexGPTProvider(LLMProvider):
                 "temperature": 0.35 if model == "pro" else 0.3,
                 "maxTokens": max_tokens,
             },
-            "messages": self._build_messages_search(query, sources, history, prior_sources_block),
+            "messages": self._build_messages_search(
+                query, sources, history, prior_sources_block, weather_query=weather_query
+            ),
         }
 
         async for chunk in self._stream_completion(payload, headers):
