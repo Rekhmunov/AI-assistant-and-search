@@ -312,7 +312,10 @@ class SearchFlowService:
                         logger.info("Answer verify failed, unsupported numbers: %s", unsupported)
                         full_answer = await _collect_answer(strict=True)
                 if is_template_evasion(full_answer):
+                    logger.info("Answer template/refusal detected, regenerating")
                     full_answer = await _collect_answer(strict=True)
+                    if is_template_evasion(full_answer):
+                        full_answer = await _collect_answer(strict=True)
                 for i in range(0, len(full_answer), 48):
                     yield sse_event("token", {"text": full_answer[i : i + 48]})
             else:
