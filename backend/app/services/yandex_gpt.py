@@ -17,10 +17,12 @@ AnswerModel = Literal["lite", "pro"]
 SYSTEM_PROMPT_SEARCH = """Ты — экспертный поисковый ассистент Glosix (уровень качества как Perplexity). Язык ответа: русский.
 
 Правила содержания:
-- Опирайся ТОЛЬКО на предоставленные источники; цитируй факты номерами [1], [2] и т.д.
-- Не выдумывай шаги, URL, роли IAM и параметры API, которых нет в источниках.
-- Если в источниках мало деталей — задай один конкретный уточняющий вопрос (город, дата, модель), а не отсылай «посмотрите на сайте».
-- Не отправляй пользователя на внешние сервисы вместо ответа по [1], [2].
+- Опирайся на предоставленные источники [1], [2] и контекст диалога; цитируй факты номерами.
+- Не выдумывай факты, которых нет в источниках и истории.
+- ЗАПРЕЩЕНО: «перейдите на сайт», «воспользуйтесь сервисом», нумерованный список порталов вместо ответа.
+- Если в источниках нет нужных данных — кратко скажи об этом и задай один уточняющий вопрос (город, дата, что именно).
+- Если в вопросе есть блок «--- Документ:» — в первую очередь анализируй файл; источники [n] — для внешних фактов и дополнений.
+- Если просят сократить/перефразировать/резюмировать — опирайся на последний ответ ассистента в истории; источники — вспомогательно.
 
 Структура ответа (для инструкций и «как настроить»):
 1. Короткое вступление — 1–2 предложения.
@@ -33,12 +35,6 @@ SYSTEM_PROMPT_SEARCH = """Ты — экспертный поисковый ас�
 - Только обычный текст и переносы строк. ЗАПРЕЩЕНО: #, ##, ###, **, __, `, markdown-заголовки.
 - Не используй жирный и курсив через звёздочки — выделяй смысл формулировками, не разметкой.
 - Абзацы отделяй пустой строкой."""
-
-_WEATHER_ANSWER_BLOCK = """
-Запрос про погоду:
-- Ответь фактами из источников: температура, осадки, ветер, облачность — с цитатами [1], [2].
-- ЗАПРЕЩЕНО: «перейдите на сайт», «воспользуйтесь сервисом», нумерованный список погодных порталов без цифр прогноза.
-- Если в сниппетах нет чисел прогноза — одной фразой скажи об этом и спроси город (если не указан)."""
 
 SYSTEM_PROMPT_DIRECT = """Ты — ассистент Glosix. Отвечай на русском по делу, используя контекст диалога.
 Если в контексте есть ранее найденные источники — можешь ссылаться на [1], [2].
@@ -126,13 +122,15 @@ class YandexGPTProvider(LLMProvider):
         history: list[tuple[str, str]],
         prior_sources_block: str = "",
         *,
-        weather_query: bool = False,
+        hint_clarify: str | None = None,
     ) -> list[dict]:
         extra = f"\n\n{prior_sources_block}" if prior_sources_block else ""
-        weather_block = _WEATHER_ANSWER_BLOCK if weather_query else ""
+        clarify_block = ""
+        if hint_clarify:
+            clarify_block = f"\n\nПодсказка: в выдаче может не хватать данных. В конце ответа задай уточнение: {hint_clarify}"
         user_content = f"""Источники:
 {_format_sources(sources)}
-{_format_history(history)}{extra}{weather_block}
+{_format_history(history)}{extra}{clarify_block}
 
 Вопрос: {query}"""
         return [
@@ -204,7 +202,7 @@ class YandexGPTProvider(LLMProvider):
         model: AnswerModel = "lite",
         prior_sources_block: str = "",
         *,
-        weather_query: bool = False,
+        hint_clarify: str | None = None,
     ) -> AsyncIterator[str]:
         if not self.settings.yandex_configured:
             mock = (
@@ -228,7 +226,7 @@ class YandexGPTProvider(LLMProvider):
                 "maxTokens": max_tokens,
             },
             "messages": self._build_messages_search(
-                query, sources, history, prior_sources_block, weather_query=weather_query
+                query, sources, history, prior_sources_block, hint_clarify=hint_clarify
             ),
         }
 

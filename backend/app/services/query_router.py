@@ -1,15 +1,13 @@
-"""Маршрутизация v2: по умолчанию веб-поиск; direct — узкий whitelist."""
+"""Маршрутизация v3: всегда веб-поиск, кроме короткого chitchat."""
 
-import json
 import logging
-import re
 from dataclasses import dataclass
 from typing import Literal
 
 from app.core.config import Settings, get_settings
 from app.models.user import Plan
 from app.services.search_query import enhance_search_query, is_howto_query, normalize_user_query
-from app.services.thread_context import ThreadContext, format_history_compact
+from app.services.thread_context import ThreadContext
 from app.services.yandex_gpt import YandexGPTProvider
 
 logger = logging.getLogger(__name__)
@@ -24,53 +22,7 @@ Intent = Literal[
     "chitchat",
 ]
 
-POLICY_VERSION = "v2"
-
-EDIT_PRIOR_KEYWORDS = (
-    "перефраз",
-    "сократи",
-    "короче",
-    "проще",
-    "переведи",
-    "перевод",
-    "рерайт",
-    "исправь текст",
-    "объясни ещё раз",
-    "подробнее о пункте",
-    "что ты имел",
-    "резюмируй",
-    "итог",
-    "вывод",
-)
-
-PRO_KEYWORDS = (
-    "сравни",
-    "сравнение",
-    "проанализируй",
-    "анализ",
-    "таблиц",
-    "за и против",
-    "плюсы и минусы",
-    "подробный отчёт",
-    "детальный разбор",
-    "пошагово",
-    "стратег",
-)
-
-HOWTO_KEYWORDS = (
-    "как настроить",
-    "как подключить",
-    "как использовать",
-    "как создать",
-    "как установить",
-    "настройка",
-    "настроить",
-    "подключить",
-    "инструкция",
-    "пошагов",
-    "quickstart",
-    "getting started",
-)
+POLICY_VERSION = "v3"
 
 CHITCHAT_EXACT = frozenset(
     {
@@ -86,6 +38,32 @@ CHITCHAT_EXACT = frozenset(
     }
 )
 
+EDIT_PRIOR_KEYWORDS = (
+    "перефраз",
+    "сократи",
+    "короче",
+    "проще",
+    "переведи",
+    "перевод",
+    "рерайт",
+    "исправь текст",
+    "резюмируй",
+    "итог",
+    "вывод",
+)
+
+PRO_KEYWORDS = (
+    "сравни",
+    "сравнение",
+    "проанализируй",
+    "анализ",
+    "таблиц",
+    "за и против",
+    "плюсы и минусы",
+    "подробный отчёт",
+    "детальный разбор",
+)
+
 PRO_MIN_QUERY_LEN = 120
 
 
@@ -99,107 +77,61 @@ class RouteDecision:
     policy_version: str = POLICY_VERSION
 
 
-def _has_attachment_marker(query: str) -> bool:
-    return "--- Документ:" in query or "[Файлы:" in query
-
-
 def _is_chitchat(q: str) -> bool:
     stripped = q.strip().lower().rstrip("!?.")
     return len(stripped) < 24 and stripped in CHITCHAT_EXACT
 
 
-def _is_edit_prior(q: str, ctx: ThreadContext) -> bool:
-    return ctx.is_continuation and any(k in q for k in EDIT_PRIOR_KEYWORDS)
+def _has_attachment_marker(query: str) -> bool:
+    return "--- Документ:" in query or "[Файлы:" in query
 
 
-def _rule_route(query: str, ctx: ThreadContext, has_attachments: bool, user_plan: Plan) -> RouteDecision | None:
-    q = query.strip().lower()
-    normalized = normalize_user_query(query)
-
-    if _is_chitchat(q):
-        return RouteDecision(
-            needs_search=False,
-            search_query=query,
-            answer_model="lite",
-            reason="rules:chitchat",
-            intent="chitchat",
-        )
-
-    if has_attachments or _has_attachment_marker(query):
-        return RouteDecision(
-            needs_search=False,
-            search_query=query[:400],
-            answer_model="pro",
-            reason="rules:attachment_direct",
-            intent="document",
-        )
-
-    if _is_edit_prior(q, ctx):
-        return RouteDecision(
-            needs_search=False,
-            search_query=query,
-            answer_model="lite",
-            reason="rules:edit_prior",
-            intent="edit_prior",
-        )
-
-    if any(k in q for k in HOWTO_KEYWORDS) or is_howto_query(normalized):
-        search_q = enhance_search_query(normalized, for_howto=True)
-        return RouteDecision(
-            needs_search=True,
-            search_query=search_q,
-            answer_model="pro",
-            reason="rules:howto_guide",
-            intent="howto",
-        )
-
-    if any(k in q for k in PRO_KEYWORDS) or len(query) > PRO_MIN_QUERY_LEN:
-        return RouteDecision(
-            needs_search=True,
-            search_query=normalized[:400],
-            answer_model="pro",
-            reason="rules:compare_analyze",
-            intent="compare_analyze",
-        )
-
-    return None
-
-
-def _model_from_complexity(query: str, user_plan: Plan) -> AnswerModel:
+def _detect_intent(
+    query: str,
+    ctx: ThreadContext,
+    has_attachments: bool,
+) -> Intent:
     q = query.lower()
+    if has_attachments or _has_attachment_marker(query):
+        return "document"
+    if ctx.is_continuation and any(k in q for k in EDIT_PRIOR_KEYWORDS):
+        return "edit_prior"
+    if is_howto_query(query):
+        return "howto"
     if any(k in q for k in PRO_KEYWORDS) or len(query) > PRO_MIN_QUERY_LEN:
+        return "compare_analyze"
+    return "factual_current"
+
+
+def _model_for_intent(intent: Intent, query: str, user_plan: Plan) -> AnswerModel:
+    if intent in ("howto", "document", "compare_analyze"):
+        return "pro"
+    if any(k in query.lower() for k in PRO_KEYWORDS) or len(query) > PRO_MIN_QUERY_LEN:
         return "pro"
     if user_plan == Plan.PRO:
         return "lite"
     return "lite"
 
 
-def _parse_classifier_json(text: str, fallback_query: str) -> RouteDecision | None:
-    match = re.search(r"\{[^{}]*\}", text, re.DOTALL)
-    if not match:
-        return None
-    try:
-        data = json.loads(match.group())
-    except json.JSONDecodeError:
-        return None
-
-    needs_search = bool(data.get("needs_search", True))
-    search_query = str(data.get("search_query") or fallback_query)[:400]
-    model_raw = str(data.get("answer_model", "lite")).lower()
-    answer_model: AnswerModel = "pro" if model_raw == "pro" else "lite"
-    reason = str(data.get("reason", "classifier"))[:64]
-    intent_raw = str(data.get("intent", "factual_current")).lower()
-    intent: Intent = "factual_current"
-    if intent_raw in ("howto", "document", "edit_prior", "compare_analyze", "chitchat"):
-        intent = intent_raw  # type: ignore[assignment]
-    if not needs_search and intent == "factual_current":
-        intent = "edit_prior"
-
+def _build_search_route(
+    query: str,
+    ctx: ThreadContext,
+    has_attachments: bool,
+    user_plan: Plan,
+    *,
+    reason: str,
+) -> RouteDecision:
+    normalized = normalize_user_query(query)
+    intent = _detect_intent(normalized, ctx, has_attachments)
+    search_q = enhance_search_query(
+        normalized,
+        for_howto=intent == "howto",
+    )
     return RouteDecision(
-        needs_search=needs_search,
-        search_query=search_query,
-        answer_model=answer_model,
-        reason=f"classifier:{reason}",
+        needs_search=True,
+        search_query=search_q,
+        answer_model=_model_for_intent(intent, normalized, user_plan),
+        reason=reason,
         intent=intent,
     )
 
@@ -217,24 +149,21 @@ class QueryRouter:
         user_plan: Plan = Plan.FREE,
     ) -> RouteDecision:
         query = normalize_user_query(query)
-        ruled = _rule_route(query, ctx, has_attachments, user_plan)
-        if ruled:
-            return ruled
+        q = query.strip().lower()
 
-        if not self.settings.yandex_configured:
+        if _is_chitchat(q):
             return RouteDecision(
-                needs_search=True,
-                search_query=query[:400],
-                answer_model=_model_from_complexity(query, user_plan),
-                reason="mock:search",
-                intent="factual_current",
+                needs_search=False,
+                search_query=query,
+                answer_model="lite",
+                reason="rules:chitchat",
+                intent="chitchat",
             )
 
-        search_q = enhance_search_query(query, for_howto=is_howto_query(query))
-        return RouteDecision(
-            needs_search=True,
-            search_query=search_q,
-            answer_model=_model_from_complexity(query, user_plan),
-            reason="default:search_v2",
-            intent="howto" if is_howto_query(query) else "factual_current",
+        return _build_search_route(
+            query,
+            ctx,
+            has_attachments,
+            user_plan,
+            reason="always_search:v3",
         )

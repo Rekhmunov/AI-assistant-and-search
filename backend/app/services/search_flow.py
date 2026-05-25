@@ -200,7 +200,7 @@ class SearchFlowService:
         rewrite_trace: dict | None = None
         search_attempts: list[dict] = []
         retrieval_trace: dict | None = None
-        clarification_only = False
+        hint_clarify: str | None = None
 
         try:
             if route.needs_search:
@@ -218,76 +218,65 @@ class SearchFlowService:
                     route.answer_model = "pro"
 
                 if rewrite.needs_clarification and rewrite.clarification_question:
-                    clarification_only = True
-                else:
-                    howto = (
-                        route.intent == "howto"
-                        or is_howto_query(llm_query)
-                        or route.reason.startswith("rules:howto")
+                    hint_clarify = rewrite.clarification_question
+
+                queries = rewrite.search_queries or [route.search_query]
+                howto = route.intent == "howto" or is_howto_query(llm_query)
+                weather = is_weather_query(llm_query)
+
+                for base_q in queries[:2]:
+                    search_q_sent = enhance_search_query(
+                        base_q, for_howto=howto, for_weather=weather
                     )
-                    weather = is_weather_query(llm_query)
-                    for base_q in rewrite.search_queries[:2]:
-                        search_q_sent = enhance_search_query(
-                            base_q, for_howto=howto, for_weather=weather
-                        )
-                        raw_sources = await self.search.search(search_q_sent)
-                        ranked = rank_sources(
-                            raw_sources,
-                            howto=howto or route.answer_model == "pro",
-                            weather=weather,
-                        )
-                        assessment = assess_retrieval(ranked, llm_query)
-                        search_attempts.append(
-                            {
-                                "query": search_q_sent,
-                                "sources_count": len(ranked),
-                                "retrieval_ok": assessment.ok,
-                                "retrieval_score": assessment.score,
-                                "retrieval_reason": assessment.reason,
-                            }
-                        )
-                        sources = ranked
-                        retrieval_trace = {
-                            "ok": assessment.ok,
-                            "score": assessment.score,
-                            "reason": assessment.reason,
+                    raw_sources = await self.search.search(search_q_sent)
+                    ranked = rank_sources(
+                        raw_sources,
+                        howto=howto or route.answer_model == "pro",
+                        weather=weather,
+                    )
+                    assessment = assess_retrieval(ranked, llm_query)
+                    search_attempts.append(
+                        {
+                            "query": search_q_sent,
+                            "sources_count": len(ranked),
+                            "retrieval_ok": assessment.ok,
+                            "retrieval_score": assessment.score,
+                            "retrieval_reason": assessment.reason,
                         }
-                        if assessment.ok:
-                            break
+                    )
+                    sources = ranked
+                    retrieval_trace = {
+                        "ok": assessment.ok,
+                        "score": assessment.score,
+                        "reason": assessment.reason,
+                    }
+                    if assessment.ok:
+                        break
 
-                    sources_json = sources_to_json(sources)
-                    if sources_json:
-                        yield sse_event("sources", {"sources": sources_json})
+                sources_json = sources_to_json(sources)
+                if sources_json:
+                    yield sse_event("sources", {"sources": sources_json})
 
-            answer_via_search = route.needs_search and not clarification_only
-            weather_q = is_weather_query(llm_query)
             gpt_preview = build_gpt_messages_preview(
                 self.llm,
                 llm_query=llm_query,
                 sources=sources,
                 history=history,
                 prior_sources_block=prior_sources_block,
-                needs_search=answer_via_search,
+                needs_search=route.needs_search,
                 model=route.answer_model,
-                weather_query=weather_q,
+                hint_clarify=hint_clarify,
             )
 
             full_answer = ""
-            if clarification_only and rewrite_trace:
-                text = str(rewrite_trace.get("clarification_question") or "").strip()
-                full_answer = text
-                step = max(1, len(text) // 24)
-                for i in range(0, len(text), step):
-                    chunk = text[i : i + step]
-                    yield sse_event("token", {"text": chunk})
-            elif route.needs_search:
+            if route.needs_search:
                 async for chunk in self.llm.stream_answer(
                     llm_query,
                     sources,
                     history,
                     model=route.answer_model,
                     prior_sources_block=prior_sources_block,
-                    weather_query=is_weather_query(llm_query),
+                    hint_clarify=hint_clarify,
                 ):
                     full_answer += chunk
                     yield sse_event("token", {"text": chunk})
@@ -318,7 +307,7 @@ class SearchFlowService:
             search_query_sent=search_q_sent,
             sources=sources,
             sources_json=sources_json,
-            needs_search=route.needs_search and not clarification_only,
+            needs_search=route.needs_search,
             answer_model=route.answer_model,
             gpt_messages_preview=gpt_preview,
             rewrite=rewrite_trace,
