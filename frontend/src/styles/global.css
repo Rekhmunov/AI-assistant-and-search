@@ -129,6 +129,55 @@ body {
   line-height: 1.5;
 }
 
+.profile-section {
+  margin: 20px 0;
+  padding: 16px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.profile-section-title {
+  font-size: 1rem;
+  margin: 0 0 12px;
+}
+
+.profile-link-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.9rem;
+}
+
+.status-ok {
+  color: var(--accent);
+}
+
+.status-muted {
+  color: var(--muted);
+}
+
+.profile-bind-block {
+  margin-top: 12px;
+}
+
+.profile-bind-block label {
+  display: block;
+  margin-bottom: 10px;
+  font-size: 0.85rem;
+}
+
+.profile-bind-block input {
+  display: block;
+  width: 100%;
+  margin-top: 4px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: inherit;
+}
+
 .composer-wrap {
   position: fixed;
   left: 0;

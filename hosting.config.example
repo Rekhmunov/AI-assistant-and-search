@@ -22,3 +22,5 @@ APP_DIR=/opt/aisearch
 
 # MAX bot (можно заполнить позже в .env)
 # BOT_TOKEN=
+# Ссылка на бота MAX (кнопка «Открыть в MAX» на сайте)
+# VITE_MAX_BOT_URL=https://max.ru

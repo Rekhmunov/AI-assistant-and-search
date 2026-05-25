@@ -79,6 +79,7 @@ services:
       context: ./frontend
       args:
         VITE_API_URL: ${VITE_API_URL:-}
+        VITE_MAX_BOT_URL: ${VITE_MAX_BOT_URL:-https://max.ru}
     restart: unless-stopped
     depends_on:
       - backend

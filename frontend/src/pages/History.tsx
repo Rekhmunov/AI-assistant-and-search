@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "react-router-dom";
 import { fetchThreads } from "../api/client";
+import { isMaxWebApp } from "../lib/maxApp";
 import { t } from "../i18n";
 import { useAuthStore } from "../store/authStore";
 
@@ -24,14 +25,23 @@ export function History() {
     enabled: !!token,
   });
 
+  const inMax = isMaxWebApp();
+
   if (!token) {
     return (
       <div className="page">
         <h1>{t("history")}</h1>
         <p className="auth-gate-text">{t("historyLoginHint")}</p>
-        <Link to="/login" className="btn-primary btn-block">
-          {t("signIn")}
-        </Link>
+        {!inMax && (
+          <Link to="/login" className="btn-primary btn-block">
+            {t("signIn")}
+          </Link>
+        )}
+        {inMax && (
+          <Link to="/profile" className="btn-primary btn-block">
+            {t("navProfile")}
+          </Link>
+        )}
         <Link to="/" className="btn-link" style={{ display: "block", marginTop: 16, textAlign: "center" }}>
           {t("backToSearch")}
         </Link>

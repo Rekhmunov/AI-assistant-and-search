@@ -5,6 +5,7 @@ import { uploadFile, type UploadedFile, fetchMe } from "../api/client";
 import { ACCEPT_FILE_INPUT, MAX_FILE_BYTES_FREE, MAX_FILE_BYTES_PRO, validateFile } from "../constants/files";
 import { useVoiceInput } from "../hooks/useVoiceInput";
 import { t } from "../i18n";
+import { isMaxWebApp } from "../lib/maxApp";
 import { useAuthStore } from "../store/authStore";
 
 export interface ComposerAttachment {
@@ -32,6 +33,7 @@ export function SearchComposer({
   onAttachmentsChange,
 }: Props) {
   const token = useAuthStore((s) => s.token);
+  const inMax = isMaxWebApp();
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -107,7 +109,7 @@ export function SearchComposer({
         </div>
       )}
       {(uploadError || voice.error) && <p className="composer-error">{uploadError || voice.error}</p>}
-      {!token && (
+      {!token && !inMax && (
         <p className="composer-hint">
           {t("guestSearchHint")}{" "}
           <Link to="/login">{t("signIn")}</Link> — {t("guestSearchHintMore")}

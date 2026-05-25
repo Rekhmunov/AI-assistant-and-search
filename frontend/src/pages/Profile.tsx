@@ -1,6 +1,8 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "react-router-dom";
 import { devActivatePro, fetchMe, deleteAccount } from "../api/client";
+import { ProfileAccountSection } from "../components/ProfileAccountSection";
+import { isMaxWebApp } from "../lib/maxApp";
 import { t } from "../i18n";
 import { useAuthStore } from "../store/authStore";
 
@@ -10,6 +12,7 @@ export function Profile() {
   const clear = useAuthStore((s) => s.clear);
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const inMax = isMaxWebApp();
 
   const { data: user } = useQuery({
     queryKey: ["me"],
@@ -21,10 +24,14 @@ export function Profile() {
     return (
       <div className="page">
         <h1>{t("profile")}</h1>
-        <p className="auth-gate-text">{t("profileLoginHint")}</p>
-        <Link to="/login" className="btn-primary btn-block">
-          {t("signIn")}
-        </Link>
+        <p className="auth-gate-text">
+          {inMax ? t("profileMaxLoginHint") : t("profileLoginHint")}
+        </p>
+        {!inMax && (
+          <Link to="/login" className="btn-primary btn-block">
+            {t("signIn")}
+          </Link>
+        )}
         <Link to="/" className="btn-link" style={{ display: "block", marginTop: 16, textAlign: "center" }}>
           {t("backToSearch")}
         </Link>
@@ -45,6 +52,13 @@ export function Profile() {
     if (!confirm("Удалить аккаунт?")) return;
     await deleteAccount(token);
     clear();
+    navigate("/");
+  };
+
+  const onUserUpdated = (updated: typeof user) => {
+    if (updated) setUser(updated);
+    queryClient.invalidateQueries({ queryKey: ["me"] });
+    queryClient.invalidateQueries({ queryKey: ["session"] });
   };
 
   return (
@@ -52,12 +66,6 @@ export function Profile() {
       <h1>{t("profile")}</h1>
       <div className="profile-card">
         <div>👤 {name}</div>
-        {user?.email && (
-          <div style={{ marginTop: 8, color: "var(--muted)" }}>{user.email}</div>
-        )}
-        <div style={{ marginTop: 4, color: "var(--muted)" }}>
-          MAX: {user?.max_linked ? "привязан" : "не привязан (откройте из бота после входа)"}
-        </div>
         <div style={{ marginTop: 4, color: "var(--muted)" }}>
           {t("plan")}: {user?.plan === "pro" ? "Pro" : "Free"}
         </div>
@@ -65,6 +73,8 @@ export function Profile() {
           {t("searchesToday")}: {user?.searches_today ?? 0}/{user?.searches_limit ?? 10}
         </div>
       </div>
+
+      {user && <ProfileAccountSection user={user} token={token} onUserUpdated={onUserUpdated} />}
 
       {user?.plan !== "pro" && (
         <div className="pro-banner">
@@ -80,17 +90,24 @@ export function Profile() {
       <div style={{ color: "var(--muted)" }}>
         {t("language")}: Русский
       </div>
-      <button
-        type="button"
-        className="btn-secondary btn-block"
-        style={{ marginTop: 16 }}
-        onClick={() => {
-          clear();
-          navigate("/login");
-        }}
-      >
-        Выйти
-      </button>
+      {user?.email && (
+        <button
+          type="button"
+          className="btn-secondary btn-block"
+          style={{ marginTop: 16 }}
+          onClick={() => {
+            clear();
+            navigate(inMax ? "/" : "/login");
+          }}
+        >
+          {t("signOut")}
+        </button>
+      )}
+      {!user?.email && inMax && (
+        <p className="hint" style={{ marginTop: 16 }}>
+          {t("maxSignOutHint")}
+        </p>
+      )}
       <button type="button" className="danger-link" onClick={onDelete}>
         {t("deleteAccount")}
       </button>

@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { bindMax, fetchMe, loginWithInitData } from "../api/client";
 import { useAuthStore } from "../store/authStore";
 
-/** Validates stored token or legacy MAX initData; clears invalid token. */
+/** JWT, then MAX initData (miniapp), else guest-ready web session. */
 export function useAuthBootstrap() {
   const { token, setAuth, setUser, clear } = useAuthStore();
   const [ready, setReady] = useState(false);
@@ -39,7 +39,7 @@ export function useAuthBootstrap() {
               return;
             }
           } catch {
-            /* show email login */
+            /* MAX: no email login screen; user stays guest until retry from bot */
           }
         }
 

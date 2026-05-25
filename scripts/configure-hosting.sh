@@ -41,6 +41,7 @@ POSTGRES_PW_VAL="${POSTGRES_PASSWORD:-$(gen_secret)}"
 
 # Пустой URL: запросы на /api того же хоста (app/admin), без cross-origin и CORS-ошибок
 VITE_URL=""
+VITE_MAX_BOT="${VITE_MAX_BOT_URL:-https://max.ru}"
 CORS="https://${APP_HOST},https://${API_HOST},https://${ADMIN_HOST}"
 
 if [ -f .env ] && [ "${FORCE:-0}" != "1" ]; then
@@ -56,6 +57,7 @@ DEBUG=false
 SKIP_INIT_DATA_VALIDATION=false
 
 VITE_API_URL=${VITE_URL}
+VITE_MAX_BOT_URL=${VITE_MAX_BOT}
 CORS_ORIGINS=${CORS}
 
 JWT_SECRET=${JWT_SECRET_VAL}

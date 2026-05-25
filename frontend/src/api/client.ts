@@ -114,6 +114,22 @@ export async function registerEmail(
   return res.json();
 }
 
+export async function bindEmail(
+  token: string,
+  email: string,
+  password: string,
+  firstName?: string
+): Promise<UserProfile> {
+  const res = await fetch(`${API_BASE}/api/auth/bind-email`, {
+    method: "POST",
+    headers: apiHeaders(token),
+    credentials: "include",
+    body: JSON.stringify({ email, password, first_name: firstName }),
+  });
+  if (!res.ok) throw new Error(await parseAuthError(res));
+  return res.json();
+}
+
 export async function bindMax(token: string, initData: string): Promise<UserProfile> {
   const res = await fetch(`${API_BASE}/api/auth/bind-max`, {
     method: "POST",

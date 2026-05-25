@@ -1,11 +1,14 @@
-import { FormEvent, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { FormEvent, useEffect, useState } from "react";
+import { Navigate, useNavigate } from "react-router-dom";
 import { loginEmail, registerEmail } from "../api/client";
 import { GlosixHeader } from "../components/GlosixHeader";
+import { isMaxWebApp } from "../lib/maxApp";
 import { useAuthStore } from "../store/authStore";
 
+/** Вход по email — только для веб-сайта, не для миниаппа MAX. */
 export function LoginPage() {
   const navigate = useNavigate();
+  const token = useAuthStore((s) => s.token);
   const setAuth = useAuthStore((s) => s.setAuth);
   const [mode, setMode] = useState<"login" | "register">("login");
   const [email, setEmail] = useState("");
@@ -13,6 +16,20 @@ export function LoginPage() {
   const [firstName, setFirstName] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+
+  const inMax = isMaxWebApp();
+
+  useEffect(() => {
+    if (inMax && token) navigate("/profile", { replace: true });
+  }, [inMax, token, navigate]);
+
+  if (inMax) {
+    return <Navigate to="/" replace />;
+  }
+
+  if (token) {
+    return <Navigate to="/" replace />;
+  }
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -36,8 +53,8 @@ export function LoginPage() {
     <div className="page page-login">
       <GlosixHeader showLimits={false} />
       <div className="login-card">
-        <h1>{mode === "login" ? "Вход" : "Регистрация"}</h1>
-        <p className="hint">Один аккаунт для сайта app.glosix.ru и миниаппа в MAX</p>
+        <h1>{mode === "login" ? "Вход на сайт" : "Регистрация"}</h1>
+        <p className="hint">Email и пароль для app.glosix.ru. В MAX вход автоматический.</p>
         <button type="button" className="btn-link" style={{ marginBottom: 16 }} onClick={() => navigate("/")}>
           Продолжить без входа
         </button>

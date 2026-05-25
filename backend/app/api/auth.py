@@ -284,6 +284,33 @@ async def login_email(
     return AuthResponse(access_token=access, user=_user_profile(user, used, limit))
 
 
+@router.post("/bind-email", response_model=UserProfile)
+async def bind_email(
+    body: EmailRegisterRequest,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+    limiter: Annotated[RateLimiter, Depends(get_rate_limiter)],
+):
+    """Добавить email и пароль к аккаунту MAX (вход с сайта app.glosix.ru)."""
+    if user.email:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email уже привязан")
+
+    email = body.email.strip().lower()
+    existing = await db.execute(
+        select(User).where(User.email == email, User.id != user.id, User.deleted_at.is_(None))
+    )
+    if existing.scalar_one_or_none():
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Этот email уже занят")
+
+    user.email = email
+    user.password_hash = hash_password(body.password)
+    if body.first_name and not user.first_name:
+        user.first_name = body.first_name
+
+    used, limit = await _limits_for_user(user, limiter)
+    return _user_profile(user, used, limit)
+
+
 @router.post("/bind-max", response_model=UserProfile)
 async def bind_max(
     body: InitDataRequest,

@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { fetchSession } from "../api/client";
+import { isMaxWebApp } from "../lib/maxApp";
 import { t } from "../i18n";
 import { useAuthStore } from "../store/authStore";
 
@@ -10,6 +11,7 @@ interface Props {
 
 export function GlosixHeader({ showLimits = true }: Props) {
   const token = useAuthStore((s) => s.token);
+  const inMax = isMaxWebApp();
 
   const { data: session } = useQuery({
     queryKey: ["session", token],
@@ -34,9 +36,14 @@ export function GlosixHeader({ showLimits = true }: Props) {
             {limits}
           </span>
         )}
-        {!token && (
+        {!token && !inMax && (
           <Link to="/login" className="header-login-btn">
             {t("signIn")}
+          </Link>
+        )}
+        {!token && inMax && (
+          <Link to="/profile" className="header-login-btn">
+            {t("navProfile")}
           </Link>
         )}
         {token && (
