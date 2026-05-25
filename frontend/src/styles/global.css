@@ -376,15 +376,11 @@ body {
   overflow-y: auto;
   overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
-  padding-left: 4px;
+  padding-right: 2px;
   margin-bottom: 8px;
-  direction: rtl;
+  direction: ltr;
   scrollbar-width: thin;
   scrollbar-color: var(--scrollbar-thumb) transparent;
-}
-
-.thread-conversation > * {
-  direction: ltr;
 }
 
 .thread-conversation::-webkit-scrollbar {
