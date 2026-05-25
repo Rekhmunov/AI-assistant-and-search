@@ -1,6 +1,8 @@
 import base64
 import json
 import logging
+import re
+import xml.etree.ElementTree as ET
 from urllib.parse import urlparse
 
 import httpx
@@ -34,6 +36,41 @@ MOCK_SOURCES: list[SearchSource] = [
         domain="rbc.ru",
     ),
 ]
+
+
+def _xml_text(element: ET.Element | None) -> str:
+    if element is None:
+        return ""
+    parts = [element.text or ""]
+    for child in element:
+        parts.append(_xml_text(child))
+        if child.tail:
+            parts.append(child.tail)
+    return re.sub(r"\s+", " ", "".join(parts)).strip()
+
+
+def _parse_yandex_xml(xml_bytes: bytes, limit: int) -> list[SearchSource]:
+    root = ET.fromstring(xml_bytes)
+    docs = root.findall(".//doc")
+    sources: list[SearchSource] = []
+    for i, doc in enumerate(docs[:limit], start=1):
+        url = _xml_text(doc.find("url"))
+        title = _xml_text(doc.find("title")) or _xml_text(doc.find("headline"))
+        passage_el = doc.find("passages/passage")
+        snippet = _xml_text(passage_el) or _xml_text(doc.find("headline"))
+        domain = urlparse(url).netloc.replace("www.", "") if url else "unknown"
+        if not url and not title:
+            continue
+        sources.append(
+            SearchSource(
+                index=i,
+                url=url,
+                title=title or domain,
+                snippet=snippet[:500],
+                domain=domain,
+            )
+        )
+    return sources
 
 
 def _parse_search_documents(decoded: dict, limit: int) -> list[SearchSource]:
@@ -79,12 +116,18 @@ class YandexSearchService:
         body = {
             "query": {
                 "searchType": "SEARCH_TYPE_RU",
-                "queryText": query,
+                "queryText": query[:400],
             },
-            "folderId": self.settings.yandex_folder_id,
-            "responseFormat": "FORMAT_JSON",
-            "maxPassages": 2,
+            "folderId": self.settings.yandex_folder_id.strip(),
+            "responseFormat": "FORMAT_XML",
+            "maxPassages": "2",
             "region": "225",
+            "l10n": "LOCALIZATION_RU",
+            "groupSpec": {
+                "groupMode": "GROUP_MODE_FLAT",
+                "groupsOnPage": str(min(limit, 20)),
+                "docsInGroup": "1",
+            },
         }
 
         try:
@@ -106,12 +149,21 @@ class YandexSearchService:
             raise YandexServiceError("search", "Пустой ответ Search API")
 
         try:
-            decoded = json.loads(base64.b64decode(raw).decode("utf-8"))
-        except (json.JSONDecodeError, ValueError) as e:
-            logger.exception("Yandex Search rawData decode failed")
+            xml_bytes = base64.b64decode(raw)
+        except ValueError as e:
+            logger.exception("Yandex Search rawData base64 decode failed")
             raise YandexServiceError("search", "Некорректный ответ Search API") from e
 
-        sources = _parse_search_documents(decoded, limit)
+        sources = _parse_yandex_xml(xml_bytes, limit)
+        if not sources:
+            # fallback: legacy JSON-in-base64 (если API вернёт JSON)
+            try:
+                import json
+
+                decoded = json.loads(xml_bytes.decode("utf-8"))
+                sources = _parse_search_documents(decoded, limit)
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                pass
         if not sources:
             logger.warning("Yandex Search: no documents in response")
             raise YandexServiceError("search", "В выдаче нет документов")

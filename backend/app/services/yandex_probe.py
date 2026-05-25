@@ -31,7 +31,8 @@ async def probe_yandex(settings: Settings | None = None) -> dict:
         sources = await YandexSearchService(s).search("тест", limit=1)
         search_ok = len(sources) > 0 and sources[0].domain != "habr.com"
     except httpx.HTTPStatusError as e:
-        errors.append(f"search HTTP {e.response.status_code}")
+        body = e.response.text[:200].replace("\n", " ")
+        errors.append(f"search HTTP {e.response.status_code}: {body}")
         logger.warning("Yandex search probe failed: %s", e.response.text[:300])
     except Exception as e:
         errors.append(f"search: {e!s}")
