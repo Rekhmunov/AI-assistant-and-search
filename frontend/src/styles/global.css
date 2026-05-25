@@ -606,15 +606,250 @@ body {
 
 .thread-list button,
 .history-card {
-  width: 100%;
   text-align: left;
   padding: 14px;
   border-radius: 12px;
   border: 1px solid var(--border);
   background: var(--surface);
   color: var(--text);
-  margin-bottom: 8px;
   cursor: pointer;
+}
+
+.history-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.history-row {
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+  margin-bottom: 8px;
+  position: relative;
+}
+
+.history-row .history-card {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.history-card-title {
+  display: block;
+  font-size: 1rem;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.history-card-meta {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.muted-text {
+  color: var(--muted);
+}
+
+.thread-history-menu {
+  position: relative;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+}
+
+.kebab-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 100%;
+  min-height: 52px;
+  padding: 0;
+  border: none;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s;
+}
+
+.kebab-btn:hover,
+.kebab-btn[aria-expanded="true"] {
+  color: var(--text);
+  background: var(--surface);
+}
+
+.thread-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 30;
+  min-width: 200px;
+  padding: 6px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+}
+
+.thread-dropdown button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 12px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font-size: 0.95rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.thread-dropdown button:hover {
+  background: var(--accent-soft);
+}
+
+.thread-dropdown button.danger {
+  color: #f87171;
+}
+
+.thread-dropdown button.danger:hover {
+  background: rgba(248, 113, 113, 0.12);
+}
+
+.thread-dropdown-confirm {
+  min-width: 220px;
+  padding: 12px;
+}
+
+.thread-dropdown-confirm p {
+  margin: 0 0 12px;
+  font-size: 0.9rem;
+  color: var(--text);
+  line-height: 1.4;
+}
+
+.thread-dropdown-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.thread-dropdown-actions .btn-secondary,
+.thread-dropdown-actions .btn-danger {
+  flex: 1;
+  padding: 8px 10px;
+  font-size: 0.875rem;
+}
+
+.btn-danger {
+  border: none;
+  border-radius: 8px;
+  background: #dc2626;
+  color: #fff;
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.btn-danger:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.thread-rename-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(4px);
+}
+
+.thread-rename-sheet {
+  width: 100%;
+  max-width: 480px;
+  padding: 20px;
+  border-radius: 16px 16px 0 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+
+@media (min-width: 480px) {
+  .thread-rename-overlay {
+    align-items: center;
+  }
+
+  .thread-rename-sheet {
+    border-radius: 16px;
+  }
+}
+
+.thread-rename-label {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 0.875rem;
+  color: var(--muted);
+}
+
+.thread-rename-input {
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 1rem;
+}
+
+.thread-rename-input:focus {
+  outline: 2px solid var(--accent);
+  border-color: transparent;
+}
+
+.thread-rename-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.btn-primary {
+  padding: 10px 16px;
+  border: none;
+  border-radius: 10px;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btn-secondary {
+  padding: 10px 16px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.thread-rename-actions .btn-secondary,
+.thread-rename-actions .btn-primary {
+  flex: 1;
+}
+
+.thread-menu-error {
+  margin: 8px 0 0;
+  font-size: 0.85rem;
+  color: #f87171;
 }
 
 .thread-header {

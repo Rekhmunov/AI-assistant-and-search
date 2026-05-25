@@ -47,3 +47,7 @@ class ThreadDetail(BaseModel):
     messages: list[MessageOut]
 
     model_config = {"from_attributes": True}
+
+
+class ThreadUpdate(BaseModel):
+    title: str = Field(..., min_length=1, max_length=500)
