@@ -27,6 +27,7 @@
   "navSearch": "Поиск",
   "navHistory": "История",
   "navProfile": "Профиль",
+  "navMain": "Основная навигация",
   "queryLabel": "Запрос",
   "rateLimit": "Достигнут лимит поисков на сегодня",
   "loading": "Ищем ответ...",

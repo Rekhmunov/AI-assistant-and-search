@@ -1104,23 +1104,58 @@ body {
   right: 0;
   display: flex;
   justify-content: space-around;
+  align-items: stretch;
+  max-width: 640px;
+  margin: 0 auto;
   background: var(--surface);
-  border-top: 1px solid var(--border);
-  padding: 10px 0 calc(10px + env(safe-area-inset-bottom));
+  border-top: 1px solid var(--border-subtle);
+  box-shadow: 0 -2px 12px rgba(0, 0, 0, 0.04);
+  padding: 6px 8px calc(6px + env(safe-area-inset-bottom));
   z-index: 100;
 }
 
 .bottom-nav a {
+  flex: 1;
+  max-width: 120px;
   color: var(--muted);
   text-decoration: none;
-  font-size: 0.75rem;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
+  justify-content: center;
+  gap: 2px;
+  padding: 6px 4px;
+  border-radius: 12px;
+  transition: color 0.15s, background 0.15s;
+}
+
+.bottom-nav a:hover {
+  color: var(--text);
+  background: var(--surface-hover);
+}
+
+.bottom-nav-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  color: inherit;
+}
+
+.bottom-nav-label {
+  font-size: 0.7rem;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  line-height: 1.2;
 }
 
 .bottom-nav a.active {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.bottom-nav a.active .bottom-nav-icon {
   color: var(--accent);
 }
 
