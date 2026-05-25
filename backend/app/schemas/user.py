@@ -8,6 +8,8 @@ from app.models.user import Plan
 
 class UserProfile(BaseModel):
     id: UUID
+    email: str | None = None
+    max_linked: bool = False
     first_name: str | None
     last_name: str | None
     username: str | None

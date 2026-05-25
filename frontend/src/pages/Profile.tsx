@@ -1,4 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
 import { devActivatePro, fetchMe, deleteAccount } from "../api/client";
 import { t } from "../i18n";
 import { useAuthStore } from "../store/authStore";
@@ -8,6 +9,7 @@ export function Profile() {
   const setUser = useAuthStore((s) => s.setUser);
   const clear = useAuthStore((s) => s.clear);
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
 
   const { data: user } = useQuery({
     queryKey: ["me"],
@@ -35,7 +37,13 @@ export function Profile() {
       <h1>{t("profile")}</h1>
       <div className="profile-card">
         <div>👤 {name}</div>
-        <div style={{ marginTop: 8, color: "var(--muted)" }}>
+        {user?.email && (
+          <div style={{ marginTop: 8, color: "var(--muted)" }}>{user.email}</div>
+        )}
+        <div style={{ marginTop: 4, color: "var(--muted)" }}>
+          MAX: {user?.max_linked ? "привязан" : "не привязан (откройте из бота после входа)"}
+        </div>
+        <div style={{ marginTop: 4, color: "var(--muted)" }}>
           {t("plan")}: {user?.plan === "pro" ? "Pro" : "Free"}
         </div>
         <div style={{ marginTop: 4, color: "var(--muted)" }}>
@@ -57,6 +65,17 @@ export function Profile() {
       <div style={{ color: "var(--muted)" }}>
         {t("language")}: Русский
       </div>
+      <button
+        type="button"
+        className="btn-secondary btn-block"
+        style={{ marginTop: 16 }}
+        onClick={() => {
+          clear();
+          navigate("/login");
+        }}
+      >
+        Выйти
+      </button>
       <button type="button" className="danger-link" onClick={onDelete}>
         {t("deleteAccount")}
       </button>

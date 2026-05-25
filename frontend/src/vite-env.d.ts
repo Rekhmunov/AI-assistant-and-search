@@ -32,3 +32,28 @@ declare var webkitSpeechRecognition: {
   prototype: SpeechRecognition;
   new (): SpeechRecognition;
 };
+
+interface WebAppUser {
+  id: number;
+  first_name?: string;
+  last_name?: string;
+  username?: string;
+}
+
+interface WebAppInitDataUnsafe {
+  user?: WebAppUser;
+  start_param?: string;
+}
+
+interface WebAppBridge {
+  initData: string;
+  initDataUnsafe: WebAppInitDataUnsafe;
+  ready: () => void;
+  close: () => void;
+  platform?: string;
+  version?: string;
+}
+
+interface Window {
+  WebApp?: WebAppBridge;
+}

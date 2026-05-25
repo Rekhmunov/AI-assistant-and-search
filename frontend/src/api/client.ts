@@ -4,6 +4,8 @@ export type Plan = "free" | "pro";
 
 export interface UserProfile {
   id: string;
+  email?: string | null;
+  max_linked?: boolean;
   first_name: string | null;
   last_name: string | null;
   username: string | null;
@@ -52,14 +54,63 @@ function authHeaders(token: string | null): HeadersInit {
   return h;
 }
 
-export async function login(initData: string): Promise<{ access_token: string; user: UserProfile }> {
+async function parseAuthError(res: Response): Promise<string> {
+  try {
+    const body = await res.json();
+    return (body as { detail?: string }).detail || "Ошибка авторизации";
+  } catch {
+    return "Ошибка авторизации";
+  }
+}
+
+export async function loginWithInitData(initData: string): Promise<{ access_token: string; user: UserProfile }> {
   const res = await fetch(`${API_BASE}/api/auth/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
     body: JSON.stringify({ init_data: initData }),
   });
-  if (!res.ok) throw new Error("Auth failed");
+  if (!res.ok) throw new Error(await parseAuthError(res));
+  return res.json();
+}
+
+export async function loginEmail(
+  email: string,
+  password: string
+): Promise<{ access_token: string; user: UserProfile }> {
+  const res = await fetch(`${API_BASE}/api/auth/email-login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ email, password }),
+  });
+  if (!res.ok) throw new Error(await parseAuthError(res));
+  return res.json();
+}
+
+export async function registerEmail(
+  email: string,
+  password: string,
+  firstName?: string
+): Promise<{ access_token: string; user: UserProfile }> {
+  const res = await fetch(`${API_BASE}/api/auth/register`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ email, password, first_name: firstName }),
+  });
+  if (!res.ok) throw new Error(await parseAuthError(res));
+  return res.json();
+}
+
+export async function bindMax(token: string, initData: string): Promise<UserProfile> {
+  const res = await fetch(`${API_BASE}/api/auth/bind-max`, {
+    method: "POST",
+    headers: authHeaders(token),
+    credentials: "include",
+    body: JSON.stringify({ init_data: initData }),
+  });
+  if (!res.ok) throw new Error(await parseAuthError(res));
   return res.json();
 }
 

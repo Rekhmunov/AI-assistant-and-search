@@ -1,11 +1,10 @@
 import { useEffect, useState } from "react";
-import { fetchMe, login } from "../api/client";
+import { bindMax, fetchMe, loginWithInitData } from "../api/client";
 import { useAuthStore } from "../store/authStore";
 
-const DEV_INIT_DATA = "user=%7B%22id%22%3A1%2C%22first_name%22%3A%22Dev%22%7D&auth_date=9999999999";
-
+/** Validates stored token or legacy MAX initData; clears invalid token. */
 export function useAuthBootstrap() {
-  const { token, setAuth, setUser } = useAuthStore();
+  const { token, setAuth, setUser, clear } = useAuthStore();
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -14,20 +13,42 @@ export function useAuthBootstrap() {
 
     async function bootstrap() {
       try {
-        const initData = window.WebApp?.initData || DEV_INIT_DATA;
         if (window.WebApp?.ready) window.WebApp.ready();
 
-        if (!token) {
-          const data = await login(initData);
-          if (!cancelled) setAuth(data.access_token, data.user);
-        } else {
-          const user = await fetchMe(token);
-          if (!cancelled) setUser(user);
+        if (token) {
+          try {
+            const user = await fetchMe(token);
+            if (!cancelled) {
+              setUser(user);
+              await tryBindMax(token);
+              setReady(true);
+            }
+            return;
+          } catch {
+            clear();
+          }
         }
-      } catch {
-        if (!cancelled) setError("Не удалось войти");
-      } finally {
+
+        const initData = window.WebApp?.initData?.trim();
+        if (initData) {
+          try {
+            const data = await loginWithInitData(initData);
+            if (!cancelled) {
+              setAuth(data.access_token, data.user);
+              setReady(true);
+              return;
+            }
+          } catch {
+            /* show email login */
+          }
+        }
+
         if (!cancelled) setReady(true);
+      } catch {
+        if (!cancelled) {
+          setError("Ошибка загрузки");
+          setReady(true);
+        }
       }
     }
 
@@ -35,7 +56,18 @@ export function useAuthBootstrap() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [token, clear, setAuth, setUser]);
 
   return { ready, error };
+}
+
+async function tryBindMax(token: string) {
+  const initData = window.WebApp?.initData?.trim();
+  if (!initData) return;
+  try {
+    const user = await bindMax(token, initData);
+    useAuthStore.getState().setUser(user);
+  } catch {
+    /* already linked */
+  }
 }
