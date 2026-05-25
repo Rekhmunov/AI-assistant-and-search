@@ -2,8 +2,8 @@ import enum
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, Enum, ForeignKey, Text, func
-from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy import DateTime, ForeignKey, Text, func
+from sqlalchemy.dialects.postgresql import ENUM, JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -19,7 +19,14 @@ class Message(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     thread_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("threads.id", ondelete="CASCADE"))
-    role: Mapped[MessageRole] = mapped_column(Enum(MessageRole, name="message_role_enum"))
+    role: Mapped[MessageRole] = mapped_column(
+        ENUM(
+            MessageRole,
+            name="message_role_enum",
+            create_type=False,
+            values_callable=lambda enum_cls: [member.value for member in enum_cls],
+        ),
+    )
     content: Mapped[str] = mapped_column(Text, default="")
     sources: Mapped[list | None] = mapped_column(JSONB, nullable=True)
     follow_up_questions: Mapped[list | None] = mapped_column(JSONB, nullable=True)

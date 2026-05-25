@@ -174,6 +174,7 @@ async def resolve_search_user(
     guest = User(guest_key=new_key, plan=Plan.FREE)
     db.add(guest)
     await db.flush()
+    await db.commit()
     return SearchUserResult(user=guest, new_guest_key=new_key)
 
 

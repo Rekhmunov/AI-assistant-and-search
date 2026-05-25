@@ -19,8 +19,10 @@ def build_thread_context(messages: list[Message]) -> ThreadContext:
     prior_search = False
 
     for m in messages:
-        history.append((m.role.value, m.content))
-        if m.role == MessageRole.ASSISTANT:
+        role_val = m.role.value if isinstance(m.role, MessageRole) else str(m.role)
+        history.append((role_val, m.content))
+        is_assistant = m.role == MessageRole.ASSISTANT or role_val == MessageRole.ASSISTANT.value
+        if is_assistant:
             if m.sources:
                 last_sources = m.sources if isinstance(m.sources, list) else None
                 prior_search = True

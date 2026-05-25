@@ -26,8 +26,10 @@ Glosix использует три сервиса Yandex Cloud:
 
 | Роль | Зачем |
 |------|--------|
-| `search-api.executor` | Запросы Web Search API |
+| `search-api.webSearch.user` | Веб-поиск Search API v2 |
 | `ai.languageModels.user` | YandexGPT Lite и Pro (completion) |
+
+Не используйте устаревшие `search-api.executor`, `search-api.editor`, `search-api.admin`.
 
 В консоли: **Search API** → включить API в каталоге.  
 **Yandex AI Studio / Foundation Models** → доступ к моделям в каталоге.

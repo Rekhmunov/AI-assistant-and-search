@@ -154,12 +154,14 @@ class YandexSearchService:
             logger.exception("Yandex Search rawData base64 decode failed")
             raise YandexServiceError("search", "Некорректный ответ Search API") from e
 
-        sources = _parse_yandex_xml(xml_bytes, limit)
+        try:
+            sources = _parse_yandex_xml(xml_bytes, limit)
+        except ET.ParseError as e:
+            logger.exception("Yandex Search XML parse failed")
+            raise YandexServiceError("search", "Некорректный XML в ответе Search API") from e
         if not sources:
             # fallback: legacy JSON-in-base64 (если API вернёт JSON)
             try:
-                import json
-
                 decoded = json.loads(xml_bytes.decode("utf-8"))
                 sources = _parse_search_documents(decoded, limit)
             except (json.JSONDecodeError, UnicodeDecodeError):
