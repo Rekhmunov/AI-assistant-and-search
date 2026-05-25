@@ -4,10 +4,14 @@ import json
 import logging
 import re
 
+from typing import TYPE_CHECKING
+
 from app.services.facts.models import Fact, FactPack
 from app.services.llm_provider import SearchSource
 from app.services.page_depth import is_financial_query
-from app.services.yandex_gpt import YandexGPTProvider
+
+if TYPE_CHECKING:
+    from app.services.yandex_gpt import YandexGPTProvider
 
 logger = logging.getLogger(__name__)
 
@@ -91,7 +95,7 @@ def _parse_extract_json(text: str, prefilled: list[Fact]) -> FactPack:
 
 
 async def extract_facts_from_sources(
-    llm: YandexGPTProvider,
+    llm: "YandexGPTProvider",
     query: str,
     sources: list[SearchSource],
     *,
