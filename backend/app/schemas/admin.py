@@ -93,9 +93,25 @@ class UserAdminOut(BaseModel):
     created_at: datetime
     deleted_at: datetime | None
     searches_today: int = 0
+    searches_limit: int = 0
+    threads_count: int = 0
     is_guest: bool = False
 
     model_config = {"from_attributes": True}
+
+
+class AdminMessageOut(BaseModel):
+    id: UUID
+    role: str
+    content: str
+    content_truncated: bool = False
+    created_at: datetime
+
+
+class AdminThreadMessagesOut(BaseModel):
+    id: UUID
+    title: str
+    messages: list[AdminMessageOut]
 
 
 class UserAdminUpdate(BaseModel):

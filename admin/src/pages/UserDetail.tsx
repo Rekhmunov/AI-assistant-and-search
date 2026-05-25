@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { apiFetch } from "../api";
+import { UserThreadPanel, type ThreadSummary } from "../components/UserThreadPanel";
 import { useAuth } from "../AuthContext";
 
 interface UserRow {
@@ -13,29 +14,32 @@ interface UserRow {
   plan: string;
   plan_expires_at: string | null;
   searches_today: number;
+  searches_limit: number;
+  threads_count: number;
   deleted_at: string | null;
   is_guest: boolean;
 }
 
-interface ThreadRow {
-  id: string;
-  title: string;
-  message_count: number;
-  last_message_at: string;
+function displayName(user: UserRow): string {
+  if (user.username) return `@${user.username}`;
+  if (user.first_name) return user.first_name;
+  if (user.email) return user.email;
+  if (user.max_user_id != null) return `MAX ${user.max_user_id}`;
+  return "Пользователь";
 }
 
 export function UserDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { can } = useAuth();
   const [user, setUser] = useState<UserRow | null>(null);
-  const [threads, setThreads] = useState<ThreadRow[]>([]);
+  const [threads, setThreads] = useState<ThreadSummary[]>([]);
   const [days, setDays] = useState(30);
   const [msg, setMsg] = useState("");
 
   const load = () => {
     if (!id) return;
     apiFetch<UserRow>(`/api/admin/users/${id}`).then(setUser);
-    apiFetch<ThreadRow[]>(`/api/admin/users/${id}/threads`).then(setThreads);
+    apiFetch<ThreadSummary[]>(`/api/admin/users/${id}/threads?limit=50`).then(setThreads);
   };
 
   useEffect(load, [id]);
@@ -62,21 +66,43 @@ export function UserDetailPage() {
 
   if (!user) return <p>Загрузка…</p>;
 
+  const searchPairs = Math.ceil(
+    threads.reduce((n, t) => n + Math.max(0, t.message_count), 0) / 2,
+  );
+
   return (
-    <div>
+    <div className="user-detail">
       <Link to="/users">← Пользователи</Link>
-      <h1>
-        {user.first_name || "Пользователь"} {user.last_name || ""}
-      </h1>
-      <p className="hint">
-        {user.email && <>Email: {user.email} · </>}
-        {user.max_user_id != null ? <>MAX ID: {user.max_user_id}</> : "MAX не привязан"}
-        {user.is_guest && " · гостевая сессия"}
-      </p>
-      <p>
-        План: <strong>{user.plan}</strong> · Поисков сегодня: {user.searches_today}
+      <h1>{displayName(user)}</h1>
+      <div className="user-detail-summary card">
+        <p className="hint">
+          {user.email && <>Email: {user.email} · </>}
+          {user.max_user_id != null ? <>MAX ID: {user.max_user_id}</> : "MAX не привязан"}
+          {user.is_guest && " · только гостевая сессия (без email/MAX)"}
+        </p>
+        <div className="user-detail-stats">
+          <span>
+            План: <strong>{user.plan}</strong>
+            {user.plan_expires_at &&
+              ` до ${new Date(user.plan_expires_at).toLocaleDateString("ru-RU")}`}
+          </span>
+          <span>
+            Поиски сегодня:{" "}
+            <strong>
+              {user.searches_today}/{user.searches_limit || "—"}
+            </strong>
+          </span>
+          <span>
+            Диалогов: <strong>{user.threads_count || threads.length}</strong>
+          </span>
+        </div>
         {user.deleted_at && <span className="badge bad">забанен</span>}
-      </p>
+        <p className="hint user-detail-note">
+          Счётчик поисков — из Redis за сегодня. Отдельные гостевые строки в списке скрыты: после входа
+          диалоги переносятся сюда, старый счётчик гостя не суммируется.
+        </p>
+      </div>
+
       {msg && <p className="ok">{msg}</p>}
       {can("users:write") && (
         <div className="card row-actions">
@@ -94,14 +120,21 @@ export function UserDetailPage() {
           </button>
         </div>
       )}
-      <h2>Треды</h2>
-      <ul>
+
+      <h2>Диалоги ({threads.length})</h2>
+      <p className="hint">
+        Раскройте диалог, чтобы увидеть вопросы и ответы. Данные подгружаются по одному треду — не нагружают
+        память.
+      </p>
+      {threads.length === 0 && <p className="hint">Диалогов пока нет</p>}
+      <div className="thread-panels">
         {threads.map((t) => (
-          <li key={t.id}>
-            {t.title} ({t.message_count}) — {new Date(t.last_message_at).toLocaleString()}
-          </li>
+          <UserThreadPanel key={t.id} userId={id!} thread={t} />
         ))}
-      </ul>
+      </div>
+      {threads.length > 0 && (
+        <p className="hint">≈ {searchPairs} пар вопрос–ответ в загруженных тредах</p>
+      )}
     </div>
   );
 }
