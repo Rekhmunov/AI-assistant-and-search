@@ -1,4 +1,4 @@
-"""Маршрутизация v3: всегда веб-поиск, кроме короткого chitchat."""
+"""Маршрутизация v3.1: веб-поиск по умолчанию; без поиска — chitchat и вопросы о Glosix."""
 
 import logging
 from dataclasses import dataclass
@@ -6,7 +6,12 @@ from typing import Literal
 
 from app.core.config import Settings, get_settings
 from app.models.user import Plan
-from app.services.search_query import enhance_search_query, is_howto_query, normalize_user_query
+from app.services.search_query import (
+    enhance_search_query,
+    is_howto_query,
+    is_meta_assistant_query,
+    normalize_user_query,
+)
 from app.services.thread_context import ThreadContext
 from app.services.yandex_gpt import YandexGPTProvider
 
@@ -22,7 +27,7 @@ Intent = Literal[
     "chitchat",
 ]
 
-POLICY_VERSION = "v3"
+POLICY_VERSION = "v3.1"
 
 CHITCHAT_EXACT = frozenset(
     {
@@ -157,6 +162,15 @@ class QueryRouter:
                 search_query=query,
                 answer_model="lite",
                 reason="rules:chitchat",
+                intent="chitchat",
+            )
+
+        if is_meta_assistant_query(query):
+            return RouteDecision(
+                needs_search=False,
+                search_query=query,
+                answer_model="lite",
+                reason="rules:meta_assistant",
                 intent="chitchat",
             )
 

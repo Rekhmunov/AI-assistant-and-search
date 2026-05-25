@@ -8,6 +8,8 @@ import httpx
 
 from app.core.config import Settings, get_settings
 from app.services.llm_provider import LLMProvider, SearchSource
+from app.services.search_query import is_meta_assistant_query
+from app.services.answer_guard import strict_answer_addon
 from app.services.yandex_errors import YandexServiceError
 
 logger = logging.getLogger(__name__)
@@ -35,6 +37,16 @@ SYSTEM_PROMPT_SEARCH = """Ты — экспертный поисковый ас�
 - Только обычный текст и переносы строк. ЗАПРЕЩЕНО: #, ##, ###, **, __, `, markdown-заголовки.
 - Не используй жирный и курсив через звёздочки — выделяй смысл формулировками, не разметкой.
 - Абзацы отделяй пустой строкой."""
+
+SYSTEM_PROMPT_META = """Ты — Glosix, AI-ассистент в Telegram с веб-поиском (как Perplexity).
+
+На вопросы о себе отвечай честно и по делу:
+- Ты умеешь искать актуальную информацию в интернете, анализировать источники и давать ответы с цитатами [1], [2].
+- Ты можешь разбирать прикреплённые файлы, помогать с инструкциями, сравнениями и правками текста из диалога.
+- Ты не «просто поисковик со ссылками» — цель: готовый ответ фактами, а не список сайтов.
+
+Не говори, что ты «только поисковый ассистент без программирования» и не отрицай помощь с кодом/IT: объясняй, что можешь помочь через поиск документации и разбор задач.
+Не выдумывай личные качества. Формат: простой текст, без markdown (#, **, `)."""
 
 SYSTEM_PROMPT_DIRECT = """Ты — ассистент Glosix. Отвечай на русском по делу, используя контекст диалога.
 Если в контексте есть ранее найденные источники — можешь ссылаться на [1], [2].
@@ -123,14 +135,16 @@ class YandexGPTProvider(LLMProvider):
         prior_sources_block: str = "",
         *,
         hint_clarify: str | None = None,
+        strict_facts: bool = False,
     ) -> list[dict]:
         extra = f"\n\n{prior_sources_block}" if prior_sources_block else ""
         clarify_block = ""
         if hint_clarify:
             clarify_block = f"\n\nПодсказка: в выдаче может не хватать данных. В конце ответа задай уточнение: {hint_clarify}"
+        strict_block = strict_answer_addon() if strict_facts else ""
         user_content = f"""Источники:
 {_format_sources(sources)}
-{_format_history(history)}{extra}{clarify_block}
+{_format_history(history)}{extra}{clarify_block}{strict_block}
 
 Вопрос: {query}"""
         return [
@@ -148,11 +162,12 @@ class YandexGPTProvider(LLMProvider):
         user_content = f"""{_format_history(history)}{extra}
 
 Вопрос: {query}"""
-        system = (
-            SYSTEM_PROMPT_DOCUMENT
-            if _query_has_document_block(query)
-            else SYSTEM_PROMPT_DIRECT
-        )
+        if _query_has_document_block(query):
+            system = SYSTEM_PROMPT_DOCUMENT
+        elif is_meta_assistant_query(query):
+            system = SYSTEM_PROMPT_META
+        else:
+            system = SYSTEM_PROMPT_DIRECT
         return [
             {"role": "system", "text": system},
             {"role": "user", "text": user_content},
@@ -203,6 +218,7 @@ class YandexGPTProvider(LLMProvider):
         prior_sources_block: str = "",
         *,
         hint_clarify: str | None = None,
+        strict_facts: bool = False,
     ) -> AsyncIterator[str]:
         if not self.settings.yandex_configured:
             mock = (
@@ -226,7 +242,12 @@ class YandexGPTProvider(LLMProvider):
                 "maxTokens": max_tokens,
             },
             "messages": self._build_messages_search(
-                query, sources, history, prior_sources_block, hint_clarify=hint_clarify
+                query,
+                sources,
+                history,
+                prior_sources_block,
+                hint_clarify=hint_clarify,
+                strict_facts=strict_facts,
             ),
         }
 

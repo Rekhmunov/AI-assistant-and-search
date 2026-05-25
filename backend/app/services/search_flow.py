@@ -14,11 +14,14 @@ from app.models.thread import Thread
 from app.models.uploaded_file import UploadedFile
 from app.models.user import User
 from app.services.llm_provider import SearchSource
+from app.services.answer_guard import is_link_delegation_answer
 from app.services.query_router import QueryRouter
 from app.services.query_rewriter import QueryRewriter
 from app.services.retrieval_quality import assess_retrieval
+from app.services.source_page_fetch import enrich_sources_with_pages
 from app.services.search_debug import build_debug_trace, build_gpt_messages_preview
 from app.services.search_query import (
+    build_weather_search_queries,
     enhance_search_query,
     is_howto_query,
     is_weather_query,
@@ -220,9 +223,11 @@ class SearchFlowService:
                 if rewrite.needs_clarification and rewrite.clarification_question:
                     hint_clarify = rewrite.clarification_question
 
-                queries = rewrite.search_queries or [route.search_query]
+                queries = list(rewrite.search_queries or [route.search_query])
                 howto = route.intent == "howto" or is_howto_query(llm_query)
                 weather = is_weather_query(llm_query)
+                if weather:
+                    queries = build_weather_search_queries(llm_query, queries)
 
                 for base_q in queries[:2]:
                     search_q_sent = enhance_search_query(
@@ -253,6 +258,24 @@ class SearchFlowService:
                     if assessment.ok:
                         break
 
+                if sources and retrieval_trace and not retrieval_trace.get("ok"):
+                    sources = await enrich_sources_with_pages(sources, max_pages=2)
+                    reassess = assess_retrieval(sources, llm_query)
+                    retrieval_trace = {
+                        "ok": reassess.ok,
+                        "score": reassess.score,
+                        "reason": f"after_page_fetch:{reassess.reason}",
+                    }
+                    search_attempts.append(
+                        {
+                            "query": "(page_fetch)",
+                            "sources_count": len(sources),
+                            "retrieval_ok": reassess.ok,
+                            "retrieval_score": reassess.score,
+                            "retrieval_reason": retrieval_trace["reason"],
+                        }
+                    )
+
                 sources_json = sources_to_json(sources)
                 if sources_json:
                     yield sse_event("sources", {"sources": sources_json})
@@ -270,16 +293,41 @@ class SearchFlowService:
 
             full_answer = ""
             if route.needs_search:
-                async for chunk in self.llm.stream_answer(
-                    llm_query,
-                    sources,
-                    history,
-                    model=route.answer_model,
-                    prior_sources_block=prior_sources_block,
-                    hint_clarify=hint_clarify,
-                ):
-                    full_answer += chunk
-                    yield sse_event("token", {"text": chunk})
+                weak_retrieval = bool(retrieval_trace and not retrieval_trace.get("ok"))
+                weather_q = is_weather_query(llm_query)
+                buffer_tokens = weather_q or weak_retrieval
+
+                async def _collect_answer(*, strict: bool) -> str:
+                    text = ""
+                    async for chunk in self.llm.stream_answer(
+                        llm_query,
+                        sources,
+                        history,
+                        model=route.answer_model,
+                        prior_sources_block=prior_sources_block,
+                        hint_clarify=hint_clarify,
+                        strict_facts=strict or weather_q or weak_retrieval,
+                    ):
+                        text += chunk
+                    return text
+
+                if buffer_tokens:
+                    full_answer = await _collect_answer(strict=False)
+                    if is_link_delegation_answer(full_answer):
+                        full_answer = await _collect_answer(strict=True)
+                    for i in range(0, len(full_answer), 48):
+                        yield sse_event("token", {"text": full_answer[i : i + 48]})
+                else:
+                    async for chunk in self.llm.stream_answer(
+                        llm_query,
+                        sources,
+                        history,
+                        model=route.answer_model,
+                        prior_sources_block=prior_sources_block,
+                        hint_clarify=hint_clarify,
+                    ):
+                        full_answer += chunk
+                        yield sse_event("token", {"text": chunk})
             else:
                 async for chunk in self.llm.stream_answer_direct(
                     llm_query,

@@ -102,6 +102,32 @@ def is_weather_query(query: str) -> bool:
     return any(m in q for m in _WEATHER_MARKERS)
 
 
+_META_ASSISTANT_RE = re.compile(
+    r"(?:^|[\s,.!?])(?:"
+    r"ты\s+умеешь|ты\s+можешь|что\s+ты\s+умеешь|что\s+ты\s+можешь|"
+    r"кто\s+ты|что\s+ты\s+такое|что\s+ты\s+за\s+|"
+    r"ты\s+программир|ты\s+кодир|ты\s+разработ|"
+    r"ты\s+ии|ты\s+бот|ты\s+нейросет|"
+    r"can\s+you\s+code|do\s+you\s+program|who\s+are\s+you|what\s+are\s+you"
+    r")",
+    re.I,
+)
+
+
+def is_meta_assistant_query(query: str) -> bool:
+    """Вопросы о возможностях Glosix — без веб-поиска (иначе выдача про «поисковых ассистентов»)."""
+    q = query.strip()
+    if len(q) > 220:
+        return False
+    if _has_attachment_marker(q):
+        return False
+    return bool(_META_ASSISTANT_RE.search(q))
+
+
+def _has_attachment_marker(query: str) -> bool:
+    return "--- Документ:" in query or "[Файлы:" in query
+
+
 def _text_has_place(text: str) -> bool:
     q = text.lower()
     if any(h in q for h in _PLACE_HINTS):
