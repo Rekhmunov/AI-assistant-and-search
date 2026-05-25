@@ -38,6 +38,19 @@ SYSTEM_PROMPT_DIRECT = """Ты — ассистент Glosix. Отвечай н�
 Не выдумывай актуальные факты (курсы валют, новости, цены) — предложи уточнить или выполнить поиск.
 Формат: только простой текст с абзацами, без markdown (#, **, `)."""
 
+SYSTEM_PROMPT_DOCUMENT = """Ты — ассистент Glosix. Пользователь прикрепил файл(ы); их текст в запросе в блоках «--- Документ: имя ---».
+
+Правила:
+- Анализируй в первую очередь содержимое этих блоков, а не «источники из интернета».
+- Для 1CClientBankExchange / обмен с банком: опиши структуру, секции, реквизиты, суммы, ошибки или несоответствия, если видны в тексте.
+- Если текст нечитаем, пустой или обрезан — скажи прямо и что нужно (фрагмент, другая кодировка, экспорт заново).
+- Не отсылай пользователя к веб-поиску вместо разбора файла.
+- Формат: простой текст с абзацами, без markdown (#, **, `)."""
+
+
+def _query_has_document_block(query: str) -> bool:
+    return "--- Документ:" in query
+
 
 def _format_sources(sources: list[SearchSource], max_snippet: int = 900) -> str:
     if not sources:
@@ -127,8 +140,13 @@ class YandexGPTProvider(LLMProvider):
         user_content = f"""{_format_history(history)}{extra}
 
 Вопрос: {query}"""
+        system = (
+            SYSTEM_PROMPT_DOCUMENT
+            if _query_has_document_block(query)
+            else SYSTEM_PROMPT_DIRECT
+        )
         return [
-            {"role": "system", "text": SYSTEM_PROMPT_DIRECT},
+            {"role": "system", "text": system},
             {"role": "user", "text": user_content},
         ]
 

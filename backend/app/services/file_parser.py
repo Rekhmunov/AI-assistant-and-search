@@ -12,10 +12,25 @@ def _clip(text: str) -> str:
     return text[:MAX_EXTRACT_CHARS] + "\n… [обрезано]"
 
 
+def _decode_text_bytes(data: bytes) -> str:
+    """UTF-8, BOM, Windows-1251 (типично для 1С/банк-клиент) и fallback."""
+    if data.startswith(b"\xff\xfe") or data.startswith(b"\xfe\xff"):
+        try:
+            return data.decode("utf-16")
+        except UnicodeDecodeError:
+            pass
+    for encoding in ("utf-8-sig", "utf-8", "cp1251", "latin-1"):
+        try:
+            return data.decode(encoding)
+        except UnicodeDecodeError:
+            continue
+    return data.decode("utf-8", errors="replace")
+
+
 def extract_text(filename: str, data: bytes) -> str:
     ext = Path(filename).suffix.lower().lstrip(".")
     if ext in ("txt", "md", "json"):
-        return _clip(data.decode("utf-8", errors="replace"))
+        return _clip(_decode_text_bytes(data))
     if ext == "csv":
         return _clip(_parse_csv(data))
     if ext == "pdf":
@@ -30,7 +45,7 @@ def extract_text(filename: str, data: bytes) -> str:
 
 
 def _parse_csv(data: bytes) -> str:
-    text = data.decode("utf-8", errors="replace")
+    text = _decode_text_bytes(data)
     reader = csv.reader(io.StringIO(text))
     rows = []
     for i, row in enumerate(reader):

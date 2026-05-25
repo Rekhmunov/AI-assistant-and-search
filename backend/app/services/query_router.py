@@ -114,11 +114,12 @@ def _rule_route(query: str, ctx: ThreadContext, has_attachments: bool, user_plan
         )
 
     if has_attachments or _has_attachment_marker(query):
+        # Анализ прикреплённого файла — без веб-поиска; текст документа уже в запросе.
         return RouteDecision(
-            needs_search=True,
+            needs_search=False,
             search_query=query[:400],
             answer_model="pro",
-            reason="rules:attachment",
+            reason="rules:attachment_direct",
         )
 
     if any(k in q for k in SEARCH_KEYWORDS):
@@ -239,6 +240,7 @@ class QueryRouter:
 - needs_search=false если переформулировка, сокращение, уточнение по уже данному ответу в истории.
 - search_query: короткий запрос для Yandex Search (с контекстом темы из истории).
 - answer_model: "pro" для инструкций «как настроить/подключить», сложного анализа, файлов; иначе "lite".
+- Если есть вложение (файл в запросе) — needs_search=false, ответ по тексту документа.
 - search_query: для how-to добавь контекст (официальная документация, Yandex Cloud API).
 
 Ответь ТОЛЬКО JSON:
