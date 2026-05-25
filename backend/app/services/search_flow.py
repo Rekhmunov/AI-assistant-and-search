@@ -14,7 +14,7 @@ from app.models.thread import Thread
 from app.models.uploaded_file import UploadedFile
 from app.models.user import User
 from app.services.llm_provider import SearchSource
-from app.services.answer_guard import is_link_delegation_answer
+from app.services.answer_guard import is_template_evasion
 from app.services.query_router import QueryRouter
 from app.services.query_rewriter import QueryRewriter
 from app.services.retrieval_quality import assess_retrieval
@@ -258,8 +258,9 @@ class SearchFlowService:
                     if assessment.ok:
                         break
 
-                if sources and retrieval_trace and not retrieval_trace.get("ok"):
-                    sources = await enrich_sources_with_pages(sources, max_pages=2)
+                if sources:
+                    max_pages = 3 if route.answer_model == "pro" else 2
+                    sources = await enrich_sources_with_pages(sources, max_pages=max_pages)
                     reassess = assess_retrieval(sources, llm_query)
                     retrieval_trace = {
                         "ok": reassess.ok,
@@ -294,8 +295,6 @@ class SearchFlowService:
             full_answer = ""
             if route.needs_search:
                 weak_retrieval = bool(retrieval_trace and not retrieval_trace.get("ok"))
-                weather_q = is_weather_query(llm_query)
-                buffer_tokens = weather_q or weak_retrieval
 
                 async def _collect_answer(*, strict: bool) -> str:
                     text = ""
@@ -306,28 +305,16 @@ class SearchFlowService:
                         model=route.answer_model,
                         prior_sources_block=prior_sources_block,
                         hint_clarify=hint_clarify,
-                        strict_facts=strict or weather_q or weak_retrieval,
+                        strict_facts=strict or weak_retrieval,
                     ):
                         text += chunk
                     return text
 
-                if buffer_tokens:
-                    full_answer = await _collect_answer(strict=False)
-                    if is_link_delegation_answer(full_answer):
-                        full_answer = await _collect_answer(strict=True)
-                    for i in range(0, len(full_answer), 48):
-                        yield sse_event("token", {"text": full_answer[i : i + 48]})
-                else:
-                    async for chunk in self.llm.stream_answer(
-                        llm_query,
-                        sources,
-                        history,
-                        model=route.answer_model,
-                        prior_sources_block=prior_sources_block,
-                        hint_clarify=hint_clarify,
-                    ):
-                        full_answer += chunk
-                        yield sse_event("token", {"text": chunk})
+                full_answer = await _collect_answer(strict=False)
+                if is_template_evasion(full_answer):
+                    full_answer = await _collect_answer(strict=True)
+                for i in range(0, len(full_answer), 48):
+                    yield sse_event("token", {"text": full_answer[i : i + 48]})
             else:
                 async for chunk in self.llm.stream_answer_direct(
                     llm_query,

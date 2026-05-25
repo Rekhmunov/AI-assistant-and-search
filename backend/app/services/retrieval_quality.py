@@ -12,6 +12,17 @@ _WEATHER_DATA_RE = re.compile(
     re.I,
 )
 
+_META_SNIPPET_HINTS = (
+    "посетите сайт",
+    "перейдите на",
+    "воспользуйтесь",
+    "где посмотреть",
+    "можно найти на",
+    "метеорологических сайтах",
+    "список сайтов",
+    "задачи по поиску информации",
+)
+
 
 @dataclass
 class RetrievalAssessment:
@@ -51,6 +62,12 @@ def assess_retrieval(sources: list[SearchSource], user_query: str) -> RetrievalA
     if is_weather_query(user_query) and not _WEATHER_DATA_RE.search(corpus):
         ok = False
         reason = f"weather_no_digits hits={hits}/{len(tokens)} rich={rich} score={score:.2f}"
+        return RetrievalAssessment(ok=ok, score=score, reason=reason)
+
+    meta_hits = sum(1 for h in _META_SNIPPET_HINTS if h in corpus)
+    if meta_hits >= 2 and hit_ratio < 0.35:
+        ok = False
+        reason = f"meta_snippets meta={meta_hits} hits={hits}/{len(tokens)} score={score:.2f}"
         return RetrievalAssessment(ok=ok, score=score, reason=reason)
 
     reason = f"hits={hits}/{len(tokens)} rich={rich} score={score:.2f}"

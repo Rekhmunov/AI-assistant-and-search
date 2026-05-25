@@ -1,4 +1,4 @@
-"""Маршрутизация v3.1: веб-поиск по умолчанию; без поиска — chitchat и вопросы о Glosix."""
+"""Маршрутизация v4: анализ → веб-поиск → ответ эксперта; без поиска — chitchat и «кто ты»."""
 
 import logging
 from dataclasses import dataclass
@@ -27,7 +27,7 @@ Intent = Literal[
     "chitchat",
 ]
 
-POLICY_VERSION = "v3.1"
+POLICY_VERSION = "v4"
 
 CHITCHAT_EXACT = frozenset(
     {
