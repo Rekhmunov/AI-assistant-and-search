@@ -15,6 +15,21 @@ _WEATHER_DATA_RE = re.compile(
     re.I,
 )
 
+_CURRENCY_DATA_RE = re.compile(
+    r"\d{1,3}[.,]\d{2,6}\s*(?:₽|руб)|курс.{0,20}\d{1,3}[.,]\d{2,6}|USD|EUR",
+    re.I,
+)
+
+_CURRENCY_META_HINTS = (
+    "центральный банк",
+    "финансовые портал",
+    "какой ресурс",
+    "где узнать курс",
+    "предоставляет официальные курсы",
+    "banki.ru",
+    "bcs-express",
+)
+
 _WEATHER_META_HINTS = (
     "перейдите на сайт",
     "посетите сайт",
@@ -29,6 +44,8 @@ _WEATHER_META_HINTS = (
 
 # Чем меньше score — тем выше в списке после сортировки
 _DOMAIN_PRIORITY: dict[str, int] = {
+    "cbr.ru": -5,
+    "cbr-xml-daily.ru": -4,
     "yandex.cloud": 0,
     "cloud.yandex.ru": 1,
     "yandex.ru": 2,
@@ -67,7 +84,7 @@ def _domain_score(domain: str) -> int:
     return 50
 
 
-def _url_bonus(url: str, title: str, *, howto: bool, weather: bool) -> int:
+def _url_bonus(url: str, title: str, *, howto: bool, weather: bool, currency: bool) -> int:
     combined = f"{url} {title}".lower()
     bonus = 0
     if howto:
@@ -85,7 +102,26 @@ def _url_bonus(url: str, title: str, *, howto: bool, weather: bool) -> int:
         for dom in ("gismeteo", "yandex.ru/pogoda", "weather.com", "meteoinfo", "rp5.ru"):
             if dom in blob:
                 bonus -= 5
+    if currency:
+        blob = f"{url} {title}".lower()
+        if _CURRENCY_DATA_RE.search(blob):
+            bonus -= 25
+        if any(h in blob for h in _CURRENCY_META_HINTS):
+            bonus += 20
+        for dom in ("cbr.ru", "banki.ru/currency", "investing.com"):
+            if dom in blob:
+                bonus -= 6
     return bonus
+
+
+def _currency_snippet_bonus(snippet: str) -> int:
+    if not snippet:
+        return 10
+    if _CURRENCY_DATA_RE.search(snippet):
+        return -35
+    if any(h in snippet.lower() for h in _CURRENCY_META_HINTS):
+        return 18
+    return 0
 
 
 def _weather_snippet_bonus(snippet: str) -> int:
@@ -103,15 +139,20 @@ def rank_sources(
     *,
     howto: bool = False,
     weather: bool = False,
+    currency: bool = False,
 ) -> list[SearchSource]:
     if not sources:
         return sources
 
     def sort_key(s: SearchSource) -> tuple[int, int]:
         domain = urlparse(s.url).netloc.replace("www.", "") if s.url else s.domain
-        base = _domain_score(domain) + _url_bonus(s.url, s.title, howto=howto, weather=weather)
+        base = _domain_score(domain) + _url_bonus(
+            s.url, s.title, howto=howto, weather=weather, currency=currency
+        )
         if weather:
             base += _weather_snippet_bonus(s.snippet or "")
+        if currency:
+            base += _currency_snippet_bonus(s.snippet or "")
         return (base, s.index)
 
     ordered = sorted(sources, key=sort_key)

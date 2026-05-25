@@ -145,6 +145,34 @@ def query_has_place(query: str, history: list[tuple[str, str]] | None = None) ->
     return False
 
 
+def is_currency_rate_query(query: str) -> bool:
+    from app.services.currency_rates import is_currency_rate_query as _is
+
+    return _is(query)
+
+
+def build_currency_search_queries(user_query: str, llm_queries: list[str]) -> list[str]:
+    """Запросы на страницы с котировками, не «где узнать курс»."""
+    base = (llm_queries[0] if llm_queries else user_query).strip()
+    u = user_query.lower()
+    b = base.lower()
+    parts = [base]
+    if "курс" not in b:
+        parts.append("курс")
+    if "рубл" not in b and "rub" not in b:
+        parts.append("рубль")
+    if "сегодня" in u or "сейчас" in u:
+        if "сегодня" not in b:
+            parts.append("сегодня")
+    if "цб" not in b and "cbr" not in b:
+        parts.append("ЦБ РФ")
+    primary = " ".join(parts).strip()[:400]
+    secondary = f"{primary} котировка цифры"[:400]
+    if secondary.lower() == primary.lower():
+        secondary = f"site:cbr.ru курс доллара рубль сегодня"[:400]
+    return [primary, secondary]
+
+
 def build_weather_search_queries(user_query: str, llm_queries: list[str]) -> list[str]:
     """Запросы на страницы с цифрами прогноза, а не «где посмотреть погоду»."""
     base = (llm_queries[0] if llm_queries else user_query).strip()
@@ -171,6 +199,7 @@ def enhance_search_query(
     *,
     for_howto: bool | None = None,
     for_weather: bool = False,
+    for_currency: bool = False,
 ) -> str:
     """
     Улучшает запрос для Yandex Search: исправляет опечатки, добавляет контекст для how-to.
@@ -197,6 +226,18 @@ def enhance_search_query(
         for token in ("прогноз", "температура"):
             if token not in low:
                 parts.append(token)
+        return " ".join(parts)[:400]
+
+    if for_currency or is_currency_rate_query(text):
+        low = text.lower()
+        parts = [text]
+        for token in ("курс", "рубль"):
+            if token not in low:
+                parts.append(token)
+        if "цб" not in low:
+            parts.append("ЦБ РФ")
+        if "сегодня" not in low:
+            parts.append("сегодня")
         return " ".join(parts)[:400]
 
     return text[:400]

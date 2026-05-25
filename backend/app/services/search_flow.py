@@ -20,9 +20,16 @@ from app.services.query_rewriter import QueryRewriter
 from app.services.retrieval_quality import assess_retrieval
 from app.services.source_page_fetch import enrich_sources_with_pages
 from app.services.search_debug import build_debug_trace, build_gpt_messages_preview
+from app.services.currency_rates import (
+    cbr_source_from_facts,
+    detect_currency_codes,
+    fetch_cbr_rates,
+)
 from app.services.search_query import (
+    build_currency_search_queries,
     build_weather_search_queries,
     enhance_search_query,
+    is_currency_rate_query,
     is_howto_query,
     is_weather_query,
     normalize_user_query,
@@ -226,18 +233,32 @@ class SearchFlowService:
                 queries = list(rewrite.search_queries or [route.search_query])
                 howto = route.intent == "howto" or is_howto_query(llm_query)
                 weather = is_weather_query(llm_query)
+                currency = is_currency_rate_query(llm_query)
                 if weather:
                     queries = build_weather_search_queries(llm_query, queries)
+                elif currency:
+                    queries = build_currency_search_queries(llm_query, queries)
+
+                cbr_facts: str | None = None
+                if currency:
+                    codes = detect_currency_codes(llm_query)
+                    cbr = await fetch_cbr_rates(codes)
+                    if cbr:
+                        cbr_facts, _ = cbr
 
                 for base_q in queries[:2]:
                     search_q_sent = enhance_search_query(
-                        base_q, for_howto=howto, for_weather=weather
+                        base_q,
+                        for_howto=howto,
+                        for_weather=weather,
+                        for_currency=currency,
                     )
                     raw_sources = await self.search.search(search_q_sent)
                     ranked = rank_sources(
                         raw_sources,
                         howto=howto or route.answer_model == "pro",
                         weather=weather,
+                        currency=currency,
                     )
                     assessment = assess_retrieval(ranked, llm_query)
                     search_attempts.append(
@@ -257,6 +278,21 @@ class SearchFlowService:
                     }
                     if assessment.ok:
                         break
+
+                if cbr_facts:
+                    cbr_src = cbr_source_from_facts(cbr_facts)
+                    rest = [s for s in sources if "cbr.ru" not in (s.url or "")]
+                    merged = [cbr_src] + rest[:7]
+                    sources = [
+                        SearchSource(
+                            index=i,
+                            url=s.url,
+                            title=s.title,
+                            snippet=s.snippet,
+                            domain=s.domain,
+                        )
+                        for i, s in enumerate(merged, start=1)
+                    ]
 
                 if sources:
                     max_pages = 3 if route.answer_model == "pro" else 2

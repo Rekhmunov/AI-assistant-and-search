@@ -179,5 +179,5 @@ class QueryRouter:
             ctx,
             has_attachments,
             user_plan,
-            reason="always_search:v3",
+            reason="always_search:v4",
         )
