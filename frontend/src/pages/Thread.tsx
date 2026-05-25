@@ -1,12 +1,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
-import {
-  fetchThread,
-  saveThread,
-  streamSearch,
-  type Source,
-} from "../api/client";
+import { fetchThread, saveThread, streamSearch, type Source } from "../api/client";
 import { AnswerToolbar } from "../components/AnswerToolbar";
 import { GlosixHeader } from "../components/GlosixHeader";
 import { SearchComposer, type ComposerAttachment } from "../components/SearchComposer";
@@ -14,7 +9,25 @@ import { SearchStatusLine, type SearchPhase } from "../components/SearchStatusLi
 import { SourcesCollapsible } from "../components/SourcesCollapsible";
 import { StreamingText } from "../components/StreamingText";
 import { t } from "../i18n";
+import { messagesToTurns, type ThreadTurn } from "../lib/threadTurns";
 import { useAuthStore } from "../store/authStore";
+
+function updateLastStreamingTurn(
+  turns: ThreadTurn[],
+  patch: Partial<Pick<ThreadTurn, "answer" | "sources" | "followUps">>,
+  appendAnswer?: string,
+): ThreadTurn[] {
+  const idx = turns.findLastIndex((turn) => turn.streaming);
+  if (idx < 0) return turns;
+  const current = turns[idx];
+  const next = [...turns];
+  next[idx] = {
+    ...current,
+    ...patch,
+    answer: appendAnswer !== undefined ? current.answer + appendAnswer : (patch.answer ?? current.answer),
+  };
+  return next;
+}
 
 export function Thread() {
   const { id } = useParams();
@@ -26,52 +39,64 @@ export function Thread() {
   const queryClient = useQueryClient();
 
   const [threadId, setThreadId] = useState<string | null>(id ?? null);
-  const [displayQuery, setDisplayQuery] = useState(initialQuery);
+  const [turns, setTurns] = useState<ThreadTurn[]>([]);
   const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
-  const [sources, setSources] = useState<Source[]>([]);
-  const [answer, setAnswer] = useState("");
-  const [followUps, setFollowUps] = useState<string[]>([]);
   const [streaming, setStreaming] = useState(false);
   const [saved, setSaved] = useState(false);
   const [needsSearch, setNeedsSearch] = useState(true);
   const [searchPhase, setSearchPhase] = useState<SearchPhase>("idle");
   const [composerQuery, setComposerQuery] = useState("");
   const started = useRef(false);
+  const streamingRef = useRef(false);
+  const activeThreadIdRef = useRef<string | null>(id ?? null);
+  const scrollBottomRef = useRef<HTMLDivElement>(null);
 
   const { data: thread } = useQuery({
-    queryKey: ["thread", id],
-    queryFn: () => fetchThread(token, id!),
-    enabled: !!id,
+    queryKey: ["thread", id ?? threadId],
+    queryFn: () => fetchThread(token, (id ?? threadId)!),
+    enabled: !!(id ?? threadId),
   });
 
   useEffect(() => {
-    if (thread) {
+    if (id) activeThreadIdRef.current = id;
+  }, [id]);
+
+  useEffect(() => {
+    if (thread && !streamingRef.current) {
       setSaved(thread.is_saved);
-      const lastUser = [...thread.messages].reverse().find((m) => m.role === "user");
-      if (lastUser) setDisplayQuery(lastUser.content);
-      const lastAssistant = [...thread.messages].reverse().find((m) => m.role === "assistant");
-      if (lastAssistant) {
-        setAnswer(lastAssistant.content);
-        setSources(lastAssistant.sources ?? []);
-        setFollowUps(lastAssistant.follow_up_questions ?? []);
-        setSearchPhase("idle");
-      }
+      setTurns(messagesToTurns(thread.messages));
     }
   }, [thread]);
+
+  useEffect(() => {
+    scrollBottomRef.current?.scrollIntoView({ behavior: streaming ? "auto" : "smooth" });
+  }, [turns, streaming, searchPhase]);
 
   const runSearch = useCallback(
     async (text: string, existingThreadId: string | null, attachmentIds: string[]) => {
       if (!text.trim() && !attachmentIds.length) return;
-      if (streaming) return;
+      if (streamingRef.current) return;
+
+      const pendingKey = `stream-${Date.now()}`;
+      streamingRef.current = true;
       setStreaming(true);
-      setDisplayQuery(text);
-      setAnswer("");
-      setSources([]);
-      setFollowUps([]);
+      setNeedsSearch(true);
       setSearchPhase("routing");
+      setTurns((prev) => [
+        ...prev,
+        {
+          key: pendingKey,
+          query: text,
+          answer: "",
+          sources: [],
+          followUps: [],
+          streaming: true,
+        },
+      ]);
 
       await streamSearch(token, text, existingThreadId, attachmentIds, {
         onThread: (tid) => {
+          activeThreadIdRef.current = tid;
           setThreadId(tid);
           if (!id) navigate(`/thread/${tid}`, { replace: true });
         },
@@ -80,29 +105,41 @@ export function Thread() {
           setSearchPhase(route.needs_search ? "searching" : "answering");
         },
         onSources: (list) => {
-          setSources(list);
           setSearchPhase("answering");
+          setTurns((prev) => updateLastStreamingTurn(prev, { sources: list }));
         },
         onToken: (chunk) => {
           setSearchPhase("answering");
-          setAnswer((a) => a + chunk);
+          setTurns((prev) => updateLastStreamingTurn(prev, {}, chunk));
         },
-        onFollowUps: setFollowUps,
+        onFollowUps: (questions) => {
+          setTurns((prev) => updateLastStreamingTurn(prev, { followUps: questions }));
+        },
         onDone: () => {
+          streamingRef.current = false;
           setStreaming(false);
           setSearchPhase("idle");
+          setTurns((prev) =>
+            prev.map((turn) => (turn.streaming ? { ...turn, streaming: false } : turn)),
+          );
           queryClient.invalidateQueries({ queryKey: ["session"] });
           queryClient.invalidateQueries({ queryKey: ["threads"] });
-          if (threadId) queryClient.invalidateQueries({ queryKey: ["thread", threadId] });
+          const tid = activeThreadIdRef.current ?? existingThreadId ?? id ?? threadId;
+          if (tid) queryClient.invalidateQueries({ queryKey: ["thread", tid] });
         },
         onError: (msg) => {
+          streamingRef.current = false;
           setStreaming(false);
           setSearchPhase("idle");
-          setAnswer(msg);
+          setTurns((prev) =>
+            prev.map((turn) =>
+              turn.streaming ? { ...turn, answer: msg, streaming: false } : turn,
+            ),
+          );
         },
       });
     },
-    [token, streaming, id, navigate, queryClient, threadId]
+    [token, id, navigate, queryClient, threadId],
   );
 
   useEffect(() => {
@@ -122,8 +159,7 @@ export function Thread() {
     runSearch(payload.query, threadId, payload.attachmentIds);
   };
 
-  const showStatus = streaming && !answer.trim();
-  const showSources = sources.length > 0 && Boolean(answer.trim()) && !streaming;
+  const lastCompletedIndex = turns.findLastIndex((turn) => !turn.streaming && turn.answer.trim());
 
   return (
     <div className="page page-thread">
@@ -145,43 +181,67 @@ export function Thread() {
         </div>
       </div>
 
-      {displayQuery && (
-        <div className="thread-query">
-          <p className="thread-query-text">{displayQuery}</p>
-        </div>
-      )}
+      <div className="thread-conversation">
+        {turns.length === 0 && !streaming && (
+          <p className="thread-conversation-empty">{t("loading")}</p>
+        )}
 
-      {showStatus && <SearchStatusLine phase={searchPhase} needsSearch={needsSearch} />}
+        {turns.map((turn, index) => {
+          const isActive = turn.streaming;
+          const showStatus = isActive && streaming && !turn.answer.trim();
+          const showAnswer = Boolean(turn.answer.trim()) || isActive;
+          const showSources =
+            turn.sources.length > 0 && Boolean(turn.answer.trim()) && !isActive;
+          const showFollowUps =
+            index === lastCompletedIndex &&
+            turn.followUps.length > 0 &&
+            !streaming &&
+            !isActive;
 
-      {answer.trim() && (
-        <section className="answer-section">
-          <StreamingText text={answer} streaming={streaming} />
-          {!streaming && answer.trim() && (
-            <AnswerToolbar answer={answer} title={displayQuery} />
-          )}
-        </section>
-      )}
+          return (
+            <article key={turn.key} className="thread-turn">
+              <div className="thread-query">
+                <p className="thread-query-text">{turn.query}</p>
+              </div>
 
-      {showSources && <SourcesCollapsible sources={sources} />}
+              {showStatus && (
+                <SearchStatusLine phase={searchPhase} needsSearch={needsSearch} />
+              )}
 
-      {followUps.length > 0 && !streaming && (
-        <section className="followups-section">
-          <div className="section-title">{t("followUps")}</div>
-          <div className="chips">
-            {followUps.map((q) => (
-              <button
-                key={q}
-                type="button"
-                className="chip"
-                disabled={streaming}
-                onClick={() => runSearch(q, threadId, [])}
-              >
-                {q}
-              </button>
-            ))}
-          </div>
-        </section>
-      )}
+              {showAnswer && (
+                <section className="answer-section">
+                  <StreamingText text={turn.answer} streaming={isActive && streaming} />
+                  {!isActive && turn.answer.trim() && (
+                    <AnswerToolbar answer={turn.answer} title={turn.query} />
+                  )}
+                </section>
+              )}
+
+              {showSources && <SourcesCollapsible sources={turn.sources} />}
+
+              {showFollowUps && (
+                <section className="followups-section">
+                  <div className="section-title">{t("followUps")}</div>
+                  <div className="chips">
+                    {turn.followUps.map((q) => (
+                      <button
+                        key={q}
+                        type="button"
+                        className="chip"
+                        disabled={streaming}
+                        onClick={() => runSearch(q, threadId, [])}
+                      >
+                        {q}
+                      </button>
+                    ))}
+                  </div>
+                </section>
+              )}
+            </article>
+          );
+        })}
+        <div ref={scrollBottomRef} className="thread-scroll-anchor" aria-hidden />
+      </div>
 
       <SearchComposer
         value={composerQuery}

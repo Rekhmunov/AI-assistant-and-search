@@ -301,7 +301,51 @@ body {
 }
 
 .page-thread {
-  padding-bottom: 140px;
+  display: flex;
+  flex-direction: column;
+  min-height: calc(100dvh - 120px);
+  max-height: calc(100dvh - 120px);
+  padding-bottom: 0;
+  overflow: hidden;
+}
+
+.thread-conversation {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  padding-right: 2px;
+  margin-bottom: 8px;
+}
+
+.thread-conversation-empty {
+  color: var(--muted);
+  text-align: center;
+  padding: 24px 0;
+}
+
+.thread-turn {
+  margin-bottom: 28px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.thread-turn:last-of-type {
+  border-bottom: none;
+  margin-bottom: 12px;
+}
+
+.thread-scroll-anchor {
+  height: 1px;
+}
+
+.page-thread .search-composer,
+.page-thread > .search-bar-wrap {
+  flex-shrink: 0;
+  margin-top: auto;
+  padding-bottom: calc(12px + env(safe-area-inset-bottom));
+  background: linear-gradient(to top, var(--bg) 70%, transparent);
 }
 
 .thread-query {
