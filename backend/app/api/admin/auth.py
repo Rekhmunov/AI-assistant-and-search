@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 import redis.asyncio as redis
 
-from app.api.deps import get_current_admin, get_db, get_redis
+from app.api.deps import clear_admin_cookie, get_current_admin, get_db, get_redis, set_admin_cookie
 from app.core.config import get_settings
 from app.core.security import create_admin_token, verify_password
 from app.models.admin_user import AdminUser
@@ -50,15 +50,7 @@ async def admin_login(
     await db.commit()
     await redis_client.delete(rate_key)
 
-    response.set_cookie(
-        key="admin_token",
-        value=token,
-        httponly=True,
-        secure=not settings.debug,
-        samesite="none" if not settings.debug else "lax",
-        max_age=settings.admin_session_expire_hours * 3600,
-        path="/",
-    )
+    set_admin_cookie(response, token)
     return {"ok": True, "admin": AdminUserOut.model_validate(admin)}
 
 
@@ -76,7 +68,7 @@ async def admin_logout(
         ip_address=request.client.host if request.client else None,
     )
     await db.commit()
-    response.delete_cookie("admin_token", path="/")
+    clear_admin_cookie(response)
     return {"ok": True}
 
 

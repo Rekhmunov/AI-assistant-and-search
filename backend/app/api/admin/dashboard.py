@@ -1,11 +1,13 @@
+import logging
 from datetime import datetime, timedelta, timezone
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func, select
+from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_db, get_rate_limiter, get_redis
+from app.api.deps import get_db, get_redis
 from app.core.admin_permissions import require_permission
 from app.core.config import get_settings
 from app.models.broadcast import Broadcast
@@ -16,6 +18,9 @@ from app.schemas.admin import DashboardMetrics
 from app.services.app_settings import get_setting
 
 router = APIRouter(tags=["admin-dashboard"])
+
+
+logger = logging.getLogger(__name__)
 
 
 @router.get("/dashboard", response_model=DashboardMetrics)
@@ -30,22 +35,41 @@ async def dashboard(
     day_ago = now - timedelta(hours=24)
     today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
 
-    users_total = await db.scalar(select(func.count()).select_from(User).where(User.deleted_at.is_(None)))
-    users_new_7d = await db.scalar(
-        select(func.count()).select_from(User).where(User.deleted_at.is_(None), User.created_at >= week_ago)
-    )
-    users_pro = await db.scalar(
-        select(func.count()).select_from(User).where(User.deleted_at.is_(None), User.plan == Plan.PRO)
-    )
-    users_active_24h = await db.scalar(
-        select(func.count(func.distinct(Thread.user_id)))
-        .select_from(Thread)
-        .where(Thread.last_message_at >= day_ago)
-    )
-    broadcasts_total = await db.scalar(select(func.count()).select_from(Broadcast))
-    messages_today = await db.scalar(
-        select(func.count()).select_from(Message).where(Message.created_at >= today_start)
-    )
+    try:
+        users_total = await db.scalar(
+            select(func.count()).select_from(User).where(User.deleted_at.is_(None))
+        )
+        users_new_7d = await db.scalar(
+            select(func.count()).select_from(User).where(
+                User.deleted_at.is_(None), User.created_at >= week_ago
+            )
+        )
+        users_pro = await db.scalar(
+            select(func.count()).select_from(User).where(
+                User.deleted_at.is_(None), User.plan == Plan.PRO
+            )
+        )
+        users_active_24h = await db.scalar(
+            select(func.count(func.distinct(Thread.user_id)))
+            .select_from(Thread)
+            .where(Thread.last_message_at >= day_ago)
+        )
+        broadcasts_total = await db.scalar(select(func.count()).select_from(Broadcast))
+        messages_today = await db.scalar(
+            select(func.count()).select_from(Message).where(Message.created_at >= today_start)
+        )
+    except ProgrammingError as exc:
+        logger.exception("Dashboard DB schema error")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="База не обновлена. Выполните: docker compose -f docker-compose.prod.yml exec backend alembic upgrade head",
+        ) from exc
+    except Exception as exc:
+        logger.exception("Dashboard metrics query failed")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Ошибка загрузки метрик: {type(exc).__name__}",
+        ) from exc
 
     redis_ok = True
     try:

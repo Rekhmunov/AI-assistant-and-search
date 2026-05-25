@@ -21,7 +21,10 @@ export function DashboardPage() {
   useEffect(() => {
     apiFetch<DashboardMetrics>("/api/admin/dashboard")
       .then(setData)
-      .catch((e) => setError(String(e)));
+      .catch((e) => {
+        const msg = e instanceof Error ? e.message : String(e);
+        setError(msg === "Internal server error" ? `${msg} — обновите сервер и миграции БД` : msg);
+      });
   }, []);
 
   if (error) return <p className="error">{error}</p>;

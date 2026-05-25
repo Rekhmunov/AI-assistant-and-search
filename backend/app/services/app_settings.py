@@ -56,10 +56,16 @@ def default_for_key(key: str, settings: Settings | None = None) -> Any:
 
 
 async def sync_settings_cache(db: AsyncSession, redis_client: redis.Redis) -> None:
-    result = await db.execute(select(AppSetting))
-    rows = result.scalars().all()
-    for row in rows:
-        await redis_client.set(_redis_key(row.key), row.value)
+    try:
+        result = await db.execute(select(AppSetting))
+        rows = result.scalars().all()
+        for row in rows:
+            try:
+                await redis_client.set(_redis_key(row.key), row.value)
+            except Exception:
+                pass
+    except Exception:
+        pass
 
 
 async def get_setting(
@@ -69,15 +75,24 @@ async def get_setting(
     settings: Settings | None = None,
 ) -> Any:
     settings = settings or get_settings()
-    cached = await redis_client.get(_redis_key(key))
-    if cached is not None:
-        return _parse_value(key, cached)
+    try:
+        cached = await redis_client.get(_redis_key(key))
+        if cached is not None:
+            return _parse_value(key, cached)
+    except Exception:
+        pass
 
-    result = await db.execute(select(AppSetting).where(AppSetting.key == key))
-    row = result.scalar_one_or_none()
-    if row:
-        await redis_client.set(_redis_key(key), row.value)
-        return _parse_value(key, row.value)
+    try:
+        result = await db.execute(select(AppSetting).where(AppSetting.key == key))
+        row = result.scalar_one_or_none()
+        if row:
+            try:
+                await redis_client.set(_redis_key(row.key), row.value)
+            except Exception:
+                pass
+            return _parse_value(key, row.value)
+    except Exception:
+        pass
 
     return default_for_key(key, settings)
 

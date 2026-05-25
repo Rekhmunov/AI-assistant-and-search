@@ -51,6 +51,36 @@ def set_guest_cookie(response: Response, guest_key: str) -> None:
     response.set_cookie(**kwargs)
 
 
+def set_admin_cookie(response: Response, token: str) -> None:
+    settings = get_settings()
+    kwargs: dict = {
+        "key": "admin_token",
+        "value": token,
+        "httponly": True,
+        "secure": not settings.debug,
+        "samesite": "none" if not settings.debug else "lax",
+        "max_age": settings.admin_session_expire_hours * 3600,
+        "path": "/",
+    }
+    if settings.cookie_domain:
+        kwargs["domain"] = settings.cookie_domain
+    response.set_cookie(**kwargs)
+
+
+def clear_admin_cookie(response: Response) -> None:
+    settings = get_settings()
+    kwargs: dict = {
+        "key": "admin_token",
+        "path": "/",
+        "httponly": True,
+        "secure": not settings.debug,
+        "samesite": "none" if not settings.debug else "lax",
+    }
+    if settings.cookie_domain:
+        kwargs["domain"] = settings.cookie_domain
+    response.delete_cookie(**kwargs)
+
+
 def clear_guest_cookie(response: Response) -> None:
     settings = get_settings()
     kwargs: dict = {
