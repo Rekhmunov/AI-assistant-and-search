@@ -25,9 +25,14 @@ async def search_stream(
     if await get_setting("maintenance_mode", db, redis):
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Maintenance mode")
 
+    stream_headers = {
+        "Cache-Control": "no-cache",
+        "Connection": "keep-alive",
+        "X-Accel-Buffering": "no",
+    }
     if actor.new_guest_key:
         set_guest_cookie(response, actor.new_guest_key)
-        response.headers["X-Guest-Session"] = actor.new_guest_key
+        stream_headers["X-Guest-Session"] = actor.new_guest_key
 
     flow = SearchFlowService()
     user = actor.user
@@ -38,12 +43,10 @@ async def search_stream(
         ):
             yield event
 
-    return StreamingResponse(
-        event_generator(),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "X-Accel-Buffering": "no",
-        },
-    )
+    stream = StreamingResponse(event_generator(), media_type="text/event-stream", headers=stream_headers)
+    # Cookies set on injected Response are not always merged into StreamingResponse.
+    if actor.new_guest_key:
+        for header, value in response.headers.raw:
+            if header.lower() == b"set-cookie":
+                stream.headers.append("set-cookie", value.decode("latin-1"))
+    return stream

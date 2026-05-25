@@ -37,6 +37,7 @@ def create_app() -> FastAPI:
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
+        expose_headers=["X-Guest-Session"],
     )
 
     app.include_router(api_router)
