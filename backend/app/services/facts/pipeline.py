@@ -12,7 +12,7 @@ from app.services.facts.orchestrator import FactOrchestrator
 from app.services.facts.slots import detect_fact_slots
 from app.services.llm_provider import SearchSource
 from app.services.retrieval_quality import assess_retrieval
-from app.services.source_page_fetch import enrich_sources_with_pages
+from app.services.page_depth import FINANCIAL_NUMBER_RE, enrich_sources_deep, is_financial_query
 from app.services.source_ranking import rank_sources
 from app.services.yandex_gpt import YandexGPTProvider
 from app.services.yandex_search import YandexSearchService
@@ -20,7 +20,8 @@ from app.services.yandex_search import YandexSearchService
 logger = logging.getLogger(__name__)
 
 MAX_SEARCH_QUERIES = 3
-MAX_FETCH_PAGES = 5
+MAX_FETCH_PAGES = 8
+MAX_CHUNKS_PER_PAGE = 4
 
 
 @dataclass
@@ -119,7 +120,13 @@ class FactPipeline:
                 )
 
         if sources:
-            sources = await enrich_sources_with_pages(sources, max_pages=MAX_FETCH_PAGES)
+            chunks_pp = 5 if is_financial_query(llm_query) else MAX_CHUNKS_PER_PAGE
+            sources = await enrich_sources_deep(
+                sources,
+                llm_query,
+                max_pages=MAX_FETCH_PAGES,
+                chunks_per_page=chunks_pp,
+            )
             reassess = assess_retrieval(sources, llm_query)
             retrieval_trace = {
                 "ok": reassess.ok,
@@ -143,6 +150,20 @@ class FactPipeline:
             prefilled=provider_facts,
             fact_slots=fact_slots,
         )
+        if "company_financial" in fact_slots:
+            corpus = " ".join((s.snippet or "") for s in sources[:6])
+            only_providers = len(fact_pack.facts) <= len(provider_facts)
+            if only_providers and FINANCIAL_NUMBER_RE.search(corpus):
+                retry_pack = await extract_facts_from_sources(
+                    self.llm,
+                    llm_query,
+                    sources,
+                    prefilled=provider_facts,
+                    fact_slots=fact_slots,
+                    model="pro",
+                )
+                if len(retry_pack.facts) > len(fact_pack.facts):
+                    fact_pack = retry_pack
 
         return FactPipelineResult(
             sources=sources,

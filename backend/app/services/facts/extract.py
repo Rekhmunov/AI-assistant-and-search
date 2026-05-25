@@ -6,6 +6,7 @@ import re
 
 from app.services.facts.models import Fact, FactPack
 from app.services.llm_provider import SearchSource
+from app.services.page_depth import is_financial_query
 from app.services.yandex_gpt import YandexGPTProvider
 
 logger = logging.getLogger(__name__)
@@ -32,12 +33,18 @@ _EXTRACT_USER_TEMPLATE = """Вопрос пользователя:
 - claim — на русском, готовое утверждение (температура, курс, дата, определение).
 - source_index — номер источника из блока выше.
 - Если для ответа на вопрос нет данных — facts пустой, опиши в gaps.
-- Максимум 8 фактов."""
+- Максимум 12 фактов."""
+
+_EXTRACT_FINANCIAL_ADDON = """
+Дополнительно для финансовых вопросов (оборот, выручка, прибыль):
+- Ищи цифры в фрагментах страницы за 2023–2025; указывай год и валюту в claim.
+- Если в [1] есть таблица или «оборот» с числом — обязательно добавь fact с source_index 1.
+- Не пиши «данных нет», если в тексте источника есть хотя бы одно подходящее число."""
 
 
-def _format_sources_block(sources: list[SearchSource], max_per: int = 2000) -> str:
+def _format_sources_block(sources: list[SearchSource], max_per: int = 4500) -> str:
     lines: list[str] = []
-    for s in sources[:10]:
+    for s in sources[:8]:
         snippet = (s.snippet or "")[:max_per]
         lines.append(f'[{s.index}] {s.domain} — "{s.title}"\nURL: {s.url}\n{snippet}')
     return "\n\n".join(lines) if lines else "(нет)"
@@ -56,7 +63,7 @@ def _parse_extract_json(text: str, prefilled: list[Fact]) -> FactPack:
     seen_claims: set[str] = {f.claim.lower()[:80] for f in prefilled}
     raw_facts = data.get("facts") or []
     if isinstance(raw_facts, list):
-        for i, item in enumerate(raw_facts[:8]):
+        for i, item in enumerate(raw_facts[:12]):
             if not isinstance(item, dict):
                 continue
             claim = str(item.get("claim") or "").strip()
@@ -90,13 +97,17 @@ async def extract_facts_from_sources(
     *,
     prefilled: list[Fact] | None = None,
     fact_slots: list[str] | None = None,
+    model: str = "lite",
 ) -> FactPack:
     prefilled = prefilled or []
     if not sources and not prefilled:
         return FactPack(facts=[], gaps=["no_sources"], fact_slots=fact_slots or [])
 
     prefilled_text = "\n".join(f"- [{f.source_index}] {f.claim}" for f in prefilled) or "(нет)"
-    user_text = _EXTRACT_USER_TEMPLATE.format(
+    template = _EXTRACT_USER_TEMPLATE
+    if is_financial_query(query):
+        template += _EXTRACT_FINANCIAL_ADDON
+    user_text = template.format(
         query=query[:900],
         prefilled=prefilled_text,
         sources_block=_format_sources_block(sources),
@@ -108,8 +119,8 @@ async def extract_facts_from_sources(
                 {"role": "system", "text": _EXTRACT_SYSTEM},
                 {"role": "user", "text": user_text},
             ],
-            model="lite",
-            max_tokens=1200,
+            model=model,  # type: ignore[arg-type]
+            max_tokens=2000,
             temperature=0.1,
         )
         pack = _parse_extract_json(raw, prefilled)
