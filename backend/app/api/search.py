@@ -28,7 +28,9 @@ async def search_stream(
     flow = SearchFlowService()
 
     async def event_generator():
-        async for event in flow.stream_search(db, user, limiter, body.query, body.thread_id):
+        async for event in flow.stream_search(
+            db, user, limiter, body.query, body.thread_id, body.attachment_ids
+        ):
             yield event
 
     return StreamingResponse(

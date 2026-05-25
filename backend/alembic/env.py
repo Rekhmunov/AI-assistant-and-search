@@ -16,6 +16,7 @@ from app.models import (  # noqa: F401
     message,
     subscription,
     thread,
+    uploaded_file,
     user,
 )
 

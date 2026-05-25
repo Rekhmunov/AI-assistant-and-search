@@ -1,20 +1,34 @@
 /// <reference types="vite/client" />
 
-interface MaxWebAppUser {
-  id: number;
-  first_name?: string;
-  last_name?: string;
-  username?: string | null;
-  language_code?: string;
+interface ImportMetaEnv {
+  readonly VITE_API_URL: string;
 }
 
-interface MaxWebApp {
-  initData: string;
-  initDataUnsafe: { user?: MaxWebAppUser };
-  ready: () => void;
-  close: () => void;
+interface ImportMeta {
+  readonly env: ImportMetaEnv;
 }
 
-interface Window {
-  WebApp?: MaxWebApp;
+interface SpeechRecognition extends EventTarget {
+  lang: string;
+  interimResults: boolean;
+  maxAlternatives: number;
+  start(): void;
+  stop(): void;
+  onresult: ((ev: SpeechRecognitionEvent) => void) | null;
+  onerror: ((ev: Event) => void) | null;
+  onend: (() => void) | null;
 }
+
+interface SpeechRecognitionEvent extends Event {
+  results: SpeechRecognitionResultList;
+}
+
+declare var SpeechRecognition: {
+  prototype: SpeechRecognition;
+  new (): SpeechRecognition;
+};
+
+declare var webkitSpeechRecognition: {
+  prototype: SpeechRecognition;
+  new (): SpeechRecognition;
+};

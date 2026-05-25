@@ -8,7 +8,8 @@ import {
   type Message,
   type Source,
 } from "../api/client";
-import { SearchBar } from "../components/SearchBar";
+import { GlosixHeader } from "../components/GlosixHeader";
+import { SearchComposer, type ComposerAttachment } from "../components/SearchComposer";
 import { SourceCard } from "../components/SourceCard";
 import { StreamingText } from "../components/StreamingText";
 import { t } from "../i18n";
@@ -18,19 +19,19 @@ export function Thread() {
   const { id } = useParams();
   const [searchParams] = useSearchParams();
   const initialQuery = searchParams.get("q") ?? "";
+  const initialFiles = searchParams.get("files")?.split(",").filter(Boolean) ?? [];
   const navigate = useNavigate();
   const token = useAuthStore((s) => s.token)!;
   const queryClient = useQueryClient();
 
   const [threadId, setThreadId] = useState<string | null>(id ?? null);
   const [query, setQuery] = useState(initialQuery);
-  const [followUp, setFollowUp] = useState("");
+  const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
   const [sources, setSources] = useState<Source[]>([]);
   const [answer, setAnswer] = useState("");
   const [followUps, setFollowUps] = useState<string[]>([]);
   const [streaming, setStreaming] = useState(false);
   const [saved, setSaved] = useState(false);
-  const [messages, setMessages] = useState<Message[]>([]);
   const started = useRef(false);
 
   const { data: thread } = useQuery({
@@ -42,7 +43,6 @@ export function Thread() {
   useEffect(() => {
     if (thread) {
       setSaved(thread.is_saved);
-      setMessages(thread.messages);
       const lastUser = [...thread.messages].reverse().find((m) => m.role === "user");
       if (lastUser) setQuery(lastUser.content);
       const lastAssistant = [...thread.messages].reverse().find((m) => m.role === "assistant");
@@ -55,14 +55,15 @@ export function Thread() {
   }, [thread]);
 
   const runSearch = useCallback(
-    async (text: string, existingThreadId: string | null) => {
-      if (!text.trim() || streaming) return;
+    async (text: string, existingThreadId: string | null, attachmentIds: string[]) => {
+      if (!text.trim() && !attachmentIds.length) return;
+      if (streaming) return;
       setStreaming(true);
       setAnswer("");
       setSources([]);
       setFollowUps([]);
 
-      await streamSearch(token, text, existingThreadId, {
+      await streamSearch(token, text, existingThreadId, attachmentIds, {
         onThread: (tid) => {
           setThreadId(tid);
           if (!id) navigate(`/thread/${tid}`, { replace: true });
@@ -85,11 +86,11 @@ export function Thread() {
   );
 
   useEffect(() => {
-    if (initialQuery && !id && !started.current && token) {
+    if ((initialQuery || initialFiles.length) && !id && !started.current && token) {
       started.current = true;
-      runSearch(initialQuery, null);
+      runSearch(initialQuery || t("analyzeFile"), null, initialFiles);
     }
-  }, [initialQuery, id, token, runSearch]);
+  }, [initialQuery, initialFiles, id, token, runSearch]);
 
   const handleSave = async () => {
     if (!threadId) return;
@@ -97,75 +98,72 @@ export function Thread() {
     setSaved(true);
   };
 
-  const submitFollowUp = () => {
-    const text = followUp.trim();
-    if (!text) return;
-    setFollowUp("");
-    setMessages((m) => [
-      ...m,
-      { id: "tmp-u", role: "user", content: text, sources: null, follow_up_questions: null, created_at: new Date().toISOString() },
-    ]);
-    runSearch(text, threadId);
+  const onComposerSubmit = (payload: { query: string; attachmentIds: string[] }) => {
+    setQuery(payload.query);
+    runSearch(payload.query, threadId, payload.attachmentIds);
   };
 
   return (
-    <div className="page">
-      <div className="thread-header">
-        <button type="button" className="icon-btn" onClick={() => navigate(-1)}>
-          ← {t("back")}
-        </button>
-        <button type="button" className="icon-btn" onClick={handleSave} disabled={!threadId || saved}>
-          💾 {saved ? t("saved") : t("save")}
-        </button>
+    <div className="page page-thread">
+      <div className="thread-top">
+        <GlosixHeader showLimits={false} />
+        <div className="thread-actions">
+          <button type="button" className="icon-btn" onClick={() => navigate("/")}>
+            ← {t("back")}
+          </button>
+          <button type="button" className="icon-btn" onClick={handleSave} disabled={!threadId || saved}>
+            {saved ? t("saved") : t("save")}
+          </button>
+        </div>
       </div>
 
-      <div className="query-box">
-        {t("queryLabel")}: &quot;{query}&quot;
-      </div>
+      {query && (
+        <div className="query-box">
+          <span className="query-label">{t("queryLabel")}</span>
+          <p className="query-text">{query}</p>
+        </div>
+      )}
 
       {sources.length > 0 && (
-        <>
+        <section className="sources-section">
           <div className="section-title">{t("sources")}</div>
-          <div className="source-cards">
+          <div className="source-carousel">
             {sources.map((s) => (
               <SourceCard key={s.index} source={s} />
             ))}
           </div>
-        </>
+        </section>
       )}
 
       <StreamingText text={answer || (streaming ? t("loading") : "")} streaming={streaming} />
 
-      {messages.map((m) =>
-        m.id.startsWith("tmp") ? null : (
-          <div key={m.id} style={{ display: "none" }} />
-        )
-      )}
-
       {followUps.length > 0 && (
-        <>
+        <section className="followups-section">
           <div className="section-title">{t("followUps")}</div>
-          <ul className="follow-up-list">
+          <div className="chips">
             {followUps.map((q) => (
-              <li
+              <button
                 key={q}
-                onClick={() => {
-                  setFollowUp(q);
-                  runSearch(q, threadId);
-                }}
+                type="button"
+                className="chip"
+                disabled={streaming}
+                onClick={() => runSearch(q, threadId, [])}
               >
                 {q}
-              </li>
+              </button>
             ))}
-          </ul>
-        </>
+          </div>
+        </section>
       )}
 
-      <SearchBar
-        value={followUp}
-        onChange={setFollowUp}
-        onSubmit={submitFollowUp}
+      <SearchComposer
+        value={query}
+        onChange={setQuery}
+        onSubmit={onComposerSubmit}
+        disabled={streaming}
         placeholder={t("askFollowUp")}
+        attachments={attachments}
+        onAttachmentsChange={setAttachments}
       />
     </div>
   );

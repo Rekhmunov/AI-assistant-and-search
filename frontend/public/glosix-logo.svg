@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 32" fill="none" role="img" aria-label="Glosix">
+  <rect x="0" y="4" width="24" height="24" rx="6" fill="#6366F1"/>
+  <path d="M8 12h8v2H8v-2zm0 4h6v2H8v-2z" fill="#fff"/>
+  <text x="32" y="22" font-family="system-ui, sans-serif" font-size="18" font-weight="700" fill="#F3F4F6">Glosix</text>
+</svg>

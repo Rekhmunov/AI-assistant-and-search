@@ -123,10 +123,34 @@ export interface SSEHandlers {
   onError?: (message: string) => void;
 }
 
+export interface UploadedFile {
+  id: string;
+  filename: string;
+  size_bytes: number;
+  excerpt: string;
+}
+
+export async function uploadFile(token: string, file: File): Promise<UploadedFile> {
+  const form = new FormData();
+  form.append("file", file);
+  const res = await fetch(`${API_BASE}/api/files/upload`, {
+    method: "POST",
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    credentials: "include",
+    body: form,
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error((err as { detail?: string }).detail || "Upload failed");
+  }
+  return res.json();
+}
+
 export async function streamSearch(
   token: string,
   query: string,
   threadId: string | null,
+  attachmentIds: string[],
   handlers: SSEHandlers,
   signal?: AbortSignal
 ): Promise<void> {
@@ -134,7 +158,11 @@ export async function streamSearch(
     method: "POST",
     headers: authHeaders(token),
     credentials: "include",
-    body: JSON.stringify({ query, thread_id: threadId }),
+    body: JSON.stringify({
+      query,
+      thread_id: threadId,
+      attachment_ids: attachmentIds.length ? attachmentIds : null,
+    }),
     signal,
   });
 
