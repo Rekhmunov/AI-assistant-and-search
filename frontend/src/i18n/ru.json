@@ -1,7 +1,10 @@
 {
   "appName": "Glosix",
-  "homeTitle": "Спросите что угодно",
-  "homeSubtitle": "Поиск с источниками • документы и Excel • голосовой ввод",
+  "homePlaceholder1": "Спросите что угодно…",
+  "homePlaceholder2": "Я могу анализировать отчёты и Excel…",
+  "homePlaceholder3": "Найду ответ в интернете с источниками…",
+  "homePlaceholder4": "Разберу PDF, Word и выгрузки 1С…",
+  "homePlaceholder5": "Помогу настроить Yandex GPT и Cloud…",
   "searchPlaceholder": "Спросите что угодно…",
   "attachFile": "Прикрепить файл",
   "voiceInput": "Голосовой ввод",

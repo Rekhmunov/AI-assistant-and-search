@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { uploadFile, type UploadedFile, fetchMe } from "../api/client";
 import { ACCEPT_FILE_INPUT, MAX_FILE_BYTES_FREE, MAX_FILE_BYTES_PRO, validateFile } from "../constants/files";
+import { useTypingPlaceholder } from "../hooks/useTypingPlaceholder";
 import { useVoiceInput } from "../hooks/useVoiceInput";
 import { t } from "../i18n";
 import { isMaxWebApp } from "../lib/maxApp";
@@ -23,6 +24,9 @@ interface Props {
   onAttachmentsChange: (a: ComposerAttachment[]) => void;
   /** false — в потоке страницы (главная без ввода); true — закреплено над нижним меню */
   docked?: boolean;
+  /** Циклический «печатающийся» placeholder на главной */
+  animatedPlaceholder?: boolean;
+  placeholderPhrases?: string[];
 }
 
 export function SearchComposer({
@@ -34,6 +38,8 @@ export function SearchComposer({
   attachments,
   onAttachmentsChange,
   docked = true,
+  animatedPlaceholder = false,
+  placeholderPhrases = [],
 }: Props) {
   const token = useAuthStore((s) => s.token);
   const inMax = isMaxWebApp();
@@ -93,6 +99,9 @@ export function SearchComposer({
 
   const canSend = (value.trim().length > 0 || attachments.length > 0) && !disabled && !uploading;
   const hasAttachment = attachments.length > 0;
+  const showAnimatedPlaceholder = animatedPlaceholder && !value.trim() && !disabled;
+  const typingPlaceholder = useTypingPlaceholder(showAnimatedPlaceholder, placeholderPhrases);
+  const staticPlaceholder = placeholder ?? t("searchPlaceholder");
 
   return (
     <div className={`composer-wrap${docked ? " composer-wrap--docked" : " composer-wrap--inline"}`}>
@@ -145,20 +154,28 @@ export function SearchComposer({
             hidden
             onChange={(e) => onFilePick(e.target.files)}
           />
-          <textarea
-            className="composer-input"
-            rows={hasAttachment ? 2 : 1}
-            value={value}
-            placeholder={placeholder ?? t("searchPlaceholder")}
-            disabled={disabled}
-            onChange={(e) => onChange(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                if (canSend) handleSubmit(e as unknown as FormEvent);
-              }
-            }}
-          />
+          <div className="composer-input-wrap">
+            {showAnimatedPlaceholder && typingPlaceholder && (
+              <span className="composer-placeholder-typing" aria-hidden>
+                {typingPlaceholder}
+                <span className="composer-placeholder-caret" />
+              </span>
+            )}
+            <textarea
+              className="composer-input"
+              rows={hasAttachment ? 2 : 1}
+              value={value}
+              placeholder={showAnimatedPlaceholder ? " " : staticPlaceholder}
+              disabled={disabled}
+              onChange={(e) => onChange(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  if (canSend) handleSubmit(e as unknown as FormEvent);
+                }
+              }}
+            />
+          </div>
           <button
             type="button"
             className={`composer-icon ${voice.state === "recording" ? "recording" : ""}`}

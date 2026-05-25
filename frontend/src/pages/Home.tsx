@@ -1,10 +1,8 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { GlosixHeader } from "../components/GlosixHeader";
 import { SearchComposer, type ComposerAttachment } from "../components/SearchComposer";
-import { t } from "../i18n";
-
-const SUGGESTIONS = ["Технологии", "Бизнес", "Наука", "Анализ Excel-отчёта"];
+import { getHomePlaceholderPhrases } from "../constants/homePlaceholders";
 
 export function Home() {
   const navigate = useNavigate();
@@ -21,23 +19,11 @@ export function Home() {
   };
 
   const composing = Boolean(query.trim() || attachments.length > 0);
+  const placeholderPhrases = useMemo(() => getHomePlaceholderPhrases(), []);
 
   return (
     <div className={`page page-home${composing ? " page-home--composing" : ""}`}>
       <GlosixHeader showBrand={false} />
-      <div className="home-body">
-        <div className="home-hero">
-          <h1 className="home-title">{t("homeTitle")}</h1>
-          <p className="home-subtitle">{t("homeSubtitle")}</p>
-        </div>
-        <div className="home-suggestions">
-          {SUGGESTIONS.map((topic) => (
-            <button key={topic} type="button" className="chip" onClick={() => setQuery(topic)}>
-              {topic}
-            </button>
-          ))}
-        </div>
-      </div>
       <SearchComposer
         value={query}
         onChange={setQuery}
@@ -45,6 +31,8 @@ export function Home() {
         attachments={attachments}
         onAttachmentsChange={setAttachments}
         docked={composing}
+        animatedPlaceholder={!composing}
+        placeholderPhrases={placeholderPhrases}
       />
     </div>
   );

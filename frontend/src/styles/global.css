@@ -75,43 +75,18 @@ body:has(.page-thread) {
   min-height: calc(100dvh - var(--bottom-nav-height) - env(safe-area-inset-bottom));
 }
 
-.home-body {
-  display: flex;
-  flex-direction: column;
-  padding-top: clamp(32px, 10vh, 88px);
+.page-home:not(.page-home--composing) {
+  justify-content: center;
+  padding-top: 0;
 }
 
-.page-home--composing .home-body {
-  padding-top: 16px;
-  padding-bottom: 8px;
+.page-home:not(.page-home--composing) .composer-wrap--inline {
+  margin-top: 0;
+  padding-top: 0;
 }
 
-.home-hero {
-  display: flex;
-  flex-direction: column;
+.page-home--composing {
   justify-content: flex-start;
-  padding: 0 0 20px;
-}
-
-.home-title {
-  font-size: 1.75rem;
-  font-weight: 700;
-  margin: 0 0 8px;
-  line-height: 1.2;
-}
-
-.home-subtitle {
-  color: var(--muted);
-  margin: 0;
-  font-size: 0.95rem;
-  line-height: 1.45;
-}
-
-.home-suggestions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-bottom: 20px;
 }
 
 .glosix-header {
@@ -332,8 +307,48 @@ body:has(.page-thread) {
   color: var(--text);
 }
 
+.composer-input-wrap {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+}
+
+.composer-placeholder-typing {
+  position: absolute;
+  left: 4px;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  pointer-events: none;
+  color: var(--muted);
+  font-size: 1rem;
+  line-height: 1.4;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.composer-placeholder-caret {
+  display: inline-block;
+  width: 1px;
+  height: 1.1em;
+  margin-left: 1px;
+  vertical-align: text-bottom;
+  background: var(--muted);
+  animation: placeholder-caret-blink 1s step-end infinite;
+}
+
+@keyframes placeholder-caret-blink {
+  50% {
+    opacity: 0;
+  }
+}
+
 .composer-input {
   flex: 1;
+  width: 100%;
   border: none;
   background: transparent;
   color: var(--text);
