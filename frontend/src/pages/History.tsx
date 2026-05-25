@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "react-router-dom";
 import { fetchThreads } from "../api/client";
+import { ThreadHistoryMenu } from "../components/ThreadHistoryMenu";
 import { isMaxWebApp } from "../lib/maxApp";
 import { t } from "../i18n";
 import { useAuthStore } from "../store/authStore";
@@ -57,32 +58,34 @@ export function History() {
   }
 
   return (
-    <div className="page">
+    <div className="page page-history">
       <h1>{t("history")}</h1>
-      {isLoading && <p style={{ color: "var(--muted)" }}>{t("loading")}</p>}
-      {!isLoading && threads.length === 0 && (
-        <p style={{ color: "var(--muted)" }}>{t("historyEmpty")}</p>
-      )}
+      {isLoading && <p className="muted-text">{t("loading")}</p>}
+      {!isLoading && threads.length === 0 && <p className="muted-text">{t("historyEmpty")}</p>}
       {[...groups.entries()].map(([label, items]) => (
         <div key={label}>
           <div className="section-title">{label}</div>
-          {items.map((th) => (
-            <button
-              key={th.id}
-              type="button"
-              className="history-card"
-              onClick={() => navigate(`/thread/${th.id}`)}
-            >
-              <div>{th.title}</div>
-              <small style={{ color: "var(--muted)" }}>
-                {th.message_count} вопросов •{" "}
-                {new Date(th.last_message_at).toLocaleTimeString("ru-RU", {
-                  hour: "2-digit",
-                  minute: "2-digit",
-                })}
-              </small>
-            </button>
-          ))}
+          <ul className="history-list">
+            {items.map((th) => (
+              <li key={th.id} className="history-row">
+                <button
+                  type="button"
+                  className="history-card"
+                  onClick={() => navigate(`/thread/${th.id}`)}
+                >
+                  <span className="history-card-title">{th.title}</span>
+                  <small className="history-card-meta">
+                    {th.message_count} {t("questionsCount")} •{" "}
+                    {new Date(th.last_message_at).toLocaleTimeString("ru-RU", {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </small>
+                </button>
+                <ThreadHistoryMenu threadId={th.id} title={th.title} />
+              </li>
+            ))}
+          </ul>
         </div>
       ))}
     </div>

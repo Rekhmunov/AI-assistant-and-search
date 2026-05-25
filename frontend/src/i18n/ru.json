@@ -64,5 +64,14 @@
   "signOut": "Выйти",
   "maxSignOutHint": "Чтобы выйти, закройте миниапп. Email для входа с сайта можно добавить выше.",
   "backToSearch": "Вернуться к поиску",
-  "historyEmpty": "Пока нет сохранённых диалогов"
+  "historyEmpty": "Пока нет сохранённых диалогов",
+  "threadActions": "Действия с диалогом",
+  "renameThread": "Переименовать",
+  "deleteThread": "Удалить",
+  "deleteThreadConfirm": "Удалить этот диалог?",
+  "delete": "Удалить",
+  "cancel": "Отмена",
+  "saveTitle": "Сохранить",
+  "threadTitleRequired": "Введите название",
+  "questionsCount": "вопросов"
 }

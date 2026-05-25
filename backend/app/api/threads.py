@@ -11,7 +11,7 @@ from app.api.deps import SearchUserResult, get_current_user, get_db, get_existin
 from app.models.message import Message
 from app.models.thread import Thread
 from app.models.user import Plan, User
-from app.schemas.thread import MessageOut, SourceOut, ThreadDetail, ThreadListItem
+from app.schemas.thread import MessageOut, SourceOut, ThreadDetail, ThreadListItem, ThreadUpdate
 
 router = APIRouter(prefix="/threads", tags=["threads"])
 
@@ -73,6 +73,36 @@ async def get_thread(
         is_saved=thread.is_saved,
         messages=messages_out,
     )
+
+
+@router.patch("/{thread_id}", response_model=ThreadListItem)
+async def update_thread(
+    thread_id: UUID,
+    body: ThreadUpdate,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+):
+    result = await db.execute(select(Thread).where(Thread.id == thread_id, Thread.user_id == user.id))
+    thread = result.scalar_one_or_none()
+    if not thread:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Thread not found")
+    thread.title = body.title.strip()
+    await db.flush()
+    await db.refresh(thread)
+    return thread
+
+
+@router.delete("/{thread_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_thread(
+    thread_id: UUID,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+):
+    result = await db.execute(select(Thread).where(Thread.id == thread_id, Thread.user_id == user.id))
+    thread = result.scalar_one_or_none()
+    if not thread:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Thread not found")
+    await db.delete(thread)
 
 
 @router.post("/{thread_id}/save")

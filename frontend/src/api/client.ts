@@ -185,6 +185,32 @@ export async function saveThread(token: string, id: string): Promise<void> {
   });
 }
 
+export async function renameThread(token: string, id: string, title: string): Promise<ThreadListItem> {
+  const res = await fetch(`${API_BASE}/api/threads/${id}`, {
+    method: "PATCH",
+    headers: apiHeaders(token),
+    credentials: "include",
+    body: JSON.stringify({ title }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error((err as { detail?: string }).detail || "Failed to rename thread");
+  }
+  return res.json();
+}
+
+export async function deleteThread(token: string, id: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/threads/${id}`, {
+    method: "DELETE",
+    headers: apiHeaders(token),
+    credentials: "include",
+  });
+  if (!res.ok && res.status !== 204) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error((err as { detail?: string }).detail || "Failed to delete thread");
+  }
+}
+
 export async function devActivatePro(token: string): Promise<void> {
   await fetch(`${API_BASE}/api/payments/dev-activate`, {
     method: "POST",
