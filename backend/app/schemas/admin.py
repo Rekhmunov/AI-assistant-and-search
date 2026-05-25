@@ -93,6 +93,8 @@ class UserAdminOut(BaseModel):
     created_at: datetime
     deleted_at: datetime | None
     searches_today: int = 0
+    searches_limit: int = 0
+    threads_count: int = 0
     is_guest: bool = False
 
     model_config = {"from_attributes": True}
@@ -127,6 +129,43 @@ class SettingsOut(BaseModel):
 
 class SettingsUpdate(BaseModel):
     settings: dict[str, Any]
+
+
+class AdminThreadListItem(BaseModel):
+    id: UUID
+    title: str
+    message_count: int
+    last_message_at: datetime
+    created_at: datetime
+    deleted_at: datetime | None = None
+    deleted_by_user: bool = False
+
+
+class AdminMessageDebugOut(BaseModel):
+    id: UUID
+    role: str
+    content: str
+    created_at: datetime
+    sources: list[dict[str, Any]] | None = None
+    follow_up_questions: list[str] | None = None
+    debug_trace: dict[str, Any] | None = None
+
+
+class AdminSearchTurnOut(BaseModel):
+    """Один поисковый цикл: вопрос пользователя + ответ ассистента с отладкой."""
+
+    user_message: AdminMessageDebugOut
+    assistant_message: AdminMessageDebugOut | None = None
+
+
+class AdminThreadDebugOut(BaseModel):
+    id: UUID
+    title: str
+    created_at: datetime
+    last_message_at: datetime
+    deleted_at: datetime | None
+    deleted_by_user: bool
+    turns: list[AdminSearchTurnOut]
 
 
 class AuditLogOut(BaseModel):

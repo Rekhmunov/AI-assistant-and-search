@@ -13,6 +13,7 @@ from app.models.uploaded_file import UploadedFile
 from app.models.user import User
 from app.services.llm_provider import SearchSource
 from app.services.query_router import QueryRouter
+from app.services.search_debug import build_debug_trace, build_gpt_messages_preview
 from app.services.search_query import enhance_search_query, is_howto_query, normalize_user_query
 from app.services.source_ranking import rank_sources
 from app.services.thread_context import build_thread_context, format_sources_for_prompt
@@ -114,7 +115,11 @@ class SearchFlowService:
         thread: Thread | None = None
         if thread_id:
             result = await db.execute(
-                select(Thread).where(Thread.id == thread_id, Thread.user_id == user.id)
+                select(Thread).where(
+                    Thread.id == thread_id,
+                    Thread.user_id == user.id,
+                    Thread.deleted_at.is_(None),
+                )
             )
             thread = result.scalar_one_or_none()
             if not thread:
@@ -156,20 +161,31 @@ class SearchFlowService:
 
         sources: list[SearchSource] = []
         sources_json: list[dict] = []
+        search_q_sent: str | None = None
 
         try:
             if route.needs_search:
-                search_q = enhance_search_query(
+                search_q_sent = enhance_search_query(
                     route.search_query,
                     for_howto=is_howto_query(llm_query) or route.reason.startswith("rules:howto"),
                 )
-                raw_sources = await self.search.search(search_q)
+                raw_sources = await self.search.search(search_q_sent)
                 sources = rank_sources(
                     raw_sources,
                     howto=is_howto_query(llm_query) or route.answer_model == "pro",
                 )
                 sources_json = sources_to_json(sources)
                 yield sse_event("sources", {"sources": sources_json})
+
+            gpt_preview = build_gpt_messages_preview(
+                self.llm,
+                llm_query=llm_query,
+                sources=sources,
+                history=history,
+                prior_sources_block=prior_sources_block,
+                needs_search=route.needs_search,
+                model=route.answer_model,
+            )
 
             full_answer = ""
             if route.needs_search:
@@ -202,12 +218,25 @@ class SearchFlowService:
 
         follow_ups = await self.llm.generate_follow_ups(llm_query, full_answer)
 
+        debug_trace = build_debug_trace(
+            display_content=display_content,
+            llm_query=llm_query,
+            route=route,
+            search_query_sent=search_q_sent,
+            sources=sources,
+            sources_json=sources_json,
+            needs_search=route.needs_search,
+            answer_model=route.answer_model,
+            gpt_messages_preview=gpt_preview,
+        )
+
         assistant_msg = Message(
             thread_id=thread.id,
             role=MessageRole.ASSISTANT,
             content=full_answer.strip(),
             sources=sources_json if sources_json else None,
             follow_up_questions=follow_ups,
+            debug_trace=debug_trace,
         )
         db.add(assistant_msg)
         thread.message_count = (thread.message_count or 0) + 2

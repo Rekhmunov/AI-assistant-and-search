@@ -230,3 +230,146 @@ pre.small {
 .checkbox input {
   width: auto;
 }
+
+.user-detail-summary {
+  margin-top: 12px;
+}
+
+.user-detail-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px 24px;
+  margin: 12px 0;
+  font-size: 14px;
+}
+
+.thread-panels {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.thread-panel {
+  background: #fff;
+  border-radius: 10px;
+  border: 1px solid #e5e7eb;
+  overflow: hidden;
+}
+
+.thread-panel-open {
+  border-color: #93c5fd;
+}
+
+.thread-panel-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: 100%;
+  padding: 12px 14px;
+  border: none;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.thread-panel-head:hover {
+  background: #f9fafb;
+}
+
+.thread-panel-chevron {
+  flex-shrink: 0;
+  color: #6b7280;
+  font-size: 12px;
+  margin-top: 4px;
+}
+
+.thread-panel-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.thread-panel-title {
+  font-weight: 600;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.thread-panel-meta {
+  font-size: 12px;
+  color: #6b7280;
+  margin-top: 4px;
+}
+
+.thread-panel-body {
+  padding: 12px 14px 16px 36px;
+  border-top: 1px solid #f3f4f6;
+}
+
+.debug-turn {
+  margin-bottom: 20px;
+  padding-bottom: 16px;
+  border-bottom: 1px dashed #e5e7eb;
+}
+
+.debug-turn h4 {
+  margin: 0 0 10px;
+  font-size: 14px;
+}
+
+.debug-block {
+  margin-bottom: 10px;
+}
+
+.debug-block-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: #374151;
+  margin-bottom: 4px;
+}
+
+.debug-pre {
+  margin: 0;
+  padding: 10px;
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  font-size: 12px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+.debug-meta {
+  font-size: 12px;
+  color: #4b5563;
+  margin: 8px 0;
+  line-height: 1.5;
+}
+
+.debug-trace {
+  margin: 12px 0;
+  padding: 10px;
+  background: #eff6ff;
+  border-radius: 8px;
+  border: 1px solid #dbeafe;
+}
+
+.debug-details summary {
+  cursor: pointer;
+  font-size: 12px;
+  color: #2563eb;
+  margin: 6px 0;
+}
+
+.badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  background: #e5e7eb;
+}

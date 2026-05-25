@@ -28,7 +28,11 @@ async def list_threads(
     user: Annotated[User, Depends(get_current_user)],
 ):
     cutoff = _history_cutoff(user)
-    q = select(Thread).where(Thread.user_id == user.id).order_by(Thread.last_message_at.desc())
+    q = (
+        select(Thread)
+        .where(Thread.user_id == user.id, Thread.deleted_at.is_(None))
+        .order_by(Thread.last_message_at.desc())
+    )
     if cutoff:
         q = q.where(Thread.last_message_at >= cutoff)
     result = await db.execute(q)
@@ -44,7 +48,7 @@ async def get_thread(
     user = actor.user
     result = await db.execute(
         select(Thread)
-        .where(Thread.id == thread_id, Thread.user_id == user.id)
+        .where(Thread.id == thread_id, Thread.user_id == user.id, Thread.deleted_at.is_(None))
         .options(selectinload(Thread.messages))
     )
     thread = result.scalar_one_or_none()
@@ -82,7 +86,13 @@ async def update_thread(
     db: Annotated[AsyncSession, Depends(get_db)],
     user: Annotated[User, Depends(get_current_user)],
 ):
-    result = await db.execute(select(Thread).where(Thread.id == thread_id, Thread.user_id == user.id))
+    result = await db.execute(
+        select(Thread).where(
+            Thread.id == thread_id,
+            Thread.user_id == user.id,
+            Thread.deleted_at.is_(None),
+        )
+    )
     thread = result.scalar_one_or_none()
     if not thread:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Thread not found")
@@ -98,11 +108,17 @@ async def delete_thread(
     db: Annotated[AsyncSession, Depends(get_db)],
     user: Annotated[User, Depends(get_current_user)],
 ):
-    result = await db.execute(select(Thread).where(Thread.id == thread_id, Thread.user_id == user.id))
+    result = await db.execute(
+        select(Thread).where(
+            Thread.id == thread_id,
+            Thread.user_id == user.id,
+            Thread.deleted_at.is_(None),
+        )
+    )
     thread = result.scalar_one_or_none()
     if not thread:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Thread not found")
-    await db.delete(thread)
+    thread.deleted_at = datetime.now(timezone.utc)
 
 
 @router.post("/{thread_id}/save")
@@ -111,7 +127,13 @@ async def save_thread(
     db: Annotated[AsyncSession, Depends(get_db)],
     user: Annotated[User, Depends(get_current_user)],
 ):
-    result = await db.execute(select(Thread).where(Thread.id == thread_id, Thread.user_id == user.id))
+    result = await db.execute(
+        select(Thread).where(
+            Thread.id == thread_id,
+            Thread.user_id == user.id,
+            Thread.deleted_at.is_(None),
+        )
+    )
     thread = result.scalar_one_or_none()
     if not thread:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Thread not found")
@@ -125,7 +147,13 @@ async def unsave_thread(
     db: Annotated[AsyncSession, Depends(get_db)],
     user: Annotated[User, Depends(get_current_user)],
 ):
-    result = await db.execute(select(Thread).where(Thread.id == thread_id, Thread.user_id == user.id))
+    result = await db.execute(
+        select(Thread).where(
+            Thread.id == thread_id,
+            Thread.user_id == user.id,
+            Thread.deleted_at.is_(None),
+        )
+    )
     thread = result.scalar_one_or_none()
     if not thread:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Thread not found")

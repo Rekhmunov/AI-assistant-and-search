@@ -1,6 +1,10 @@
 import { FormEvent, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { apiFetch } from "../api";
+import {
+  UserThreadDebugPanel,
+  type ThreadSummary,
+} from "../components/UserThreadDebugPanel";
 import { useAuth } from "../AuthContext";
 
 interface UserRow {
@@ -13,32 +17,39 @@ interface UserRow {
   plan: string;
   plan_expires_at: string | null;
   searches_today: number;
+  searches_limit: number;
+  threads_count: number;
   deleted_at: string | null;
   is_guest: boolean;
 }
 
-interface ThreadRow {
-  id: string;
-  title: string;
-  message_count: number;
-  last_message_at: string;
+function displayName(user: UserRow): string {
+  if (user.username) return `@${user.username}`;
+  if (user.first_name) return user.first_name;
+  if (user.email) return user.email;
+  if (user.max_user_id != null) return `MAX ${user.max_user_id}`;
+  return "Пользователь";
 }
 
 export function UserDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { can } = useAuth();
   const [user, setUser] = useState<UserRow | null>(null);
-  const [threads, setThreads] = useState<ThreadRow[]>([]);
+  const [threads, setThreads] = useState<ThreadSummary[]>([]);
+  const [showDeleted, setShowDeleted] = useState(true);
   const [days, setDays] = useState(30);
   const [msg, setMsg] = useState("");
 
   const load = () => {
     if (!id) return;
     apiFetch<UserRow>(`/api/admin/users/${id}`).then(setUser);
-    apiFetch<ThreadRow[]>(`/api/admin/users/${id}/threads`).then(setThreads);
+    const params = new URLSearchParams({ limit: "50" });
+    if (showDeleted) params.set("include_deleted", "true");
+    else params.set("include_deleted", "false");
+    apiFetch<ThreadSummary[]>(`/api/admin/users/${id}/threads?${params}`).then(setThreads);
   };
 
-  useEffect(load, [id]);
+  useEffect(load, [id, showDeleted]);
 
   const grantPro = async (e: FormEvent) => {
     e.preventDefault();
@@ -63,20 +74,31 @@ export function UserDetailPage() {
   if (!user) return <p>Загрузка…</p>;
 
   return (
-    <div>
+    <div className="user-detail">
       <Link to="/users">← Пользователи</Link>
-      <h1>
-        {user.first_name || "Пользователь"} {user.last_name || ""}
-      </h1>
-      <p className="hint">
-        {user.email && <>Email: {user.email} · </>}
-        {user.max_user_id != null ? <>MAX ID: {user.max_user_id}</> : "MAX не привязан"}
-        {user.is_guest && " · гостевая сессия"}
-      </p>
-      <p>
-        План: <strong>{user.plan}</strong> · Поисков сегодня: {user.searches_today}
-        {user.deleted_at && <span className="badge bad">забанен</span>}
-      </p>
+      <h1>{displayName(user)}</h1>
+      <div className="user-detail-summary card">
+        <p className="hint">
+          {user.email && <>Email: {user.email} · </>}
+          {user.max_user_id != null ? <>MAX ID: {user.max_user_id}</> : "MAX не привязан"}
+          {user.is_guest && " · гостевая сессия"}
+        </p>
+        <div className="user-detail-stats">
+          <span>
+            План: <strong>{user.plan}</strong>
+          </span>
+          <span>
+            Поиски:{" "}
+            <strong>
+              {user.searches_today}/{user.searches_limit || "—"}
+            </strong>
+          </span>
+          <span>
+            Активных тредов: <strong>{user.threads_count}</strong>
+          </span>
+        </div>
+      </div>
+
       {msg && <p className="ok">{msg}</p>}
       {can("users:write") && (
         <div className="card row-actions">
@@ -94,14 +116,27 @@ export function UserDetailPage() {
           </button>
         </div>
       )}
-      <h2>Треды</h2>
-      <ul>
+
+      <h2>Треды и отладка ({threads.length})</h2>
+      <p className="hint">
+        Раскройте тред: вопрос пользователя, запрос в Search/GPT, модель, промпт. Удалённые пользователем
+        треды остаются в админке для аудита (скрыты в его истории).
+      </p>
+      <label className="checkbox">
+        <input
+          type="checkbox"
+          checked={showDeleted}
+          onChange={(e) => setShowDeleted(e.target.checked)}
+        />
+        Показывать удалённые пользователем
+      </label>
+
+      {threads.length === 0 && <p className="hint">Тредов нет</p>}
+      <div className="thread-panels">
         {threads.map((t) => (
-          <li key={t.id}>
-            {t.title} ({t.message_count}) — {new Date(t.last_message_at).toLocaleString()}
-          </li>
+          <UserThreadDebugPanel key={t.id} userId={id!} thread={t} />
         ))}
-      </ul>
+      </div>
     </div>
   );
 }
