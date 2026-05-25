@@ -39,7 +39,8 @@ JWT_SECRET_VAL="${JWT_SECRET:-$(gen_secret)}"
 ADMIN_KEY_VAL="${ADMIN_API_KEY:-$(gen_secret_24)}"
 POSTGRES_PW_VAL="${POSTGRES_PASSWORD:-$(gen_secret)}"
 
-VITE_URL="https://${API_HOST}"
+# Пустой URL: запросы на /api того же хоста (app/admin), без cross-origin и CORS-ошибок
+VITE_URL=""
 CORS="https://${APP_HOST},https://${API_HOST},https://${ADMIN_HOST}"
 
 if [ -f .env ] && [ "${FORCE:-0}" != "1" ]; then
@@ -73,6 +74,8 @@ YANDEX_API_KEY=${YANDEX_API_KEY:-}
 YOOKASSA_SHOP_ID=${YOOKASSA_SHOP_ID:-}
 YOOKASSA_SECRET_KEY=${YOOKASSA_SECRET_KEY:-}
 
+COOKIE_DOMAIN=.${DOMAIN}
+GUEST_SEARCHES_PER_DAY=5
 FREE_SEARCHES_PER_DAY=10
 PRO_SEARCHES_PER_DAY=200
 GLOBAL_YANDEX_REQUESTS_PER_DAY=5000

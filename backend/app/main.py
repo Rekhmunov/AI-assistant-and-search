@@ -1,7 +1,8 @@
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from app.api import api_router
 from app.core.config import get_settings
@@ -41,6 +42,13 @@ def create_app() -> FastAPI:
     )
 
     app.include_router(api_router)
+
+    @app.exception_handler(Exception)
+    async def unhandled_exception(request: Request, exc: Exception):
+        import logging
+
+        logging.getLogger(__name__).exception("Unhandled error on %s", request.url.path)
+        return JSONResponse(status_code=500, content={"detail": "Internal server error"})
 
     @app.get("/health")
     async def health():

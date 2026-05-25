@@ -5,6 +5,7 @@ from uuid import UUID
 from fastapi import APIRouter, Cookie, Depends, Header, HTTPException, Response, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select, update
+from sqlalchemy.exc import IntegrityError, ProgrammingError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import (
@@ -220,7 +221,18 @@ async def register_email(
         max_user_id=None,
     )
     db.add(user)
-    await db.flush()
+    try:
+        await db.flush()
+    except IntegrityError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Email уже зарегистрирован",
+        ) from exc
+    except ProgrammingError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="База не обновлена. На сервере выполните: alembic upgrade head",
+        ) from exc
 
     await _merge_guest_session(db, guest_session, user)
     clear_guest_cookie(response)
