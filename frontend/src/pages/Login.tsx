@@ -51,7 +51,7 @@ export function LoginPage() {
 
   return (
     <div className="page page-login">
-      <GlosixHeader showLimits={false} />
+      <GlosixHeader showLimits={false} showBrand={false} />
       <div className="login-card">
         <h1>{mode === "login" ? "Вход на сайт" : "Регистрация"}</h1>
         <p className="hint">Email и пароль для app.glosix.ru. В MAX вход автоматический.</p>

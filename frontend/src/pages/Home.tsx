@@ -22,7 +22,7 @@ export function Home() {
 
   return (
     <div className="page page-home">
-      <GlosixHeader />
+      <GlosixHeader showBrand={false} />
       <div className="home-hero">
         <h1 className="home-title">{t("homeTitle")}</h1>
         <p className="home-subtitle">{t("homeSubtitle")}</p>

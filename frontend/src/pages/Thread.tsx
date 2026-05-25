@@ -4,7 +4,6 @@ import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { fetchThread, streamSearch } from "../api/client";
 import { AnswerBody } from "../components/AnswerBody";
 import { AnswerFooter } from "../components/AnswerFooter";
-import { GlosixHeader } from "../components/GlosixHeader";
 import { SearchComposer, type ComposerAttachment } from "../components/SearchComposer";
 import { SearchStatusLine, type SearchPhase } from "../components/SearchStatusLine";
 import { t } from "../i18n";
@@ -160,18 +159,15 @@ export function Thread() {
   return (
     <div className="page page-thread">
       <div className="thread-top">
-        <GlosixHeader showLimits={false} />
-        <div className="thread-actions">
-          <button
-            type="button"
-            className="icon-btn icon-btn-back"
-            onClick={() => navigate("/")}
-            aria-label={t("back")}
-            title={t("back")}
-          >
-            <BackIcon />
-          </button>
-        </div>
+        <button
+          type="button"
+          className="icon-btn icon-btn-back"
+          onClick={() => navigate("/")}
+          aria-label={t("back")}
+          title={t("back")}
+        >
+          <BackIcon />
+        </button>
       </div>
 
       <div className="thread-conversation">

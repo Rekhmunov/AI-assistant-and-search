@@ -83,6 +83,15 @@ body {
   padding: 8px 0 12px;
 }
 
+.glosix-header--no-brand {
+  justify-content: flex-end;
+}
+
+.glosix-header-spacer {
+  flex: 1;
+  min-width: 0;
+}
+
 .glosix-brand {
   display: flex;
   align-items: center;
@@ -671,12 +680,8 @@ body {
 }
 
 .thread-top {
-  margin-bottom: 8px;
-}
-
-.thread-actions {
   display: flex;
-  justify-content: flex-start;
+  align-items: center;
   margin-bottom: 12px;
 }
 
@@ -687,6 +692,15 @@ body {
   min-width: 40px;
   min-height: 40px;
   padding: 8px;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.icon-btn-back:hover {
+  background: var(--surface-hover);
 }
 
 .query-label {

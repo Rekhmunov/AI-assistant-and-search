@@ -7,9 +7,11 @@ import { useAuthStore } from "../store/authStore";
 
 interface Props {
   showLimits?: boolean;
+  /** Логотип слева (фиолетовая иконка) — на главной и в треде скрыт */
+  showBrand?: boolean;
 }
 
-export function GlosixHeader({ showLimits = true }: Props) {
+export function GlosixHeader({ showLimits = true, showBrand = true }: Props) {
   const token = useAuthStore((s) => s.token);
   const inMax = isMaxWebApp();
 
@@ -26,10 +28,14 @@ export function GlosixHeader({ showLimits = true }: Props) {
       : null);
 
   return (
-    <header className="glosix-header">
-      <Link to="/" className="glosix-brand" aria-label="Glosix">
-        <img src="/glosix-logo.svg" alt="Glosix" className="glosix-logo" />
-      </Link>
+    <header className={`glosix-header${showBrand ? "" : " glosix-header--no-brand"}`}>
+      {showBrand ? (
+        <Link to="/" className="glosix-brand" aria-label="Glosix">
+          <img src="/glosix-logo.svg" alt="Glosix" className="glosix-logo" />
+        </Link>
+      ) : (
+        <div className="glosix-header-spacer" aria-hidden />
+      )}
       <div className="glosix-header-actions">
         {showLimits && limits && (
           <span className="limits-badge" title={session?.is_guest ? t("guestLimitsHint") : undefined}>
