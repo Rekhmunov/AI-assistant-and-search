@@ -14,6 +14,7 @@ from app.models.user import User
 from app.services.llm_provider import SearchSource
 from app.services.query_router import QueryRouter
 from app.services.thread_context import build_thread_context, format_sources_for_prompt
+from app.services.yandex_errors import YandexServiceError
 from app.services.yandex_gpt import YandexGPTProvider
 from app.services.yandex_search import YandexSearchService
 
@@ -152,31 +153,40 @@ class SearchFlowService:
         sources: list[SearchSource] = []
         sources_json: list[dict] = []
 
-        if route.needs_search:
-            sources = await self.search.search(route.search_query[:400])
-            sources_json = sources_to_json(sources)
-            yield sse_event("sources", {"sources": sources_json})
+        try:
+            if route.needs_search:
+                sources = await self.search.search(route.search_query[:400])
+                sources_json = sources_to_json(sources)
+                yield sse_event("sources", {"sources": sources_json})
 
-        full_answer = ""
-        if route.needs_search:
-            async for chunk in self.llm.stream_answer(
-                llm_query,
-                sources,
-                history,
-                model=route.answer_model,
-                prior_sources_block=prior_sources_block,
-            ):
-                full_answer += chunk
-                yield sse_event("token", {"text": chunk})
-        else:
-            async for chunk in self.llm.stream_answer_direct(
-                llm_query,
-                history,
-                model=route.answer_model,
-                prior_sources_block=prior_sources_block,
-            ):
-                full_answer += chunk
-                yield sse_event("token", {"text": chunk})
+            full_answer = ""
+            if route.needs_search:
+                async for chunk in self.llm.stream_answer(
+                    llm_query,
+                    sources,
+                    history,
+                    model=route.answer_model,
+                    prior_sources_block=prior_sources_block,
+                ):
+                    full_answer += chunk
+                    yield sse_event("token", {"text": chunk})
+            else:
+                async for chunk in self.llm.stream_answer_direct(
+                    llm_query,
+                    history,
+                    model=route.answer_model,
+                    prior_sources_block=prior_sources_block,
+                ):
+                    full_answer += chunk
+                    yield sse_event("token", {"text": chunk})
+        except YandexServiceError as e:
+            await db.rollback()
+            await limiter.release_search(str(user.id))
+            yield sse_event(
+                "error",
+                {"code": "yandex_error", "message": str(e)},
+            )
+            return
 
         follow_ups = await self.llm.generate_follow_ups(llm_query, full_answer)
 

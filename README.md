@@ -97,7 +97,7 @@ cd admin && npm install && npm run dev
 - `BOT_TOKEN` — токен бота MAX
 - `JWT_SECRET` — секрет для JWT
 - `SKIP_INIT_DATA_VALIDATION=false`
-- `YANDEX_FOLDER_ID`, `YANDEX_API_KEY` — без них работают mock-источники и ответы
+- `YANDEX_FOLDER_ID`, `YANDEX_API_KEY` — Yandex Search + GPT Lite/Pro ([инструкция](docs/YANDEX_SETUP.md)); без ключей — mock
 - `ADMIN_BOOTSTRAP_EMAIL` / `ADMIN_BOOTSTRAP_PASSWORD` — первый админ (owner), создаётся при старте, если таблица пуста
 - `ADMIN_API_KEY` — опционально, legacy API-ключ (предпочтительно вход по email/паролю в админке)
 

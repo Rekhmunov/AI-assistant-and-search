@@ -101,7 +101,7 @@ ENVIRONMENT=production
 DEBUG=false
 ```
 
-Добавьте ключи Yandex Cloud, если нужен боевой поиск (иначе mock).
+Добавьте ключи Yandex Cloud для боевого поиска и GPT — пошагово в [YANDEX_SETUP.md](./YANDEX_SETUP.md). Проверка: `curl https://api.ваш-домен.ru/api/health/yandex`.
 
 ### Домены в nginx
 

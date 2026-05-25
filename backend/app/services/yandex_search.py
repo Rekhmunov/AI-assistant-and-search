@@ -1,12 +1,15 @@
 import base64
 import json
+import logging
 from urllib.parse import urlparse
 
 import httpx
 
 from app.core.config import Settings, get_settings
 from app.services.llm_provider import SearchSource
+from app.services.yandex_errors import YandexServiceError
 
+logger = logging.getLogger(__name__)
 
 MOCK_SOURCES: list[SearchSource] = [
     SearchSource(
@@ -33,6 +36,34 @@ MOCK_SOURCES: list[SearchSource] = [
 ]
 
 
+def _parse_search_documents(decoded: dict, limit: int) -> list[SearchSource]:
+    docs: list[dict] = []
+    response = decoded.get("response") or decoded
+    if isinstance(response, dict):
+        docs = list(response.get("results") or [])
+        if not docs:
+            for group in response.get("groups") or []:
+                docs.extend(group.get("documents") or group.get("docs") or [])
+    if not docs:
+        docs = list(decoded.get("results") or [])
+
+    sources: list[SearchSource] = []
+    for i, doc in enumerate(docs[:limit], start=1):
+        url = doc.get("url", "")
+        domain = urlparse(url).netloc.replace("www.", "") if url else "unknown"
+        snippet = doc.get("passage") or doc.get("snippet") or doc.get("description") or ""
+        sources.append(
+            SearchSource(
+                index=i,
+                url=url,
+                title=doc.get("title", domain),
+                snippet=str(snippet)[:500],
+                domain=domain,
+            )
+        )
+    return sources
+
+
 class YandexSearchService:
     def __init__(self, settings: Settings | None = None):
         self.settings = settings or get_settings()
@@ -56,28 +87,32 @@ class YandexSearchService:
             "region": "225",
         }
 
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.post(self.settings.yandex_search_url, headers=headers, json=body)
-            response.raise_for_status()
-            data = response.json()
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.post(self.settings.yandex_search_url, headers=headers, json=body)
+                response.raise_for_status()
+                data = response.json()
+        except httpx.HTTPStatusError as e:
+            detail = e.response.text[:500]
+            logger.error("Yandex Search HTTP %s: %s", e.response.status_code, detail)
+            raise YandexServiceError("search", f"Поиск недоступен (HTTP {e.response.status_code})", e.response.status_code) from e
+        except httpx.HTTPError as e:
+            logger.exception("Yandex Search request failed")
+            raise YandexServiceError("search", "Поиск недоступен (сеть)") from e
 
         raw = data.get("rawData")
         if not raw:
-            return MOCK_SOURCES[:limit]
+            logger.warning("Yandex Search empty rawData: %s", list(data.keys()))
+            raise YandexServiceError("search", "Пустой ответ Search API")
 
-        decoded = json.loads(base64.b64decode(raw).decode("utf-8"))
-        sources: list[SearchSource] = []
-        docs = decoded.get("response", {}).get("results", []) or decoded.get("results", [])
-        for i, doc in enumerate(docs[:limit], start=1):
-            url = doc.get("url", "")
-            domain = urlparse(url).netloc.replace("www.", "") if url else "unknown"
-            sources.append(
-                SearchSource(
-                    index=i,
-                    url=url,
-                    title=doc.get("title", domain),
-                    snippet=doc.get("passage", doc.get("snippet", ""))[:500],
-                    domain=domain,
-                )
-            )
-        return sources or MOCK_SOURCES[:limit]
+        try:
+            decoded = json.loads(base64.b64decode(raw).decode("utf-8"))
+        except (json.JSONDecodeError, ValueError) as e:
+            logger.exception("Yandex Search rawData decode failed")
+            raise YandexServiceError("search", "Некорректный ответ Search API") from e
+
+        sources = _parse_search_documents(decoded, limit)
+        if not sources:
+            logger.warning("Yandex Search: no documents in response")
+            raise YandexServiceError("search", "В выдаче нет документов")
+        return sources

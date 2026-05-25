@@ -26,6 +26,9 @@ class Settings(BaseSettings):
     yandex_folder_id: str = ""
     yandex_api_key: str = ""
     yandex_search_url: str = "https://searchapi.api.cloud.yandex.net/v2/web/search"
+    # Model URI suffixes: gpt://{folder_id}/{name}/{version}
+    yandex_gpt_lite_model: str = "yandexgpt-lite/latest"
+    yandex_gpt_pro_model: str = "yandexgpt/latest"
 
     yookassa_shop_id: str = ""
     yookassa_secret_key: str = ""
@@ -53,6 +56,11 @@ class Settings(BaseSettings):
     @property
     def yandex_configured(self) -> bool:
         return bool(self.yandex_folder_id and self.yandex_api_key)
+
+    def yandex_model_uri(self, model: str) -> str:
+        folder = self.yandex_folder_id
+        suffix = self.yandex_gpt_pro_model if model == "pro" else self.yandex_gpt_lite_model
+        return f"gpt://{folder}/{suffix}"
 
 
 @lru_cache

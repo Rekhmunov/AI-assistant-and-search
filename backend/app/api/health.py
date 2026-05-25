@@ -5,6 +5,8 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_db, get_redis
+from app.core.config import get_settings
+from app.services.yandex_probe import probe_yandex
 
 router = APIRouter(tags=["health"])
 
@@ -49,10 +51,16 @@ async def api_health(db: Annotated[AsyncSession, Depends(get_db)]):
     except Exception:
         redis_ok = False
 
+    settings = get_settings()
     status = "ok" if not missing and not missing_tables and redis_ok else "degraded"
     return {
         "status": status,
         "redis": redis_ok,
+        "yandex_configured": settings.yandex_configured,
+        "yandex_models": {
+            "lite": settings.yandex_gpt_lite_model,
+            "pro": settings.yandex_gpt_pro_model,
+        },
         "db_columns": {c: c in cols for c in sorted(required)},
         "missing_migrations": missing,
         "missing_tables": missing_tables,
@@ -61,4 +69,15 @@ async def api_health(db: Annotated[AsyncSession, Depends(get_db)]):
             if missing or missing_tables
             else None
         ),
+        "yandex_hint": (
+            None
+            if settings.yandex_configured
+            else "Добавьте YANDEX_FOLDER_ID и YANDEX_API_KEY в .env — см. docs/YANDEX_SETUP.md"
+        ),
     }
+
+
+@router.get("/health/yandex")
+async def api_health_yandex():
+    """Проверка Search API и YandexGPT Lite/Pro (может занять до ~30 с)."""
+    return await probe_yandex()

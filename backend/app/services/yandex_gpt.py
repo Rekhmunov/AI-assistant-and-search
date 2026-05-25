@@ -1,4 +1,5 @@
 import json
+import logging
 import re
 from collections.abc import AsyncIterator
 from typing import Literal
@@ -7,6 +8,9 @@ import httpx
 
 from app.core.config import Settings, get_settings
 from app.services.llm_provider import LLMProvider, SearchSource
+from app.services.yandex_errors import YandexServiceError
+
+logger = logging.getLogger(__name__)
 
 AnswerModel = Literal["lite", "pro"]
 
@@ -45,10 +49,7 @@ class YandexGPTProvider(LLMProvider):
         self.settings = settings or get_settings()
 
     def _model_uri(self, model: AnswerModel = "lite") -> str:
-        folder = self.settings.yandex_folder_id
-        if model == "pro":
-            return f"gpt://{folder}/yandexgpt/latest"
-        return f"gpt://{folder}/yandexgpt-lite/latest"
+        return self.settings.yandex_model_uri(model)
 
     def _build_messages_search(
         self,
@@ -106,10 +107,17 @@ class YandexGPTProvider(LLMProvider):
             },
             "messages": messages,
         }
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            response = await client.post(self.COMPLETION_URL, headers=headers, json=payload)
-            response.raise_for_status()
-            data = response.json()
+        try:
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                response = await client.post(self.COMPLETION_URL, headers=headers, json=payload)
+                response.raise_for_status()
+                data = response.json()
+        except httpx.HTTPStatusError as e:
+            logger.error("YandexGPT HTTP %s: %s", e.response.status_code, e.response.text[:500])
+            raise YandexServiceError("gpt", f"YandexGPT недоступен (HTTP {e.response.status_code})", e.response.status_code) from e
+        except httpx.HTTPError as e:
+            logger.exception("YandexGPT request failed")
+            raise YandexServiceError("gpt", "YandexGPT недоступен (сеть)") from e
         return data.get("result", {}).get("alternatives", [{}])[0].get("message", {}).get("text", "")
 
     async def stream_answer(
@@ -178,24 +186,33 @@ class YandexGPTProvider(LLMProvider):
             yield chunk
 
     async def _stream_completion(self, payload: dict, headers: dict) -> AsyncIterator[str]:
-        async with httpx.AsyncClient(timeout=120.0) as client:
-            async with client.stream("POST", self.COMPLETION_URL, headers=headers, json=payload) as response:
-                response.raise_for_status()
-                async for line in response.aiter_lines():
-                    if not line.startswith("data:"):
-                        continue
-                    chunk = line[5:].strip()
-                    if not chunk or chunk == "[DONE]":
-                        continue
-                    try:
-                        parsed = json.loads(chunk)
-                    except json.JSONDecodeError:
-                        continue
-                    alts = parsed.get("result", {}).get("alternatives", [])
-                    if alts:
-                        text = alts[0].get("message", {}).get("text", "")
-                        if text:
-                            yield text
+        prev_len = 0
+        try:
+            async with httpx.AsyncClient(timeout=120.0) as client:
+                async with client.stream("POST", self.COMPLETION_URL, headers=headers, json=payload) as response:
+                    response.raise_for_status()
+                    async for line in response.aiter_lines():
+                        if not line.startswith("data:"):
+                            continue
+                        chunk = line[5:].strip()
+                        if not chunk or chunk == "[DONE]":
+                            continue
+                        try:
+                            parsed = json.loads(chunk)
+                        except json.JSONDecodeError:
+                            continue
+                        alts = parsed.get("result", {}).get("alternatives", [])
+                        if alts:
+                            text = alts[0].get("message", {}).get("text", "")
+                            if text and len(text) > prev_len:
+                                yield text[prev_len:]
+                                prev_len = len(text)
+        except httpx.HTTPStatusError as e:
+            logger.error("YandexGPT stream HTTP %s: %s", e.response.status_code, e.response.text[:500])
+            raise YandexServiceError("gpt", f"YandexGPT недоступен (HTTP {e.response.status_code})", e.response.status_code) from e
+        except httpx.HTTPError as e:
+            logger.exception("YandexGPT stream failed")
+            raise YandexServiceError("gpt", "YandexGPT недоступен (сеть)") from e
 
     async def generate_follow_ups(self, query: str, answer: str) -> list[str]:
         if not self.settings.yandex_configured:
@@ -224,10 +241,25 @@ class YandexGPTProvider(LLMProvider):
             ],
         }
 
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            response = await client.post(self.COMPLETION_URL, headers=headers, json=payload)
-            response.raise_for_status()
-            data = response.json()
+        try:
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                response = await client.post(self.COMPLETION_URL, headers=headers, json=payload)
+                response.raise_for_status()
+                data = response.json()
+        except httpx.HTTPStatusError as e:
+            logger.warning("Follow-ups YandexGPT HTTP %s", e.response.status_code)
+            return [
+                "Расскажи подробнее",
+                "Приведи примеры",
+                "Какие есть риски?",
+            ]
+        except httpx.HTTPError:
+            logger.exception("Follow-ups request failed")
+            return [
+                "Расскажи подробнее",
+                "Приведи примеры",
+                "Какие есть риски?",
+            ]
 
         text = data.get("result", {}).get("alternatives", [{}])[0].get("message", {}).get("text", "")
         match = re.search(r"\[.*\]", text, re.DOTALL)
