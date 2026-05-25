@@ -280,47 +280,62 @@ export async function streamSearch(
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
+  let finished = false;
+  let gotError = false;
 
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    const parts = buffer.split("\n\n");
-    buffer = parts.pop() ?? "";
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const parts = buffer.split("\n\n");
+      buffer = parts.pop() ?? "";
 
-    for (const part of parts) {
-      const lines = part.split("\n");
-      let event = "message";
-      let data = "";
-      for (const line of lines) {
-        if (line.startsWith("event:")) event = line.slice(6).trim();
-        if (line.startsWith("data:")) data = line.slice(5).trim();
+      for (const part of parts) {
+        const lines = part.split("\n");
+        let event = "message";
+        let data = "";
+        for (const line of lines) {
+          if (line.startsWith("event:")) event = line.slice(6).trim();
+          if (line.startsWith("data:")) data = line.slice(5).trim();
+        }
+        if (!data) continue;
+        const parsed = JSON.parse(data);
+        switch (event) {
+          case "thread":
+            handlers.onThread?.(parsed.thread_id);
+            break;
+          case "route":
+            handlers.onRoute?.(parsed as RouteInfo);
+            break;
+          case "sources":
+            handlers.onSources?.(parsed.sources);
+            break;
+          case "token":
+            handlers.onToken?.(parsed.text);
+            break;
+          case "follow_ups":
+            handlers.onFollowUps?.(parsed.questions);
+            break;
+          case "done":
+            finished = true;
+            handlers.onDone?.();
+            break;
+          case "error":
+            gotError = true;
+            handlers.onError?.(parsed.message);
+            break;
+        }
       }
-      if (!data) continue;
-      const parsed = JSON.parse(data);
-      switch (event) {
-        case "thread":
-          handlers.onThread?.(parsed.thread_id);
-          break;
-        case "route":
-          handlers.onRoute?.(parsed as RouteInfo);
-          break;
-        case "sources":
-          handlers.onSources?.(parsed.sources);
-          break;
-        case "token":
-          handlers.onToken?.(parsed.text);
-          break;
-        case "follow_ups":
-          handlers.onFollowUps?.(parsed.questions);
-          break;
-        case "done":
-          handlers.onDone?.();
-          break;
-        case "error":
-          handlers.onError?.(parsed.message);
-          break;
-      }
+    }
+  } catch (e) {
+    if (!gotError && !finished) {
+      gotError = true;
+      handlers.onError?.(e instanceof Error ? e.message : "Соединение прервано");
+    }
+  } finally {
+    if (!finished && !gotError) {
+      handlers.onError?.("Соединение прервано. Попробуйте ещё раз.");
     }
   }
 }
