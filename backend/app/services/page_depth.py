@@ -131,24 +131,31 @@ async def enrich_sources_deep(
     *,
     max_pages: int = _DEFAULT_MAX_PAGES,
     chunks_per_page: int = _MAX_CHUNKS_PER_PAGE,
-) -> list[SearchSource]:
+) -> tuple[list[SearchSource], dict[str, int]]:
     """Качает полный текст страницы и подставляет лучшие чанки под запрос."""
     out: list[SearchSource] = []
     fetched = 0
+    cache_hits = 0
+    cache_misses = 0
     for s in sources:
         page_chunks: list[str] = []
         if fetched < max_pages and s.url:
-            full = await fetch_page_full_text(s.url)
+            full, from_cache = await fetch_page_full_text(s.url)
+            if from_cache:
+                cache_hits += 1
+            elif full:
+                cache_misses += 1
             if full:
                 fetched += 1
                 page_chunks = select_relevant_chunks(
                     full, query, max_chunks=chunks_per_page
                 )
                 logger.debug(
-                    "Deep page %s: %d chars → %d chunks",
+                    "Deep page %s: %d chars → %d chunks (cache=%s)",
                     s.domain,
                     len(full),
                     len(page_chunks),
+                    from_cache,
                 )
         combined = build_deep_snippet(s.snippet or "", page_chunks)
         out.append(
@@ -160,4 +167,5 @@ async def enrich_sources_deep(
                 domain=s.domain,
             )
         )
-    return out
+    stats = {"hits": cache_hits, "misses": cache_misses, "fetched": fetched}
+    return out, stats

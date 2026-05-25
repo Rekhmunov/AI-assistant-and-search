@@ -253,6 +253,7 @@ class SearchFlowService:
                         for_currency=currency,
                     )
 
+                page_cache_trace: dict | None = None
                 pipeline_result = await self.fact_pipeline.run(
                     llm_query,
                     queries,
@@ -267,6 +268,7 @@ class SearchFlowService:
                 search_attempts = pipeline_result.search_attempts
                 retrieval_trace = pipeline_result.retrieval_trace
                 search_q_sent = pipeline_result.last_search_query
+                page_cache_trace = pipeline_result.page_cache
 
                 sources_json = sources_to_json(sources)
                 if sources_json:
@@ -347,6 +349,7 @@ class SearchFlowService:
             search_attempts=search_attempts or None,
             retrieval=retrieval_trace,
             fact_pack=fact_pack.to_dict() if fact_pack else None,
+            page_cache=page_cache_trace,
         )
 
         trace_payload = debug_trace if await _messages_have_debug_trace(db) else None

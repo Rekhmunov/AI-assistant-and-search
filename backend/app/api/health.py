@@ -31,11 +31,27 @@ def _build_features() -> dict[str, bool]:
         fact_pipeline = True
     except ImportError:
         fact_pipeline = False
+    page_cache_on = get_settings().page_cache_enabled
     return {
         "policy_v5_factpack": POLICY_VERSION.startswith("v5"),
         "fact_pipeline": fact_pipeline,
+        "page_cache": page_cache_on,
         "currency_cbr": currency_cbr,
         "page_fetch": page_fetch,
+    }
+
+
+@router.get("/health/page-cache")
+async def api_health_page_cache():
+    """Статистика Redis page_cache (приблизительно)."""
+    from app.core.config import get_settings
+    from app.services.page_cache import cache_stats_sample
+
+    settings = get_settings()
+    stats = await cache_stats_sample()
+    return {
+        "enabled": settings.page_cache_enabled,
+        **stats,
     }
 
 

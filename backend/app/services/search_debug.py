@@ -58,6 +58,7 @@ def build_debug_trace(
     search_attempts: list[dict[str, Any]] | None = None,
     retrieval: dict[str, Any] | None = None,
     fact_pack: dict[str, Any] | None = None,
+    page_cache: dict[str, Any] | None = None,
     settings: Settings | None = None,
 ) -> dict[str, Any]:
     s = settings or get_settings()
@@ -84,6 +85,7 @@ def build_debug_trace(
             "sources": sources_json,
         },
         "fact_pack": fact_pack,
+        "page_cache": page_cache,
         "yandex_gpt": {
             "mode": "search" if needs_search else "direct",
             "model": answer_model,

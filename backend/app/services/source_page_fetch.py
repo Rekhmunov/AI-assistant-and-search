@@ -7,6 +7,7 @@ from html import unescape
 import httpx
 
 from app.services.llm_provider import SearchSource
+from app.services.page_cache import get_cached_page_text, set_cached_page_text
 
 logger = logging.getLogger(__name__)
 
@@ -46,19 +47,30 @@ async def _fetch_page_html(url: str) -> str:
         return ""
 
 
-async def fetch_page_full_text(url: str) -> str:
-    """Полный текст страницы (до _MAX_FULL_TEXT) для чанкинга."""
+async def fetch_page_full_text(url: str) -> tuple[str, bool]:
+    """
+    Полный текст страницы (до _MAX_FULL_TEXT) для чанкинга.
+    Возвращает (текст, from_cache).
+    """
+    cached = await get_cached_page_text(url)
+    if cached:
+        if len(cached) > _MAX_FULL_TEXT:
+            return cached[:_MAX_FULL_TEXT] + "…", True
+        return cached, True
+
     html = await _fetch_page_html(url)
     if not html:
-        return ""
+        return "", False
     text = _html_to_text(html)
     if len(text) > _MAX_FULL_TEXT:
-        return text[:_MAX_FULL_TEXT] + "…"
-    return text
+        text = text[:_MAX_FULL_TEXT] + "…"
+    if text:
+        await set_cached_page_text(url, text)
+    return text, False
 
 
 async def fetch_page_excerpt(url: str) -> str:
-    text = await fetch_page_full_text(url)
+    text, _ = await fetch_page_full_text(url)
     if len(text) > _MAX_EXCERPT:
         return text[:_MAX_EXCERPT] + "…"
     return text

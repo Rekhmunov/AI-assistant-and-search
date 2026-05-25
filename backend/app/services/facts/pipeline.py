@@ -31,6 +31,7 @@ class FactPipelineResult:
     search_attempts: list[dict[str, Any]]
     retrieval_trace: dict[str, Any] | None
     last_search_query: str | None
+    page_cache: dict[str, int] | None = None
 
 
 class FactPipeline:
@@ -119,9 +120,10 @@ class FactPipeline:
                     confidence=f.confidence,
                 )
 
+        page_cache_stats: dict[str, int] | None = None
         if sources:
             chunks_pp = 5 if is_financial_query(llm_query) else MAX_CHUNKS_PER_PAGE
-            sources = await enrich_sources_deep(
+            sources, page_cache_stats = await enrich_sources_deep(
                 sources,
                 llm_query,
                 max_pages=MAX_FETCH_PAGES,
@@ -171,4 +173,5 @@ class FactPipeline:
             search_attempts=search_attempts,
             retrieval_trace=retrieval_trace,
             last_search_query=last_q,
+            page_cache=page_cache_stats,
         )
