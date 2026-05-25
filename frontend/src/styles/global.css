@@ -32,11 +32,31 @@ body {
   min-height: 100dvh;
 }
 
+/* Тред: один скролл только у переписки, не у всей страницы */
+body:has(.page-thread) {
+  overflow: hidden;
+  height: 100dvh;
+}
+
+#root:has(.page-thread) {
+  height: 100dvh;
+  max-height: 100dvh;
+  overflow: hidden;
+}
+
 .app-shell {
   min-height: 100dvh;
   padding-bottom: calc(
     var(--bottom-nav-height) + var(--composer-nav-gap) + 76px + env(safe-area-inset-bottom)
   );
+}
+
+.app-shell:has(.page-thread) {
+  height: 100dvh;
+  max-height: 100dvh;
+  min-height: 0;
+  overflow: hidden;
+  padding-bottom: 0;
 }
 
 .app-shell:has(.page-home:not(.page-home--composing)) {
@@ -401,10 +421,15 @@ body {
 .page-thread {
   display: flex;
   flex-direction: column;
-  min-height: calc(100dvh - var(--bottom-nav-height) - env(safe-area-inset-bottom));
-  max-height: calc(100dvh - var(--bottom-nav-height) - env(safe-area-inset-bottom));
+  height: 100dvh;
+  max-height: 100dvh;
+  min-height: 0;
   padding-bottom: 0;
   overflow: hidden;
+}
+
+.page-thread.page {
+  padding-bottom: 0;
 }
 
 .thread-conversation {
@@ -413,11 +438,15 @@ body {
   overflow-y: auto;
   overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
   padding-right: 2px;
-  margin-bottom: 8px;
+  margin-bottom: 0;
   direction: ltr;
   scrollbar-width: thin;
   scrollbar-color: var(--scrollbar-thumb) transparent;
+  padding-bottom: calc(
+    var(--bottom-nav-height) + var(--composer-nav-gap) + 80px + env(safe-area-inset-bottom)
+  );
 }
 
 .thread-conversation::-webkit-scrollbar {
@@ -710,6 +739,7 @@ body {
 .thread-top {
   display: flex;
   align-items: center;
+  flex-shrink: 0;
   margin-bottom: 12px;
 }
 
