@@ -201,6 +201,16 @@ async def login(
     return AuthResponse(access_token=access, user=_user_profile(user, used, limit))
 
 
+def _db_schema_error(exc: Exception) -> HTTPException | None:
+    msg = str(exc).lower()
+    if "email" in msg or "password_hash" in msg or "guest_key" in msg or "undefinedcolumn" in msg:
+        return HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="База не обновлена. Выполните: docker compose -f docker-compose.prod.yml exec backend alembic upgrade head",
+        )
+    return None
+
+
 @router.post("/register", response_model=AuthResponse)
 async def register_email(
     body: EmailRegisterRequest,
@@ -210,35 +220,43 @@ async def register_email(
     guest_session: Annotated[str | None, Cookie(alias=GUEST_COOKIE)] = None,
 ):
     email = body.email.strip().lower()
-    existing = await db.execute(select(User).where(User.email == email))
-    if existing.scalar_one_or_none():
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email уже зарегистрирован")
-
-    user = User(
-        email=email,
-        password_hash=hash_password(body.password),
-        first_name=body.first_name,
-        max_user_id=None,
-    )
-    db.add(user)
     try:
-        await db.flush()
-    except IntegrityError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Email уже зарегистрирован",
-        ) from exc
-    except ProgrammingError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="База не обновлена. На сервере выполните: alembic upgrade head",
-        ) from exc
+        existing = await db.execute(select(User).where(User.email == email))
+        if existing.scalar_one_or_none():
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email уже зарегистрирован")
 
-    await _merge_guest_session(db, guest_session, user)
-    clear_guest_cookie(response)
-    access, _ = _set_auth_cookies(response, str(user.id))
-    used, limit = await _limits_for_user(user, limiter)
-    return AuthResponse(access_token=access, user=_user_profile(user, used, limit))
+        user = User(
+            email=email,
+            password_hash=hash_password(body.password),
+            first_name=body.first_name,
+            max_user_id=None,
+        )
+        db.add(user)
+        try:
+            await db.flush()
+        except IntegrityError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Email уже зарегистрирован",
+            ) from exc
+
+        await _merge_guest_session(db, guest_session, user)
+        clear_guest_cookie(response)
+        access, _ = _set_auth_cookies(response, str(user.id))
+        used, limit = await _limits_for_user(user, limiter)
+        return AuthResponse(access_token=access, user=_user_profile(user, used, limit))
+    except HTTPException:
+        raise
+    except ProgrammingError as exc:
+        raise _db_schema_error(exc) or HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Ошибка базы данных при регистрации",
+        ) from exc
+    except Exception as exc:
+        schema_err = _db_schema_error(exc)
+        if schema_err:
+            raise schema_err from exc
+        raise
 
 
 @router.post("/email-login", response_model=AuthResponse)
