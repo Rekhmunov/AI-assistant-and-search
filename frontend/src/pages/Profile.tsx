@@ -56,6 +56,9 @@ export function Profile() {
           <div style={{ marginTop: 8, color: "var(--muted)" }}>{user.email}</div>
         )}
         <div style={{ marginTop: 4, color: "var(--muted)" }}>
+          MAX: {user?.max_linked ? "привязан" : "не привязан (откройте из бота после входа)"}
+        </div>
+        <div style={{ marginTop: 4, color: "var(--muted)" }}>
           {t("plan")}: {user?.plan === "pro" ? "Pro" : "Free"}
         </div>
         <div style={{ marginTop: 4, color: "var(--muted)" }}>
