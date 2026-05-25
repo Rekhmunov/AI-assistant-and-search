@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
-import { fetchMe } from "../api/client";
+import { fetchSession } from "../api/client";
+import { t } from "../i18n";
 import { useAuthStore } from "../store/authStore";
 
 interface Props {
@@ -9,22 +10,41 @@ interface Props {
 
 export function GlosixHeader({ showLimits = true }: Props) {
   const token = useAuthStore((s) => s.token);
-  const { data: me } = useQuery({
-    queryKey: ["me"],
-    queryFn: () => fetchMe(token!),
-    enabled: !!token && showLimits,
+
+  const { data: session } = useQuery({
+    queryKey: ["session", token],
+    queryFn: () => fetchSession(token),
+    enabled: showLimits,
   });
+
+  const limits =
+    session &&
+    (session.authenticated || session.is_guest
+      ? `${session.searches_today}/${session.searches_limit}`
+      : null);
 
   return (
     <header className="glosix-header">
       <Link to="/" className="glosix-brand" aria-label="Glosix">
         <img src="/glosix-logo.svg" alt="Glosix" className="glosix-logo" />
       </Link>
-      {showLimits && me && (
-        <Link to="/profile" className="limits-badge">
-          {me.searches_today}/{me.searches_limit}
-        </Link>
-      )}
+      <div className="glosix-header-actions">
+        {showLimits && limits && (
+          <span className="limits-badge" title={session?.is_guest ? t("guestLimitsHint") : undefined}>
+            {limits}
+          </span>
+        )}
+        {!token && (
+          <Link to="/login" className="header-login-btn">
+            {t("signIn")}
+          </Link>
+        )}
+        {token && (
+          <Link to="/profile" className="header-login-btn">
+            {t("navProfile")}
+          </Link>
+        )}
+      </div>
     </header>
   );
 }

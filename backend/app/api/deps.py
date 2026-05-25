@@ -1,8 +1,10 @@
+import secrets
 import uuid
+from dataclasses import dataclass
 from typing import Annotated
 
 import redis.asyncio as redis
-from fastapi import Cookie, Depends, Header, HTTPException, status
+from fastapi import Cookie, Depends, Header, HTTPException, Response, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,9 +14,12 @@ from app.core.database import get_db
 from app.core.limiter import RateLimiter
 from app.core.security import decode_token
 from app.models.admin_user import AdminUser
-from app.models.user import User
+from app.models.user import Plan, User
 
 security = HTTPBearer(auto_error=False)
+
+GUEST_COOKIE = "guest_session"
+GUEST_HEADER = "X-Guest-Session"
 
 _redis: redis.Redis | None = None
 
@@ -30,38 +35,151 @@ async def get_rate_limiter(r: Annotated[redis.Redis, Depends(get_redis)]) -> Rat
     return RateLimiter(r)
 
 
+def set_guest_cookie(response: Response, guest_key: str) -> None:
+    settings = get_settings()
+    kwargs: dict = {
+        "key": GUEST_COOKIE,
+        "value": guest_key,
+        "httponly": True,
+        "secure": not settings.debug,
+        "samesite": "none" if not settings.debug else "lax",
+        "max_age": 60 * 60 * 24 * 365,
+        "path": "/",
+    }
+    if settings.cookie_domain:
+        kwargs["domain"] = settings.cookie_domain
+    response.set_cookie(**kwargs)
+
+
+def clear_guest_cookie(response: Response) -> None:
+    settings = get_settings()
+    kwargs: dict = {
+        "key": GUEST_COOKIE,
+        "path": "/",
+        "httponly": True,
+        "secure": not settings.debug,
+        "samesite": "none" if not settings.debug else "lax",
+    }
+    if settings.cookie_domain:
+        kwargs["domain"] = settings.cookie_domain
+    response.delete_cookie(**kwargs)
+
+
+async def _user_from_access_token(db: AsyncSession, token: str) -> User | None:
+    settings = get_settings()
+    payload = decode_token(token, "access", settings)
+    if not payload or not payload.get("sub"):
+        return None
+    user_id = uuid.UUID(payload["sub"])
+    result = await db.execute(select(User).where(User.id == user_id, User.deleted_at.is_(None)))
+    return result.scalar_one_or_none()
+
+
+async def _user_from_refresh_cookie(db: AsyncSession, refresh_token: str | None) -> User | None:
+    if not refresh_token:
+        return None
+    settings = get_settings()
+    payload = decode_token(refresh_token, "refresh", settings)
+    if not payload or not payload.get("sub"):
+        return None
+    user_id = uuid.UUID(payload["sub"])
+    result = await db.execute(select(User).where(User.id == user_id, User.deleted_at.is_(None)))
+    return result.scalar_one_or_none()
+
+
+async def guest_by_key(db: AsyncSession, guest_key: str | None) -> User | None:
+    if not guest_key:
+        return None
+    result = await db.execute(
+        select(User).where(
+            User.guest_key == guest_key,
+            User.email.is_(None),
+            User.deleted_at.is_(None),
+        )
+    )
+    return result.scalar_one_or_none()
+
+
+async def _resolve_authenticated_user(
+    db: AsyncSession,
+    creds: HTTPAuthorizationCredentials | None,
+    refresh_token: str | None,
+) -> User | None:
+    if creds and creds.credentials:
+        user = await _user_from_access_token(db, creds.credentials)
+        if user:
+            return user
+    return await _user_from_refresh_cookie(db, refresh_token)
+
+
+@dataclass
+class SearchUserResult:
+    user: User
+    new_guest_key: str | None = None
+
+
+async def resolve_search_user(
+    db: AsyncSession,
+    creds: HTTPAuthorizationCredentials | None,
+    refresh_token: str | None,
+    guest_session: str | None,
+    x_guest_session: str | None,
+    *,
+    create_guest: bool,
+) -> SearchUserResult:
+    """JWT user, existing guest, or (if create_guest) a new guest row."""
+    user = await _resolve_authenticated_user(db, creds, refresh_token)
+    if user:
+        return SearchUserResult(user=user)
+
+    guest_key = (guest_session or x_guest_session or "").strip() or None
+    guest = await guest_by_key(db, guest_key)
+    if guest:
+        return SearchUserResult(user=guest)
+
+    if not create_guest:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
+
+    new_key = secrets.token_urlsafe(32)
+    guest = User(guest_key=new_key, plan=Plan.FREE)
+    db.add(guest)
+    await db.flush()
+    return SearchUserResult(user=guest, new_guest_key=new_key)
+
+
+async def get_search_user(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    creds: Annotated[HTTPAuthorizationCredentials | None, Depends(security)],
+    refresh_token: Annotated[str | None, Cookie(alias="refresh_token")] = None,
+    guest_session: Annotated[str | None, Cookie(alias=GUEST_COOKIE)] = None,
+    x_guest_session: Annotated[str | None, Header(alias=GUEST_HEADER)] = None,
+) -> SearchUserResult:
+    return await resolve_search_user(
+        db, creds, refresh_token, guest_session, x_guest_session, create_guest=True
+    )
+
+
+async def get_existing_search_user(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    creds: Annotated[HTTPAuthorizationCredentials | None, Depends(security)],
+    refresh_token: Annotated[str | None, Cookie(alias="refresh_token")] = None,
+    guest_session: Annotated[str | None, Cookie(alias=GUEST_COOKIE)] = None,
+    x_guest_session: Annotated[str | None, Header(alias=GUEST_HEADER)] = None,
+) -> SearchUserResult:
+    return await resolve_search_user(
+        db, creds, refresh_token, guest_session, x_guest_session, create_guest=False
+    )
+
+
 async def get_current_user(
     db: Annotated[AsyncSession, Depends(get_db)],
     creds: Annotated[HTTPAuthorizationCredentials | None, Depends(security)],
     refresh_token: Annotated[str | None, Cookie(alias="refresh_token")] = None,
 ) -> User:
-    settings = get_settings()
-    token: str | None = None
-    if creds and creds.credentials:
-        token = creds.credentials
-    elif refresh_token:
-        payload = decode_token(refresh_token, "refresh", settings)
-        if payload and payload.get("sub"):
-            token = None
-            user_id = uuid.UUID(payload["sub"])
-            result = await db.execute(select(User).where(User.id == user_id, User.deleted_at.is_(None)))
-            user = result.scalar_one_or_none()
-            if user:
-                return user
-
-    if not token:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
-
-    payload = decode_token(token, "access", settings)
-    if not payload or not payload.get("sub"):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
-
-    user_id = uuid.UUID(payload["sub"])
-    result = await db.execute(select(User).where(User.id == user_id, User.deleted_at.is_(None)))
-    user = result.scalar_one_or_none()
-    if not user:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
-    return user
+    user = await _resolve_authenticated_user(db, creds, refresh_token)
+    if user:
+        return user
+    raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
 
 
 async def get_current_admin(

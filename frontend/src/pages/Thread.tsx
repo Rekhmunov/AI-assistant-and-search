@@ -21,7 +21,7 @@ export function Thread() {
   const initialQuery = searchParams.get("q") ?? "";
   const initialFiles = searchParams.get("files")?.split(",").filter(Boolean) ?? [];
   const navigate = useNavigate();
-  const token = useAuthStore((s) => s.token)!;
+  const token = useAuthStore((s) => s.token);
   const queryClient = useQueryClient();
 
   const [threadId, setThreadId] = useState<string | null>(id ?? null);
@@ -37,7 +37,7 @@ export function Thread() {
   const { data: thread } = useQuery({
     queryKey: ["thread", id],
     queryFn: () => fetchThread(token, id!),
-    enabled: !!id && !!token,
+    enabled: !!id,
   });
 
   useEffect(() => {
@@ -73,6 +73,7 @@ export function Thread() {
         onFollowUps: setFollowUps,
         onDone: () => {
           setStreaming(false);
+          queryClient.invalidateQueries({ queryKey: ["session"] });
           queryClient.invalidateQueries({ queryKey: ["threads"] });
           if (threadId) queryClient.invalidateQueries({ queryKey: ["thread", threadId] });
         },
@@ -86,14 +87,14 @@ export function Thread() {
   );
 
   useEffect(() => {
-    if ((initialQuery || initialFiles.length) && !id && !started.current && token) {
+    if ((initialQuery || initialFiles.length) && !id && !started.current) {
       started.current = true;
       runSearch(initialQuery || t("analyzeFile"), null, initialFiles);
     }
-  }, [initialQuery, initialFiles, id, token, runSearch]);
+  }, [initialQuery, initialFiles, id, runSearch]);
 
   const handleSave = async () => {
-    if (!threadId) return;
+    if (!threadId || !token) return;
     await saveThread(token, threadId);
     setSaved(true);
   };
@@ -111,7 +112,13 @@ export function Thread() {
           <button type="button" className="icon-btn" onClick={() => navigate("/")}>
             ← {t("back")}
           </button>
-          <button type="button" className="icon-btn" onClick={handleSave} disabled={!threadId || saved}>
+          <button
+            type="button"
+            className="icon-btn"
+            onClick={handleSave}
+            disabled={!token || !threadId || saved}
+            title={!token ? t("loginToSave") : undefined}
+          >
             {saved ? t("saved") : t("save")}
           </button>
         </div>

@@ -38,6 +38,9 @@ export function LoginPage() {
       <div className="login-card">
         <h1>{mode === "login" ? "Вход" : "Регистрация"}</h1>
         <p className="hint">Один аккаунт для сайта app.glosix.ru и миниаппа в MAX</p>
+        <button type="button" className="btn-link" style={{ marginBottom: 16 }} onClick={() => navigate("/")}>
+          Продолжить без входа
+        </button>
         <form onSubmit={onSubmit}>
           {mode === "register" && (
             <label>

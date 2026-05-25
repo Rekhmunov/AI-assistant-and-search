@@ -31,7 +31,9 @@ class Settings(BaseSettings):
     yookassa_secret_key: str = ""
 
     cors_origins: str = "http://localhost:5173,http://localhost:5174"
+    cookie_domain: str = ""
 
+    guest_searches_per_day: int = 5
     free_searches_per_day: int = 10
     pro_searches_per_day: int = 200
     global_yandex_requests_per_day: int = 5000

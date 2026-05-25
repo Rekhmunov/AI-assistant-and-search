@@ -21,6 +21,7 @@ class User(Base):
     max_user_id: Mapped[int | None] = mapped_column(BigInteger, unique=True, index=True, nullable=True)
     email: Mapped[str | None] = mapped_column(String(255), unique=True, index=True, nullable=True)
     password_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    guest_key: Mapped[str | None] = mapped_column(String(64), unique=True, index=True, nullable=True)
     first_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     last_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     username: Mapped[str | None] = mapped_column(String(255), nullable=True)

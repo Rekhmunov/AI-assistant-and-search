@@ -68,6 +68,9 @@ class SearchFlowService:
         display = f"{query}\n\n[Файлы: {', '.join(names)}]" if names else query
         return llm_query, display
 
+    def _is_guest(self, user: User) -> bool:
+        return bool(user.guest_key) and not user.email
+
     async def stream_search(
         self,
         db: AsyncSession,
@@ -77,7 +80,14 @@ class SearchFlowService:
         thread_id: uuid.UUID | None,
         attachment_ids: list[uuid.UUID] | None = None,
     ) -> AsyncIterator[str]:
-        allowed, used, limit = await limiter.check_search_limit(str(user.id), user.plan)
+        if attachment_ids and self._is_guest(user):
+            yield sse_event(
+                "error",
+                {"code": "auth_required", "message": "Войдите, чтобы прикреплять файлы"},
+            )
+            return
+
+        allowed, used, limit = await limiter.check_search_limit(str(user.id), user.plan, user)
         if not allowed:
             yield sse_event("error", {"code": "rate_limit", "message": f"Лимит поисков: {limit}/день"})
             return

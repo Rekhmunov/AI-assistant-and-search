@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { fetchThreads } from "../api/client";
 import { t } from "../i18n";
 import { useAuthStore } from "../store/authStore";
@@ -24,6 +24,21 @@ export function History() {
     enabled: !!token,
   });
 
+  if (!token) {
+    return (
+      <div className="page">
+        <h1>{t("history")}</h1>
+        <p className="auth-gate-text">{t("historyLoginHint")}</p>
+        <Link to="/login" className="btn-primary btn-block">
+          {t("signIn")}
+        </Link>
+        <Link to="/" className="btn-link" style={{ display: "block", marginTop: 16, textAlign: "center" }}>
+          {t("backToSearch")}
+        </Link>
+      </div>
+    );
+  }
+
   const groups = new Map<string, typeof threads>();
   for (const th of threads) {
     const label = dayLabel(new Date(th.last_message_at));
@@ -35,6 +50,9 @@ export function History() {
     <div className="page">
       <h1>{t("history")}</h1>
       {isLoading && <p style={{ color: "var(--muted)" }}>{t("loading")}</p>}
+      {!isLoading && threads.length === 0 && (
+        <p style={{ color: "var(--muted)" }}>{t("historyEmpty")}</p>
+      )}
       {[...groups.entries()].map(([label, items]) => (
         <div key={label}>
           <div className="section-title">{label}</div>

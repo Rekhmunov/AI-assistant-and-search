@@ -5,9 +5,8 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_db, get_rate_limiter
-from app.core.config import get_settings
 from app.core.limiter import RateLimiter
-from app.models.user import Plan, User
+from app.models.user import User
 from app.schemas.user import UserProfile
 
 router = APIRouter(prefix="/users", tags=["users"])
@@ -18,11 +17,11 @@ async def get_me(
     user: Annotated[User, Depends(get_current_user)],
     limiter: Annotated[RateLimiter, Depends(get_rate_limiter)],
 ):
-    settings = get_settings()
-    used = await limiter.get_search_usage(str(user.id))
-    limit = settings.pro_searches_per_day if user.plan == Plan.PRO else settings.free_searches_per_day
+    used, limit = await limiter.usage_and_limit(user)
     return UserProfile(
         id=user.id,
+        email=user.email,
+        max_linked=user.max_user_id is not None,
         first_name=user.first_name,
         last_name=user.last_name,
         username=user.username,

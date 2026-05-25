@@ -1,5 +1,6 @@
 import { FormEvent, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { Link } from "react-router-dom";
 import { uploadFile, type UploadedFile, fetchMe } from "../api/client";
 import { ACCEPT_FILE_INPUT, MAX_FILE_BYTES_FREE, MAX_FILE_BYTES_PRO, validateFile } from "../constants/files";
 import { useVoiceInput } from "../hooks/useVoiceInput";
@@ -30,14 +31,15 @@ export function SearchComposer({
   attachments,
   onAttachmentsChange,
 }: Props) {
-  const token = useAuthStore((s) => s.token)!;
+  const token = useAuthStore((s) => s.token);
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
 
   const { data: me } = useQuery({
     queryKey: ["me"],
-    queryFn: () => fetchMe(token),
+    queryFn: () => fetchMe(token!),
+    enabled: !!token,
   });
   const maxBytes = me?.plan === "pro" ? MAX_FILE_BYTES_PRO : MAX_FILE_BYTES_FREE;
 
@@ -55,8 +57,16 @@ export function SearchComposer({
     onAttachmentsChange([]);
   };
 
+  const onAttachClick = () => {
+    if (!token) {
+      setUploadError(t("loginForFiles"));
+      return;
+    }
+    fileRef.current?.click();
+  };
+
   const onFilePick = async (files: FileList | null) => {
-    if (!files?.length) return;
+    if (!files?.length || !token) return;
     const file = files[0];
     const err = validateFile(file, maxBytes);
     if (err) {
@@ -97,13 +107,19 @@ export function SearchComposer({
         </div>
       )}
       {(uploadError || voice.error) && <p className="composer-error">{uploadError || voice.error}</p>}
+      {!token && (
+        <p className="composer-hint">
+          {t("guestSearchHint")}{" "}
+          <Link to="/login">{t("signIn")}</Link> — {t("guestSearchHintMore")}
+        </p>
+      )}
       <form className="search-composer" onSubmit={handleSubmit}>
         <button
           type="button"
           className="composer-icon"
           aria-label={t("attachFile")}
           disabled={disabled || uploading || attachments.length >= 1}
-          onClick={() => fileRef.current?.click()}
+          onClick={onAttachClick}
         >
           📎
         </button>

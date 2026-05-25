@@ -25,3 +25,11 @@ class TokenResponse(BaseModel):
 
 class AuthResponse(TokenResponse):
     user: UserProfile
+
+
+class SessionStatus(BaseModel):
+    authenticated: bool
+    is_guest: bool = False
+    searches_today: int = 0
+    searches_limit: int = 5
+    user: UserProfile | None = None

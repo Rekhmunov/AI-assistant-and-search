@@ -2,12 +2,23 @@ from datetime import datetime, timezone
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Cookie, Depends, HTTPException, Response, status
-from sqlalchemy import select
+from fastapi import APIRouter, Cookie, Depends, Header, HTTPException, Response, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user, get_db, get_rate_limiter
+from app.api.deps import (
+    GUEST_COOKIE,
+    GUEST_HEADER,
+    clear_guest_cookie,
+    get_current_user,
+    get_db,
+    get_rate_limiter,
+    guest_by_key,
+)
 from app.core.config import get_settings
+
+_session_security = HTTPBearer(auto_error=False)
 from app.core.limiter import RateLimiter
 from app.core.security import (
     create_access_token,
@@ -20,11 +31,13 @@ from app.core.security import (
     verify_password,
 )
 from app.models.user import Plan, User
+from app.models.thread import Thread
 from app.schemas.auth import (
     AuthResponse,
     EmailLoginRequest,
     EmailRegisterRequest,
     InitDataRequest,
+    SessionStatus,
     TokenResponse,
 )
 from app.schemas.user import UserProfile
@@ -65,10 +78,71 @@ def _user_profile(user: User, used: int, limit: int) -> UserProfile:
 
 
 async def _limits_for_user(user: User, limiter: RateLimiter) -> tuple[int, int]:
+    return await limiter.usage_and_limit(user)
+
+
+async def _merge_guest_session(
+    db: AsyncSession,
+    guest_key: str | None,
+    user: User,
+) -> None:
+    if not guest_key or user.guest_key == guest_key:
+        return
+    result = await db.execute(
+        select(User).where(
+            User.guest_key == guest_key,
+            User.email.is_(None),
+            User.id != user.id,
+            User.deleted_at.is_(None),
+        )
+    )
+    guest = result.scalar_one_or_none()
+    if not guest:
+        return
+    await db.execute(update(Thread).where(Thread.user_id == guest.id).values(user_id=user.id))
+    await db.delete(guest)
+
+
+@router.get("/session", response_model=SessionStatus)
+async def session_status(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    limiter: Annotated[RateLimiter, Depends(get_rate_limiter)],
+    creds: Annotated[HTTPAuthorizationCredentials | None, Depends(_session_security)],
+    refresh_token: Annotated[str | None, Cookie(alias="refresh_token")] = None,
+    guest_session: Annotated[str | None, Cookie(alias=GUEST_COOKIE)] = None,
+    x_guest_session: Annotated[str | None, Header(alias=GUEST_HEADER)] = None,
+):
+    from app.api.deps import _resolve_authenticated_user
+
     settings = get_settings()
-    used = await limiter.get_search_usage(str(user.id))
-    limit = settings.pro_searches_per_day if user.plan == Plan.PRO else settings.free_searches_per_day
-    return used, limit
+    user = await _resolve_authenticated_user(db, creds, refresh_token)
+    if user:
+        used, limit = await _limits_for_user(user, limiter)
+        return SessionStatus(
+            authenticated=True,
+            is_guest=False,
+            searches_today=used,
+            searches_limit=limit,
+            user=_user_profile(user, used, limit),
+        )
+
+    guest_key = (guest_session or x_guest_session or "").strip() or None
+    guest = await guest_by_key(db, guest_key)
+    if guest:
+        used, limit = await _limits_for_user(guest, limiter)
+        return SessionStatus(
+            authenticated=False,
+            is_guest=True,
+            searches_today=used,
+            searches_limit=limit,
+        )
+
+    return SessionStatus(
+        authenticated=False,
+        is_guest=False,
+        searches_today=0,
+        searches_limit=settings.guest_searches_per_day,
+    )
 
 
 @router.post("/login", response_model=AuthResponse)
@@ -77,6 +151,7 @@ async def login(
     response: Response,
     db: Annotated[AsyncSession, Depends(get_db)],
     limiter: Annotated[RateLimiter, Depends(get_rate_limiter)],
+    guest_session: Annotated[str | None, Cookie(alias=GUEST_COOKIE)] = None,
 ):
     settings = get_settings()
     init_data = body.init_data.strip()
@@ -118,6 +193,8 @@ async def login(
             user.plan = Plan.FREE
             user.plan_expires_at = None
 
+    await _merge_guest_session(db, guest_session, user)
+    clear_guest_cookie(response)
     access, _ = _set_auth_cookies(response, str(user.id))
     used, limit = await _limits_for_user(user, limiter)
     return AuthResponse(access_token=access, user=_user_profile(user, used, limit))
@@ -129,6 +206,7 @@ async def register_email(
     response: Response,
     db: Annotated[AsyncSession, Depends(get_db)],
     limiter: Annotated[RateLimiter, Depends(get_rate_limiter)],
+    guest_session: Annotated[str | None, Cookie(alias=GUEST_COOKIE)] = None,
 ):
     email = body.email.strip().lower()
     existing = await db.execute(select(User).where(User.email == email))
@@ -144,6 +222,8 @@ async def register_email(
     db.add(user)
     await db.flush()
 
+    await _merge_guest_session(db, guest_session, user)
+    clear_guest_cookie(response)
     access, _ = _set_auth_cookies(response, str(user.id))
     used, limit = await _limits_for_user(user, limiter)
     return AuthResponse(access_token=access, user=_user_profile(user, used, limit))
@@ -155,6 +235,7 @@ async def login_email(
     response: Response,
     db: Annotated[AsyncSession, Depends(get_db)],
     limiter: Annotated[RateLimiter, Depends(get_rate_limiter)],
+    guest_session: Annotated[str | None, Cookie(alias=GUEST_COOKIE)] = None,
 ):
     email = body.email.strip().lower()
     result = await db.execute(select(User).where(User.email == email, User.deleted_at.is_(None)))
@@ -166,6 +247,8 @@ async def login_email(
         user.plan = Plan.FREE
         user.plan_expires_at = None
 
+    await _merge_guest_session(db, guest_session, user)
+    clear_guest_cookie(response)
     access, _ = _set_auth_cookies(response, str(user.id))
     used, limit = await _limits_for_user(user, limiter)
     return AuthResponse(access_token=access, user=_user_profile(user, used, limit))

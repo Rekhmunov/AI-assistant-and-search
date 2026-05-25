@@ -1,6 +1,16 @@
+import { clearGuestSession, getGuestSessionHeader, saveGuestSession } from "../lib/guestSession";
+
 const API_BASE = import.meta.env.VITE_API_URL || "";
 
 export type Plan = "free" | "pro";
+
+export interface SessionStatus {
+  authenticated: boolean;
+  is_guest: boolean;
+  searches_today: number;
+  searches_limit: number;
+  user?: UserProfile | null;
+}
 
 export interface UserProfile {
   id: string;
@@ -48,9 +58,10 @@ export interface ThreadDetail {
   messages: Message[];
 }
 
-function authHeaders(token: string | null): HeadersInit {
-  const h: HeadersInit = { "Content-Type": "application/json" };
-  if (token) h["Authorization"] = `Bearer ${token}`;
+function apiHeaders(token: string | null, json = true): HeadersInit {
+  const h: HeadersInit = { ...getGuestSessionHeader() };
+  if (json) (h as Record<string, string>)["Content-Type"] = "application/json";
+  if (token) (h as Record<string, string>)["Authorization"] = `Bearer ${token}`;
   return h;
 }
 
@@ -106,7 +117,7 @@ export async function registerEmail(
 export async function bindMax(token: string, initData: string): Promise<UserProfile> {
   const res = await fetch(`${API_BASE}/api/auth/bind-max`, {
     method: "POST",
-    headers: authHeaders(token),
+    headers: apiHeaders(token),
     credentials: "include",
     body: JSON.stringify({ init_data: initData }),
   });
@@ -114,9 +125,18 @@ export async function bindMax(token: string, initData: string): Promise<UserProf
   return res.json();
 }
 
+export async function fetchSession(token: string | null): Promise<SessionStatus> {
+  const res = await fetch(`${API_BASE}/api/auth/session`, {
+    headers: apiHeaders(token),
+    credentials: "include",
+  });
+  if (!res.ok) throw new Error("Failed to load session");
+  return res.json();
+}
+
 export async function fetchMe(token: string): Promise<UserProfile> {
   const res = await fetch(`${API_BASE}/api/users/me`, {
-    headers: authHeaders(token),
+    headers: apiHeaders(token),
     credentials: "include",
   });
   if (!res.ok) throw new Error("Failed to load profile");
@@ -125,16 +145,16 @@ export async function fetchMe(token: string): Promise<UserProfile> {
 
 export async function fetchThreads(token: string): Promise<ThreadListItem[]> {
   const res = await fetch(`${API_BASE}/api/threads`, {
-    headers: authHeaders(token),
+    headers: apiHeaders(token),
     credentials: "include",
   });
   if (!res.ok) throw new Error("Failed to load threads");
   return res.json();
 }
 
-export async function fetchThread(token: string, id: string): Promise<ThreadDetail> {
+export async function fetchThread(token: string | null, id: string): Promise<ThreadDetail> {
   const res = await fetch(`${API_BASE}/api/threads/${id}`, {
-    headers: authHeaders(token),
+    headers: apiHeaders(token),
     credentials: "include",
   });
   if (!res.ok) throw new Error("Failed to load thread");
@@ -144,7 +164,7 @@ export async function fetchThread(token: string, id: string): Promise<ThreadDeta
 export async function saveThread(token: string, id: string): Promise<void> {
   await fetch(`${API_BASE}/api/threads/${id}/save`, {
     method: "POST",
-    headers: authHeaders(token),
+    headers: apiHeaders(token),
     credentials: "include",
   });
 }
@@ -152,7 +172,7 @@ export async function saveThread(token: string, id: string): Promise<void> {
 export async function devActivatePro(token: string): Promise<void> {
   await fetch(`${API_BASE}/api/payments/dev-activate`, {
     method: "POST",
-    headers: authHeaders(token),
+    headers: apiHeaders(token),
     credentials: "include",
   });
 }
@@ -160,7 +180,7 @@ export async function devActivatePro(token: string): Promise<void> {
 export async function deleteAccount(token: string): Promise<void> {
   await fetch(`${API_BASE}/api/users/me`, {
     method: "DELETE",
-    headers: authHeaders(token),
+    headers: apiHeaders(token),
     credentials: "include",
   });
 }
@@ -186,7 +206,9 @@ export async function uploadFile(token: string, file: File): Promise<UploadedFil
   form.append("file", file);
   const res = await fetch(`${API_BASE}/api/files/upload`, {
     method: "POST",
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    headers: token
+      ? { Authorization: `Bearer ${token}`, ...getGuestSessionHeader() }
+      : getGuestSessionHeader(),
     credentials: "include",
     body: form,
   });
@@ -198,7 +220,7 @@ export async function uploadFile(token: string, file: File): Promise<UploadedFil
 }
 
 export async function streamSearch(
-  token: string,
+  token: string | null,
   query: string,
   threadId: string | null,
   attachmentIds: string[],
@@ -207,7 +229,7 @@ export async function streamSearch(
 ): Promise<void> {
   const res = await fetch(`${API_BASE}/api/search`, {
     method: "POST",
-    headers: authHeaders(token),
+    headers: apiHeaders(token),
     credentials: "include",
     body: JSON.stringify({
       query,
@@ -217,8 +239,18 @@ export async function streamSearch(
     signal,
   });
 
+  const guestKey = res.headers.get("X-Guest-Session");
+  if (guestKey) saveGuestSession(guestKey);
+
   if (!res.ok || !res.body) {
-    handlers.onError?.("Ошибка поиска");
+    let msg = "Ошибка поиска";
+    try {
+      const err = await res.json();
+      msg = (err as { detail?: string }).detail || msg;
+    } catch {
+      /* ignore */
+    }
+    handlers.onError?.(msg);
     return;
   }
 

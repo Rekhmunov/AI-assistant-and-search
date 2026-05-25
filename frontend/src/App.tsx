@@ -8,24 +8,14 @@ import { Home } from "./pages/Home";
 import { LoginPage } from "./pages/Login";
 import { Profile } from "./pages/Profile";
 import { Thread } from "./pages/Thread";
-import { useAuthStore } from "./store/authStore";
 
 const queryClient = new QueryClient();
 
 function AppRoutes() {
-  const token = useAuthStore((s) => s.token);
   const { ready, error } = useAuthBootstrap();
 
   if (!ready) return <div className="loading-screen">{t("loading")}</div>;
   if (error) return <div className="loading-screen">{error}</div>;
-
-  if (!token) {
-    return (
-      <Routes>
-        <Route path="*" element={<LoginPage />} />
-      </Routes>
-    );
-  }
 
   return (
     <div className="app-shell">

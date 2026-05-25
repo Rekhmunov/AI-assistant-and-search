@@ -88,14 +88,45 @@ body {
   width: auto;
 }
 
+.glosix-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .limits-badge {
   font-size: 0.8rem;
   color: var(--muted);
-  text-decoration: none;
   padding: 6px 10px;
   border-radius: 999px;
   border: 1px solid var(--border);
   background: var(--surface);
+}
+
+.header-login-btn {
+  font-size: 0.85rem;
+  color: var(--accent);
+  text-decoration: none;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--accent);
+}
+
+.composer-hint {
+  font-size: 0.75rem;
+  color: var(--muted);
+  margin: 0 0 8px;
+  line-height: 1.4;
+}
+
+.composer-hint a {
+  color: var(--accent);
+}
+
+.auth-gate-text {
+  color: var(--muted);
+  margin-bottom: 20px;
+  line-height: 1.5;
 }
 
 .composer-wrap {

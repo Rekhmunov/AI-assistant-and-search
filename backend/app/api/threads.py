@@ -7,7 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.api.deps import get_current_user, get_db
+from app.api.deps import SearchUserResult, get_current_user, get_db, get_existing_search_user
 from app.models.message import Message
 from app.models.thread import Thread
 from app.models.user import Plan, User
@@ -39,8 +39,9 @@ async def list_threads(
 async def get_thread(
     thread_id: UUID,
     db: Annotated[AsyncSession, Depends(get_db)],
-    user: Annotated[User, Depends(get_current_user)],
+    actor: Annotated[SearchUserResult, Depends(get_existing_search_user)],
 ):
+    user = actor.user
     result = await db.execute(
         select(Thread)
         .where(Thread.id == thread_id, Thread.user_id == user.id)

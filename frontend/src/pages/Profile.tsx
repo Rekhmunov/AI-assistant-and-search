@@ -1,11 +1,11 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { devActivatePro, fetchMe, deleteAccount } from "../api/client";
 import { t } from "../i18n";
 import { useAuthStore } from "../store/authStore";
 
 export function Profile() {
-  const token = useAuthStore((s) => s.token)!;
+  const token = useAuthStore((s) => s.token);
   const setUser = useAuthStore((s) => s.setUser);
   const clear = useAuthStore((s) => s.clear);
   const queryClient = useQueryClient();
@@ -13,9 +13,24 @@ export function Profile() {
 
   const { data: user } = useQuery({
     queryKey: ["me"],
-    queryFn: () => fetchMe(token),
+    queryFn: () => fetchMe(token!),
     enabled: !!token,
   });
+
+  if (!token) {
+    return (
+      <div className="page">
+        <h1>{t("profile")}</h1>
+        <p className="auth-gate-text">{t("profileLoginHint")}</p>
+        <Link to="/login" className="btn-primary btn-block">
+          {t("signIn")}
+        </Link>
+        <Link to="/" className="btn-link" style={{ display: "block", marginTop: 16, textAlign: "center" }}>
+          {t("backToSearch")}
+        </Link>
+      </div>
+    );
+  }
 
   const name = [user?.first_name, user?.last_name].filter(Boolean).join(" ") || "Пользователь";
 
