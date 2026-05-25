@@ -20,19 +20,23 @@ export function Home() {
     navigate(`/thread?${params.toString()}`);
   };
 
+  const composing = Boolean(query.trim() || attachments.length > 0);
+
   return (
-    <div className="page page-home">
+    <div className={`page page-home${composing ? " page-home--composing" : ""}`}>
       <GlosixHeader showBrand={false} />
-      <div className="home-hero">
-        <h1 className="home-title">{t("homeTitle")}</h1>
-        <p className="home-subtitle">{t("homeSubtitle")}</p>
-      </div>
-      <div className="home-suggestions">
-        {SUGGESTIONS.map((topic) => (
-          <button key={topic} type="button" className="chip" onClick={() => setQuery(topic)}>
-            {topic}
-          </button>
-        ))}
+      <div className="home-body">
+        <div className="home-hero">
+          <h1 className="home-title">{t("homeTitle")}</h1>
+          <p className="home-subtitle">{t("homeSubtitle")}</p>
+        </div>
+        <div className="home-suggestions">
+          {SUGGESTIONS.map((topic) => (
+            <button key={topic} type="button" className="chip" onClick={() => setQuery(topic)}>
+              {topic}
+            </button>
+          ))}
+        </div>
       </div>
       <SearchComposer
         value={query}
@@ -40,6 +44,7 @@ export function Home() {
         onSubmit={startSearch}
         attachments={attachments}
         onAttachmentsChange={setAttachments}
+        docked={composing}
       />
     </div>
   );

@@ -12,6 +12,8 @@
   --cite: #20808d;
   --scrollbar-thumb: #c4c4bc;
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --bottom-nav-height: 46px;
+  --composer-nav-gap: 10px;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   color: var(--text);
   background: var(--bg);
@@ -32,7 +34,13 @@ body {
 
 .app-shell {
   min-height: 100dvh;
-  padding-bottom: calc(120px + env(safe-area-inset-bottom));
+  padding-bottom: calc(
+    var(--bottom-nav-height) + var(--composer-nav-gap) + 76px + env(safe-area-inset-bottom)
+  );
+}
+
+.app-shell:has(.page-home:not(.page-home--composing)) {
+  padding-bottom: calc(var(--bottom-nav-height) + 20px + env(safe-area-inset-bottom));
 }
 
 .page {
@@ -44,15 +52,25 @@ body {
 .page-home {
   display: flex;
   flex-direction: column;
-  min-height: calc(100dvh - 120px);
+  min-height: calc(100dvh - var(--bottom-nav-height) - env(safe-area-inset-bottom));
+}
+
+.home-body {
+  display: flex;
+  flex-direction: column;
+  padding-top: clamp(32px, 10vh, 88px);
+}
+
+.page-home--composing .home-body {
+  padding-top: 16px;
+  padding-bottom: 8px;
 }
 
 .home-hero {
-  flex: 1;
   display: flex;
   flex-direction: column;
-  justify-content: center;
-  padding: 24px 0 16px;
+  justify-content: flex-start;
+  padding: 0 0 20px;
 }
 
 .home-title {
@@ -73,7 +91,7 @@ body {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  margin-bottom: 12px;
+  margin-bottom: 20px;
 }
 
 .glosix-header {
@@ -193,15 +211,25 @@ body {
   color: inherit;
 }
 
-.composer-wrap {
+.composer-wrap--docked {
   position: fixed;
   left: 0;
   right: 0;
-  bottom: calc(56px + env(safe-area-inset-bottom));
+  bottom: calc(
+    var(--bottom-nav-height) + var(--composer-nav-gap) + env(safe-area-inset-bottom)
+  );
   max-width: 640px;
   margin: 0 auto;
-  padding: 0 16px 8px;
+  padding: 0 16px 0;
   z-index: 90;
+}
+
+.composer-wrap--inline {
+  position: static;
+  max-width: 100%;
+  margin: 0;
+  padding: 4px 0 12px;
+  z-index: auto;
 }
 
 .search-composer {
@@ -373,8 +401,8 @@ body {
 .page-thread {
   display: flex;
   flex-direction: column;
-  min-height: calc(100dvh - 120px);
-  max-height: calc(100dvh - 120px);
+  min-height: calc(100dvh - var(--bottom-nav-height) - env(safe-area-inset-bottom));
+  max-height: calc(100dvh - var(--bottom-nav-height) - env(safe-area-inset-bottom));
   padding-bottom: 0;
   overflow: hidden;
 }
@@ -1117,10 +1145,11 @@ body {
   align-items: stretch;
   max-width: 640px;
   margin: 0 auto;
+  min-height: var(--bottom-nav-height);
   background: var(--surface);
   border-top: 1px solid var(--border-subtle);
   box-shadow: 0 -2px 12px rgba(0, 0, 0, 0.04);
-  padding: 6px 8px calc(6px + env(safe-area-inset-bottom));
+  padding: 2px 6px calc(2px + env(safe-area-inset-bottom));
   z-index: 100;
 }
 
@@ -1133,9 +1162,9 @@ body {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 2px;
-  padding: 6px 4px;
-  border-radius: 12px;
+  gap: 1px;
+  padding: 4px 2px;
+  border-radius: 10px;
   transition: color 0.15s, background 0.15s;
 }
 
@@ -1148,16 +1177,21 @@ body {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: 22px;
+  height: 22px;
   color: inherit;
 }
 
+.bottom-nav-icon svg {
+  width: 20px;
+  height: 20px;
+}
+
 .bottom-nav-label {
-  font-size: 0.7rem;
+  font-size: 0.625rem;
   font-weight: 500;
   letter-spacing: 0.01em;
-  line-height: 1.2;
+  line-height: 1.15;
 }
 
 .bottom-nav a.active {

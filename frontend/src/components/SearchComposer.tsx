@@ -21,6 +21,8 @@ interface Props {
   placeholder?: string;
   attachments: ComposerAttachment[];
   onAttachmentsChange: (a: ComposerAttachment[]) => void;
+  /** false — в потоке страницы (главная без ввода); true — закреплено над нижним меню */
+  docked?: boolean;
 }
 
 export function SearchComposer({
@@ -31,6 +33,7 @@ export function SearchComposer({
   placeholder,
   attachments,
   onAttachmentsChange,
+  docked = true,
 }: Props) {
   const token = useAuthStore((s) => s.token);
   const inMax = isMaxWebApp();
@@ -92,7 +95,7 @@ export function SearchComposer({
   const hasAttachment = attachments.length > 0;
 
   return (
-    <div className="composer-wrap">
+    <div className={`composer-wrap${docked ? " composer-wrap--docked" : " composer-wrap--inline"}`}>
       {(uploadError || voice.error) && <p className="composer-error">{uploadError || voice.error}</p>}
       {!token && !inMax && (
         <p className="composer-hint">
