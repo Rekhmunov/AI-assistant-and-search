@@ -2,12 +2,11 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { fetchThread, streamSearch } from "../api/client";
-import { AnswerToolbar } from "../components/AnswerToolbar";
+import { AnswerBody } from "../components/AnswerBody";
+import { AnswerFooter } from "../components/AnswerFooter";
 import { GlosixHeader } from "../components/GlosixHeader";
 import { SearchComposer, type ComposerAttachment } from "../components/SearchComposer";
 import { SearchStatusLine, type SearchPhase } from "../components/SearchStatusLine";
-import { SourcesCollapsible } from "../components/SourcesCollapsible";
-import { StreamingText } from "../components/StreamingText";
 import { t } from "../i18n";
 import { messagesToTurns, type ThreadTurn } from "../lib/threadTurns";
 import { useAuthStore } from "../store/authStore";
@@ -184,8 +183,6 @@ export function Thread() {
           const isActive = turn.streaming;
           const showStatus = isActive && streaming && !turn.answer.trim();
           const showAnswer = Boolean(turn.answer.trim()) || isActive;
-          const showSources =
-            turn.sources.length > 0 && Boolean(turn.answer.trim()) && !isActive;
           const showFollowUps =
             index === lastCompletedIndex &&
             turn.followUps.length > 0 &&
@@ -204,31 +201,33 @@ export function Thread() {
 
               {showAnswer && (
                 <section className="answer-section">
-                  <StreamingText text={turn.answer} streaming={isActive && streaming} />
+                  <AnswerBody text={turn.answer} sources={turn.sources} />
                   {!isActive && turn.answer.trim() && (
-                    <AnswerToolbar answer={turn.answer} title={turn.query} />
+                    <AnswerFooter
+                      answer={turn.answer}
+                      title={turn.query}
+                      sources={turn.sources}
+                    />
                   )}
                 </section>
               )}
 
-              {showSources && <SourcesCollapsible sources={turn.sources} />}
-
               {showFollowUps && (
                 <section className="followups-section">
-                  <div className="section-title">{t("followUps")}</div>
-                  <div className="chips">
+                  <ul className="followups-list">
                     {turn.followUps.map((q) => (
-                      <button
-                        key={q}
-                        type="button"
-                        className="chip"
-                        disabled={streaming}
-                        onClick={() => runSearch(q, threadId, [])}
-                      >
-                        {q}
-                      </button>
+                      <li key={q}>
+                        <button
+                          type="button"
+                          className="followup-item"
+                          disabled={streaming}
+                          onClick={() => runSearch(q, threadId, [])}
+                        >
+                          {q}
+                        </button>
+                      </li>
                     ))}
-                  </div>
+                  </ul>
                 </section>
               )}
             </article>
