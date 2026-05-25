@@ -54,11 +54,24 @@ class FactPipeline:
         weather: bool = False,
         currency: bool = False,
         answer_model: str = "lite",
+        bootstrap_sources: list[SearchSource] | None = None,
     ) -> FactPipelineResult:
         fact_slots = detect_fact_slots(llm_query)
         search_attempts: list[dict[str, Any]] = []
         batches: list[list[SearchSource]] = []
+        if bootstrap_sources:
+            batches.append(list(bootstrap_sources))
+            search_attempts.append(
+                {
+                    "query": "(query_url_memory)",
+                    "sources_count": len(bootstrap_sources),
+                    "retrieval_ok": True,
+                    "retrieval_score": 1.0,
+                    "retrieval_reason": "bootstrap_from_index",
+                }
+            )
         last_q: str | None = None
+        yandex_batches = 0
 
         for base_q in search_queries[:MAX_SEARCH_QUERIES]:
             search_q = enhance_fn(base_q)
@@ -71,6 +84,7 @@ class FactPipeline:
                 currency=currency,
             )
             batches.append(ranked)
+            yandex_batches += 1
             assessment = assess_retrieval(ranked, llm_query)
             search_attempts.append(
                 {
@@ -81,7 +95,7 @@ class FactPipeline:
                     "retrieval_reason": assessment.reason,
                 }
             )
-            if assessment.ok and len(batches) >= 1:
+            if assessment.ok and yandex_batches >= 1:
                 break
 
         sources = merge_search_sources(batches, max_sources=12)

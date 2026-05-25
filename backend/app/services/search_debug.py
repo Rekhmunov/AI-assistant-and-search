@@ -59,6 +59,7 @@ def build_debug_trace(
     retrieval: dict[str, Any] | None = None,
     fact_pack: dict[str, Any] | None = None,
     page_cache: dict[str, Any] | None = None,
+    query_url_memory: dict[str, Any] | None = None,
     settings: Settings | None = None,
 ) -> dict[str, Any]:
     s = settings or get_settings()
@@ -86,6 +87,7 @@ def build_debug_trace(
         },
         "fact_pack": fact_pack,
         "page_cache": page_cache,
+        "query_url_memory": query_url_memory,
         "yandex_gpt": {
             "mode": "search" if needs_search else "direct",
             "model": answer_model,

@@ -13,6 +13,11 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/aisearch"
     redis_url: str = "redis://localhost:6379/0"
     page_cache_enabled: bool = True
+    query_url_index_enabled: bool = True
+    query_url_max_bootstrap: int = 4
+    query_url_max_per_query: int = 8
+    query_url_max_record: int = 5
+    query_url_lookup_keys: int = 2
 
     bot_token: str = ""
     jwt_secret: str = "change-me-in-production"

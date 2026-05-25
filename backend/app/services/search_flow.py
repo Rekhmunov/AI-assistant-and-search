@@ -34,6 +34,11 @@ from app.services.search_query import (
 from app.services.thread_context import build_thread_context, format_sources_for_prompt
 from app.services.yandex_errors import YandexServiceError
 from app.services.yandex_gpt import YandexGPTProvider
+from app.services.query_url_memory import (
+    QueryUrlMemoryTrace,
+    lookup_bootstrap_sources,
+    record_successful_urls,
+)
 from app.services.yandex_search import YandexSearchService
 
 
@@ -209,6 +214,7 @@ class SearchFlowService:
         retrieval_trace: dict | None = None
         hint_clarify: str | None = None
         fact_pack = None
+        query_url_trace: QueryUrlMemoryTrace | None = None
 
         try:
             if route.needs_search:
@@ -254,6 +260,11 @@ class SearchFlowService:
                     )
 
                 page_cache_trace: dict | None = None
+                bootstrap_sources, query_url_trace = await lookup_bootstrap_sources(
+                    db,
+                    llm_query,
+                    *(queries[:2]),
+                )
                 pipeline_result = await self.fact_pipeline.run(
                     llm_query,
                     queries,
@@ -262,6 +273,7 @@ class SearchFlowService:
                     weather=weather,
                     currency=currency,
                     answer_model=route.answer_model,
+                    bootstrap_sources=bootstrap_sources or None,
                 )
                 sources = pipeline_result.sources
                 fact_pack = pipeline_result.fact_pack
@@ -338,6 +350,24 @@ class SearchFlowService:
 
         follow_ups = await self.llm.generate_follow_ups(llm_query, full_answer)
 
+        if (
+            route.needs_search
+            and sources
+            and query_url_trace is not None
+            and full_answer.strip()
+            and not is_template_evasion(full_answer)
+        ):
+            retrieval_ok = bool(retrieval_trace and retrieval_trace.get("ok"))
+            has_facts = bool(fact_pack and fact_pack.facts)
+            if retrieval_ok or has_facts:
+                score = float((retrieval_trace or {}).get("score") or 0.35)
+                query_url_trace.recorded_count = await record_successful_urls(
+                    db,
+                    llm_query,
+                    sources,
+                    retrieval_score=score,
+                )
+
         debug_trace = build_debug_trace(
             display_content=display_content,
             llm_query=llm_query,
@@ -353,6 +383,7 @@ class SearchFlowService:
             retrieval=retrieval_trace,
             fact_pack=fact_pack.to_dict() if fact_pack else None,
             page_cache=page_cache_trace,
+            query_url_memory=query_url_trace.to_dict() if query_url_trace else None,
         )
 
         trace_payload = debug_trace if await _messages_have_debug_trace(db) else None

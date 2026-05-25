@@ -36,9 +36,18 @@ def _build_features() -> dict[str, bool]:
         "policy_v5_factpack": POLICY_VERSION.startswith("v5"),
         "fact_pipeline": fact_pipeline,
         "page_cache": page_cache_on,
+        "query_url_index": get_settings().query_url_index_enabled,
         "currency_cbr": currency_cbr,
         "page_fetch": page_fetch,
     }
+
+
+@router.get("/health/query-url-index")
+async def api_health_query_url_index(db: Annotated[AsyncSession, Depends(get_db)]):
+    """Статистика памяти query → URL (Postgres)."""
+    from app.services.query_url_memory import index_stats
+
+    return await index_stats(db)
 
 
 @router.get("/health/page-cache")
