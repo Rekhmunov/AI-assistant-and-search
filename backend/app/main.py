@@ -12,13 +12,18 @@ from app.services.app_settings import sync_settings_cache
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    async with async_session_factory() as db:
-        await ensure_bootstrap_admin(db)
-        from app.api.deps import get_redis
+    try:
+        async with async_session_factory() as db:
+            await ensure_bootstrap_admin(db)
+            from app.api.deps import get_redis
 
-        redis_client = await get_redis()
-        await sync_settings_cache(db, redis_client)
-        await db.commit()
+            redis_client = await get_redis()
+            await sync_settings_cache(db, redis_client)
+            await db.commit()
+    except Exception:
+        import logging
+
+        logging.getLogger(__name__).exception("Startup bootstrap failed")
     yield
 
 

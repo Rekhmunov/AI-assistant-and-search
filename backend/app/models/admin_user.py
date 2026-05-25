@@ -22,7 +22,12 @@ class AdminUser(Base):
     email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, index=True)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     role: Mapped[AdminRole] = mapped_column(
-        ENUM(AdminRole, name="admin_role_enum", create_type=False),
+        ENUM(
+            AdminRole,
+            name="admin_role_enum",
+            create_type=False,
+            values_callable=lambda enum_cls: [member.value for member in enum_cls],
+        ),
         nullable=False,
         default=AdminRole.OWNER,
     )
