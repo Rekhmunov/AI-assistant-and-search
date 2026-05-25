@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { formatAnswerForDisplay } from "../lib/formatAnswer";
 import { t } from "../i18n";
 
 type Props = {
@@ -11,9 +12,11 @@ export function AnswerToolbar({ answer, title }: Props) {
 
   if (!answer.trim()) return null;
 
+  const plainAnswer = formatAnswerForDisplay(answer);
+
   const copy = async () => {
     try {
-      await navigator.clipboard.writeText(answer);
+      await navigator.clipboard.writeText(plainAnswer);
       setCopied(true);
       window.setTimeout(() => setCopied(false), 2000);
     } catch {
@@ -22,7 +25,7 @@ export function AnswerToolbar({ answer, title }: Props) {
   };
 
   const share = async () => {
-    const payload = { title: title || "Glosix", text: answer };
+    const payload = { title: title || "Glosix", text: plainAnswer };
     try {
       if (navigator.share) {
         await navigator.share(payload);

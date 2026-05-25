@@ -1,3 +1,6 @@
-export function StreamingText({ text, streaming }: { text: string; streaming?: boolean }) {
-  return <div className="answer">{text}</div>;
+import { formatAnswerForDisplay } from "../lib/formatAnswer";
+
+export function StreamingText({ text }: { text: string; streaming?: boolean }) {
+  const display = formatAnswerForDisplay(text);
+  return <div className="answer">{display}</div>;
 }
