@@ -2,8 +2,8 @@ import enum
 import uuid
 from datetime import datetime
 
-from sqlalchemy import BigInteger, DateTime, Enum, String, func
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import BigInteger, DateTime, String, func
+from sqlalchemy.dialects.postgresql import ENUM, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -26,7 +26,15 @@ class User(Base):
     last_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     username: Mapped[str | None] = mapped_column(String(255), nullable=True)
     language: Mapped[str] = mapped_column(String(8), default="ru")
-    plan: Mapped[Plan] = mapped_column(Enum(Plan, name="plan_enum"), default=Plan.FREE)
+    plan: Mapped[Plan] = mapped_column(
+        ENUM(
+            Plan,
+            name="plan_enum",
+            create_type=False,
+            values_callable=lambda enum_cls: [member.value for member in enum_cls],
+        ),
+        default=Plan.FREE,
+    )
     plan_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

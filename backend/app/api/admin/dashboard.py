@@ -3,8 +3,8 @@ from datetime import datetime, timedelta, timezone
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import func, select
-from sqlalchemy.exc import ProgrammingError
+from sqlalchemy import distinct, func, select
+from sqlalchemy.exc import DBAPIError, ProgrammingError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_db, get_redis
@@ -45,12 +45,12 @@ async def dashboard(
             )
         )
         users_pro = await db.scalar(
-            select(func.count()).select_from(User).where(
-                User.deleted_at.is_(None), User.plan == Plan.PRO
-            )
+            select(func.count())
+            .select_from(User)
+            .where(User.deleted_at.is_(None), User.plan == Plan.PRO.value)
         )
         users_active_24h = await db.scalar(
-            select(func.count(func.distinct(Thread.user_id)))
+            select(func.count(distinct(Thread.user_id)))
             .select_from(Thread)
             .where(Thread.last_message_at >= day_ago)
         )
@@ -63,6 +63,13 @@ async def dashboard(
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="База не обновлена. Выполните: docker compose -f docker-compose.prod.yml exec backend alembic upgrade head",
+        ) from exc
+    except DBAPIError as exc:
+        logger.exception("Dashboard DBAPI error")
+        hint = str(exc.orig) if getattr(exc, "orig", None) else str(exc)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Ошибка БД при загрузке метрик: {hint[:200]}",
         ) from exc
     except Exception as exc:
         logger.exception("Dashboard metrics query failed")
