@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime, timedelta, timezone
 from typing import Annotated
 from uuid import UUID
@@ -17,6 +18,16 @@ from app.schemas.thread import ThreadListItem
 from app.services.admin_audit import log_admin_action
 
 router = APIRouter(prefix="/users", tags=["admin-users"])
+logger = logging.getLogger(__name__)
+
+
+def _plan_str(user: User) -> str:
+    plan = user.plan
+    if plan is None:
+        return Plan.FREE.value
+    if isinstance(plan, Plan):
+        return plan.value
+    return str(plan).lower()
 
 
 def _user_out(user: User, searches_today: int = 0) -> UserAdminOut:
@@ -28,7 +39,7 @@ def _user_out(user: User, searches_today: int = 0) -> UserAdminOut:
         first_name=user.first_name,
         last_name=user.last_name,
         username=user.username,
-        plan=user.plan.value,
+        plan=_plan_str(user),
         plan_expires_at=user.plan_expires_at,
         created_at=user.created_at,
         deleted_at=user.deleted_at,
@@ -52,7 +63,12 @@ async def list_users(
         q = q.where(User.deleted_at.is_(None))
     if search:
         term = f"%{search.strip()}%"
-        filters = [User.username.ilike(term), User.email.ilike(term), User.first_name.ilike(term)]
+        filters = [
+            User.username.ilike(term),
+            User.email.ilike(term),
+            User.first_name.ilike(term),
+            User.guest_key.ilike(term),
+        ]
         if search.strip().isdigit():
             filters.append(User.max_user_id == int(search.strip()))
         q = q.where(or_(*filters))
@@ -62,8 +78,16 @@ async def list_users(
     users = result.scalars().all()
     out: list[UserAdminOut] = []
     for user in users:
-        used = await limiter.get_search_usage(str(user.id))
-        out.append(_user_out(user, used))
+        try:
+            used = await limiter.get_search_usage(str(user.id))
+        except Exception:
+            logger.warning("Redis usage lookup failed for user %s", user.id, exc_info=True)
+            used = 0
+        try:
+            out.append(_user_out(user, used))
+        except Exception:
+            logger.exception("Failed to serialize user %s for admin list", user.id)
+    logger.info("Admin users list: returned %s of %s rows", len(out), len(users))
     return out
 
 
@@ -105,7 +129,7 @@ async def update_user(
             user.deleted_at = None
             changes["banned"] = False
     if body.plan is not None:
-        user.plan = Plan(body.plan)
+        user.plan = Plan(body.plan.lower())
         changes["plan"] = body.plan
     if body.plan_expires_at is not None:
         user.plan_expires_at = body.plan_expires_at
