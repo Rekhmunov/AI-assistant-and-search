@@ -32,6 +32,37 @@ def _format_sources(sources: list[SearchSource]) -> str:
     return "\n".join(lines)
 
 
+def _text_from_completion_json(data: dict) -> str:
+    alts = data.get("result", {}).get("alternatives", [])
+    if not alts:
+        return ""
+    return alts[0].get("message", {}).get("text", "") or ""
+
+
+def _parse_completion_stream_line(line: str) -> str | None:
+    raw = line.strip()
+    if not raw or raw == "[DONE]":
+        return None
+    if raw.startswith("data:"):
+        raw = raw[5:].strip()
+    if not raw.startswith("{"):
+        return None
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError:
+        return None
+    return _text_from_completion_json(parsed) or None
+
+
+async def _yield_text_paced(text: str) -> AsyncIterator[str]:
+    if not text:
+        return
+    parts = re.split(r"(?<=\s)", text)
+    for part in parts:
+        if part:
+            yield part
+
+
 def _format_history(history: list[tuple[str, str]], max_turns: int = 6) -> str:
     if not history:
         return ""
@@ -118,7 +149,7 @@ class YandexGPTProvider(LLMProvider):
         except httpx.HTTPError as e:
             logger.exception("YandexGPT request failed")
             raise YandexServiceError("gpt", "YandexGPT недоступен (сеть)") from e
-        return data.get("result", {}).get("alternatives", [{}])[0].get("message", {}).get("text", "")
+        return _text_from_completion_json(data)
 
     async def stream_answer(
         self,
@@ -187,32 +218,73 @@ class YandexGPTProvider(LLMProvider):
 
     async def _stream_completion(self, payload: dict, headers: dict) -> AsyncIterator[str]:
         prev_len = 0
+        stream_payload = {
+            **payload,
+            "completionOptions": {**payload["completionOptions"], "stream": True},
+        }
+
         try:
             async with httpx.AsyncClient(timeout=120.0) as client:
-                async with client.stream("POST", self.COMPLETION_URL, headers=headers, json=payload) as response:
+                async with client.stream(
+                    "POST", self.COMPLETION_URL, headers=headers, json=stream_payload
+                ) as response:
                     response.raise_for_status()
-                    async for line in response.aiter_lines():
-                        if not line.startswith("data:"):
-                            continue
-                        chunk = line[5:].strip()
-                        if not chunk or chunk == "[DONE]":
-                            continue
-                        try:
-                            parsed = json.loads(chunk)
-                        except json.JSONDecodeError:
-                            continue
-                        alts = parsed.get("result", {}).get("alternatives", [])
-                        if alts:
-                            text = alts[0].get("message", {}).get("text", "")
-                            if text and len(text) > prev_len:
-                                yield text[prev_len:]
-                                prev_len = len(text)
+                    buffer = ""
+                    async for raw_chunk in response.aiter_bytes():
+                        buffer += raw_chunk.decode("utf-8", errors="replace")
+                        while "\n" in buffer:
+                            line, buffer = buffer.split("\n", 1)
+                            full_text = _parse_completion_stream_line(line)
+                            if full_text and len(full_text) > prev_len:
+                                yield full_text[prev_len:]
+                                prev_len = len(full_text)
+                    if buffer.strip():
+                        full_text = _parse_completion_stream_line(buffer)
+                        if full_text and len(full_text) > prev_len:
+                            yield full_text[prev_len:]
+                            prev_len = len(full_text)
+                        elif buffer.strip().startswith("{"):
+                            try:
+                                parsed = json.loads(buffer.strip())
+                                full_text = _text_from_completion_json(parsed)
+                                if full_text and len(full_text) > prev_len:
+                                    yield full_text[prev_len:]
+                                    prev_len = len(full_text)
+                            except json.JSONDecodeError:
+                                pass
         except httpx.HTTPStatusError as e:
             logger.error("YandexGPT stream HTTP %s: %s", e.response.status_code, e.response.text[:500])
             raise YandexServiceError("gpt", f"YandexGPT недоступен (HTTP {e.response.status_code})", e.response.status_code) from e
         except httpx.HTTPError as e:
             logger.exception("YandexGPT stream failed")
             raise YandexServiceError("gpt", "YandexGPT недоступен (сеть)") from e
+
+        if prev_len > 0:
+            return
+
+        logger.info("YandexGPT stream returned no text, using non-streaming fallback")
+        fallback_payload = {
+            **payload,
+            "completionOptions": {**payload["completionOptions"], "stream": False},
+        }
+        try:
+            async with httpx.AsyncClient(timeout=120.0) as client:
+                response = await client.post(self.COMPLETION_URL, headers=headers, json=fallback_payload)
+                response.raise_for_status()
+                data = response.json()
+        except httpx.HTTPStatusError as e:
+            logger.error("YandexGPT fallback HTTP %s: %s", e.response.status_code, e.response.text[:500])
+            raise YandexServiceError("gpt", f"YandexGPT недоступен (HTTP {e.response.status_code})", e.response.status_code) from e
+        except httpx.HTTPError as e:
+            logger.exception("YandexGPT fallback request failed")
+            raise YandexServiceError("gpt", "YandexGPT недоступен (сеть)") from e
+
+        text = _text_from_completion_json(data)
+        if not text:
+            logger.warning("YandexGPT fallback returned empty text")
+            return
+        async for part in _yield_text_paced(text):
+            yield part
 
     async def generate_follow_ups(self, query: str, answer: str) -> list[str]:
         if not self.settings.yandex_configured:
@@ -261,7 +333,7 @@ class YandexGPTProvider(LLMProvider):
                 "Какие есть риски?",
             ]
 
-        text = data.get("result", {}).get("alternatives", [{}])[0].get("message", {}).get("text", "")
+        text = _text_from_completion_json(data)
         match = re.search(r"\[.*\]", text, re.DOTALL)
         if match:
             try:
