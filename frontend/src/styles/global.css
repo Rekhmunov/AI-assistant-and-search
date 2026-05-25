@@ -59,7 +59,7 @@ body:has(.page-thread) {
   padding-bottom: 0;
 }
 
-.app-shell:has(.page-home:not(.page-home--composing)) {
+.app-shell:has(.page-home) {
   padding-bottom: calc(var(--bottom-nav-height) + 20px + env(safe-area-inset-bottom));
 }
 
@@ -72,21 +72,14 @@ body:has(.page-thread) {
 .page-home {
   display: flex;
   flex-direction: column;
-  min-height: calc(100dvh - var(--bottom-nav-height) - env(safe-area-inset-bottom));
-}
-
-.page-home:not(.page-home--composing) {
   justify-content: center;
+  min-height: calc(100dvh - var(--bottom-nav-height) - env(safe-area-inset-bottom));
   padding-top: 0;
 }
 
-.page-home:not(.page-home--composing) .composer-wrap--inline {
+.page-home .composer-wrap--inline {
   margin-top: 0;
   padding-top: 0;
-}
-
-.page-home--composing {
-  justify-content: flex-start;
 }
 
 .glosix-header {

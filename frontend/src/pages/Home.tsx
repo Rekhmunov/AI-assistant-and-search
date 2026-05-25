@@ -18,11 +18,11 @@ export function Home() {
     navigate(`/thread?${params.toString()}`);
   };
 
-  const composing = Boolean(query.trim() || attachments.length > 0);
+  const hasDraft = Boolean(query.trim() || attachments.length > 0);
   const placeholderPhrases = useMemo(() => getHomePlaceholderPhrases(), []);
 
   return (
-    <div className={`page page-home${composing ? " page-home--composing" : ""}`}>
+    <div className="page page-home">
       <GlosixHeader showBrand={false} />
       <SearchComposer
         value={query}
@@ -30,8 +30,8 @@ export function Home() {
         onSubmit={startSearch}
         attachments={attachments}
         onAttachmentsChange={setAttachments}
-        docked={composing}
-        animatedPlaceholder={!composing}
+        docked={false}
+        animatedPlaceholder={!hasDraft}
         placeholderPhrases={placeholderPhrases}
       />
     </div>
