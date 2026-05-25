@@ -667,22 +667,24 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 40px;
+  width: 44px;
   height: 100%;
   min-height: 52px;
   padding: 0;
-  border: none;
+  border: 1px solid var(--border);
   border-radius: 12px;
-  background: transparent;
-  color: var(--muted);
+  background: var(--surface);
+  color: var(--text);
   cursor: pointer;
-  transition: color 0.15s, background 0.15s;
+  flex-shrink: 0;
+  transition: color 0.15s, background 0.15s, border-color 0.15s;
 }
 
 .kebab-btn:hover,
 .kebab-btn[aria-expanded="true"] {
-  color: var(--text);
-  background: var(--surface);
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--accent-soft);
 }
 
 .thread-dropdown {
