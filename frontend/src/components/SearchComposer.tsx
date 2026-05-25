@@ -1,6 +1,5 @@
 import { FormEvent, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Link } from "react-router-dom";
 import { uploadFile, type UploadedFile, fetchMe } from "../api/client";
 import { ACCEPT_FILE_INPUT, MAX_FILE_BYTES_FREE, MAX_FILE_BYTES_PRO, validateFile } from "../constants/files";
 import { useTypingPlaceholder } from "../hooks/useTypingPlaceholder";
@@ -106,12 +105,6 @@ export function SearchComposer({
   return (
     <div className={`composer-wrap${docked ? " composer-wrap--docked" : " composer-wrap--inline"}`}>
       {(uploadError || voice.error) && <p className="composer-error">{uploadError || voice.error}</p>}
-      {!token && !inMax && (
-        <p className="composer-hint">
-          {t("guestSearchHint")}{" "}
-          <Link to="/login">{t("signIn")}</Link> — {t("guestSearchHintMore")}
-        </p>
-      )}
       <form
         className={`search-composer${hasAttachment ? " search-composer--with-attachment" : ""}`}
         onSubmit={handleSubmit}
