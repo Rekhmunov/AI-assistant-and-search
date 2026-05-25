@@ -121,7 +121,7 @@ docker compose -f docker-compose.prod.yml exec backend \
 | Симптом | Решение |
 |---------|---------|
 | `yandex_configured: false` | Заполните `YANDEX_FOLDER_ID` и `YANDEX_API_KEY`, пересоберите backend |
-| `search HTTP 403` | Роль `search-api.executor`, включён Search API в каталоге |
+| `search HTTP 403` | Роль `search-api.webSearch.user`, включён Search API в каталоге |
 | `gpt_lite HTTP 403` | Роль `ai.languageModels.user`, биллинг AI Studio |
 | `gpt_pro HTTP 404` | Смените `YANDEX_GPT_PRO_MODEL` на `yandexgpt/latest` или `yandexgpt/rc` |
 | Mock-источники (habr, wikipedia) | Ключи пустые или не подхватились — проверьте `env_file: .env` в compose |
