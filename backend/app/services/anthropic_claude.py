@@ -41,6 +41,32 @@ MESSAGES_URL = "https://api.anthropic.com/v1/messages"
 API_VERSION = "2023-06-01"
 
 
+def _anthropic_http_error_message(response: httpx.Response, *, model: str) -> str:
+    """Текст для UI: 403 чаще всего = нет доступа к модели в консоли Anthropic."""
+    detail = ""
+    try:
+        data = response.json()
+        err = data.get("error")
+        if isinstance(err, dict):
+            detail = str(err.get("message") or "").strip()
+        elif err:
+            detail = str(err).strip()
+    except Exception:
+        detail = (response.text or "").strip()[:240]
+
+    base = f"Claude недоступен (HTTP {response.status_code})"
+    if model:
+        base += f", модель {model}"
+    if detail:
+        base += f": {detail}"
+    elif response.status_code == 403:
+        base += (
+            ". Проверьте в console.anthropic.com: биллинг, Model Access для этой модели, "
+            "ключ sk-ant- из того же workspace"
+        )
+    return base
+
+
 def _to_anthropic_messages(messages: list[dict]) -> tuple[str, list[dict]]:
     system_parts: list[str] = []
     out: list[dict] = []
@@ -209,10 +235,11 @@ class AnthropicClaudeProvider(PromptedLLMMixin, LLMProvider):
                 response.raise_for_status()
                 data = response.json()
         except httpx.HTTPStatusError as e:
-            logger.error("Claude HTTP %s: %s", e.response.status_code, e.response.text[:500])
+            model = self._model_name(model)
+            logger.error("Claude HTTP %s (%s): %s", e.response.status_code, model, e.response.text[:500])
             raise YandexServiceError(
                 "gpt",
-                f"Claude недоступен (HTTP {e.response.status_code})",
+                _anthropic_http_error_message(e.response, model=model),
                 e.response.status_code,
             ) from e
         except httpx.HTTPError as e:
@@ -270,10 +297,13 @@ class AnthropicClaudeProvider(PromptedLLMMixin, LLMProvider):
                 ) as response:
                     if response.status_code >= 400:
                         body = (await response.aread()).decode("utf-8", errors="replace")[:500]
-                        logger.error("Claude stream HTTP %s: %s", response.status_code, body)
+                        model_name = self._model_name(model)
+                        logger.error("Claude stream HTTP %s (%s): %s", response.status_code, model_name, body)
+                        req = httpx.Request("POST", MESSAGES_URL)
+                        resp = httpx.Response(response.status_code, request=req, content=body.encode())
                         raise YandexServiceError(
                             "gpt",
-                            f"Claude недоступен (HTTP {response.status_code})",
+                            _anthropic_http_error_message(resp, model=model_name),
                             response.status_code,
                         )
                     yielded = False
@@ -294,10 +324,11 @@ class AnthropicClaudeProvider(PromptedLLMMixin, LLMProvider):
                     if not yielded:
                         logger.warning("Claude stream returned no text deltas (model=%s)", payload.get("model"))
         except httpx.HTTPStatusError as e:
-            logger.error("Claude stream HTTP %s: %s", e.response.status_code, e.response.text[:500])
+            model_name = self._model_name(model)
+            logger.error("Claude stream HTTP %s (%s): %s", e.response.status_code, model_name, e.response.text[:500])
             raise YandexServiceError(
                 "gpt",
-                f"Claude недоступен (HTTP {e.response.status_code})",
+                _anthropic_http_error_message(e.response, model=model_name),
                 e.response.status_code,
             ) from e
         except httpx.HTTPError as e:

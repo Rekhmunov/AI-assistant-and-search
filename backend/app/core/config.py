@@ -44,8 +44,8 @@ class Settings(BaseSettings):
     yandex_gpt_pro_model: str = "yandexgpt/latest"
 
     anthropic_api_key: str = ""
-    anthropic_model_lite: str = "claude-3-5-haiku-latest"
-    anthropic_model_pro: str = "claude-sonnet-4-20250514"
+    anthropic_model_lite: str = "claude-3-5-haiku-20241022"
+    anthropic_model_pro: str = "claude-3-5-sonnet-20241022"
 
     yookassa_shop_id: str = ""
     yookassa_secret_key: str = ""
