@@ -1,6 +1,8 @@
+import type { ReactNode } from "react";
 import type { Source } from "../api/client";
-import { formatAnswerForDisplay } from "../lib/formatAnswer";
-import { renderTextWithCitations } from "../lib/parseCitations";
+import { parseAnswerSegments } from "../lib/parseAnswerSegments";
+import { renderAnswerTextSegment } from "../lib/renderAnswerText";
+import { CodeBlock } from "./CodeBlock";
 
 type Props = {
   text: string;
@@ -8,9 +10,29 @@ type Props = {
 };
 
 export function AnswerBody({ text, sources = [] }: Props) {
-  const display = formatAnswerForDisplay(text);
-  const content =
-    sources.length > 0 ? renderTextWithCitations(display, sources) : display;
+  const segments = parseAnswerSegments(text);
+  const children: ReactNode[] = [];
 
-  return <div className="answer">{content}</div>;
+  segments.forEach((seg, i) => {
+    if (seg.type === "code") {
+      children.push(
+        <CodeBlock
+          key={`code-${i}`}
+          code={seg.content}
+          lang={seg.lang}
+          partial={seg.partial}
+        />,
+      );
+      return;
+    }
+    const trimmed = seg.content.trim();
+    if (!trimmed) return;
+    children.push(
+      <div key={`text-${i}`} className="answer-text">
+        {renderAnswerTextSegment(seg.content, sources, `t-${i}`)}
+      </div>,
+    );
+  });
+
+  return <div className="answer">{children}</div>;
 }

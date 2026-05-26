@@ -1,40 +1,24 @@
+import { formatMarkdownText } from "./formatMarkdownText";
+import { parseAnswerSegments } from "./parseAnswerSegments";
+
 /**
- * Убирает markdown-разметку из ответа LLM для отображения в миниаппе.
- * Сохраняет абзацы, нумерованные списки и логику текста.
+ * Плоский текст для копирования всего ответа (без markdown, код как текст).
  */
 export function formatAnswerForDisplay(text: string): string {
   if (!text) return "";
 
-  let s = text.replace(/\r\n/g, "\n");
+  const segments = parseAnswerSegments(text);
+  const parts: string[] = [];
 
-  // Блоки кода
-  s = s.replace(/```[\s\S]*?```/g, (block) => {
-    const inner = block.replace(/^```\w*\n?/, "").replace(/```$/, "").trim();
-    return inner ? `\n${inner}\n` : "\n";
-  });
+  for (const seg of segments) {
+    if (seg.type === "code") {
+      const inner = seg.content.trim();
+      if (inner) parts.push(inner);
+    } else {
+      const formatted = formatMarkdownText(seg.content).trim();
+      if (formatted) parts.push(formatted);
+    }
+  }
 
-  // Заголовки # … ######
-  s = s.replace(/^#{1,6}\s+(.+)$/gm, "\n$1\n");
-
-  // Жирный / курсив
-  s = s.replace(/\*\*([^*]+)\*\*/g, "$1");
-  s = s.replace(/__([^_]+)__/g, "$1");
-  s = s.replace(/(?<!\w)\*([^*\n]+)\*(?!\w)/g, "$1");
-  s = s.replace(/(?<!\w)_([^_\n]+)_(?!\w)/g, "$1");
-
-  // Ссылки [текст](url) → текст
-  s = s.replace(/\[([^\]]+)\]\([^)]+\)/g, "$1");
-
-  // Горизонтальные линии
-  s = s.replace(/^[*\-_]{3,}\s*$/gm, "");
-
-  // Лишние пробелы в строках
-  s = s
-    .split("\n")
-    .map((line) => line.replace(/\s+$/g, ""))
-    .join("\n");
-
-  s = s.replace(/\n{3,}/g, "\n\n").trim();
-
-  return s;
+  return parts.join("\n\n").replace(/\n{3,}/g, "\n\n").trim();
 }
