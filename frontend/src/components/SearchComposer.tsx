@@ -45,6 +45,7 @@ export function SearchComposer({
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [inputFocused, setInputFocused] = useState(false);
 
   const { data: me } = useQuery({
     queryKey: ["me"],
@@ -98,9 +99,15 @@ export function SearchComposer({
 
   const canSend = (value.trim().length > 0 || attachments.length > 0) && !disabled && !uploading;
   const hasAttachment = attachments.length > 0;
-  const showAnimatedPlaceholder = animatedPlaceholder && !value.trim() && !disabled;
-  const typingPlaceholder = useTypingPlaceholder(showAnimatedPlaceholder, placeholderPhrases);
+  const showTypingOverlay =
+    animatedPlaceholder && !value.trim() && !disabled && !inputFocused;
+  const typingPlaceholder = useTypingPlaceholder(showTypingOverlay, placeholderPhrases);
   const staticPlaceholder = placeholder ?? t("searchPlaceholder");
+  const textareaPlaceholder = inputFocused
+    ? ""
+    : showTypingOverlay
+      ? " "
+      : staticPlaceholder;
 
   return (
     <div className={`composer-wrap${docked ? " composer-wrap--docked" : " composer-wrap--inline"}`}>
@@ -148,7 +155,7 @@ export function SearchComposer({
             onChange={(e) => onFilePick(e.target.files)}
           />
           <div className="composer-input-wrap">
-            {showAnimatedPlaceholder && typingPlaceholder && (
+            {showTypingOverlay && typingPlaceholder && (
               <span className="composer-placeholder-typing" aria-hidden>
                 {typingPlaceholder}
                 <span className="composer-placeholder-caret" />
@@ -158,8 +165,10 @@ export function SearchComposer({
               className="composer-input"
               rows={hasAttachment ? 2 : 1}
               value={value}
-              placeholder={showAnimatedPlaceholder ? " " : staticPlaceholder}
+              placeholder={textareaPlaceholder}
               disabled={disabled}
+              onFocus={() => setInputFocused(true)}
+              onBlur={() => setInputFocused(false)}
               onChange={(e) => onChange(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) {
