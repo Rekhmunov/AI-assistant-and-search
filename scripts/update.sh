@@ -1,62 +1,19 @@
 #!/usr/bin/env bash
-# Safe production update: git pull main, nginx config, rebuild & restart all services.
+# Полный цикл: git pull main + update-prod.sh
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-COMPOSE="docker compose -f docker-compose.prod.yml"
 BRANCH="${GIT_BRANCH:-main}"
-
-if [ -f hosting.config ]; then
-  # shellcheck disable=SC1091
-  source hosting.config
-fi
-
-API_HOST_CHECK="${API_HOST:-api.glosix.ru}"
-
-echo "==> Backup DB (optional)"
-bash scripts/backup-db.sh 2>/dev/null || echo "    backup skipped"
 
 if [ -d .git ]; then
   echo "==> Git pull origin ${BRANCH}"
   git fetch origin
   git checkout "$BRANCH"
-  git pull origin "$BRANCH"
+  git pull --ff-only origin "$BRANCH"
 else
-  echo "==> No .git — skip pull"
+  echo "==> No .git — только update-prod"
 fi
 
-echo "==> nginx.prod.conf from hosting.config (if missing or placeholder)"
-if [ -f hosting.config ]; then
-  if [ ! -f nginx/nginx.prod.conf ] || grep -q "make configure" nginx/nginx.prod.conf 2>/dev/null; then
-    bash scripts/render-nginx.sh
-  fi
-fi
-
-echo "==> nginx.prod.conf check"
-bash scripts/render-nginx.sh || true
-
-export GIT_COMMIT="$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
-echo "==> Build & restart containers (GIT_COMMIT=${GIT_COMMIT})"
-$COMPOSE build
-$COMPOSE up -d --remove-orphans
-
-echo "==> Recreate internal nginx (fresh upstream DNS after frontend/admin rebuild)"
-$COMPOSE up -d --force-recreate nginx
-
-echo "==> Wait for API health"
-for i in $(seq 1 30); do
-  if curl -sf "http://127.0.0.1:${PROXY_PORT:-18080}/health" -H "Host: ${API_HOST_CHECK}" >/dev/null 2>&1; then
-    echo "    OK: http://127.0.0.1:${PROXY_PORT:-18080}/health"
-    break
-  fi
-  if [ "$i" -eq 30 ]; then
-    echo "    FAIL: API not healthy — check: $COMPOSE logs backend --tail 50"
-    exit 1
-  fi
-  sleep 2
-done
-
-$COMPOSE ps
-echo "==> Update complete"
+exec bash scripts/update-prod.sh
