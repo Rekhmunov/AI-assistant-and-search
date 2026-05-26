@@ -218,6 +218,9 @@ class SearchFlowService:
         hint_clarify: str | None = None
         fact_pack = None
         query_url_trace: QueryUrlMemoryTrace | None = None
+        howto = False
+        fact_slots: list[str] = []
+        page_cache_trace: dict | None = None
 
         try:
             if route.needs_search:
@@ -250,7 +253,6 @@ class SearchFlowService:
                 def _enhance(q: str) -> str:
                     return enhance_search_query(q, for_howto=howto)
 
-                page_cache_trace: dict | None = None
                 extra_boot, extra_trace = await lookup_bootstrap_sources(
                     db,
                     llm_query,

@@ -80,11 +80,19 @@ class QueryRewriter:
         history_text = format_history_compact(ctx.history, max_turns=4)
 
         template = await self.llm._prompt("yandex_gpt_rewriter_user", REWRITER_USER)
-        user_prompt = template.format(
-            query=query[:900],
-            history_text=history_text or "(нет)",
-            continuation_label="да" if ctx.is_continuation else "нет",
-        )
+        try:
+            user_prompt = template.format(
+                query=query[:900],
+                history_text=history_text or "(нет)",
+                continuation_label="да" if ctx.is_continuation else "нет",
+            )
+        except KeyError:
+            logger.warning("Rewriter prompt template missing placeholders, using default")
+            user_prompt = REWRITER_USER.format(
+                query=query[:900],
+                history_text=history_text or "(нет)",
+                continuation_label="да" if ctx.is_continuation else "нет",
+            )
         system = await self.llm._prompt("yandex_gpt_rewriter_system", REWRITER_SYSTEM)
 
         try:

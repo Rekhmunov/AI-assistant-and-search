@@ -135,11 +135,9 @@ export function Thread() {
           streamingRef.current = false;
           setStreaming(false);
           setSearchPhase("idle");
-          const fatalThread =
-            code === "server_error" ||
-            code === "not_found" ||
-            msg.includes("Тред не найден");
-          if (fatalThread) {
+          const threadMissing =
+            code === "not_found" || msg.includes("Тред не найден");
+          if (threadMissing) {
             activeThreadIdRef.current = null;
             setThreadId(null);
             if (id) navigate("/", { replace: true });

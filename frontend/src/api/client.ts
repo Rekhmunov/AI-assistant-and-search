@@ -269,6 +269,20 @@ export async function uploadFile(token: string, file: File): Promise<UploadedFil
   return res.json();
 }
 
+function networkErrorMessage(err: unknown): string {
+  if (err instanceof TypeError) {
+    return "Нет связи с сервером. Проверьте интернет и обновите страницу.";
+  }
+  if (err instanceof Error) {
+    const m = err.message.toLowerCase();
+    if (m.includes("network") || m.includes("failed to fetch") || m.includes("load failed")) {
+      return "Нет связи с сервером. Проверьте интернет и обновите страницу.";
+    }
+    return err.message;
+  }
+  return "Нет связи с сервером. Попробуйте ещё раз.";
+}
+
 export async function streamSearch(
   token: string | null,
   query: string,
@@ -277,17 +291,23 @@ export async function streamSearch(
   handlers: SSEHandlers,
   signal?: AbortSignal
 ): Promise<void> {
-  const res = await fetch(`${API_BASE}/api/search`, {
-    method: "POST",
-    headers: apiHeaders(token),
-    credentials: "include",
-    body: JSON.stringify({
-      query,
-      thread_id: threadId,
-      attachment_ids: attachmentIds.length ? attachmentIds : null,
-    }),
-    signal,
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}/api/search`, {
+      method: "POST",
+      headers: apiHeaders(token),
+      credentials: "include",
+      body: JSON.stringify({
+        query,
+        thread_id: threadId,
+        attachment_ids: attachmentIds.length ? attachmentIds : null,
+      }),
+      signal,
+    });
+  } catch (err) {
+    handlers.onError?.(networkErrorMessage(err), "network_error");
+    return;
+  }
 
   const guestKey = res.headers.get("X-Guest-Session");
   if (guestKey) saveGuestSession(guestKey);
@@ -361,11 +381,11 @@ export async function streamSearch(
   } catch (e) {
     if (!gotError && !finished) {
       gotError = true;
-      handlers.onError?.(e instanceof Error ? e.message : "Соединение прервано");
+      handlers.onError?.(networkErrorMessage(e), "network_error");
     }
   } finally {
     if (!finished && !gotError) {
-      handlers.onError?.("Соединение прервано. Попробуйте ещё раз.");
+      handlers.onError?.("Соединение прервано. Попробуйте ещё раз.", "network_error");
     }
   }
 }

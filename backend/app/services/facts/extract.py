@@ -94,11 +94,19 @@ async def extract_facts_from_sources(
         template += await llm._prompt("yandex_gpt_extract_course_addon", EXTRACT_COURSE_ADDON)
     elif "company_financial" in slots:
         template += await llm._prompt("yandex_gpt_extract_financial_addon", EXTRACT_FINANCIAL_ADDON)
-    user_text = template.format(
-        query=query[:900],
-        prefilled=prefilled_text,
-        sources_block=_format_sources_block(sources),
-    )
+    try:
+        user_text = template.format(
+            query=query[:900],
+            prefilled=prefilled_text,
+            sources_block=_format_sources_block(sources),
+        )
+    except KeyError:
+        logger.warning("Extract prompt template missing placeholders, using default")
+        user_text = EXTRACT_USER.format(
+            query=query[:900],
+            prefilled=prefilled_text,
+            sources_block=_format_sources_block(sources),
+        )
     system = await llm._prompt("yandex_gpt_extract_system", EXTRACT_SYSTEM)
 
     try:
