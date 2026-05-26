@@ -9,6 +9,13 @@ BRANCH="${GIT_BRANCH:-main}"
 
 if [ -d .git ]; then
   echo "==> Git pull origin ${BRANCH}"
+  if [ -f .git/MERGE_HEAD ] || [ -d .git/rebase-merge ]; then
+    echo "==> Незавершённый merge/rebase — откатываем (nginx сохраняем в .bak)"
+    cp -f nginx/nginx.prod.conf "nginx/nginx.prod.conf.pre-merge.bak" 2>/dev/null || true
+    git merge --abort 2>/dev/null || true
+    git rebase --abort 2>/dev/null || true
+    git reset --merge 2>/dev/null || true
+  fi
   git fetch origin
   git checkout "$BRANCH"
 

@@ -61,9 +61,10 @@ def _anthropic_http_error_message(response: httpx.Response, *, model: str) -> st
         base += f": {detail}"
     if response.status_code == 403:
         base += (
-            ". В console.anthropic.com → Settings → Model access: включите эту модель "
-            "(и Sonnet для pro) в том же workspace, что и API-ключ. "
-            "При включённом Yandex Glosix может ответить через Yandex GPT."
+            ". Частые причины: (1) Model access в console.anthropic.com для workspace ключа; "
+            "(2) запрос с IP VPS/датацентра — Anthropic блокирует регион/хостинг "
+            "(проверьте curl с сервера; решение: ANTHROPIC_HTTP_PROXY в .env или Yandex GPT). "
+            "Тесты из Cursor/другой страны могут давать 200, а с VPS — 403."
         )
     return base
 
@@ -106,6 +107,12 @@ class AnthropicClaudeProvider(PromptedLLMMixin, LLMProvider):
             "anthropic-version": API_VERSION,
             "content-type": "application/json",
         }
+
+    def _http_client(self, *, timeout: float) -> httpx.AsyncClient:
+        proxy = (self.settings.anthropic_http_proxy or "").strip()
+        if proxy:
+            return httpx.AsyncClient(timeout=timeout, proxy=proxy)
+        return httpx.AsyncClient(timeout=timeout)
 
     async def _build_messages_from_fact_pack(
         self,
@@ -231,7 +238,7 @@ class AnthropicClaudeProvider(PromptedLLMMixin, LLMProvider):
             payload["system"] = system
 
         try:
-            async with httpx.AsyncClient(timeout=90.0) as client:
+            async with self._http_client(timeout=90.0) as client:
                 response = await client.post(MESSAGES_URL, headers=self._headers(), json=payload)
                 response.raise_for_status()
                 data = response.json()
@@ -292,7 +299,7 @@ class AnthropicClaudeProvider(PromptedLLMMixin, LLMProvider):
             return None
 
         try:
-            async with httpx.AsyncClient(timeout=120.0) as client:
+            async with self._http_client(timeout=120.0) as client:
                 async with client.stream(
                     "POST", MESSAGES_URL, headers=self._headers(), json=payload
                 ) as response:

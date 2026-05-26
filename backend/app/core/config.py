@@ -47,6 +47,8 @@ class Settings(BaseSettings):
     # Lite = rewriter/extract; Pro = финальный ответ. ID из console.anthropic.com → Models
     anthropic_model_lite: str = "claude-haiku-4-5-20251001"
     anthropic_model_pro: str = "claude-sonnet-4-6"
+    # Если VPS в регионе/сети, где api.anthropic.com отдаёт 403 — HTTP(S) прокси в EU/US
+    anthropic_http_proxy: str = ""
 
     yookassa_shop_id: str = ""
     yookassa_secret_key: str = ""
