@@ -19,6 +19,13 @@ class Settings(BaseSettings):
     query_url_max_record: int = 5
     query_url_lookup_keys: int = 2
 
+    page_fetch_max_pages: int = 5
+    page_fetch_max_pages_deep: int = 8
+    page_fetch_max_concurrent: int = 5
+    page_fetch_skip_rich_snippet_chars: int = 1400
+    search_parallel_extra_queries: bool = True
+    follow_ups_deferred: bool = True
+
     bot_token: str = ""
     jwt_secret: str = "change-me-in-production"
     jwt_algorithm: str = "HS256"

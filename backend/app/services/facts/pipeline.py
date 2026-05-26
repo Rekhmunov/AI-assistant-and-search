@@ -1,9 +1,11 @@
 """Конвейер: Search → fetch → providers → extract → FactPack."""
 
+import asyncio
 import logging
 from dataclasses import dataclass
 from typing import Any
 
+from app.core.config import get_settings
 from app.services.currency_rates import cbr_source_from_facts
 from app.services.facts.extract import extract_facts_from_sources
 from app.services.facts.merge_sources import merge_search_sources
@@ -11,7 +13,7 @@ from app.services.facts.models import Fact, FactPack
 from app.services.facts.orchestrator import FactOrchestrator
 from app.services.facts.slots import ranking_flags_from_slots, resolve_fact_slots
 from app.services.llm_provider import SearchSource
-from app.services.retrieval_quality import assess_retrieval
+from app.services.retrieval_quality import RetrievalAssessment, assess_retrieval
 from app.services.page_depth import FINANCIAL_NUMBER_RE, enrich_sources_deep
 from app.services.source_ranking import rank_sources
 from app.services.yandex_gpt import YandexGPTProvider
@@ -20,7 +22,6 @@ from app.services.yandex_search import YandexSearchService
 logger = logging.getLogger(__name__)
 
 MAX_SEARCH_QUERIES = 3
-MAX_FETCH_PAGES = 8
 MAX_CHUNKS_PER_PAGE = 4
 
 
@@ -44,6 +45,34 @@ class FactPipeline:
         self.llm = llm or YandexGPTProvider()
         self.orchestrator = FactOrchestrator()
 
+    def _max_fetch_pages(self, slots: list[str], *, howto: bool, answer_model: str) -> int:
+        settings = get_settings()
+        if "company_financial" in slots or "course_program" in slots or howto or answer_model == "pro":
+            return settings.page_fetch_max_pages_deep
+        return settings.page_fetch_max_pages
+
+    async def _search_batch(
+        self,
+        base_q: str,
+        *,
+        enhance_fn,
+        llm_query: str,
+        slots: list[str],
+        rank_flags: dict[str, bool],
+        howto: bool,
+        answer_model: str,
+    ) -> tuple[str, list[SearchSource], RetrievalAssessment]:
+        search_q = enhance_fn(base_q)
+        raw = await self.search.search(search_q)
+        ranked = rank_sources(
+            raw,
+            howto=howto or answer_model == "pro",
+            weather=rank_flags["weather"],
+            currency=rank_flags["currency"],
+        )
+        assessment = assess_retrieval(ranked, llm_query, fact_slots=slots)
+        return search_q, ranked, assessment
+
     async def run(
         self,
         llm_query: str,
@@ -55,6 +84,7 @@ class FactPipeline:
         answer_model: str = "lite",
         bootstrap_sources: list[SearchSource] | None = None,
     ) -> FactPipelineResult:
+        settings = get_settings()
         slots = resolve_fact_slots(fact_slots)
         rank_flags = ranking_flags_from_slots(slots)
         search_attempts: list[dict[str, Any]] = []
@@ -72,20 +102,23 @@ class FactPipeline:
             )
         last_q: str | None = None
         yandex_batches = 0
+        queries = search_queries[:MAX_SEARCH_QUERIES]
+        retrieval_ok = False
 
-        for base_q in search_queries[:MAX_SEARCH_QUERIES]:
-            search_q = enhance_fn(base_q)
-            last_q = search_q
-            raw = await self.search.search(search_q)
-            ranked = rank_sources(
-                raw,
-                howto=howto or answer_model == "pro",
-                weather=rank_flags["weather"],
-                currency=rank_flags["currency"],
+        if queries:
+            search_q, ranked, assessment = await self._search_batch(
+                queries[0],
+                enhance_fn=enhance_fn,
+                llm_query=llm_query,
+                slots=slots,
+                rank_flags=rank_flags,
+                howto=howto,
+                answer_model=answer_model,
             )
+            last_q = search_q
             batches.append(ranked)
-            yandex_batches += 1
-            assessment = assess_retrieval(ranked, llm_query, fact_slots=slots)
+            yandex_batches = 1
+            retrieval_ok = assessment.ok
             search_attempts.append(
                 {
                     "query": search_q,
@@ -95,8 +128,63 @@ class FactPipeline:
                     "retrieval_reason": assessment.reason,
                 }
             )
-            if assessment.ok and yandex_batches >= 1:
-                break
+
+            if not retrieval_ok and len(queries) > 1 and settings.search_parallel_extra_queries:
+                extra = await asyncio.gather(
+                    *[
+                        self._search_batch(
+                            q,
+                            enhance_fn=enhance_fn,
+                            llm_query=llm_query,
+                            slots=slots,
+                            rank_flags=rank_flags,
+                            howto=howto,
+                            answer_model=answer_model,
+                        )
+                        for q in queries[1:]
+                    ]
+                )
+                for sq, ranked_extra, assess_extra in extra:
+                    batches.append(ranked_extra)
+                    yandex_batches += 1
+                    search_attempts.append(
+                        {
+                            "query": sq,
+                            "sources_count": len(ranked_extra),
+                            "retrieval_ok": assess_extra.ok,
+                            "retrieval_score": assess_extra.score,
+                            "retrieval_reason": assess_extra.reason,
+                        }
+                    )
+                    if assess_extra.ok:
+                        retrieval_ok = True
+                    if not last_q:
+                        last_q = sq
+            elif not retrieval_ok and len(queries) > 1:
+                for base_q in queries[1:]:
+                    search_q, ranked, assessment = await self._search_batch(
+                        base_q,
+                        enhance_fn=enhance_fn,
+                        llm_query=llm_query,
+                        slots=slots,
+                        rank_flags=rank_flags,
+                        howto=howto,
+                        answer_model=answer_model,
+                    )
+                    last_q = search_q
+                    batches.append(ranked)
+                    yandex_batches += 1
+                    search_attempts.append(
+                        {
+                            "query": search_q,
+                            "sources_count": len(ranked),
+                            "retrieval_ok": assessment.ok,
+                            "retrieval_score": assessment.score,
+                            "retrieval_reason": assessment.reason,
+                        }
+                    )
+                    if assessment.ok:
+                        break
 
         sources = merge_search_sources(batches, max_sources=12)
         retrieval_trace: dict[str, Any] | None = None
@@ -108,7 +196,36 @@ class FactPipeline:
                 "reason": a.reason,
             }
 
-        provider_facts = await self.orchestrator.fetch_provider_facts(slots, llm_query)
+        provider_task = asyncio.create_task(self.orchestrator.fetch_provider_facts(slots, llm_query))
+
+        page_cache_stats: dict[str, int] | None = None
+        if sources:
+            max_pages = self._max_fetch_pages(slots, howto=howto, answer_model=answer_model)
+            chunks_pp = 5 if "company_financial" in slots else MAX_CHUNKS_PER_PAGE
+            sources, page_cache_stats = await enrich_sources_deep(
+                sources,
+                llm_query,
+                max_pages=max_pages,
+                chunks_per_page=chunks_pp,
+                financial="company_financial" in slots,
+            )
+            reassess = assess_retrieval(sources, llm_query, fact_slots=slots)
+            retrieval_trace = {
+                "ok": reassess.ok,
+                "score": reassess.score,
+                "reason": f"after_page_fetch:{reassess.reason}",
+            }
+            search_attempts.append(
+                {
+                    "query": "(page_fetch)",
+                    "sources_count": len(sources),
+                    "retrieval_ok": reassess.ok,
+                    "retrieval_score": reassess.score,
+                    "retrieval_reason": retrieval_trace["reason"],
+                }
+            )
+
+        provider_facts = await provider_task
         if provider_facts and "fx_rate" in slots:
             cbr_text = provider_facts[0].quote or provider_facts[0].claim
             cbr_src = cbr_source_from_facts(cbr_text)
@@ -133,32 +250,6 @@ class FactPipeline:
                     provider=f.provider,
                     confidence=f.confidence,
                 )
-
-        page_cache_stats: dict[str, int] | None = None
-        if sources:
-            chunks_pp = 5 if "company_financial" in slots else MAX_CHUNKS_PER_PAGE
-            sources, page_cache_stats = await enrich_sources_deep(
-                sources,
-                llm_query,
-                max_pages=MAX_FETCH_PAGES,
-                chunks_per_page=chunks_pp,
-                financial="company_financial" in slots,
-            )
-            reassess = assess_retrieval(sources, llm_query, fact_slots=slots)
-            retrieval_trace = {
-                "ok": reassess.ok,
-                "score": reassess.score,
-                "reason": f"after_page_fetch:{reassess.reason}",
-            }
-            search_attempts.append(
-                {
-                    "query": "(page_fetch)",
-                    "sources_count": len(sources),
-                    "retrieval_ok": reassess.ok,
-                    "retrieval_score": reassess.score,
-                    "retrieval_reason": retrieval_trace["reason"],
-                }
-            )
 
         fact_pack = await extract_facts_from_sources(
             self.llm,

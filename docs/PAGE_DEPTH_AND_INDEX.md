@@ -21,6 +21,16 @@
 
 В `debug_trace`: `page_cache: { hits, misses, fetched }`.
 
+Ускорение (env, по умолчанию включено):
+
+| Переменная | Эффект |
+|------------|--------|
+| `PAGE_FETCH_MAX_CONCURRENT=5` | параллельная загрузка страниц |
+| `PAGE_FETCH_MAX_PAGES=5` | меньше HTTP на обычных запросах (8 — pro/финансы/course) |
+| `PAGE_FETCH_SKIP_RICH_SNIPPET_CHARS=1400` | не качать URL, если сниппет Search уже длинный |
+| `SEARCH_PARALLEL_EXTRA_QUERIES=true` | 2–3-й запрос Yandex параллельно, если первый слабый |
+| `FOLLOW_UPS_DEFERRED=true` | `done` раньше, follow-up через ~1 с |
+
 Отключить кэш: `PAGE_CACHE_ENABLED=false` в `.env`.
 
 Проверка: `GET /api/health/page-cache`.

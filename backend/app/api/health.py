@@ -32,11 +32,15 @@ def _build_features() -> dict[str, bool]:
     except ImportError:
         fact_pipeline = False
     page_cache_on = get_settings().page_cache_enabled
+    s = get_settings()
     return {
         "policy_v6_context": POLICY_VERSION.startswith("v6"),
         "fact_pipeline": fact_pipeline,
         "page_cache": page_cache_on,
-        "query_url_index": get_settings().query_url_index_enabled,
+        "query_url_index": s.query_url_index_enabled,
+        "page_fetch_parallel": s.page_fetch_max_concurrent > 1,
+        "search_parallel_extra": s.search_parallel_extra_queries,
+        "follow_ups_deferred": s.follow_ups_deferred,
         "currency_cbr": currency_cbr,
         "page_fetch": page_fetch,
     }

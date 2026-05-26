@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 import uuid
@@ -8,6 +9,7 @@ from sqlalchemy import select, text
 from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import get_settings
 from app.core.limiter import RateLimiter
 from app.models.message import Message, MessageRole
 from app.models.thread import Thread
@@ -209,7 +211,10 @@ class SearchFlowService:
 
         try:
             if route.needs_search:
-                rewrite = await self.rewriter.rewrite(llm_query, thread_ctx)
+                rewrite, (bootstrap_sources, query_url_trace) = await asyncio.gather(
+                    self.rewriter.rewrite(llm_query, thread_ctx),
+                    lookup_bootstrap_sources(db, llm_query, llm_query),
+                )
                 fact_slots = resolve_fact_slots(rewrite.fact_slots)
                 rewrite_trace = {
                     "search_queries": rewrite.search_queries,
@@ -236,11 +241,25 @@ class SearchFlowService:
                     return enhance_search_query(q, for_howto=howto)
 
                 page_cache_trace: dict | None = None
-                bootstrap_sources, query_url_trace = await lookup_bootstrap_sources(
+                extra_boot, extra_trace = await lookup_bootstrap_sources(
                     db,
                     llm_query,
                     *(queries[:2]),
                 )
+                if extra_boot:
+                    seen = {(s.url or "").lower() for s in bootstrap_sources}
+                    for s in extra_boot:
+                        u = (s.url or "").lower()
+                        if u and u not in seen:
+                            bootstrap_sources.append(s)
+                            seen.add(u)
+                if extra_trace.lookup_keys:
+                    query_url_trace.lookup_keys = max(
+                        query_url_trace.lookup_keys,
+                        extra_trace.lookup_keys,
+                    )
+                    query_url_trace.bootstrap_count += extra_trace.bootstrap_count
+
                 pipeline_result = await self.fact_pipeline.run(
                     llm_query,
                     queries,
@@ -343,7 +362,16 @@ class SearchFlowService:
             )
             return
 
-        follow_ups = await self.llm.generate_follow_ups(llm_query, full_answer)
+        settings = get_settings()
+        follow_ups: list[str] = []
+        follow_up_task: asyncio.Task[list[str]] | None = None
+        if full_answer.strip():
+            if settings.follow_ups_deferred:
+                follow_up_task = asyncio.create_task(
+                    self.llm.generate_follow_ups(llm_query, full_answer)
+                )
+            else:
+                follow_ups = await self.llm.generate_follow_ups(llm_query, full_answer)
 
         if (
             route.needs_search
@@ -387,7 +415,7 @@ class SearchFlowService:
             role=MessageRole.ASSISTANT,
             content=full_answer.strip(),
             sources=sources_json if sources_json else None,
-            follow_up_questions=follow_ups,
+            follow_up_questions=follow_ups or None,
             debug_trace=trace_payload,
         )
         db.add(assistant_msg)
@@ -397,7 +425,6 @@ class SearchFlowService:
             thread.title = display_content[:200]
         await db.commit()
 
-        yield sse_event("follow_ups", {"questions": follow_ups})
         yield sse_event(
             "done",
             {
@@ -408,3 +435,11 @@ class SearchFlowService:
                 "answer_model": route.answer_model,
             },
         )
+
+        if follow_up_task is not None:
+            follow_ups = await follow_up_task
+            assistant_msg.follow_up_questions = follow_ups
+            await db.commit()
+            yield sse_event("follow_ups", {"questions": follow_ups})
+        elif follow_ups:
+            yield sse_event("follow_ups", {"questions": follow_ups})

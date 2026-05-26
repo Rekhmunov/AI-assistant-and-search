@@ -1,9 +1,11 @@
 """Глубокое чтение страниц: полный текст → чанки → отбор под запрос."""
 
+import asyncio
 import logging
 import re
 from collections.abc import Sequence
 
+from app.core.config import get_settings
 from app.services.llm_provider import SearchSource
 from app.services.source_page_fetch import fetch_page_full_text
 
@@ -48,34 +50,27 @@ def _tokenize(text: str) -> set[str]:
 
 
 def chunk_text(text: str, size: int = _CHUNK_SIZE, overlap: int = _CHUNK_OVERLAP) -> list[str]:
-    text = text.strip()
-    if not text:
-        return []
-    if len(text) <= size:
-        return [text]
+    if not text or len(text) <= size:
+        return [text] if text else []
     chunks: list[str] = []
     start = 0
     while start < len(text):
-        end = min(start + size, len(text))
-        piece = text[start:end].strip()
-        if piece:
-            chunks.append(piece)
+        end = start + size
+        chunks.append(text[start:end])
         if end >= len(text):
             break
-        start = max(0, end - overlap)
+        start = end - overlap
     return chunks
 
 
 def _score_chunk(chunk: str, query_tokens: set[str], *, financial: bool) -> float:
-    low = chunk.lower()
-    hits = sum(1 for t in query_tokens if t in low)
-    score = hits / max(len(query_tokens), 1)
+    chunk_tokens = _tokenize(chunk)
+    if not chunk_tokens:
+        return 0.0
+    overlap = len(query_tokens & chunk_tokens) / max(len(query_tokens), 1)
+    score = overlap
     if financial and FINANCIAL_NUMBER_RE.search(chunk):
-        score += 0.45
-    if financial and any(m in low for m in ("2024", "2025", "2023", "оборот", "выручк")):
-        score += 0.25
-    if len(chunk) < 80:
-        score -= 0.2
+        score += 0.35
     return score
 
 
@@ -125,6 +120,64 @@ def build_deep_snippet(
     return combined
 
 
+def _snippet_already_rich(snippet: str) -> bool:
+    settings = get_settings()
+    return len((snippet or "").strip()) >= settings.page_fetch_skip_rich_snippet_chars
+
+
+async def _enrich_one_source(
+    s: SearchSource,
+    query: str,
+    *,
+    chunks_per_page: int,
+    financial: bool,
+    sem: asyncio.Semaphore,
+    allow_fetch: bool,
+) -> tuple[SearchSource, bool, bool, bool]:
+    """Возвращает (source, did_fetch, cache_hit, cache_miss)."""
+    page_chunks: list[str] = []
+    did_fetch = False
+    cache_hit = False
+    cache_miss = False
+
+    if allow_fetch and s.url and not _snippet_already_rich(s.snippet or ""):
+        async with sem:
+            full, from_cache = await fetch_page_full_text(s.url)
+        if from_cache:
+            cache_hit = True
+        elif full:
+            cache_miss = True
+        if full:
+            did_fetch = True
+            page_chunks = select_relevant_chunks(
+                full,
+                query,
+                max_chunks=chunks_per_page,
+                financial=financial,
+            )
+            logger.debug(
+                "Deep page %s: %d chars → %d chunks (cache=%s)",
+                s.domain,
+                len(full),
+                len(page_chunks),
+                from_cache,
+            )
+
+    combined = build_deep_snippet(s.snippet or "", page_chunks)
+    return (
+        SearchSource(
+            index=s.index,
+            url=s.url,
+            title=s.title,
+            snippet=combined,
+            domain=s.domain,
+        ),
+        did_fetch,
+        cache_hit,
+        cache_miss,
+    )
+
+
 async def enrich_sources_deep(
     sources: list[SearchSource],
     query: str,
@@ -133,43 +186,45 @@ async def enrich_sources_deep(
     chunks_per_page: int = _MAX_CHUNKS_PER_PAGE,
     financial: bool = False,
 ) -> tuple[list[SearchSource], dict[str, int]]:
-    """Качает полный текст страницы и подставляет лучшие чанки под запрос."""
-    out: list[SearchSource] = []
+    """Параллельно качает тексты страниц (с лимитом concurrency) и подставляет чанки."""
+    settings = get_settings()
+    concurrency = max(1, min(settings.page_fetch_max_concurrent, 8))
+    sem = asyncio.Semaphore(concurrency)
+
+    fetch_budget = max_pages
+    tasks: list[tuple[int, asyncio.Task]] = []
+    for i, s in enumerate(sources):
+        allow = fetch_budget > 0 and bool(s.url) and not _snippet_already_rich(s.snippet or "")
+        if allow:
+            fetch_budget -= 1
+        task = asyncio.create_task(
+            _enrich_one_source(
+                s,
+                query,
+                chunks_per_page=chunks_per_page,
+                financial=financial,
+                sem=sem,
+                allow_fetch=allow,
+            )
+        )
+        tasks.append((i, task))
+
+    results: list[SearchSource | None] = [None] * len(sources)
     fetched = 0
     cache_hits = 0
     cache_misses = 0
-    for s in sources:
-        page_chunks: list[str] = []
-        if fetched < max_pages and s.url:
-            full, from_cache = await fetch_page_full_text(s.url)
-            if from_cache:
-                cache_hits += 1
-            elif full:
-                cache_misses += 1
-            if full:
-                fetched += 1
-                page_chunks = select_relevant_chunks(
-                    full,
-                    query,
-                    max_chunks=chunks_per_page,
-                    financial=financial,
-                )
-                logger.debug(
-                    "Deep page %s: %d chars → %d chunks (cache=%s)",
-                    s.domain,
-                    len(full),
-                    len(page_chunks),
-                    from_cache,
-                )
-        combined = build_deep_snippet(s.snippet or "", page_chunks)
-        out.append(
-            SearchSource(
-                index=s.index,
-                url=s.url,
-                title=s.title,
-                snippet=combined,
-                domain=s.domain,
-            )
-        )
+
+    gathered = await asyncio.gather(*(t for _, t in tasks))
+    for (i, _), result in zip(tasks, gathered):
+        src, did_fetch, hit, miss = result
+        results[i] = src
+        if did_fetch:
+            fetched += 1
+        if hit:
+            cache_hits += 1
+        if miss:
+            cache_misses += 1
+
+    out = [r for r in results if r is not None]
     stats = {"hits": cache_hits, "misses": cache_misses, "fetched": fetched}
     return out, stats
