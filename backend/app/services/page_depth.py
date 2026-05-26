@@ -4,7 +4,6 @@ import logging
 import re
 from collections.abc import Sequence
 
-from app.services.currency_rates import is_course_program_query
 from app.services.llm_provider import SearchSource
 from app.services.source_page_fetch import fetch_page_full_text
 
@@ -42,15 +41,6 @@ FINANCIAL_NUMBER_RE = re.compile(
     r"\d[\d\s]{0,12}(?:[.,]\d+)?\s*(?:млн|млрд|тыс|₽|руб|%)",
     re.I,
 )
-
-
-def is_financial_query(query: str) -> bool:
-    q = query.lower()
-    if is_course_program_query(q):
-        return False
-    if _INN_RE.search(q) or _INN_CONTEXT_RE.search(q):
-        return True
-    return any(m in q for m in _FINANCIAL_MARKERS)
 
 
 def _tokenize(text: str) -> set[str]:
@@ -94,11 +84,11 @@ def select_relevant_chunks(
     query: str,
     *,
     max_chunks: int = _MAX_CHUNKS_PER_PAGE,
+    financial: bool = False,
 ) -> list[str]:
     query_tokens = _tokenize(query)
     if not query_tokens:
         query_tokens = _tokenize(query[:200])
-    financial = is_financial_query(query)
     chunks = chunk_text(text)
     if not chunks:
         return []
@@ -141,6 +131,7 @@ async def enrich_sources_deep(
     *,
     max_pages: int = _DEFAULT_MAX_PAGES,
     chunks_per_page: int = _MAX_CHUNKS_PER_PAGE,
+    financial: bool = False,
 ) -> tuple[list[SearchSource], dict[str, int]]:
     """Качает полный текст страницы и подставляет лучшие чанки под запрос."""
     out: list[SearchSource] = []
@@ -158,7 +149,10 @@ async def enrich_sources_deep(
             if full:
                 fetched += 1
                 page_chunks = select_relevant_chunks(
-                    full, query, max_chunks=chunks_per_page
+                    full,
+                    query,
+                    max_chunks=chunks_per_page,
+                    financial=financial,
                 )
                 logger.debug(
                     "Deep page %s: %d chars → %d chunks (cache=%s)",

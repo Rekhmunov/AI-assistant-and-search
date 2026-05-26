@@ -9,10 +9,10 @@ from app.services.facts.extract import extract_facts_from_sources
 from app.services.facts.merge_sources import merge_search_sources
 from app.services.facts.models import Fact, FactPack
 from app.services.facts.orchestrator import FactOrchestrator
-from app.services.facts.slots import detect_fact_slots
+from app.services.facts.slots import ranking_flags_from_slots, resolve_fact_slots
 from app.services.llm_provider import SearchSource
 from app.services.retrieval_quality import assess_retrieval
-from app.services.page_depth import FINANCIAL_NUMBER_RE, enrich_sources_deep, is_financial_query
+from app.services.page_depth import FINANCIAL_NUMBER_RE, enrich_sources_deep
 from app.services.source_ranking import rank_sources
 from app.services.yandex_gpt import YandexGPTProvider
 from app.services.yandex_search import YandexSearchService
@@ -50,13 +50,13 @@ class FactPipeline:
         search_queries: list[str],
         *,
         enhance_fn,
+        fact_slots: list[str] | None = None,
         howto: bool = False,
-        weather: bool = False,
-        currency: bool = False,
         answer_model: str = "lite",
         bootstrap_sources: list[SearchSource] | None = None,
     ) -> FactPipelineResult:
-        fact_slots = detect_fact_slots(llm_query)
+        slots = resolve_fact_slots(fact_slots)
+        rank_flags = ranking_flags_from_slots(slots)
         search_attempts: list[dict[str, Any]] = []
         batches: list[list[SearchSource]] = []
         if bootstrap_sources:
@@ -80,12 +80,12 @@ class FactPipeline:
             ranked = rank_sources(
                 raw,
                 howto=howto or answer_model == "pro",
-                weather=weather,
-                currency=currency,
+                weather=rank_flags["weather"],
+                currency=rank_flags["currency"],
             )
             batches.append(ranked)
             yandex_batches += 1
-            assessment = assess_retrieval(ranked, llm_query)
+            assessment = assess_retrieval(ranked, llm_query, fact_slots=slots)
             search_attempts.append(
                 {
                     "query": search_q,
@@ -101,15 +101,15 @@ class FactPipeline:
         sources = merge_search_sources(batches, max_sources=12)
         retrieval_trace: dict[str, Any] | None = None
         if sources:
-            a = assess_retrieval(sources, llm_query)
+            a = assess_retrieval(sources, llm_query, fact_slots=slots)
             retrieval_trace = {
                 "ok": a.ok,
                 "score": a.score,
                 "reason": a.reason,
             }
 
-        provider_facts = await self.orchestrator.fetch_provider_facts(fact_slots, llm_query)
-        if provider_facts and "fx_rate" in fact_slots:
+        provider_facts = await self.orchestrator.fetch_provider_facts(slots, llm_query)
+        if provider_facts and "fx_rate" in slots:
             cbr_text = provider_facts[0].quote or provider_facts[0].claim
             cbr_src = cbr_source_from_facts(cbr_text)
             rest = [s for s in sources if "cbr.ru" not in (s.url or "")]
@@ -136,14 +136,15 @@ class FactPipeline:
 
         page_cache_stats: dict[str, int] | None = None
         if sources:
-            chunks_pp = 5 if is_financial_query(llm_query) else MAX_CHUNKS_PER_PAGE
+            chunks_pp = 5 if "company_financial" in slots else MAX_CHUNKS_PER_PAGE
             sources, page_cache_stats = await enrich_sources_deep(
                 sources,
                 llm_query,
                 max_pages=MAX_FETCH_PAGES,
                 chunks_per_page=chunks_pp,
+                financial="company_financial" in slots,
             )
-            reassess = assess_retrieval(sources, llm_query)
+            reassess = assess_retrieval(sources, llm_query, fact_slots=slots)
             retrieval_trace = {
                 "ok": reassess.ok,
                 "score": reassess.score,
@@ -164,9 +165,9 @@ class FactPipeline:
             llm_query,
             sources,
             prefilled=provider_facts,
-            fact_slots=fact_slots,
+            fact_slots=slots,
         )
-        if "company_financial" in fact_slots:
+        if "company_financial" in slots:
             corpus = " ".join((s.snippet or "") for s in sources[:6])
             only_providers = len(fact_pack.facts) <= len(provider_facts)
             if only_providers and FINANCIAL_NUMBER_RE.search(corpus):
@@ -175,7 +176,7 @@ class FactPipeline:
                     llm_query,
                     sources,
                     prefilled=provider_facts,
-                    fact_slots=fact_slots,
+                    fact_slots=slots,
                     model="pro",
                 )
                 if len(retry_pack.facts) > len(fact_pack.facts):

@@ -20,17 +20,8 @@ from app.services.query_rewriter import QueryRewriter
 from app.services.facts.pipeline import FactPipeline
 from app.services.facts.verify import verify_answer_against_facts
 from app.services.search_debug import build_debug_trace, build_gpt_messages_preview
-from app.services.search_query import (
-    build_course_search_queries,
-    build_currency_search_queries,
-    build_weather_search_queries,
-    enhance_search_query,
-    is_course_program_query,
-    is_currency_rate_query,
-    is_howto_query,
-    is_weather_query,
-    normalize_user_query,
-)
+from app.services.facts.slots import resolve_fact_slots
+from app.services.search_query import enhance_search_query, normalize_user_query
 from app.services.thread_context import build_thread_context, format_sources_for_prompt
 from app.services.yandex_errors import YandexServiceError
 from app.services.yandex_gpt import YandexGPTProvider
@@ -219,11 +210,13 @@ class SearchFlowService:
         try:
             if route.needs_search:
                 rewrite = await self.rewriter.rewrite(llm_query, thread_ctx)
+                fact_slots = resolve_fact_slots(rewrite.fact_slots)
                 rewrite_trace = {
                     "search_queries": rewrite.search_queries,
                     "needs_clarification": rewrite.needs_clarification,
                     "clarification_question": rewrite.clarification_question,
                     "intent": rewrite.intent,
+                    "fact_slots": fact_slots,
                     "reason": rewrite.reason,
                 }
                 if rewrite.intent in _VALID_INTENTS:
@@ -235,29 +228,12 @@ class SearchFlowService:
                     hint_clarify = rewrite.clarification_question
 
                 queries = list(rewrite.search_queries or [route.search_query])
-                course_program = is_course_program_query(llm_query)
-                howto = (
-                    route.intent == "howto"
-                    or is_howto_query(llm_query)
-                    or course_program
-                )
-                weather = is_weather_query(llm_query)
-                currency = is_currency_rate_query(llm_query)
-                if weather:
-                    queries = build_weather_search_queries(llm_query, queries)
-                elif currency:
-                    queries = build_currency_search_queries(llm_query, queries)
-                elif course_program:
-                    queries = build_course_search_queries(llm_query, queries)
+                howto = rewrite.intent == "howto"
+                if howto or "course_program" in fact_slots:
                     route.answer_model = "pro"
 
                 def _enhance(q: str) -> str:
-                    return enhance_search_query(
-                        q,
-                        for_howto=howto,
-                        for_weather=weather,
-                        for_currency=currency,
-                    )
+                    return enhance_search_query(q, for_howto=howto)
 
                 page_cache_trace: dict | None = None
                 bootstrap_sources, query_url_trace = await lookup_bootstrap_sources(
@@ -269,9 +245,8 @@ class SearchFlowService:
                     llm_query,
                     queries,
                     enhance_fn=_enhance,
+                    fact_slots=fact_slots,
                     howto=howto,
-                    weather=weather,
-                    currency=currency,
                     answer_model=route.answer_model,
                     bootstrap_sources=bootstrap_sources or None,
                 )

@@ -1,4 +1,4 @@
-"""Маршрутизация v5: FactPack (search → extract → answer); без поиска — chitchat и «кто ты»."""
+"""Маршрутизация v6: rewriter fact_slots + FactPack; без поиска — chitchat и «кто ты»."""
 
 import logging
 from dataclasses import dataclass
@@ -27,7 +27,7 @@ Intent = Literal[
     "chitchat",
 ]
 
-POLICY_VERSION = "v5"
+POLICY_VERSION = "v6"
 
 CHITCHAT_EXACT = frozenset(
     {
@@ -179,5 +179,5 @@ class QueryRouter:
             ctx,
             has_attachments,
             user_plan,
-            reason="always_search:v5",
+            reason="always_search:v6",
         )

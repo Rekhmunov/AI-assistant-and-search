@@ -1,16 +1,36 @@
-"""Определение слотов структурированных фактов по запросу."""
+"""Слоты структурированных фактов — из rewriter (контекст), не из ключевых слов."""
 
-from app.services.currency_rates import is_currency_rate_query
-from app.services.page_depth import is_financial_query
-from app.services.search_query import is_weather_query
+from __future__ import annotations
+
+VALID_FACT_SLOTS = frozenset(
+    {
+        "fx_rate",
+        "weather_now",
+        "company_financial",
+        "course_program",
+    }
+)
 
 
-def detect_fact_slots(query: str) -> list[str]:
-    slots: list[str] = []
-    if is_currency_rate_query(query):
-        slots.append("fx_rate")
-    if is_weather_query(query):
-        slots.append("weather_now")
-    if is_financial_query(query):
-        slots.append("company_financial")
-    return slots
+def normalize_fact_slots(raw: object) -> list[str]:
+    if not isinstance(raw, list):
+        return []
+    out: list[str] = []
+    for item in raw:
+        slot = str(item).strip().lower()[:32]
+        if slot in VALID_FACT_SLOTS and slot not in out:
+            out.append(slot)
+    return out
+
+
+def resolve_fact_slots(rewriter_slots: list[str] | None) -> list[str]:
+    """Единственный источник слотов для пайплайна — поле fact_slots от rewriter."""
+    return normalize_fact_slots(rewriter_slots or [])
+
+
+def ranking_flags_from_slots(fact_slots: list[str]) -> dict[str, bool]:
+    return {
+        "weather": "weather_now" in fact_slots,
+        "currency": "fx_rate" in fact_slots,
+        "course_program": "course_program" in fact_slots,
+    }

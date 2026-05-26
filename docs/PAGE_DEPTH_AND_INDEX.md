@@ -1,5 +1,14 @@
 # Глубина страниц и накопление индекса
 
+## Маршрутизация (контекст через rewriter)
+
+Перед поиском **QueryRewriter** (LLM) возвращает JSON: `intent`, `fact_slots`, `search_queries`.
+
+- **Нет** веток `if погода / elif валюта` по ключевым словам в `search_flow`.
+- `fact_slots`: `fx_rate` | `weather_now` | `company_financial` | `course_program` | `[]`
+- ЦБ, ранжирование погоды/FX, строгий retrieval — только если слот выставил rewriter.
+- `enhance_search_query` — только how-to / опечатки; формулировки поиска задаёт rewriter.
+
 ## Текущая модель (v5 + deep pages + Redis cache)
 
 1. Yandex Search — **находит URL** и даёт passage.

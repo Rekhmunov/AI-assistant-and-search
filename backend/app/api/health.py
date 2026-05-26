@@ -33,7 +33,7 @@ def _build_features() -> dict[str, bool]:
         fact_pipeline = False
     page_cache_on = get_settings().page_cache_enabled
     return {
-        "policy_v5_factpack": POLICY_VERSION.startswith("v5"),
+        "policy_v6_context": POLICY_VERSION.startswith("v6"),
         "fact_pipeline": fact_pipeline,
         "page_cache": page_cache_on,
         "query_url_index": get_settings().query_url_index_enabled,

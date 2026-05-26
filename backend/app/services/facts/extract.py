@@ -8,8 +8,6 @@ from typing import TYPE_CHECKING
 
 from app.services.facts.models import Fact, FactPack
 from app.services.llm_provider import SearchSource
-from app.services.currency_rates import is_course_program_query
-from app.services.page_depth import is_financial_query
 
 if TYPE_CHECKING:
     from app.services.yandex_gpt import YandexGPTProvider
@@ -114,10 +112,11 @@ async def extract_facts_from_sources(
         return FactPack(facts=[], gaps=["no_sources"], fact_slots=fact_slots or [])
 
     prefilled_text = "\n".join(f"- [{f.source_index}] {f.claim}" for f in prefilled) or "(нет)"
+    slots = fact_slots or []
     template = _EXTRACT_USER_TEMPLATE
-    if is_course_program_query(query):
+    if "course_program" in slots:
         template += _EXTRACT_COURSE_ADDON
-    elif is_financial_query(query):
+    elif "company_financial" in slots:
         template += _EXTRACT_FINANCIAL_ADDON
     user_text = template.format(
         query=query[:900],

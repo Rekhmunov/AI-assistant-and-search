@@ -4,7 +4,6 @@ import re
 from dataclasses import dataclass
 
 from app.services.llm_provider import SearchSource
-from app.services.search_query import is_currency_rate_query, is_weather_query
 
 _TOKEN_RE = re.compile(r"[a-zA-Zа-яА-ЯёЁ0-9]{4,}")
 _WEATHER_DATA_RE = re.compile(
@@ -42,7 +41,12 @@ def _query_tokens(text: str) -> set[str]:
     return {t.lower() for t in _TOKEN_RE.findall(text)}
 
 
-def assess_retrieval(sources: list[SearchSource], user_query: str) -> RetrievalAssessment:
+def assess_retrieval(
+    sources: list[SearchSource],
+    user_query: str,
+    *,
+    fact_slots: list[str] | None = None,
+) -> RetrievalAssessment:
     if not sources:
         return RetrievalAssessment(ok=False, score=0.0, reason="no_sources")
 
@@ -66,12 +70,14 @@ def assess_retrieval(sources: list[SearchSource], user_query: str) -> RetrievalA
     score = 0.55 * hit_ratio + 0.45 * rich_ratio
     ok = score >= 0.22 or (len(sources) >= 4 and rich >= 2)
 
-    if is_weather_query(user_query) and not _WEATHER_DATA_RE.search(corpus):
+    slots = fact_slots or []
+
+    if "weather_now" in slots and not _WEATHER_DATA_RE.search(corpus):
         ok = False
         reason = f"weather_no_digits hits={hits}/{len(tokens)} rich={rich} score={score:.2f}"
         return RetrievalAssessment(ok=ok, score=score, reason=reason)
 
-    if is_currency_rate_query(user_query) and not _CURRENCY_DATA_RE.search(corpus):
+    if "fx_rate" in slots and not _CURRENCY_DATA_RE.search(corpus):
         ok = False
         reason = f"currency_no_rate hits={hits}/{len(tokens)} rich={rich} score={score:.2f}"
         return RetrievalAssessment(ok=ok, score=score, reason=reason)
