@@ -42,8 +42,8 @@ echo "==> Build & restart containers (GIT_COMMIT=${GIT_COMMIT})"
 $COMPOSE build
 $COMPOSE up -d --remove-orphans
 
-echo "==> Restart internal nginx (pick up nginx.prod.conf)"
-$COMPOSE restart nginx
+echo "==> Recreate internal nginx (fresh upstream DNS after frontend/admin rebuild)"
+$COMPOSE up -d --force-recreate nginx
 
 echo "==> Wait for API health"
 for i in $(seq 1 30); do
