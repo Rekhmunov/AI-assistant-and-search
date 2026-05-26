@@ -107,14 +107,53 @@ body:has(.page-thread) {
 }
 
 .glosix-brand {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   text-decoration: none;
 }
 
-.glosix-logo {
-  height: 28px;
-  width: auto;
+.glosix-wordmark {
+  font-size: 1.35rem;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  color: var(--text);
+  line-height: 1.2;
+}
+
+.glosix-wordmark--sidebar {
+  font-size: 1.55rem;
+  color: #141414;
+}
+
+.profile-limits-card {
+  margin: 0 0 16px;
+  padding: 16px 18px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.profile-limits-label {
+  display: block;
+  font-size: 0.85rem;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+
+.profile-limits-value {
+  display: block;
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: -0.02em;
+}
+
+.profile-limits-hint {
+  margin: 10px 0 0;
+  font-size: 0.8rem;
+  color: var(--muted);
+  line-height: 1.4;
 }
 
 .glosix-header-actions {
@@ -1339,15 +1378,12 @@ body:has(.page-thread) {
     box-shadow: var(--shadow-sm);
   }
 
-  .sidebar-brand {
-    display: flex;
-    align-items: center;
+  .sidebar-nav .glosix-brand {
     padding: 4px 8px 20px;
-    text-decoration: none;
   }
 
-  .sidebar-brand .glosix-logo {
-    height: 30px;
+  .sidebar-nav .glosix-wordmark--sidebar {
+    font-size: 1.65rem;
   }
 
   .sidebar-nav-top {

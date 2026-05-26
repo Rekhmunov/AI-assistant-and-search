@@ -1,6 +1,5 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { GlosixHeader } from "../components/GlosixHeader";
 import { SearchComposer, type ComposerAttachment } from "../components/SearchComposer";
 import { getHomePlaceholderPhrases } from "../constants/homePlaceholders";
 
@@ -23,7 +22,6 @@ export function Home() {
 
   return (
     <div className="page page-home">
-      <GlosixHeader showBrand={false} />
       <SearchComposer
         value={query}
         onChange={setQuery}

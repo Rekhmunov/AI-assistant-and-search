@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
-import { Link, NavLink } from "react-router-dom";
+import { NavLink } from "react-router-dom";
+import { GlosixBrand } from "./GlosixBrand";
 import { t } from "../i18n";
 
 function SearchNavIcon() {
@@ -79,9 +80,7 @@ export function AppNavigation() {
   return (
     <>
       <nav className="sidebar-nav" aria-label={aria}>
-        <Link to="/" className="sidebar-brand" aria-label="Glosix">
-          <img src="/glosix-logo.svg" alt="" className="glosix-logo" />
-        </Link>
+        <GlosixBrand className="glosix-wordmark--sidebar" />
         <div className="sidebar-nav-top">
           <NavItem to="/" end label={t("navSearch")} icon={<SearchNavIcon />} />
           <NavItem to="/history" label={t("navHistory")} icon={<HistoryNavIcon />} />

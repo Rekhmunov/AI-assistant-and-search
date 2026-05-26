@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "react-router-dom";
-import { devActivatePro, fetchMe, deleteAccount } from "../api/client";
+import { devActivatePro, fetchMe, deleteAccount, fetchSession } from "../api/client";
 import { ProfileAccountSection } from "../components/ProfileAccountSection";
 import { isMaxWebApp } from "../lib/maxApp";
 import { t } from "../i18n";
@@ -19,6 +19,15 @@ export function Profile() {
     queryFn: () => fetchMe(token!),
     enabled: !!token,
   });
+
+  const { data: session } = useQuery({
+    queryKey: ["session", token],
+    queryFn: () => fetchSession(token),
+    enabled: !!token,
+  });
+
+  const searchesToday = session?.searches_today ?? user?.searches_today ?? 0;
+  const searchesLimit = session?.searches_limit ?? user?.searches_limit ?? 10;
 
   if (!token) {
     return (
@@ -64,13 +73,20 @@ export function Profile() {
   return (
     <div className="page">
       <h1>{t("profile")}</h1>
+      <div className="profile-limits-card">
+        <span className="profile-limits-label">{t("searchesToday")}</span>
+        <strong className="profile-limits-value">
+          {searchesToday}/{searchesLimit}
+        </strong>
+        {session?.is_guest && (
+          <p className="profile-limits-hint">{t("guestLimitsHint")}</p>
+        )}
+      </div>
+
       <div className="profile-card">
         <div>👤 {name}</div>
         <div style={{ marginTop: 4, color: "var(--muted)" }}>
           {t("plan")}: {user?.plan === "pro" ? "Pro" : "Free"}
-        </div>
-        <div style={{ marginTop: 4, color: "var(--muted)" }}>
-          {t("searchesToday")}: {user?.searches_today ?? 0}/{user?.searches_limit ?? 10}
         </div>
       </div>
 
