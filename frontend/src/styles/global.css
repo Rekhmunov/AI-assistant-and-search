@@ -14,6 +14,8 @@
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04);
   --bottom-nav-height: 46px;
   --composer-nav-gap: 10px;
+  --sidebar-width: 220px;
+  --desktop-nav-min: 900px;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   color: var(--text);
   background: var(--bg);
@@ -49,6 +51,11 @@ body:has(.page-thread) {
   padding-bottom: calc(
     var(--bottom-nav-height) + var(--composer-nav-gap) + 76px + env(safe-area-inset-bottom)
   );
+}
+
+.app-main {
+  min-width: 0;
+  min-height: 0;
 }
 
 .app-shell:has(.page-thread) {
@@ -494,12 +501,30 @@ body:has(.page-thread) {
   margin-bottom: 12px;
 }
 
+.page-thread .composer-wrap--docked {
+  padding-top: 10px;
+  background: linear-gradient(to top, var(--bg) 72%, transparent);
+}
+
 .page-thread .search-composer,
 .page-thread > .search-bar-wrap {
   flex-shrink: 0;
   margin-top: auto;
   padding-bottom: calc(12px + env(safe-area-inset-bottom));
-  background: linear-gradient(to top, var(--bg) 70%, transparent);
+  background: #ffffff;
+  border-color: #deded8;
+  box-shadow: 0 2px 16px rgba(0, 0, 0, 0.08);
+}
+
+.page-thread .composer-input::placeholder {
+  color: #6f6f6f;
+  opacity: 1;
+}
+
+.page-thread .composer-input:disabled {
+  opacity: 1;
+  color: var(--text);
+  -webkit-text-fill-color: var(--text);
 }
 
 .thread-query {
@@ -1176,6 +1201,10 @@ body:has(.page-thread) {
   color: var(--accent);
 }
 
+.sidebar-nav {
+  display: none;
+}
+
 .bottom-nav {
   position: fixed;
   bottom: 0;
@@ -1194,11 +1223,16 @@ body:has(.page-thread) {
   z-index: 100;
 }
 
+.bottom-nav a,
+.sidebar-nav a {
+  color: var(--muted);
+  text-decoration: none;
+  transition: color 0.15s, background 0.15s;
+}
+
 .bottom-nav a {
   flex: 1;
   max-width: 120px;
-  color: var(--muted);
-  text-decoration: none;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -1206,7 +1240,6 @@ body:has(.page-thread) {
   gap: 1px;
   padding: 4px 2px;
   border-radius: 10px;
-  transition: color 0.15s, background 0.15s;
 }
 
 .bottom-nav a:hover {
@@ -1214,34 +1247,189 @@ body:has(.page-thread) {
   background: var(--surface-hover);
 }
 
-.bottom-nav-icon {
+.app-nav-icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   width: 22px;
   height: 22px;
   color: inherit;
+  flex-shrink: 0;
 }
 
-.bottom-nav-icon svg {
+.app-nav-icon svg {
   width: 20px;
   height: 20px;
 }
 
-.bottom-nav-label {
+.bottom-nav .app-nav-label {
   font-size: 0.625rem;
   font-weight: 500;
   letter-spacing: 0.01em;
   line-height: 1.15;
 }
 
-.bottom-nav a.active {
+.bottom-nav a.active,
+.sidebar-nav a.active {
   color: var(--accent);
   background: var(--accent-soft);
 }
 
-.bottom-nav a.active .bottom-nav-icon {
+.bottom-nav a.active .app-nav-icon,
+.sidebar-nav a.active .app-nav-icon {
   color: var(--accent);
+}
+
+/* ПК: левая панель вместо нижней навигации */
+@media (min-width: 900px) {
+  .app-shell {
+    display: flex;
+    min-height: 100dvh;
+    padding-bottom: 0;
+    padding-left: var(--sidebar-width);
+  }
+
+  .app-shell:has(.page-home) {
+    padding-bottom: 0;
+  }
+
+  .app-shell:has(.page-thread) {
+    height: 100dvh;
+    max-height: 100dvh;
+  }
+
+  .app-main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 100dvh;
+    max-height: 100dvh;
+  }
+
+  .app-main:has(.page-thread) {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .page-thread.page {
+    flex: 1;
+    height: 100%;
+    max-height: 100%;
+  }
+
+  .bottom-nav {
+    display: none;
+  }
+
+  .sidebar-nav {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    z-index: 110;
+    display: flex;
+    flex-direction: column;
+    width: var(--sidebar-width);
+    padding: 16px 12px;
+    background: var(--surface);
+    border-right: 1px solid var(--border-subtle);
+    box-shadow: var(--shadow-sm);
+  }
+
+  .sidebar-brand {
+    display: flex;
+    align-items: center;
+    padding: 4px 8px 20px;
+    text-decoration: none;
+  }
+
+  .sidebar-brand .glosix-logo {
+    height: 30px;
+  }
+
+  .sidebar-nav-top {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .sidebar-nav-bottom {
+    margin-top: auto;
+    padding-top: 12px;
+    border-top: 1px solid var(--border-subtle);
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .sidebar-nav a {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    font-size: 0.9rem;
+    font-weight: 500;
+  }
+
+  .sidebar-nav a:hover {
+    color: var(--text);
+    background: var(--surface-hover);
+  }
+
+  .sidebar-nav .app-nav-icon {
+    width: 24px;
+    height: 24px;
+  }
+
+  .sidebar-nav .app-nav-icon svg {
+    width: 22px;
+    height: 22px;
+  }
+
+  .page {
+    max-width: 720px;
+  }
+
+  .page-home {
+    min-height: 100dvh;
+  }
+
+  .thread-conversation {
+    padding-bottom: calc(var(--composer-nav-gap) + 88px);
+  }
+
+  .composer-wrap--docked {
+    left: var(--sidebar-width);
+    right: 0;
+    max-width: min(720px, calc(100vw - var(--sidebar-width) - 48px));
+    bottom: calc(12px + env(safe-area-inset-bottom));
+  }
+
+  .page-thread .composer-wrap--docked {
+    left: var(--sidebar-width);
+    max-width: min(720px, calc(100vw - var(--sidebar-width) - 48px));
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  .glosix-header .header-login-btn {
+    display: none;
+  }
+
+  .app-shell:has(.page-login) {
+    padding-left: 0;
+  }
+
+  .app-shell:has(.page-login) .sidebar-nav {
+    display: none;
+  }
+
+  .app-shell:has(.page-login) .bottom-nav {
+    display: none;
+  }
 }
 
 .profile-card {
