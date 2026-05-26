@@ -26,13 +26,13 @@ from app.services.facts.slots import resolve_fact_slots
 from app.services.search_query import enhance_search_query, normalize_user_query
 from app.services.thread_context import build_thread_context, format_sources_for_prompt
 from app.services.yandex_errors import YandexServiceError
-from app.services.yandex_gpt import YandexGPTProvider
 from app.services.query_url_memory import (
     QueryUrlMemoryTrace,
     lookup_bootstrap_sources,
     record_successful_urls,
 )
-from app.services.yandex_search import YandexSearchService
+from app.services.providers.factory import resolve_runtime_providers
+import redis.asyncio as redis
 
 
 def sources_to_json(sources: list[SearchSource]) -> list[dict]:
@@ -78,11 +78,7 @@ _VALID_INTENTS: frozenset[str] = frozenset(
 
 class SearchFlowService:
     def __init__(self):
-        self.search = YandexSearchService()
-        self.llm = YandexGPTProvider()
         self.router = QueryRouter()
-        self.rewriter = QueryRewriter()
-        self.fact_pipeline = FactPipeline(self.search, self.llm)
 
     async def _resolve_attachments(
         self,
@@ -123,7 +119,18 @@ class SearchFlowService:
         query: str,
         thread_id: uuid.UUID | None,
         attachment_ids: list[uuid.UUID] | None = None,
+        redis_client: redis.Redis | None = None,
     ) -> AsyncIterator[str]:
+        if redis_client is None:
+            from app.api.deps import get_redis
+
+            redis_client = await get_redis()
+
+        llm, search, _prompt_store, llm_provider_id, search_provider_id = await resolve_runtime_providers(
+            db, redis_client
+        )
+        rewriter = QueryRewriter(llm)
+        fact_pipeline = FactPipeline(search, llm)
         if attachment_ids and self._is_guest(user):
             yield sse_event(
                 "error",
@@ -215,7 +222,7 @@ class SearchFlowService:
         try:
             if route.needs_search:
                 rewrite, (bootstrap_sources, query_url_trace) = await asyncio.gather(
-                    self.rewriter.rewrite(llm_query, thread_ctx),
+                    rewriter.rewrite(llm_query, thread_ctx),
                     lookup_bootstrap_sources(db, llm_query, llm_query),
                 )
                 fact_slots = resolve_fact_slots(rewrite.fact_slots)
@@ -263,7 +270,7 @@ class SearchFlowService:
                     )
                     query_url_trace.bootstrap_count += extra_trace.bootstrap_count
 
-                pipeline_result = await self.fact_pipeline.run(
+                pipeline_result = await fact_pipeline.run(
                     llm_query,
                     queries,
                     enhance_fn=_enhance,
@@ -283,8 +290,8 @@ class SearchFlowService:
                 if sources_json:
                     yield sse_event("sources", {"sources": sources_json})
 
-            gpt_preview = build_gpt_messages_preview(
-                self.llm,
+            gpt_preview = await build_gpt_messages_preview(
+                llm,
                 llm_query=llm_query,
                 sources=sources,
                 history=history,
@@ -300,7 +307,7 @@ class SearchFlowService:
                 weak_retrieval = bool(retrieval_trace and not retrieval_trace.get("ok"))
 
                 full_answer = ""
-                async for chunk in self.llm.stream_answer(
+                async for chunk in llm.stream_answer(
                     llm_query,
                     sources,
                     history,
@@ -324,7 +331,7 @@ class SearchFlowService:
                         logger.info("Answer verify failed, unsupported numbers: %s", unsupported)
                         yield sse_event("reset_answer", {})
                         full_answer = ""
-                        async for chunk in self.llm.stream_answer(
+                        async for chunk in llm.stream_answer(
                             llm_query,
                             sources,
                             history,
@@ -341,7 +348,7 @@ class SearchFlowService:
                     logger.info("Answer template/refusal detected, regenerating")
                     yield sse_event("reset_answer", {})
                     full_answer = ""
-                    async for chunk in self.llm.stream_answer(
+                    async for chunk in llm.stream_answer(
                         llm_query,
                         sources,
                         history,
@@ -355,7 +362,7 @@ class SearchFlowService:
                         full_answer += chunk
                         yield sse_event("token", {"text": chunk})
             else:
-                async for chunk in self.llm.stream_answer_direct(
+                async for chunk in llm.stream_answer_direct(
                     llm_query,
                     history,
                     model=route.answer_model,
@@ -378,10 +385,10 @@ class SearchFlowService:
         if full_answer.strip():
             if settings.follow_ups_deferred:
                 follow_up_task = asyncio.create_task(
-                    self.llm.generate_follow_ups(llm_query, full_answer)
+                    llm.generate_follow_ups(llm_query, full_answer)
                 )
             else:
-                follow_ups = await self.llm.generate_follow_ups(llm_query, full_answer)
+                follow_ups = await llm.generate_follow_ups(llm_query, full_answer)
 
         if (
             route.needs_search

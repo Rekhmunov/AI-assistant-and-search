@@ -8,50 +8,17 @@ from typing import TYPE_CHECKING
 
 from app.services.facts.models import Fact, FactPack
 from app.services.llm_provider import SearchSource
+from app.services.prompts.defaults import (
+    EXTRACT_COURSE_ADDON,
+    EXTRACT_FINANCIAL_ADDON,
+    EXTRACT_SYSTEM,
+    EXTRACT_USER,
+)
 
 if TYPE_CHECKING:
     from app.services.yandex_gpt import YandexGPTProvider
 
 logger = logging.getLogger(__name__)
-
-_EXTRACT_SYSTEM = (
-    "Ты извлекаешь факты из источников для ответа на вопрос пользователя. "
-    "Отвечай ТОЛЬКО валидным JSON без markdown."
-)
-
-_EXTRACT_USER_TEMPLATE = """Вопрос пользователя:
-{query}
-
-Уже подтверждённые факты (не дублируй):
-{prefilled}
-
-Источники:
-{sources_block}
-
-Верни JSON:
-{{"facts": [{{"id": "f1", "claim": "краткое утверждение", "source_index": 1, "quote": "фрагмент из источника", "confidence": "high|medium"}}], "gaps": ["чего не хватает"]}}
-
-Правила:
-- Только факты, явно следующие из источников [n]; не выдумывай цифры.
-- claim — на русском, готовое утверждение (температура, курс, дата, определение).
-- source_index — номер источника из блока выше.
-- Если для ответа на вопрос нет данных — facts пустой, gaps без фраз «нет знаний» (нейтрально: «мало цифр в источниках»).
-- Максимум 12 фактов (для программ/курсов — до 20)."""
-
-_EXTRACT_COURSE_ADDON = """
-Запрос про программу/курс (обучение, похудение, тренировки) — НЕ про курс валют:
-- Извлекай пункты плана: недели/дни, упражнения, частота, питание, ограничения — как в источнике (можно перефразировать claim).
-- Отдельные facts для питания и для тренировок.
-- Допустимы рекомендации без цифр («силовые 3 раза в неделю»), если так в [n].
-- Числа (ккал, кг, минуты) — только если явно в цитате.
-- Не подставляй курс валют, ЦБ, котировки.
-- До 20 facts."""
-
-_EXTRACT_FINANCIAL_ADDON = """
-Дополнительно для финансовых вопросов (оборот, выручка, прибыль):
-- Ищи цифры в фрагментах страницы за 2023–2025; указывай год и валюту в claim.
-- Если в [1] есть таблица или «оборот» с числом — обязательно добавь fact с source_index 1.
-- Не пиши «данных нет», если в тексте источника есть хотя бы одно подходящее число."""
 
 
 def _format_sources_block(sources: list[SearchSource], max_per: int = 4500) -> str:
@@ -122,21 +89,22 @@ async def extract_facts_from_sources(
 
     prefilled_text = "\n".join(f"- [{f.source_index}] {f.claim}" for f in prefilled) or "(нет)"
     slots = fact_slots or []
-    template = _EXTRACT_USER_TEMPLATE
+    template = await llm._prompt("yandex_gpt_extract_user", EXTRACT_USER)
     if "course_program" in slots:
-        template += _EXTRACT_COURSE_ADDON
+        template += await llm._prompt("yandex_gpt_extract_course_addon", EXTRACT_COURSE_ADDON)
     elif "company_financial" in slots:
-        template += _EXTRACT_FINANCIAL_ADDON
+        template += await llm._prompt("yandex_gpt_extract_financial_addon", EXTRACT_FINANCIAL_ADDON)
     user_text = template.format(
         query=query[:900],
         prefilled=prefilled_text,
         sources_block=_format_sources_block(sources),
     )
+    system = await llm._prompt("yandex_gpt_extract_system", EXTRACT_SYSTEM)
 
     try:
         raw = await llm.complete_text(
             [
-                {"role": "system", "text": _EXTRACT_SYSTEM},
+                {"role": "system", "text": system},
                 {"role": "user", "text": user_text},
             ],
             model=model,  # type: ignore[arg-type]

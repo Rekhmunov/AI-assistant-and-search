@@ -13,67 +13,25 @@ from app.services.answer_guard import answer_addon_for_slots, strict_answer_addo
 from app.services.facts.slots import uses_synthesis_grounding
 from app.services.facts.format import format_fact_pack_for_prompt
 from app.services.facts.models import FactPack
+from app.services.prompts.defaults import (
+    ANSWER_DIRECT,
+    ANSWER_DOCUMENT,
+    ANSWER_META,
+    ANSWER_SEARCH,
+    FOLLOW_UPS_SYSTEM,
+)
+from app.services.prompts.store import PromptStore
 from app.services.yandex_errors import YandexServiceError
 
 logger = logging.getLogger(__name__)
 
 AnswerModel = Literal["lite", "pro"]
 
-SYSTEM_PROMPT_SEARCH = """Ты — Glosix: умный собеседник-эксперт. Язык: русский.
-
-Твоя модель работы — как у человека, который разбирается в теме:
-1) понять вопрос и контекст диалога;
-2) опереться на найденные материалы [1], [2] и выдержки со страниц;
-3) выдать связный, систематизированный ответ своими словами — не пересказ ссылок.
-
-Содержание:
-- Сразу отвечай по сути; факты, цифры, даты, имена — из источников с пометкой [n].
-- Не выдумывай то, чего нет в источниках и истории.
-- Если в вопросе «--- Документ:» — сначала файл; веб-источники для внешних фактов.
-- Если просят сократить/перефразировать — из последнего ответа ассистента в истории.
-
-Тон (обязательно):
-- Ты уже получил результаты веб-поиска ниже — отвечай сразу по теме, как эксперт. Поиск для пользователя уже сделан.
-- НИКОГДА не пиши: «к сожалению», «у меня нет знаний/специализации», «я не эксперт», «не разбираюсь в…», «давайте попробуем найти», «я могу найти/использовать ресурсы».
-- Не описывай процесс («давайте поищем», «обращусь к сайтам») — только выводы из [1], [2].
-- Не вставляй голые https://… вместо ответа; URL только внутри смысла, если нужен домен источника.
-
-ЗАПРЕЩЕНО (шаблоны и отговорки):
-- «перейдите на сайт», списки URL/порталов вместо ответа;
-- «я только поисковый ассистент», «не умею программировать», «обратитесь к специалисту» без разбора;
-- пустые фразы «в интернете можно найти…» без конкретики из источников.
-- Если данных мало — что удалось выяснить из [n] (1–2 факта), без отказа от темы; один уточняющий вопрос в конце, не «сделайте поиск сами».
-- Курс валют: сразу цифры (официальный ЦБ и при необходимости биржевой), без списка banki.ru / cbr.ru «где посмотреть».
-- Точные цифры (курс, погода, финансы): только из блока фактов или цитат [n].
-- Программы / похудение / обучение: см. режим синтеза в запросе пользователя.
-
-Структура ответа:
-1. Суть — 1–3 предложения, прямой ответ.
-2. Детали — логические блоки: заголовок отдельной строкой (без # и **), абзацы, при необходимости нумерация 1. 2. 3.
-3. Для how-to и программ (похудение, «курс»): дай пошаговый план (недели или блоки), конкретные действия из [n]; не ограничивайся 5 общими фразами. Цифры — только если есть в источниках; иначе формулируй качественно («3 силовые в неделю» из [2]). Можно обобщать и структурировать рекомендации из нескольких [n], не выдумывая новых цифр.
-4. Уточняющий вопрос в конце ответа — только если без параметра (город, диагноз, цель веса) нельзя составить план; не спрашивай очевидное после уже данного плана.
-
-Формат: только текст и переносы строк; без markdown (#, **, `)."""
-
-SYSTEM_PROMPT_META = """Ты — Glosix: умный ассистент с доступом к веб-поиску.
-
-На вопросы о себе: ты анализируешь запрос, ищешь актуальные данные в сети и отвечаешь связным текстом с цитатами [n], а не списком сайтов.
-Помогаешь с кодом и IT через поиск документации и разбор задач; с файлами, инструкциями, сравнениями.
-Не называй себя «только поисковиком» и не отказывай шаблоном. Формат: простой текст, без markdown."""
-
-SYSTEM_PROMPT_DIRECT = """Ты — Glosix, умный собеседник. Отвечай по-русски по делу, из контекста диалога.
-Если есть источники [1], [2] — опирайся на них.
-Не пиши «нет знаний», «к сожалению не могу», «давайте поищем» — сразу по сути.
-Формат: простой текст, без markdown."""
-
-SYSTEM_PROMPT_DOCUMENT = """Ты — ассистент Glosix. Пользователь прикрепил файл(ы); их текст в запросе в блоках «--- Документ: имя ---».
-
-Правила:
-- Анализируй в первую очередь содержимое этих блоков, а не «источники из интернета».
-- Для 1CClientBankExchange / обмен с банком: опиши структуру, секции, реквизиты, суммы, ошибки или несоответствия, если видны в тексте.
-- Если текст нечитаем, пустой или обрезан — скажи прямо и что нужно (фрагмент, другая кодировка, экспорт заново).
-- Не отсылай пользователя к веб-поиску вместо разбора файла.
-- Формат: простой текст с абзацами, без markdown (#, **, `)."""
+# Алиасы для обратной совместимости и тестов
+SYSTEM_PROMPT_SEARCH = ANSWER_SEARCH
+SYSTEM_PROMPT_META = ANSWER_META
+SYSTEM_PROMPT_DIRECT = ANSWER_DIRECT
+SYSTEM_PROMPT_DOCUMENT = ANSWER_DOCUMENT
 
 
 def _query_has_document_block(query: str) -> bool:
@@ -134,13 +92,19 @@ def _format_history(history: list[tuple[str, str]], max_turns: int = 6) -> str:
 class YandexGPTProvider(LLMProvider):
     COMPLETION_URL = "https://llm.api.cloud.yandex.net/foundationModels/v1/completion"
 
-    def __init__(self, settings: Settings | None = None):
+    def __init__(self, settings: Settings | None = None, *, prompt_store: PromptStore | None = None):
         self.settings = settings or get_settings()
+        self.prompts = prompt_store
+
+    async def _prompt(self, prompt_id: str, default: str) -> str:
+        if self.prompts:
+            return await self.prompts.get(prompt_id, default=default)
+        return default
 
     def _model_uri(self, model: AnswerModel = "lite") -> str:
         return self.settings.yandex_model_uri(model)
 
-    def _build_messages_from_fact_pack(
+    async def _build_messages_from_fact_pack(
         self,
         query: str,
         sources: list[SearchSource],
@@ -177,12 +141,13 @@ class YandexGPTProvider(LLMProvider):
 {_format_history(history)}{extra}{clarify_block}{strict_block}
 
 Вопрос: {query}"""
+        system = await self._prompt("yandex_gpt_answer_search", ANSWER_SEARCH)
         return [
-            {"role": "system", "text": SYSTEM_PROMPT_SEARCH},
+            {"role": "system", "text": system},
             {"role": "user", "text": user_content},
         ]
 
-    def _build_messages_search(
+    async def _build_messages_search(
         self,
         query: str,
         sources: list[SearchSource],
@@ -195,7 +160,7 @@ class YandexGPTProvider(LLMProvider):
         intent_howto: bool = False,
     ) -> list[dict]:
         if fact_pack is not None:
-            return self._build_messages_from_fact_pack(
+            return await self._build_messages_from_fact_pack(
                 query,
                 sources,
                 fact_pack,
@@ -215,12 +180,13 @@ class YandexGPTProvider(LLMProvider):
 {_format_history(history)}{extra}{clarify_block}{strict_block}
 
 Вопрос: {query}"""
+        system = await self._prompt("yandex_gpt_answer_search", ANSWER_SEARCH)
         return [
-            {"role": "system", "text": SYSTEM_PROMPT_SEARCH},
+            {"role": "system", "text": system},
             {"role": "user", "text": user_content},
         ]
 
-    def _build_messages_direct(
+    async def _build_messages_direct(
         self,
         query: str,
         history: list[tuple[str, str]],
@@ -231,11 +197,11 @@ class YandexGPTProvider(LLMProvider):
 
 Вопрос: {query}"""
         if _query_has_document_block(query):
-            system = SYSTEM_PROMPT_DOCUMENT
+            system = await self._prompt("yandex_gpt_answer_document", ANSWER_DOCUMENT)
         elif is_meta_assistant_query(query):
-            system = SYSTEM_PROMPT_META
+            system = await self._prompt("yandex_gpt_answer_meta", ANSWER_META)
         else:
-            system = SYSTEM_PROMPT_DIRECT
+            system = await self._prompt("yandex_gpt_answer_direct", ANSWER_DIRECT)
         return [
             {"role": "system", "text": system},
             {"role": "user", "text": user_content},
@@ -311,7 +277,7 @@ class YandexGPTProvider(LLMProvider):
                 "temperature": 0.35 if model == "pro" else 0.3,
                 "maxTokens": max_tokens,
             },
-            "messages": self._build_messages_search(
+            "messages": await self._build_messages_search(
                 query,
                 sources,
                 history,
@@ -350,7 +316,7 @@ class YandexGPTProvider(LLMProvider):
                 "temperature": 0.4,
                 "maxTokens": max_tokens,
             },
-            "messages": self._build_messages_direct(query, history, prior_sources_block),
+            "messages": await self._build_messages_direct(query, history, prior_sources_block),
         }
 
         async for chunk in self._stream_completion(payload, headers):
@@ -438,18 +404,14 @@ class YandexGPTProvider(LLMProvider):
             "Authorization": f"Api-Key {self.settings.yandex_api_key}",
             "Content-Type": "application/json",
         }
+        follow_system = await self._prompt("yandex_gpt_follow_ups_system", FOLLOW_UPS_SYSTEM)
         payload = {
             "modelUri": self._model_uri("lite"),
             "completionOptions": {"stream": False, "temperature": 0.4, "maxTokens": 320},
             "messages": [
                 {
                     "role": "system",
-                    "text": (
-                        "Сгенерируй ровно 3 короткие фразы — заголовки для продолжения темы "
-                        "(следующий запрос пользователя). Утвердительные формулировки, без знака «?», "
-                        "не вопросы к пользователю. 4–12 слов. Примеры: «План питания на 1500 ккал», "
-                        "«Тренировки на 4 недели для начинающих». Ответ — только JSON-массив строк."
-                    ),
+                    "text": follow_system,
                 },
                 {
                     "role": "user",

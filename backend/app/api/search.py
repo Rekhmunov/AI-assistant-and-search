@@ -55,7 +55,13 @@ async def search_stream(
                     yield sse_event("error", {"code": "not_found", "message": "Пользователь не найден"})
                     return
                 async for event in flow.stream_search(
-                    db, user, limiter, body.query, body.thread_id, body.attachment_ids
+                    db,
+                    user,
+                    limiter,
+                    body.query,
+                    body.thread_id,
+                    body.attachment_ids,
+                    redis_client=redis,
                 ):
                     yield event
             except Exception:

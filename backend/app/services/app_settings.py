@@ -6,13 +6,23 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings, get_settings
 from app.models.app_setting import AppSetting
+from app.services.prompts.catalog import PROMPT_CATALOG
+from app.services.prompts.defaults import DEFAULT_LLM_PROVIDER, DEFAULT_SEARCH_PROVIDER, PROMPT_DEFAULTS
+from app.services.providers.registry import list_llm_providers, list_search_providers
 
-SETTING_KEYS: dict[str, type] = {
+BASE_SETTING_KEYS: dict[str, type] = {
     "free_searches_per_day": int,
     "pro_searches_per_day": int,
     "global_yandex_requests_per_day": int,
     "maintenance_mode": bool,
     "bot_welcome_text": str,
+    "llm_provider": str,
+    "search_provider": str,
+}
+
+SETTING_KEYS: dict[str, type] = {
+    **BASE_SETTING_KEYS,
+    **{p.setting_key: str for p in PROMPT_CATALOG},
 }
 
 ENV_DEFAULTS: dict[str, str] = {
@@ -45,6 +55,13 @@ def _serialize_value(value: Any) -> str:
 
 def default_for_key(key: str, settings: Settings | None = None) -> Any:
     settings = settings or get_settings()
+    if key.startswith("prompt_"):
+        prompt_id = key.removeprefix("prompt_")
+        return PROMPT_DEFAULTS.get(prompt_id, "")
+    if key == "llm_provider":
+        return DEFAULT_LLM_PROVIDER
+    if key == "search_provider":
+        return DEFAULT_SEARCH_PROVIDER
     env_attr = ENV_DEFAULTS.get(key)
     if env_attr and hasattr(settings, env_attr):
         return getattr(settings, env_attr)
@@ -130,3 +147,35 @@ async def list_settings(db: AsyncSession, redis_client: redis.Redis) -> dict[str
     out["yandex_configured"] = settings.yandex_configured
     out["environment"] = settings.environment
     return out
+
+
+async def list_settings_bundle(db: AsyncSession, redis_client: redis.Redis) -> dict[str, Any]:
+    settings = get_settings()
+    flat = await list_settings(db, redis_client)
+    prompts = []
+    for p in PROMPT_CATALOG:
+        prompts.append(
+            {
+                "id": p.id,
+                "label": p.label,
+                "group": p.group,
+                "provider": p.provider,
+                "setting_key": p.setting_key,
+                "description": p.description,
+                "rows": p.rows,
+                "value": str(flat.get(p.setting_key) or p.default),
+                "default": p.default,
+            }
+        )
+    return {
+        "settings": flat,
+        "llm_providers": [
+            {"id": x.id, "label": x.label, "configured": x.configured, "hint": x.hint}
+            for x in list_llm_providers(settings)
+        ],
+        "search_providers": [
+            {"id": x.id, "label": x.label, "configured": x.configured, "hint": x.hint}
+            for x in list_search_providers(settings)
+        ],
+        "prompts": prompts,
+    }

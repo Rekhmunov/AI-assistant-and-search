@@ -1,0 +1,58 @@
+"""Фабрика активных провайдеров по настройкам админки."""
+
+from __future__ import annotations
+
+import redis.asyncio as redis
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.config import Settings, get_settings
+from app.services.app_settings import get_setting
+from app.services.prompts.defaults import DEFAULT_LLM_PROVIDER, DEFAULT_SEARCH_PROVIDER
+from app.services.prompts.store import PromptStore
+from app.services.providers.registry import VALID_LLM_IDS, VALID_SEARCH_IDS
+from app.services.yandex_gpt import YandexGPTProvider
+from app.services.yandex_search import YandexSearchService
+
+
+async def resolve_llm_provider_id(db: AsyncSession, redis_client: redis.Redis) -> str:
+    raw = await get_setting("llm_provider", db, redis_client)
+    pid = str(raw or DEFAULT_LLM_PROVIDER).strip()
+    return pid if pid in VALID_LLM_IDS else DEFAULT_LLM_PROVIDER
+
+
+async def resolve_search_provider_id(db: AsyncSession, redis_client: redis.Redis) -> str:
+    raw = await get_setting("search_provider", db, redis_client)
+    pid = str(raw or DEFAULT_SEARCH_PROVIDER).strip()
+    return pid if pid in VALID_SEARCH_IDS else DEFAULT_SEARCH_PROVIDER
+
+
+def create_llm_provider(
+    provider_id: str,
+    settings: Settings | None,
+    prompt_store: PromptStore,
+) -> YandexGPTProvider:
+    settings = settings or get_settings()
+    if provider_id == "yandex_gpt":
+        return YandexGPTProvider(settings, prompt_store=prompt_store)
+    raise ValueError(f"Unknown LLM provider: {provider_id}")
+
+
+def create_search_provider(provider_id: str, settings: Settings | None) -> YandexSearchService:
+    settings = settings or get_settings()
+    if provider_id == "yandex_search":
+        return YandexSearchService(settings)
+    raise ValueError(f"Unknown search provider: {provider_id}")
+
+
+async def resolve_runtime_providers(
+    db: AsyncSession,
+    redis_client: redis.Redis,
+    settings: Settings | None = None,
+) -> tuple[YandexGPTProvider, YandexSearchService, PromptStore, str, str]:
+    settings = settings or get_settings()
+    prompt_store = PromptStore(db, redis_client)
+    llm_id = await resolve_llm_provider_id(db, redis_client)
+    search_id = await resolve_search_provider_id(db, redis_client)
+    llm = create_llm_provider(llm_id, settings, prompt_store)
+    search = create_search_provider(search_id, settings)
+    return llm, search, prompt_store, llm_id, search_id

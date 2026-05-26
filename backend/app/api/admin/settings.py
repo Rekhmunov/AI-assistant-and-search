@@ -6,21 +6,22 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_db, get_redis
 from app.core.admin_permissions import require_permission
 from app.models.admin_user import AdminUser
-from app.schemas.admin import SettingsOut, SettingsUpdate
+from app.schemas.admin import SettingsBundleOut, SettingsOut, SettingsUpdate
 from app.services.admin_audit import log_admin_action
-from app.services.app_settings import SETTING_KEYS, list_settings, set_setting
+from app.services.app_settings import SETTING_KEYS, list_settings, list_settings_bundle, set_setting
+from app.services.providers.registry import VALID_LLM_IDS, VALID_SEARCH_IDS
 
 router = APIRouter(prefix="/settings", tags=["admin-settings"])
 
 
-@router.get("", response_model=SettingsOut)
+@router.get("", response_model=SettingsBundleOut)
 async def get_settings(
     db: Annotated[AsyncSession, Depends(get_db)],
     _admin=Depends(require_permission("settings:read")),
 ):
     redis = await get_redis()
-    data = await list_settings(db, redis)
-    return SettingsOut(settings=data)
+    bundle = await list_settings_bundle(db, redis)
+    return SettingsBundleOut(**bundle)
 
 
 @router.patch("", response_model=SettingsOut)
@@ -35,6 +36,10 @@ async def update_settings(
     for key, value in body.settings.items():
         if key not in SETTING_KEYS:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Unknown setting: {key}")
+        if key == "llm_provider" and str(value) not in VALID_LLM_IDS:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unknown LLM provider")
+        if key == "search_provider" and str(value) not in VALID_SEARCH_IDS:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unknown search provider")
         await set_setting(key, value, db, redis, admin.id)
         updated[key] = value
 
@@ -46,5 +51,5 @@ async def update_settings(
         details=updated,
         ip_address=request.client.host if request.client else None,
     )
-    data = await list_settings(db, redis)
-    return SettingsOut(settings=data)
+    bundle = await list_settings_bundle(db, redis)
+    return SettingsBundleOut(**bundle)

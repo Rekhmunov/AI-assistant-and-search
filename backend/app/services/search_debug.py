@@ -17,7 +17,7 @@ def _clip(text: str, limit: int = _TRACE_TEXT_LIMIT) -> str:
     return text[:limit] + "…"
 
 
-def build_gpt_messages_preview(
+async def build_gpt_messages_preview(
     llm: YandexGPTProvider,
     *,
     llm_query: str,
@@ -30,7 +30,7 @@ def build_gpt_messages_preview(
     fact_pack: FactPack | None = None,
 ) -> list[dict[str, str]]:
     if needs_search:
-        raw = llm._build_messages_search(
+        raw = await llm._build_messages_search(
             llm_query,
             sources,
             history,
@@ -39,7 +39,7 @@ def build_gpt_messages_preview(
             fact_pack=fact_pack,
         )
     else:
-        raw = llm._build_messages_direct(llm_query, history, prior_sources_block)
+        raw = await llm._build_messages_direct(llm_query, history, prior_sources_block)
     return [{"role": m["role"], "text": _clip(m["text"])} for m in raw]
 
 

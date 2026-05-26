@@ -75,6 +75,53 @@ a {
   padding: 24px;
 }
 
+.settings-section {
+  margin-bottom: 28px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.settings-section:last-of-type {
+  border-bottom: none;
+  margin-bottom: 12px;
+}
+
+.settings-section-title {
+  margin: 0 0 16px;
+  font-size: 1.05rem;
+}
+
+.settings-prompt-group {
+  margin-bottom: 20px;
+}
+
+.settings-prompt-group-title {
+  margin: 0 0 10px;
+  font-size: 0.95rem;
+  color: #374151;
+}
+
+.settings-prompt-label textarea {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.8rem;
+  line-height: 1.45;
+}
+
+.settings-prompt-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 4px;
+}
+
+.hint-inline {
+  display: block;
+  font-size: 0.8rem;
+  color: #6b7280;
+  margin: 4px 0 6px;
+}
+
 .card {
   background: #fff;
   border-radius: 12px;

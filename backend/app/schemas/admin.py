@@ -123,6 +123,32 @@ class SubscriptionOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class ProviderOptionOut(BaseModel):
+    id: str
+    label: str
+    configured: bool
+    hint: str | None = None
+
+
+class PromptFieldOut(BaseModel):
+    id: str
+    label: str
+    group: str
+    provider: str
+    setting_key: str
+    description: str = ""
+    rows: int = 8
+    value: str
+    default: str
+
+
+class SettingsBundleOut(BaseModel):
+    settings: dict[str, Any]
+    llm_providers: list[ProviderOptionOut]
+    search_providers: list[ProviderOptionOut]
+    prompts: list[PromptFieldOut]
+
+
 class SettingsOut(BaseModel):
     settings: dict[str, Any]
 
