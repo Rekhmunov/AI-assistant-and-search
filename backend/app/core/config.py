@@ -44,8 +44,9 @@ class Settings(BaseSettings):
     yandex_gpt_pro_model: str = "yandexgpt/latest"
 
     anthropic_api_key: str = ""
-    anthropic_model_lite: str = "claude-3-5-haiku-20241022"
-    anthropic_model_pro: str = "claude-3-5-sonnet-20241022"
+    # Lite = rewriter/extract; Pro = финальный ответ. ID из console.anthropic.com → Models
+    anthropic_model_lite: str = "claude-haiku-4-5-20251001"
+    anthropic_model_pro: str = "claude-sonnet-4-6"
 
     yookassa_shop_id: str = ""
     yookassa_secret_key: str = ""
