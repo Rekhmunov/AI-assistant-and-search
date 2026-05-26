@@ -2,7 +2,12 @@
 
 import unittest
 
-from app.services.facts.slots import normalize_fact_slots, resolve_fact_slots
+from app.services.facts.slots import (
+    normalize_fact_slots,
+    resolve_fact_slots,
+    uses_synthesis_grounding,
+    uses_strict_numeric_grounding,
+)
 from app.services.query_rewriter import _parse_rewrite_json
 
 
@@ -26,6 +31,12 @@ class TestFactSlots(unittest.TestCase):
         assert r is not None
         self.assertEqual(r.fact_slots, ["course_program"])
         self.assertEqual(r.search_queries[0], "курс похудение программа")
+
+    def test_grounding_modes(self):
+        self.assertTrue(uses_synthesis_grounding(["course_program"]))
+        self.assertFalse(uses_strict_numeric_grounding(["course_program"]))
+        self.assertTrue(uses_strict_numeric_grounding(["fx_rate"]))
+        self.assertTrue(uses_synthesis_grounding([], intent_howto=True))
 
     def test_course_not_fx_slot(self):
         text = (

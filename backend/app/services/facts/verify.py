@@ -35,11 +35,23 @@ def _number_in_corpus(num: str, corpus: str) -> bool:
     return val in _normalize_num(corpus)
 
 
-def verify_answer_against_facts(answer: str, pack: FactPack) -> tuple[bool, list[str]]:
+def verify_answer_against_facts(
+    answer: str,
+    pack: FactPack,
+    *,
+    fact_slots: list[str] | None = None,
+) -> tuple[bool, list[str]]:
     """
     Возвращает (ok, список чисел в ответе без подтверждения в facts).
     Пустой pack — проверку не блокируем.
+    Для course_program / how-to не блокируем ответ (цифры редко критичны).
     """
+    from app.services.facts.slots import uses_synthesis_grounding
+
+    slots = fact_slots or pack.fact_slots or []
+    if uses_synthesis_grounding(slots):
+        return True, []
+
     if not answer.strip() or not pack.facts:
         return True, []
 

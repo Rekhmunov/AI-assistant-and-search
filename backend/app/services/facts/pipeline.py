@@ -251,12 +251,14 @@ class FactPipeline:
                     confidence=f.confidence,
                 )
 
+        extract_model = "pro" if "course_program" in slots else "lite"
         fact_pack = await extract_facts_from_sources(
             self.llm,
             llm_query,
             sources,
             prefilled=provider_facts,
             fact_slots=slots,
+            model=extract_model,
         )
         if "company_financial" in slots:
             corpus = " ".join((s.snippet or "") for s in sources[:6])

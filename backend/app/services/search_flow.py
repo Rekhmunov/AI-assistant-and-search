@@ -306,12 +306,17 @@ class SearchFlowService:
                     hint_clarify=hint_clarify,
                     strict_facts=weak_retrieval,
                     fact_pack=fact_pack,
+                    intent_howto=howto,
                 ):
                     full_answer += chunk
                     yield sse_event("token", {"text": chunk})
 
                 if fact_pack and fact_pack.facts:
-                    ok, unsupported = verify_answer_against_facts(full_answer, fact_pack)
+                    ok, unsupported = verify_answer_against_facts(
+                        full_answer,
+                        fact_pack,
+                        fact_slots=fact_slots,
+                    )
                     if not ok:
                         logger.info("Answer verify failed, unsupported numbers: %s", unsupported)
                         yield sse_event("reset_answer", {})
@@ -341,6 +346,7 @@ class SearchFlowService:
                         hint_clarify=hint_clarify,
                         strict_facts=True,
                         fact_pack=fact_pack,
+                        intent_howto=howto,
                     ):
                         full_answer += chunk
                         yield sse_event("token", {"text": chunk})

@@ -9,7 +9,8 @@ import httpx
 from app.core.config import Settings, get_settings
 from app.services.llm_provider import LLMProvider, SearchSource
 from app.services.search_query import is_meta_assistant_query
-from app.services.answer_guard import strict_answer_addon
+from app.services.answer_guard import answer_addon_for_slots, strict_answer_addon
+from app.services.facts.slots import uses_synthesis_grounding
 from app.services.facts.format import format_fact_pack_for_prompt
 from app.services.facts.models import FactPack
 from app.services.yandex_errors import YandexServiceError
@@ -43,12 +44,13 @@ SYSTEM_PROMPT_SEARCH = """Ты — Glosix: умный собеседник-эк�
 - пустые фразы «в интернете можно найти…» без конкретики из источников.
 - Если данных мало — что удалось выяснить из [n] (1–2 факта), без отказа от темы; один уточняющий вопрос в конце, не «сделайте поиск сами».
 - Курс валют: сразу цифры (официальный ЦБ и при необходимости биржевой), без списка banki.ru / cbr.ru «где посмотреть».
-- Блок «Проверенные факты»: цифры и даты только оттуда; источники [n] для цитат.
+- Точные цифры (курс, погода, финансы): только из блока фактов или цитат [n].
+- Программы / похудение / обучение: см. режим синтеза в запросе пользователя.
 
 Структура ответа:
 1. Суть — 1–3 предложения, прямой ответ.
 2. Детали — логические блоки: заголовок отдельной строкой (без # и **), абзацы, при необходимости нумерация 1. 2. 3.
-3. Для how-to и программ (похудение, тренировки, «курс»): пошаговый план — недели/дни, конкретные действия, цифры (ккал, повторения, минуты) только из [n]. Если пользователь просит «подробный» / «план» — развёрнутый ответ, не общие советы в 5 предложениях.
+3. Для how-to и программ (похудение, «курс»): дай пошаговый план (недели или блоки), конкретные действия из [n]; не ограничивайся 5 общими фразами. Цифры — только если есть в источниках; иначе формулируй качественно («3 силовые в неделю» из [2]). Можно обобщать и структурировать рекомендации из нескольких [n], не выдумывая новых цифр.
 4. Уточняющий вопрос в конце ответа — только если без параметра (город, диагноз, цель веса) нельзя составить план; не спрашивай очевидное после уже данного плана.
 
 Формат: только текст и переносы строк; без markdown (#, **, `)."""
@@ -148,6 +150,7 @@ class YandexGPTProvider(LLMProvider):
         *,
         hint_clarify: str | None = None,
         strict_facts: bool = False,
+        intent_howto: bool = False,
     ) -> list[dict]:
         extra = f"\n\n{prior_sources_block}" if prior_sources_block else ""
         clarify_block = ""
@@ -156,8 +159,20 @@ class YandexGPTProvider(LLMProvider):
                 f"\n\nПодсказка: в выдаче может не хватать данных. "
                 f"В конце ответа задай уточнение: {hint_clarify}"
             )
-        strict_block = strict_answer_addon() if strict_facts else ""
-        facts_block = format_fact_pack_for_prompt(fact_pack, sources)
+        slots = fact_pack.fact_slots or []
+        synthesis = uses_synthesis_grounding(slots, intent_howto=intent_howto)
+        if strict_facts and not synthesis:
+            strict_block = strict_answer_addon()
+        elif synthesis:
+            strict_block = answer_addon_for_slots(slots, synthesis=True)
+        else:
+            strict_block = ""
+        facts_block = format_fact_pack_for_prompt(
+            fact_pack,
+            sources,
+            fact_slots=slots,
+            intent_howto=intent_howto,
+        )
         user_content = f"""{facts_block}
 {_format_history(history)}{extra}{clarify_block}{strict_block}
 
@@ -177,6 +192,7 @@ class YandexGPTProvider(LLMProvider):
         hint_clarify: str | None = None,
         strict_facts: bool = False,
         fact_pack: FactPack | None = None,
+        intent_howto: bool = False,
     ) -> list[dict]:
         if fact_pack is not None:
             return self._build_messages_from_fact_pack(
@@ -187,6 +203,7 @@ class YandexGPTProvider(LLMProvider):
                 prior_sources_block,
                 hint_clarify=hint_clarify,
                 strict_facts=strict_facts,
+                intent_howto=intent_howto,
             )
         extra = f"\n\n{prior_sources_block}" if prior_sources_block else ""
         clarify_block = ""
@@ -271,6 +288,7 @@ class YandexGPTProvider(LLMProvider):
         hint_clarify: str | None = None,
         strict_facts: bool = False,
         fact_pack: FactPack | None = None,
+        intent_howto: bool = False,
     ) -> AsyncIterator[str]:
         if not self.settings.yandex_configured:
             mock = (
@@ -301,6 +319,7 @@ class YandexGPTProvider(LLMProvider):
                 hint_clarify=hint_clarify,
                 strict_facts=strict_facts,
                 fact_pack=fact_pack,
+                intent_howto=intent_howto,
             ),
         }
 

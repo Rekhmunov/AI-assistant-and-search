@@ -34,3 +34,26 @@ def ranking_flags_from_slots(fact_slots: list[str]) -> dict[str, bool]:
         "currency": "fx_rate" in fact_slots,
         "course_program": "course_program" in fact_slots,
     }
+
+
+# Цифры и даты в ответе должны совпадать с FactPack / источниками.
+STRICT_NUMERIC_SLOTS = frozenset({"fx_rate", "weather_now", "company_financial"})
+
+# План, шаги, рекомендации: структура из источников, без выдуманных ккал/курсов валют.
+SYNTHESIS_SLOTS = frozenset({"course_program"})
+
+
+def uses_strict_numeric_grounding(fact_slots: list[str] | None) -> bool:
+    slots = fact_slots or []
+    if any(s in STRICT_NUMERIC_SLOTS for s in slots):
+        return True
+    return not any(s in SYNTHESIS_SLOTS for s in slots)
+
+
+def uses_synthesis_grounding(fact_slots: list[str] | None, *, intent_howto: bool = False) -> bool:
+    slots = fact_slots or []
+    if "course_program" in slots or intent_howto:
+        return True
+    if any(s in STRICT_NUMERIC_SLOTS for s in slots):
+        return False
+    return False

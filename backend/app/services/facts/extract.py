@@ -36,13 +36,16 @@ _EXTRACT_USER_TEMPLATE = """Вопрос пользователя:
 - claim — на русском, готовое утверждение (температура, курс, дата, определение).
 - source_index — номер источника из блока выше.
 - Если для ответа на вопрос нет данных — facts пустой, gaps без фраз «нет знаний» (нейтрально: «мало цифр в источниках»).
-- Максимум 12 фактов."""
+- Максимум 12 фактов (для программ/курсов — до 20)."""
 
 _EXTRACT_COURSE_ADDON = """
 Запрос про программу/курс (обучение, похудение, тренировки) — НЕ про курс валют:
-- Извлекай пошаговый план: недели/дни, упражнения, подходы, ккал, граммы, минуты, частота тренировок.
-- Отдельные facts для питания и для тренировок, если есть в источниках.
-- Не подставляй курс доллара, ЦБ, котировки."""
+- Извлекай пункты плана: недели/дни, упражнения, частота, питание, ограничения — как в источнике (можно перефразировать claim).
+- Отдельные facts для питания и для тренировок.
+- Допустимы рекомендации без цифр («силовые 3 раза в неделю»), если так в [n].
+- Числа (ккал, кг, минуты) — только если явно в цитате.
+- Не подставляй курс валют, ЦБ, котировки.
+- До 20 facts."""
 
 _EXTRACT_FINANCIAL_ADDON = """
 Дополнительно для финансовых вопросов (оборот, выручка, прибыль):
@@ -59,20 +62,25 @@ def _format_sources_block(sources: list[SearchSource], max_per: int = 4500) -> s
     return "\n\n".join(lines) if lines else "(нет)"
 
 
-def _parse_extract_json(text: str, prefilled: list[Fact]) -> FactPack:
+def _parse_extract_json(
+    text: str,
+    prefilled: list[Fact],
+    fact_slots: list[str] | None = None,
+) -> FactPack:
     match = re.search(r"\{.*\}", text, re.DOTALL)
     if not match:
-        return FactPack(facts=list(prefilled), gaps=["extract_parse_failed"])
+        return FactPack(facts=list(prefilled), gaps=["extract_parse_failed"], fact_slots=fact_slots or [])
     try:
         data = json.loads(match.group())
     except json.JSONDecodeError:
-        return FactPack(facts=list(prefilled), gaps=["extract_json_invalid"])
+        return FactPack(facts=list(prefilled), gaps=["extract_json_invalid"], fact_slots=fact_slots or [])
 
     facts: list[Fact] = list(prefilled)
     seen_claims: set[str] = {f.claim.lower()[:80] for f in prefilled}
     raw_facts = data.get("facts") or []
     if isinstance(raw_facts, list):
-        for i, item in enumerate(raw_facts[:12]):
+        max_facts = 20 if (fact_slots and "course_program" in fact_slots) else 12
+        for i, item in enumerate(raw_facts[:max_facts]):
             if not isinstance(item, dict):
                 continue
             claim = str(item.get("claim") or "").strip()
@@ -96,7 +104,7 @@ def _parse_extract_json(text: str, prefilled: list[Fact]) -> FactPack:
 
     gaps_raw = data.get("gaps") or []
     gaps = [str(g).strip() for g in gaps_raw if str(g).strip()][:5] if isinstance(gaps_raw, list) else []
-    return FactPack(facts=facts, gaps=gaps)
+    return FactPack(facts=facts, gaps=gaps, fact_slots=fact_slots or [])
 
 
 async def extract_facts_from_sources(
@@ -135,7 +143,7 @@ async def extract_facts_from_sources(
             max_tokens=2000,
             temperature=0.1,
         )
-        pack = _parse_extract_json(raw, prefilled)
+        pack = _parse_extract_json(raw, prefilled, fact_slots)
         pack.fact_slots = fact_slots or []
         return pack
     except Exception:
