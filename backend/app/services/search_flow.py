@@ -277,8 +277,42 @@ class SearchFlowService:
             if route.needs_search:
                 weak_retrieval = bool(retrieval_trace and not retrieval_trace.get("ok"))
 
-                async def _collect_answer(*, strict: bool) -> str:
-                    text = ""
+                full_answer = ""
+                async for chunk in self.llm.stream_answer(
+                    llm_query,
+                    sources,
+                    history,
+                    model=route.answer_model,
+                    prior_sources_block=prior_sources_block,
+                    hint_clarify=hint_clarify,
+                    strict_facts=weak_retrieval,
+                    fact_pack=fact_pack,
+                ):
+                    full_answer += chunk
+                    yield sse_event("token", {"text": chunk})
+
+                if fact_pack and fact_pack.facts:
+                    ok, unsupported = verify_answer_against_facts(full_answer, fact_pack)
+                    if not ok:
+                        logger.info("Answer verify failed, unsupported numbers: %s", unsupported)
+                        yield sse_event("reset_answer", {})
+                        full_answer = ""
+                        async for chunk in self.llm.stream_answer(
+                            llm_query,
+                            sources,
+                            history,
+                            model=route.answer_model,
+                            prior_sources_block=prior_sources_block,
+                            hint_clarify=hint_clarify,
+                            strict_facts=True,
+                            fact_pack=fact_pack,
+                        ):
+                            full_answer += chunk
+                            yield sse_event("token", {"text": chunk})
+                if is_template_evasion(full_answer):
+                    logger.info("Answer template/refusal detected, regenerating")
+                    yield sse_event("reset_answer", {})
+                    full_answer = ""
                     async for chunk in self.llm.stream_answer(
                         llm_query,
                         sources,
@@ -286,25 +320,11 @@ class SearchFlowService:
                         model=route.answer_model,
                         prior_sources_block=prior_sources_block,
                         hint_clarify=hint_clarify,
-                        strict_facts=strict or weak_retrieval,
+                        strict_facts=True,
                         fact_pack=fact_pack,
                     ):
-                        text += chunk
-                    return text
-
-                full_answer = await _collect_answer(strict=False)
-                if fact_pack and fact_pack.facts:
-                    ok, unsupported = verify_answer_against_facts(full_answer, fact_pack)
-                    if not ok:
-                        logger.info("Answer verify failed, unsupported numbers: %s", unsupported)
-                        full_answer = await _collect_answer(strict=True)
-                if is_template_evasion(full_answer):
-                    logger.info("Answer template/refusal detected, regenerating")
-                    full_answer = await _collect_answer(strict=True)
-                    if is_template_evasion(full_answer):
-                        full_answer = await _collect_answer(strict=True)
-                for i in range(0, len(full_answer), 48):
-                    yield sse_event("token", {"text": full_answer[i : i + 48]})
+                        full_answer += chunk
+                        yield sse_event("token", {"text": chunk})
             else:
                 async for chunk in self.llm.stream_answer_direct(
                     llm_query,

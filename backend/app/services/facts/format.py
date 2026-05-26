@@ -19,6 +19,6 @@ def format_fact_pack_for_prompt(pack: FactPack, sources: list[SearchSource]) -> 
 
     lines.append("\n=== Источники (для цитат [n]) ===")
     for s in sources[:8]:
-        snippet = (s.snippet or "")[:700]
+        snippet = (s.snippet or "")[:2200]
         lines.append(f'[{s.index}] {s.domain} — "{s.title}"\n{snippet}')
     return "\n".join(lines)

@@ -113,6 +113,9 @@ export function Thread() {
           setSearchPhase("answering");
           setTurns((prev) => updateLastStreamingTurn(prev, {}, chunk));
         },
+        onResetAnswer: () => {
+          setTurns((prev) => updateLastStreamingTurn(prev, { answer: "" }));
+        },
         onFollowUps: (questions) => {
           setTurns((prev) => updateLastStreamingTurn(prev, { followUps: questions }));
         },

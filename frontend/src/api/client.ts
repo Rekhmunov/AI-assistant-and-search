@@ -238,6 +238,7 @@ export interface SSEHandlers {
   onRoute?: (route: RouteInfo) => void;
   onSources?: (sources: Source[]) => void;
   onToken?: (text: string) => void;
+  onResetAnswer?: () => void;
   onFollowUps?: (questions: string[]) => void;
   onDone?: () => void;
   onError?: (message: string) => void;
@@ -339,6 +340,9 @@ export async function streamSearch(
             break;
           case "token":
             handlers.onToken?.(parsed.text);
+            break;
+          case "reset_answer":
+            handlers.onResetAnswer?.();
             break;
           case "follow_ups":
             handlers.onFollowUps?.(parsed.questions);

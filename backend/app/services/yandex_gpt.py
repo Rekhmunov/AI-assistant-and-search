@@ -48,8 +48,8 @@ SYSTEM_PROMPT_SEARCH = """Ты — Glosix: умный собеседник-эк�
 Структура ответа:
 1. Суть — 1–3 предложения, прямой ответ.
 2. Детали — логические блоки: заголовок отдельной строкой (без # и **), абзацы, при необходимости нумерация 1. 2. 3.
-3. Для how-to: шаги с тире «— » для подпунктов; приоритет официальных [n].
-4. В конце — один уместный уточняющий вопрос, не обязателен.
+3. Для how-to и программ (похудение, тренировки, «курс»): пошаговый план — недели/дни, конкретные действия, цифры (ккал, повторения, минуты) только из [n]. Если пользователь просит «подробный» / «план» — развёрнутый ответ, не общие советы в 5 предложениях.
+4. Уточняющий вопрос в конце ответа — только если без параметра (город, диагноз, цель веса) нельзя составить план; не спрашивай очевидное после уже данного плана.
 
 Формат: только текст и переносы строк; без markdown (#, **, `)."""
 
@@ -410,9 +410,9 @@ class YandexGPTProvider(LLMProvider):
     async def generate_follow_ups(self, query: str, answer: str) -> list[str]:
         if not self.settings.yandex_configured:
             return [
-                "Расскажи подробнее",
-                "Приведи примеры",
-                "Какие есть риски?",
+                "Пошаговый план на месяц",
+                "Примеры меню и калорий",
+                "Типичные ошибки при похудении",
             ]
 
         headers = {
@@ -421,11 +421,16 @@ class YandexGPTProvider(LLMProvider):
         }
         payload = {
             "modelUri": self._model_uri("lite"),
-            "completionOptions": {"stream": False, "temperature": 0.5, "maxTokens": 300},
+            "completionOptions": {"stream": False, "temperature": 0.4, "maxTokens": 320},
             "messages": [
                 {
                     "role": "system",
-                    "text": "Сгенерируй ровно 3 коротких уточняющих вопроса по теме. Ответ — JSON массив строк.",
+                    "text": (
+                        "Сгенерируй ровно 3 короткие фразы — заголовки для продолжения темы "
+                        "(следующий запрос пользователя). Утвердительные формулировки, без знака «?», "
+                        "не вопросы к пользователю. 4–12 слов. Примеры: «План питания на 1500 ккал», "
+                        "«Тренировки на 4 недели для начинающих». Ответ — только JSON-массив строк."
+                    ),
                 },
                 {
                     "role": "user",
@@ -441,18 +446,10 @@ class YandexGPTProvider(LLMProvider):
                 data = response.json()
         except httpx.HTTPStatusError as e:
             logger.warning("Follow-ups YandexGPT HTTP %s", e.response.status_code)
-            return [
-                "Расскажи подробнее",
-                "Приведи примеры",
-                "Какие есть риски?",
-            ]
+            return _default_follow_up_suggestions(query)
         except httpx.HTTPError:
             logger.exception("Follow-ups request failed")
-            return [
-                "Расскажи подробнее",
-                "Приведи примеры",
-                "Какие есть риски?",
-            ]
+            return _default_follow_up_suggestions(query)
 
         text = _text_from_completion_json(data)
         match = re.search(r"\[.*\]", text, re.DOTALL)
@@ -460,11 +457,39 @@ class YandexGPTProvider(LLMProvider):
             try:
                 items = json.loads(match.group())
                 if isinstance(items, list):
-                    return [str(x) for x in items[:3]]
+                    return _normalize_follow_up_suggestions([str(x) for x in items[:3]])
             except json.JSONDecodeError:
                 pass
-        return [q.strip() for q in text.split("\n") if q.strip()][:3] or [
-            "Расскажи подробнее",
-            "Приведи примеры",
-            "Какие есть риски?",
+        lines = [q.strip() for q in text.split("\n") if q.strip()][:3]
+        return _normalize_follow_up_suggestions(lines) or _default_follow_up_suggestions(query)
+
+
+def _normalize_follow_up_suggestions(items: list[str]) -> list[str]:
+    out: list[str] = []
+    for raw in items:
+        s = raw.strip().strip("-•").strip()
+        if s.endswith("?"):
+            s = s[:-1].strip()
+        if not s or "?" in s:
+            continue
+        if re.match(r"^(какие|какой|какая|как|есть ли|уточните)\b", s, re.I):
+            continue
+        out.append(s[:120])
+        if len(out) >= 3:
+            break
+    return out
+
+
+def _default_follow_up_suggestions(query: str) -> list[str]:
+    q = query.lower()
+    if "похуд" in q or "курс" in q:
+        return [
+            "Пошаговый план похудения на 4 недели",
+            "Меню и калорийность на день",
+            "Силовые и кардио: схема на неделю",
         ]
+    return [
+        "Подробный разбор по шагам",
+        "Примеры и цифры по теме",
+        "Сравнение основных подходов",
+    ]
