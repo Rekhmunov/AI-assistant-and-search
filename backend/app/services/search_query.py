@@ -95,13 +95,74 @@ _PLACE_IN_RE = re.compile(
 _META_ASSISTANT_RE = re.compile(
     r"(?:^|[\s,.!?])(?:"
     r"ты\s+умеешь|ты\s+можешь|что\s+ты\s+умеешь|что\s+ты\s+можешь|"
+    r"что\s+ты\s+умеешь\s+делать|чем\s+ты\s+можешь|чем\s+можешь\s+помочь|"
+    r"чем\s+поможешь|что\s+умеешь|какие\s+у\s+тебя\s+возможности|"
+    r"как\s+ты\s+работаешь|расскажи\s+о\s+себе|"
     r"кто\s+ты|что\s+ты\s+такое|что\s+ты\s+за\s+|"
     r"ты\s+программир|ты\s+кодир|ты\s+разработ|"
     r"ты\s+ии|ты\s+бот|ты\s+нейросет|"
-    r"can\s+you\s+code|do\s+you\s+program|who\s+are\s+you|what\s+are\s+you"
+    r"can\s+you\s+code|do\s+you\s+program|who\s+are\s+you|what\s+are\s+you|"
+    r"what\s+can\s+you\s+do"
     r")",
     re.I,
 )
+
+_CHITCHAT_MAX_LEN = 40
+
+CHITCHAT_EXACT = frozenset(
+    {
+        "привет",
+        "приветик",
+        "здравствуй",
+        "здравствуйте",
+        "hi",
+        "hello",
+        "hey",
+        "хай",
+        "спасибо",
+        "благодарю",
+        "thanks",
+        "thank you",
+        "thx",
+        "ок",
+        "окей",
+        "okay",
+        "как дела",
+        "как ты",
+        "что нового",
+        "че как",
+        "чё как",
+        "добрый день",
+        "доброе утро",
+        "добрый вечер",
+        "доброй ночи",
+        "доброго дня",
+        "пока",
+        "до свидания",
+        "bye",
+        "goodbye",
+        "good morning",
+    }
+)
+
+_CHITCHAT_RE = re.compile(
+    r"^(?:"
+    r"как\s+(?:у\s+тебя\s+|тебя\s+)?дела|"
+    r"как\s+ты\s+себя\s+чувствуешь|"
+    r"что\s+(?:нового|случилось)"
+    r")\??$",
+    re.I,
+)
+
+
+def is_chitchat_query(query: str) -> bool:
+    """Короткая болтовня — без веб-поиска (ответ только LLM)."""
+    stripped = query.strip().lower().rstrip("!?.")
+    if not stripped or len(stripped) > _CHITCHAT_MAX_LEN:
+        return False
+    if stripped in CHITCHAT_EXACT:
+        return True
+    return bool(_CHITCHAT_RE.match(stripped))
 
 
 def is_meta_assistant_query(query: str) -> bool:
@@ -110,6 +171,8 @@ def is_meta_assistant_query(query: str) -> bool:
     if len(q) > 220:
         return False
     if _has_attachment_marker(q):
+        return False
+    if is_chitchat_query(q):
         return False
     return bool(_META_ASSISTANT_RE.search(q))
 
