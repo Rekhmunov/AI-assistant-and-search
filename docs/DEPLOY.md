@@ -113,6 +113,25 @@ nano nginx/nginx.prod.conf
 
 ---
 
+## Обновление с `main` (одна команда)
+
+На сервере (или из PowerShell по SSH):
+
+```bash
+cd /opt/aisearch && bash scripts/update.sh
+```
+
+Скрипт: `git pull` → сборка backend, frontend, admin, worker → `up -d` → **пересоздание nginx** → миграции.  
+**Не затирает** `.env`. `nginx.prod.conf` пересобирается только если битый/без `admin.*`.
+
+Из Windows (PowerShell), подставьте IP/хост сервера:
+
+```powershell
+ssh root@ВАШ_СЕРВЕР "cd /opt/aisearch && bash scripts/update.sh"
+```
+
+---
+
 ## 4. Запуск Docker
 
 ```bash
