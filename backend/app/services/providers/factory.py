@@ -2,16 +2,21 @@
 
 from __future__ import annotations
 
+from typing import Union
+
 import redis.asyncio as redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings, get_settings
 from app.services.app_settings import get_setting
+from app.services.anthropic_claude import AnthropicClaudeProvider
 from app.services.prompts.defaults import DEFAULT_LLM_PROVIDER, DEFAULT_SEARCH_PROVIDER
 from app.services.prompts.store import PromptStore
 from app.services.providers.registry import VALID_LLM_IDS, VALID_SEARCH_IDS
 from app.services.yandex_gpt import YandexGPTProvider
 from app.services.yandex_search import YandexSearchService
+
+ChatLLM = Union[YandexGPTProvider, AnthropicClaudeProvider]
 
 
 async def resolve_llm_provider_id(db: AsyncSession, redis_client: redis.Redis) -> str:
@@ -30,10 +35,12 @@ def create_llm_provider(
     provider_id: str,
     settings: Settings | None,
     prompt_store: PromptStore,
-) -> YandexGPTProvider:
+) -> ChatLLM:
     settings = settings or get_settings()
     if provider_id == "yandex_gpt":
         return YandexGPTProvider(settings, prompt_store=prompt_store)
+    if provider_id == "anthropic_claude":
+        return AnthropicClaudeProvider(settings, prompt_store=prompt_store)
     raise ValueError(f"Unknown LLM provider: {provider_id}")
 
 
@@ -44,11 +51,17 @@ def create_search_provider(provider_id: str, settings: Settings | None) -> Yande
     raise ValueError(f"Unknown search provider: {provider_id}")
 
 
+def llm_model_label(llm: ChatLLM, answer_model: str) -> str:
+    if isinstance(llm, AnthropicClaudeProvider):
+        return llm._model_name(answer_model)  # type: ignore[arg-type]
+    return llm._model_uri(answer_model)  # type: ignore[arg-type]
+
+
 async def resolve_runtime_providers(
     db: AsyncSession,
     redis_client: redis.Redis,
     settings: Settings | None = None,
-) -> tuple[YandexGPTProvider, YandexSearchService, PromptStore, str, str]:
+) -> tuple[ChatLLM, YandexSearchService, PromptStore, str, str]:
     settings = settings or get_settings()
     prompt_store = PromptStore(db, redis_client)
     llm_id = await resolve_llm_provider_id(db, redis_client)

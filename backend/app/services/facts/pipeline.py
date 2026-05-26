@@ -16,6 +16,7 @@ from app.services.llm_provider import SearchSource
 from app.services.retrieval_quality import RetrievalAssessment, assess_retrieval
 from app.services.page_depth import FINANCIAL_NUMBER_RE, enrich_sources_deep
 from app.services.source_ranking import rank_sources
+from app.services.providers.factory import ChatLLM
 from app.services.yandex_gpt import YandexGPTProvider
 from app.services.yandex_search import YandexSearchService
 
@@ -39,7 +40,7 @@ class FactPipeline:
     def __init__(
         self,
         search: YandexSearchService | None = None,
-        llm: YandexGPTProvider | None = None,
+        llm: ChatLLM | None = None,
     ) -> None:
         self.search = search or YandexSearchService()
         self.llm = llm or YandexGPTProvider()

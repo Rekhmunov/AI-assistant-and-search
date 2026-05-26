@@ -145,6 +145,7 @@ async def list_settings(db: AsyncSession, redis_client: redis.Redis) -> dict[str
     for key in SETTING_KEYS:
         out[key] = await get_setting(key, db, redis_client, settings)
     out["yandex_configured"] = settings.yandex_configured
+    out["anthropic_configured"] = settings.anthropic_configured
     out["environment"] = settings.environment
     return out
 

@@ -6,7 +6,7 @@ from app.core.config import Settings, get_settings
 from app.services.llm_provider import SearchSource
 from app.services.facts.models import FactPack
 from app.services.query_router import RouteDecision
-from app.services.yandex_gpt import YandexGPTProvider
+from app.services.providers.factory import ChatLLM, llm_model_label
 
 _TRACE_TEXT_LIMIT = 12_000
 
@@ -18,7 +18,7 @@ def _clip(text: str, limit: int = _TRACE_TEXT_LIMIT) -> str:
 
 
 async def build_gpt_messages_preview(
-    llm: YandexGPTProvider,
+    llm: ChatLLM,
     *,
     llm_query: str,
     sources: list[SearchSource],
@@ -45,6 +45,8 @@ async def build_gpt_messages_preview(
 
 def build_debug_trace(
     *,
+    llm: ChatLLM,
+    llm_provider_id: str,
     display_content: str,
     llm_query: str,
     route: RouteDecision,
@@ -63,7 +65,6 @@ def build_debug_trace(
     settings: Settings | None = None,
 ) -> dict[str, Any]:
     s = settings or get_settings()
-    llm = YandexGPTProvider(s)
     return {
         "user_display": _clip(display_content, 4000),
         "llm_query": _clip(llm_query, 8000),
@@ -88,10 +89,11 @@ def build_debug_trace(
         "fact_pack": fact_pack,
         "page_cache": page_cache,
         "query_url_memory": query_url_memory,
+        "llm_provider": llm_provider_id,
         "yandex_gpt": {
             "mode": "search" if needs_search else "direct",
             "model": answer_model,
-            "model_uri": llm._model_uri(answer_model),  # type: ignore[arg-type]
+            "model_uri": llm_model_label(llm, answer_model),
             "messages_to_api": gpt_messages_preview,
         },
     }

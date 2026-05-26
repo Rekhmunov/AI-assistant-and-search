@@ -138,7 +138,7 @@ FOLLOW_UPS_SYSTEM = (
     "«Тренировки на 4 недели для начинающих». Ответ — только JSON-массив строк."
 )
 
-PROMPT_DEFAULTS: dict[str, str] = {
+_YANDEX_PROMPT_DEFAULTS: dict[str, str] = {
     "yandex_gpt_answer_search": ANSWER_SEARCH,
     "yandex_gpt_answer_meta": ANSWER_META,
     "yandex_gpt_answer_direct": ANSWER_DIRECT,
@@ -151,6 +151,10 @@ PROMPT_DEFAULTS: dict[str, str] = {
     "yandex_gpt_extract_financial_addon": EXTRACT_FINANCIAL_ADDON,
     "yandex_gpt_follow_ups_system": FOLLOW_UPS_SYSTEM,
 }
+
+PROMPT_DEFAULTS: dict[str, str] = dict(_YANDEX_PROMPT_DEFAULTS)
+for _key, _val in _YANDEX_PROMPT_DEFAULTS.items():
+    PROMPT_DEFAULTS[_key.replace("yandex_gpt_", "anthropic_claude_", 1)] = _val
 
 DEFAULT_LLM_PROVIDER = "yandex_gpt"
 DEFAULT_SEARCH_PROVIDER = "yandex_search"

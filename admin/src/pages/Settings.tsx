@@ -245,7 +245,9 @@ export function SettingsPage() {
 
       {msg && <p className="ok">{msg}</p>}
       <p>
-        Yandex: {settings.yandex_configured ? "настроен" : "mock"} · Среда: {String(settings.environment)}
+        Yandex: {settings.yandex_configured ? "настроен" : "mock"} · Claude:{" "}
+        {settings.anthropic_configured ? "настроен" : "не задан"} · Среда:{" "}
+        {String(settings.environment)}
       </p>
     </div>
   );

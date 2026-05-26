@@ -16,7 +16,7 @@ from app.services.prompts.defaults import (
 )
 
 if TYPE_CHECKING:
-    from app.services.yandex_gpt import YandexGPTProvider
+    from app.services.providers.factory import ChatLLM
 
 logger = logging.getLogger(__name__)
 
@@ -75,7 +75,7 @@ def _parse_extract_json(
 
 
 async def extract_facts_from_sources(
-    llm: "YandexGPTProvider",
+    llm: "ChatLLM",
     query: str,
     sources: list[SearchSource],
     *,
@@ -89,11 +89,11 @@ async def extract_facts_from_sources(
 
     prefilled_text = "\n".join(f"- [{f.source_index}] {f.claim}" for f in prefilled) or "(нет)"
     slots = fact_slots or []
-    template = await llm._prompt("yandex_gpt_extract_user", EXTRACT_USER)
+    template = await llm.get_prompt("extract_user", EXTRACT_USER)
     if "course_program" in slots:
-        template += await llm._prompt("yandex_gpt_extract_course_addon", EXTRACT_COURSE_ADDON)
+        template += await llm.get_prompt("extract_course_addon", EXTRACT_COURSE_ADDON)
     elif "company_financial" in slots:
-        template += await llm._prompt("yandex_gpt_extract_financial_addon", EXTRACT_FINANCIAL_ADDON)
+        template += await llm.get_prompt("extract_financial_addon", EXTRACT_FINANCIAL_ADDON)
     try:
         user_text = template.format(
             query=query[:900],
@@ -107,7 +107,7 @@ async def extract_facts_from_sources(
             prefilled=prefilled_text,
             sources_block=_format_sources_block(sources),
         )
-    system = await llm._prompt("yandex_gpt_extract_system", EXTRACT_SYSTEM)
+    system = await llm.get_prompt("extract_system", EXTRACT_SYSTEM)
 
     try:
         raw = await llm.complete_text(

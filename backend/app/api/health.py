@@ -114,9 +114,14 @@ async def api_health(db: Annotated[AsyncSession, Depends(get_db)]):
         "status": status,
         "redis": redis_ok,
         "yandex_configured": settings.yandex_configured,
+        "anthropic_configured": settings.anthropic_configured,
         "yandex_models": {
             "lite": settings.yandex_gpt_lite_model,
             "pro": settings.yandex_gpt_pro_model,
+        },
+        "anthropic_models": {
+            "lite": settings.anthropic_model_lite,
+            "pro": settings.anthropic_model_pro,
         },
         "db_columns": {c: c in cols for c in sorted(required)},
         "missing_migrations": missing,

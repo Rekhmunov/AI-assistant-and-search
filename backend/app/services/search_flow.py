@@ -415,6 +415,8 @@ class SearchFlowService:
                     await db.rollback()
 
         debug_trace = build_debug_trace(
+            llm=llm,
+            llm_provider_id=llm_provider_id,
             display_content=display_content,
             llm_query=llm_query,
             route=route,

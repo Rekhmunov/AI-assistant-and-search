@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from app.services.facts.slots import normalize_fact_slots
 from app.services.prompts.defaults import REWRITER_SYSTEM, REWRITER_USER
 from app.services.search_query import normalize_user_query
+from app.services.providers.factory import ChatLLM
 from app.services.thread_context import ThreadContext, format_history_compact
 from app.services.yandex_gpt import YandexGPTProvider
 
@@ -71,7 +72,7 @@ def _parse_rewrite_json(text: str, fallback_query: str) -> RewriteResult | None:
 
 
 class QueryRewriter:
-    def __init__(self, llm: YandexGPTProvider | None = None):
+    def __init__(self, llm: ChatLLM | None = None):
         self.llm = llm or YandexGPTProvider()
 
     async def rewrite(self, query: str, ctx: ThreadContext) -> RewriteResult:
@@ -79,7 +80,7 @@ class QueryRewriter:
         fallback = query[:400]
         history_text = format_history_compact(ctx.history, max_turns=4)
 
-        template = await self.llm._prompt("yandex_gpt_rewriter_user", REWRITER_USER)
+        template = await self.llm.get_prompt("rewriter_user", REWRITER_USER)
         try:
             user_prompt = template.format(
                 query=query[:900],
@@ -93,7 +94,7 @@ class QueryRewriter:
                 history_text=history_text or "(нет)",
                 continuation_label="да" if ctx.is_continuation else "нет",
             )
-        system = await self.llm._prompt("yandex_gpt_rewriter_system", REWRITER_SYSTEM)
+        system = await self.llm.get_prompt("rewriter_system", REWRITER_SYSTEM)
 
         try:
             raw = await self.llm.complete_text(

@@ -20,6 +20,7 @@ from app.services.prompts.defaults import (
     ANSWER_SEARCH,
     FOLLOW_UPS_SYSTEM,
 )
+from app.services.llm_prompted import PromptedLLMMixin
 from app.services.prompts.store import PromptStore
 from app.services.yandex_errors import YandexServiceError
 
@@ -89,17 +90,13 @@ def _format_history(history: list[tuple[str, str]], max_turns: int = 6) -> str:
     return "\n\nПредыдущий диалог:\n" + "\n".join(parts)
 
 
-class YandexGPTProvider(LLMProvider):
+class YandexGPTProvider(PromptedLLMMixin, LLMProvider):
     COMPLETION_URL = "https://llm.api.cloud.yandex.net/foundationModels/v1/completion"
+    prompt_namespace = "yandex_gpt"
 
     def __init__(self, settings: Settings | None = None, *, prompt_store: PromptStore | None = None):
         self.settings = settings or get_settings()
         self.prompts = prompt_store
-
-    async def _prompt(self, prompt_id: str, default: str) -> str:
-        if self.prompts:
-            return await self.prompts.get(prompt_id, default=default)
-        return default
 
     def _model_uri(self, model: AnswerModel = "lite") -> str:
         return self.settings.yandex_model_uri(model)
@@ -141,7 +138,7 @@ class YandexGPTProvider(LLMProvider):
 {_format_history(history)}{extra}{clarify_block}{strict_block}
 
 Вопрос: {query}"""
-        system = await self._prompt("yandex_gpt_answer_search", ANSWER_SEARCH)
+        system = await self.get_prompt("answer_search", ANSWER_SEARCH)
         return [
             {"role": "system", "text": system},
             {"role": "user", "text": user_content},
@@ -180,7 +177,7 @@ class YandexGPTProvider(LLMProvider):
 {_format_history(history)}{extra}{clarify_block}{strict_block}
 
 Вопрос: {query}"""
-        system = await self._prompt("yandex_gpt_answer_search", ANSWER_SEARCH)
+        system = await self.get_prompt("answer_search", ANSWER_SEARCH)
         return [
             {"role": "system", "text": system},
             {"role": "user", "text": user_content},
@@ -197,11 +194,11 @@ class YandexGPTProvider(LLMProvider):
 
 Вопрос: {query}"""
         if _query_has_document_block(query):
-            system = await self._prompt("yandex_gpt_answer_document", ANSWER_DOCUMENT)
+            system = await self.get_prompt("answer_document", ANSWER_DOCUMENT)
         elif is_meta_assistant_query(query):
-            system = await self._prompt("yandex_gpt_answer_meta", ANSWER_META)
+            system = await self.get_prompt("answer_meta", ANSWER_META)
         else:
-            system = await self._prompt("yandex_gpt_answer_direct", ANSWER_DIRECT)
+            system = await self.get_prompt("answer_direct", ANSWER_DIRECT)
         return [
             {"role": "system", "text": system},
             {"role": "user", "text": user_content},
@@ -404,7 +401,7 @@ class YandexGPTProvider(LLMProvider):
             "Authorization": f"Api-Key {self.settings.yandex_api_key}",
             "Content-Type": "application/json",
         }
-        follow_system = await self._prompt("yandex_gpt_follow_ups_system", FOLLOW_UPS_SYSTEM)
+        follow_system = await self.get_prompt("follow_ups_system", FOLLOW_UPS_SYSTEM)
         payload = {
             "modelUri": self._model_uri("lite"),
             "completionOptions": {"stream": False, "temperature": 0.4, "maxTokens": 320},

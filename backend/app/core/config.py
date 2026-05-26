@@ -43,6 +43,10 @@ class Settings(BaseSettings):
     yandex_gpt_lite_model: str = "yandexgpt-lite/latest"
     yandex_gpt_pro_model: str = "yandexgpt/latest"
 
+    anthropic_api_key: str = ""
+    anthropic_model_lite: str = "claude-3-5-haiku-latest"
+    anthropic_model_pro: str = "claude-sonnet-4-20250514"
+
     yookassa_shop_id: str = ""
     yookassa_secret_key: str = ""
 
@@ -69,6 +73,10 @@ class Settings(BaseSettings):
     @property
     def yandex_configured(self) -> bool:
         return bool(self.yandex_folder_id and self.yandex_api_key)
+
+    @property
+    def anthropic_configured(self) -> bool:
+        return bool(self.anthropic_api_key.strip())
 
     def yandex_model_uri(self, model: str) -> str:
         folder = self.yandex_folder_id

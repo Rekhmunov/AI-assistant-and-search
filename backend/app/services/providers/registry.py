@@ -18,6 +18,7 @@ class ProviderInfo:
 
 def list_llm_providers(settings: Settings) -> list[ProviderInfo]:
     yandex_ok = settings.yandex_configured
+    claude_ok = settings.anthropic_configured
     return [
         ProviderInfo(
             id="yandex_gpt",
@@ -25,6 +26,17 @@ def list_llm_providers(settings: Settings) -> list[ProviderInfo]:
             kind="llm",
             configured=yandex_ok,
             hint=None if yandex_ok else "Нужны YANDEX_FOLDER_ID и YANDEX_API_KEY в .env",
+        ),
+        ProviderInfo(
+            id="anthropic_claude",
+            label="Claude (Anthropic)",
+            kind="llm",
+            configured=claude_ok,
+            hint=(
+                "Тот же пайплайн Glosix: Yandex Search + RAG; меняется только LLM."
+                if claude_ok
+                else "Нужен ANTHROPIC_API_KEY в .env"
+            ),
         ),
     ]
 
@@ -42,5 +54,5 @@ def list_search_providers(settings: Settings) -> list[ProviderInfo]:
     ]
 
 
-VALID_LLM_IDS = frozenset({"yandex_gpt"})
+VALID_LLM_IDS = frozenset({"yandex_gpt", "anthropic_claude"})
 VALID_SEARCH_IDS = frozenset({"yandex_search"})
