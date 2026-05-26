@@ -178,11 +178,16 @@ curl https://api.ваш-домен.ru/health
 
 ## 7. Обновление релиза
 
+На сервере **всегда** используйте `docker-compose.prod.yml`, не голый `docker compose` (dev-файл подставляет пароль `postgres`/`postgres` и ломает миграции на уже развёрнутой БД).
+
 ```bash
 cd /opt/aisearch
-git pull
-docker compose -f docker-compose.prod.yml build
-docker compose -f docker-compose.prod.yml up -d
+git fetch origin && git pull origin main
+bash scripts/update.sh
+# или вручную:
+# docker compose -f docker-compose.prod.yml build
+# docker compose -f docker-compose.prod.yml up -d --remove-orphans
+# bash scripts/migrate.sh
 ```
 
 ---
@@ -204,6 +209,8 @@ PostgreSQL (5432) и Redis **не** открывайте наружу.
 
 | Симптом | Решение |
 |---------|---------|
+| `InvalidPasswordError: password authentication failed for user "postgres"` при `alembic` | Не используйте `docker compose` без `-f docker-compose.prod.yml`. Миграции: `bash scripts/migrate.sh`. Пароль в `.env` (`POSTGRES_PASSWORD`) должен совпадать с тем, с которым **первый раз** создан том `pgdata` (смена пароля в `.env` без `ALTER USER` в Postgres не работает). |
+| `Found orphan containers (aisearch-nginx-1)` | Запущен dev-compose вместо prod: `docker compose -f docker-compose.prod.yml up -d --remove-orphans` |
 | 502 Bad Gateway | `docker compose -f docker-compose.prod.yml ps`, логи backend |
 | CORS error в миниаппе | `CORS_ORIGINS` должен содержать `https://app...` |
 | Invalid initData | `SKIP_INIT_DATA_VALIDATION=false`, верный `BOT_TOKEN` |
