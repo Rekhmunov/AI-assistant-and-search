@@ -74,6 +74,11 @@ $COMPOSE build --pull backend frontend admin worker
 echo "==> Start stack"
 $COMPOSE up -d --remove-orphans
 
+if grep -q '^ANTHROPIC_API_KEY=.\+' .env 2>/dev/null; then
+  echo "==> ANTHROPIC_API_KEY в .env — пересоздаём backend/worker (подхват ключа)"
+  $COMPOSE up -d --force-recreate backend worker
+fi
+
 echo "==> Recreate nginx (актуальный IP frontend/admin — иначе 502)"
 $COMPOSE up -d --force-recreate nginx
 

@@ -142,8 +142,17 @@ class PromptFieldOut(BaseModel):
     default: str
 
 
+class LlmRuntimeOut(BaseModel):
+    active_provider: str
+    anthropic_api_key_loaded: bool
+    anthropic_key_suffix: str | None = None
+    anthropic_mock_active: bool = False
+    hint: str | None = None
+
+
 class SettingsBundleOut(BaseModel):
     settings: dict[str, Any]
+    llm_runtime: LlmRuntimeOut | None = None
     llm_providers: list[ProviderOptionOut]
     search_providers: list[ProviderOptionOut]
     prompts: list[PromptFieldOut]
