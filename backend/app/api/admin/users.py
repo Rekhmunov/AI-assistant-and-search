@@ -173,6 +173,7 @@ async def list_users(
             out.append(await _user_out(db, user, limiter))
         except Exception:
             logger.exception("Failed to serialize user %s for admin list", user.id)
+    logger.info("Admin users list: returned %s of %s rows", len(out), len(users))
     return out
 
 
