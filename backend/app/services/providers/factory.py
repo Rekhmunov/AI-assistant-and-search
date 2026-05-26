@@ -12,11 +12,12 @@ from app.services.app_settings import get_setting
 from app.services.anthropic_claude import AnthropicClaudeProvider
 from app.services.prompts.defaults import DEFAULT_LLM_PROVIDER, DEFAULT_SEARCH_PROVIDER
 from app.services.prompts.store import PromptStore
+from app.services.providers.llm_fallback import ClaudeWithYandexFallback
 from app.services.providers.registry import VALID_LLM_IDS, VALID_SEARCH_IDS
 from app.services.yandex_gpt import YandexGPTProvider
 from app.services.yandex_search import YandexSearchService
 
-ChatLLM = Union[YandexGPTProvider, AnthropicClaudeProvider]
+ChatLLM = Union[YandexGPTProvider, AnthropicClaudeProvider, ClaudeWithYandexFallback]
 
 
 async def resolve_llm_provider_id(db: AsyncSession, redis_client: redis.Redis) -> str:
@@ -52,9 +53,10 @@ def create_search_provider(provider_id: str, settings: Settings | None) -> Yande
 
 
 def llm_model_label(llm: ChatLLM, answer_model: str) -> str:
-    if isinstance(llm, AnthropicClaudeProvider):
-        return llm._model_name(answer_model)  # type: ignore[arg-type]
-    return llm._model_uri(answer_model)  # type: ignore[arg-type]
+    target = getattr(llm, "label_provider", llm)
+    if isinstance(target, AnthropicClaudeProvider):
+        return target._model_name(answer_model)  # type: ignore[arg-type]
+    return target._model_uri(answer_model)  # type: ignore[arg-type]
 
 
 async def resolve_runtime_providers(
@@ -67,7 +69,10 @@ async def resolve_runtime_providers(
     llm_id = await resolve_llm_provider_id(db, redis_client)
     search_id = await resolve_search_provider_id(db, redis_client)
     llm = create_llm_provider(llm_id, settings, prompt_store)
-    if llm_id == "anthropic_claude" and not settings.anthropic_configured:
+    if llm_id == "anthropic_claude" and settings.yandex_configured:
+        yandex_llm = YandexGPTProvider(settings, prompt_store=prompt_store)
+        llm = ClaudeWithYandexFallback(llm, yandex_llm)  # type: ignore[assignment]
+    elif llm_id == "anthropic_claude" and not settings.anthropic_configured:
         import logging
 
         logging.getLogger(__name__).warning(

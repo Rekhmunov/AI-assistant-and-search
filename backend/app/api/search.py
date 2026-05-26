@@ -13,6 +13,7 @@ from app.models.user import User
 from app.schemas.search import SearchRequest
 from app.services.app_settings import get_setting
 from app.services.search_flow import SearchFlowService, sse_event
+from app.services.yandex_errors import YandexServiceError
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +65,11 @@ async def search_stream(
                     redis_client=redis,
                 ):
                     yield event
+            except YandexServiceError as e:
+                logger.warning("Search stream Yandex/Claude error for user %s: %s", user_id, e)
+                await db.rollback()
+                await limiter.release_search(str(user_id))
+                yield sse_event("error", {"code": "yandex_error", "message": str(e)})
             except Exception:
                 logger.exception("Search SSE stream failed for user %s", user_id)
                 await db.rollback()

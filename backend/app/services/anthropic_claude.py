@@ -59,10 +59,11 @@ def _anthropic_http_error_message(response: httpx.Response, *, model: str) -> st
         base += f", модель {model}"
     if detail:
         base += f": {detail}"
-    elif response.status_code == 403:
+    if response.status_code == 403:
         base += (
-            ". Проверьте в console.anthropic.com: биллинг, Model Access для этой модели, "
-            "ключ sk-ant- из того же workspace"
+            ". В console.anthropic.com → Settings → Model access: включите эту модель "
+            "(и Sonnet для pro) в том же workspace, что и API-ключ. "
+            "При включённом Yandex Glosix может ответить через Yandex GPT."
         )
     return base
 
