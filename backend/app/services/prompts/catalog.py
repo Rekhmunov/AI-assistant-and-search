@@ -124,6 +124,21 @@ _ANTHROPIC_PROMPTS: tuple[PromptDefinition, ...] = tuple(
 
 PROMPT_CATALOG = PROMPT_CATALOG + _ANTHROPIC_PROMPTS
 
+_DEEPSEEK_PROMPTS: tuple[PromptDefinition, ...] = tuple(
+    PromptDefinition(
+        id=p.id.replace("yandex_gpt_", "deepseek_", 1),
+        label=p.label,
+        group=p.group,
+        provider="deepseek",
+        description=p.description,
+        rows=p.rows,
+    )
+    for p in PROMPT_CATALOG
+    if p.provider == "yandex_gpt"
+)
+
+PROMPT_CATALOG = PROMPT_CATALOG + _DEEPSEEK_PROMPTS
+
 _by_provider: dict[str, list[PromptDefinition]] = {}
 for _p in PROMPT_CATALOG:
     _by_provider.setdefault(_p.provider, []).append(_p)

@@ -155,6 +155,7 @@ _YANDEX_PROMPT_DEFAULTS: dict[str, str] = {
 PROMPT_DEFAULTS: dict[str, str] = dict(_YANDEX_PROMPT_DEFAULTS)
 for _key, _val in _YANDEX_PROMPT_DEFAULTS.items():
     PROMPT_DEFAULTS[_key.replace("yandex_gpt_", "anthropic_claude_", 1)] = _val
+    PROMPT_DEFAULTS[_key.replace("yandex_gpt_", "deepseek_", 1)] = _val
 
 DEFAULT_LLM_PROVIDER = "yandex_gpt"
 DEFAULT_SEARCH_PROVIDER = "yandex_search"

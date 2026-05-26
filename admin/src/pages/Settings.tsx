@@ -26,6 +26,9 @@ type LlmRuntime = {
   anthropic_api_key_loaded: boolean;
   anthropic_key_suffix?: string | null;
   anthropic_mock_active: boolean;
+  deepseek_api_key_loaded?: boolean;
+  deepseek_key_suffix?: string | null;
+  deepseek_mock_active?: boolean;
   hint?: string | null;
 };
 
@@ -46,6 +49,7 @@ export function SettingsPage() {
   const [msg, setMsg] = useState("");
   const [llmRuntime, setLlmRuntime] = useState<LlmRuntime | null>(null);
   const [probeMsg, setProbeMsg] = useState("");
+  const [deepseekProbeMsg, setDeepseekProbeMsg] = useState("");
 
   useEffect(() => {
     apiFetch<SettingsBundle>("/api/admin/settings").then((r) => {
@@ -136,11 +140,29 @@ export function SettingsPage() {
     }
   };
 
+  const runDeepseekProbe = async () => {
+    setDeepseekProbeMsg("Проверка…");
+    try {
+      const r = await apiFetch<{
+        ok: boolean;
+        key_suffix?: string;
+        message: string;
+      }>("/api/admin/settings/probe-deepseek", { method: "POST" });
+      setDeepseekProbeMsg(
+        r.ok
+          ? `${r.message} (суффикс ключа …${r.key_suffix ?? "?"})`
+          : r.message,
+      );
+    } catch (err) {
+      setDeepseekProbeMsg(err instanceof Error ? err.message : "Ошибка проверки");
+    }
+  };
+
   return (
     <div className="settings-page">
       <h1>Настройки</h1>
       <p className="hint">
-        Секреты (BOT_TOKEN, Yandex API, Anthropic) — только в .env на сервере. Ключ из чата Cursor не
+        Секреты (BOT_TOKEN, Yandex API, Anthropic, DeepSeek) — только в .env на сервере. Ключ из чата Cursor не
         используется. После смены .env: force-recreate backend. Lite/Pro выбирает код по типу запроса.
       </p>
       {llmRuntime?.hint && (
@@ -298,8 +320,15 @@ export function SettingsPage() {
         {llmRuntime?.anthropic_key_suffix
           ? ` (…${llmRuntime.anthropic_key_suffix})`
           : ""}{" "}
+        · DeepSeek в .env: {settings.deepseek_configured ? "да" : "нет"}
+        {llmRuntime?.deepseek_key_suffix
+          ? ` (…${llmRuntime.deepseek_key_suffix})`
+          : ""}{" "}
         · Активный LLM: {llmRuntime?.active_provider ?? llmProvider}
-        {llmRuntime?.anthropic_mock_active ? " · mock, API не вызывается" : ""} · Среда:{" "}
+        {llmRuntime?.anthropic_mock_active || llmRuntime?.deepseek_mock_active
+          ? " · mock, API не вызывается"
+          : ""}{" "}
+        · Среда:{" "}
         {String(settings.environment)}
       </p>
       {can("settings:read") && (
@@ -308,6 +337,14 @@ export function SettingsPage() {
             Проверить Claude (тестовый запрос из .env)
           </button>
           {probeMsg && <span className="hint-inline"> {probeMsg}</span>}
+        </p>
+      )}
+      {can("settings:read") && (
+        <p>
+          <button type="button" className="btn-link" onClick={() => void runDeepseekProbe()}>
+            Проверить DeepSeek (lite + pro из .env)
+          </button>
+          {deepseekProbeMsg && <span className="hint-inline"> {deepseekProbeMsg}</span>}
         </p>
       )}
     </div>

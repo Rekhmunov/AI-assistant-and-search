@@ -19,6 +19,7 @@ class ProviderInfo:
 def list_llm_providers(settings: Settings) -> list[ProviderInfo]:
     yandex_ok = settings.yandex_configured
     claude_ok = settings.anthropic_configured
+    deepseek_ok = settings.deepseek_configured
     return [
         ProviderInfo(
             id="yandex_gpt",
@@ -38,6 +39,17 @@ def list_llm_providers(settings: Settings) -> list[ProviderInfo]:
                 else "Нужен ANTHROPIC_API_KEY в .env"
             ),
         ),
+        ProviderInfo(
+            id="deepseek",
+            label="DeepSeek",
+            kind="llm",
+            configured=deepseek_ok,
+            hint=(
+                "Тот же пайплайн Glosix: Yandex Search + RAG; меняется только LLM."
+                if deepseek_ok
+                else "Нужен DEEPSEEK_API_KEY в .env"
+            ),
+        ),
     ]
 
 
@@ -54,5 +66,5 @@ def list_search_providers(settings: Settings) -> list[ProviderInfo]:
     ]
 
 
-VALID_LLM_IDS = frozenset({"yandex_gpt", "anthropic_claude"})
+VALID_LLM_IDS = frozenset({"yandex_gpt", "anthropic_claude", "deepseek"})
 VALID_SEARCH_IDS = frozenset({"yandex_search"})

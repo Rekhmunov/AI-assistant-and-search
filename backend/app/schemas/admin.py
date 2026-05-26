@@ -147,6 +147,9 @@ class LlmRuntimeOut(BaseModel):
     anthropic_api_key_loaded: bool
     anthropic_key_suffix: str | None = None
     anthropic_mock_active: bool = False
+    deepseek_api_key_loaded: bool = False
+    deepseek_key_suffix: str | None = None
+    deepseek_mock_active: bool = False
     hint: str | None = None
 
 

@@ -50,6 +50,12 @@ class Settings(BaseSettings):
     # Если VPS в регионе/сети, где api.anthropic.com отдаёт 403 — HTTP(S) прокси в EU/US
     anthropic_http_proxy: str = ""
 
+    deepseek_api_key: str = ""
+    deepseek_model_lite: str = "deepseek-v4-flash"
+    deepseek_model_pro: str = "deepseek-v4-pro"
+    deepseek_base_url: str = "https://api.deepseek.com"
+    deepseek_http_proxy: str = ""
+
     yookassa_shop_id: str = ""
     yookassa_secret_key: str = ""
 
@@ -80,6 +86,10 @@ class Settings(BaseSettings):
     @property
     def anthropic_configured(self) -> bool:
         return bool(self.anthropic_api_key.strip())
+
+    @property
+    def deepseek_configured(self) -> bool:
+        return bool(self.deepseek_api_key.strip())
 
     def yandex_model_uri(self, model: str) -> str:
         folder = self.yandex_folder_id

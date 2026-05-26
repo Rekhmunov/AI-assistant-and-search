@@ -10,14 +10,21 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import Settings, get_settings
 from app.services.app_settings import get_setting
 from app.services.anthropic_claude import AnthropicClaudeProvider
+from app.services.deepseek import DeepSeekProvider
 from app.services.prompts.defaults import DEFAULT_LLM_PROVIDER, DEFAULT_SEARCH_PROVIDER
 from app.services.prompts.store import PromptStore
-from app.services.providers.llm_fallback import ClaudeWithYandexFallback
+from app.services.providers.llm_fallback import ClaudeWithYandexFallback, DeepSeekWithYandexFallback
 from app.services.providers.registry import VALID_LLM_IDS, VALID_SEARCH_IDS
 from app.services.yandex_gpt import YandexGPTProvider
 from app.services.yandex_search import YandexSearchService
 
-ChatLLM = Union[YandexGPTProvider, AnthropicClaudeProvider, ClaudeWithYandexFallback]
+ChatLLM = Union[
+    YandexGPTProvider,
+    AnthropicClaudeProvider,
+    DeepSeekProvider,
+    ClaudeWithYandexFallback,
+    DeepSeekWithYandexFallback,
+]
 
 
 async def resolve_llm_provider_id(db: AsyncSession, redis_client: redis.Redis) -> str:
@@ -42,6 +49,8 @@ def create_llm_provider(
         return YandexGPTProvider(settings, prompt_store=prompt_store)
     if provider_id == "anthropic_claude":
         return AnthropicClaudeProvider(settings, prompt_store=prompt_store)
+    if provider_id == "deepseek":
+        return DeepSeekProvider(settings, prompt_store=prompt_store)
     raise ValueError(f"Unknown LLM provider: {provider_id}")
 
 
@@ -54,7 +63,7 @@ def create_search_provider(provider_id: str, settings: Settings | None) -> Yande
 
 def llm_model_label(llm: ChatLLM, answer_model: str) -> str:
     target = getattr(llm, "label_provider", llm)
-    if isinstance(target, AnthropicClaudeProvider):
+    if isinstance(target, (AnthropicClaudeProvider, DeepSeekProvider)):
         return target._model_name(answer_model)  # type: ignore[arg-type]
     return target._model_uri(answer_model)  # type: ignore[arg-type]
 
@@ -77,6 +86,15 @@ async def resolve_runtime_providers(
 
         logging.getLogger(__name__).warning(
             "llm_provider=anthropic_claude but ANTHROPIC_API_KEY missing — answers use mock, no API calls"
+        )
+    elif llm_id == "deepseek" and settings.yandex_configured:
+        yandex_llm = YandexGPTProvider(settings, prompt_store=prompt_store)
+        llm = DeepSeekWithYandexFallback(llm, yandex_llm)  # type: ignore[assignment]
+    elif llm_id == "deepseek" and not settings.deepseek_configured:
+        import logging
+
+        logging.getLogger(__name__).warning(
+            "llm_provider=deepseek but DEEPSEEK_API_KEY missing — answers use mock, no API calls"
         )
     search = create_search_provider(search_id, settings)
     return llm, search, prompt_store, llm_id, search_id
