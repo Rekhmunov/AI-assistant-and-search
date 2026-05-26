@@ -67,5 +67,11 @@ async def resolve_runtime_providers(
     llm_id = await resolve_llm_provider_id(db, redis_client)
     search_id = await resolve_search_provider_id(db, redis_client)
     llm = create_llm_provider(llm_id, settings, prompt_store)
+    if llm_id == "anthropic_claude" and not settings.anthropic_configured:
+        import logging
+
+        logging.getLogger(__name__).warning(
+            "llm_provider=anthropic_claude but ANTHROPIC_API_KEY missing — answers use mock, no API calls"
+        )
     search = create_search_provider(search_id, settings)
     return llm, search, prompt_store, llm_id, search_id

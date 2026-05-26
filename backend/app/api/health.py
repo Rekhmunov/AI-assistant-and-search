@@ -6,6 +6,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_db, get_redis
 from app.core.config import get_settings
+from app.services.anthropic_probe import probe_anthropic
+from app.services.llm_runtime import fetch_llm_runtime_status
 from app.services.query_router import POLICY_VERSION
 from app.services.yandex_probe import probe_yandex
 
@@ -109,12 +111,20 @@ async def api_health(db: Annotated[AsyncSession, Depends(get_db)]):
         redis_ok = False
 
     settings = get_settings()
+    llm_runtime = None
+    if redis_ok:
+        try:
+            redis = await get_redis()
+            llm_runtime = await fetch_llm_runtime_status(db, redis, settings)
+        except Exception:
+            pass
     status = "ok" if not missing and not missing_tables and redis_ok else "degraded"
     return {
         "status": status,
         "redis": redis_ok,
         "yandex_configured": settings.yandex_configured,
         "anthropic_configured": settings.anthropic_configured,
+        "llm_runtime": llm_runtime,
         "yandex_models": {
             "lite": settings.yandex_gpt_lite_model,
             "pro": settings.yandex_gpt_pro_model,
@@ -160,3 +170,9 @@ async def api_health_version():
 async def api_health_yandex():
     """Проверка Search API и YandexGPT Lite/Pro (может занять до ~30 с)."""
     return await probe_yandex()
+
+
+@router.get("/health/anthropic")
+async def api_health_anthropic():
+    """Тест Anthropic с ANTHROPIC_API_KEY из .env (появится в Usage консоли)."""
+    return await probe_anthropic()

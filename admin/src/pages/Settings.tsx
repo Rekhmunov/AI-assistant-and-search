@@ -21,8 +21,17 @@ type PromptField = {
   default: string;
 };
 
+type LlmRuntime = {
+  active_provider: string;
+  anthropic_api_key_loaded: boolean;
+  anthropic_key_suffix?: string | null;
+  anthropic_mock_active: boolean;
+  hint?: string | null;
+};
+
 type SettingsBundle = {
   settings: Record<string, unknown>;
+  llm_runtime?: LlmRuntime | null;
   llm_providers: ProviderOption[];
   search_providers: ProviderOption[];
   prompts: PromptField[];
@@ -35,10 +44,13 @@ export function SettingsPage() {
   const [searchProviders, setSearchProviders] = useState<ProviderOption[]>([]);
   const [prompts, setPrompts] = useState<PromptField[]>([]);
   const [msg, setMsg] = useState("");
+  const [llmRuntime, setLlmRuntime] = useState<LlmRuntime | null>(null);
+  const [probeMsg, setProbeMsg] = useState("");
 
   useEffect(() => {
     apiFetch<SettingsBundle>("/api/admin/settings").then((r) => {
       setSettings(r.settings);
+      setLlmRuntime(r.llm_runtime ?? null);
       setLlmProviders(r.llm_providers);
       setSearchProviders(r.search_providers);
       setPrompts(r.prompts);
@@ -95,6 +107,7 @@ export function SettingsPage() {
         body: JSON.stringify({ settings: payload }),
       });
       setSettings(updated.settings ?? {});
+      if (updated.llm_runtime) setLlmRuntime(updated.llm_runtime);
       if (updated.llm_providers?.length) setLlmProviders(updated.llm_providers);
       if (updated.search_providers?.length) setSearchProviders(updated.search_providers);
       if (updated.prompts?.length) setPrompts(updated.prompts);
@@ -105,13 +118,36 @@ export function SettingsPage() {
     }
   };
 
+  const runAnthropicProbe = async () => {
+    setProbeMsg("Проверка…");
+    try {
+      const r = await apiFetch<{
+        ok: boolean;
+        key_suffix?: string;
+        message: string;
+      }>("/api/admin/settings/probe-anthropic", { method: "POST" });
+      setProbeMsg(
+        r.ok
+          ? `${r.message} (суффикс ключа …${r.key_suffix ?? "?"})`
+          : r.message,
+      );
+    } catch (err) {
+      setProbeMsg(err instanceof Error ? err.message : "Ошибка проверки");
+    }
+  };
+
   return (
     <div className="settings-page">
       <h1>Настройки</h1>
       <p className="hint">
-        Секреты (BOT_TOKEN, Yandex API, JWT) — только в .env. Lite/Pro для ответов выбирает код по типу
-        запроса.
+        Секреты (BOT_TOKEN, Yandex API, Anthropic) — только в .env на сервере. Ключ из чата Cursor не
+        используется. После смены .env: force-recreate backend. Lite/Pro выбирает код по типу запроса.
       </p>
+      {llmRuntime?.hint && (
+        <p className="error" role="alert">
+          {llmRuntime.hint}
+        </p>
+      )}
 
       <form className="card settings-form" onSubmit={save}>
         <section className="settings-section">
@@ -257,10 +293,23 @@ export function SettingsPage() {
         </p>
       )}
       <p>
-        Yandex: {settings.yandex_configured ? "настроен" : "mock"} · Claude:{" "}
-        {settings.anthropic_configured ? "настроен" : "не задан"} · Среда:{" "}
+        Yandex: {settings.yandex_configured ? "настроен" : "mock"} · Claude в .env:{" "}
+        {settings.anthropic_configured ? "да" : "нет"}
+        {llmRuntime?.anthropic_key_suffix
+          ? ` (…${llmRuntime.anthropic_key_suffix})`
+          : ""}{" "}
+        · Активный LLM: {llmRuntime?.active_provider ?? llmProvider}
+        {llmRuntime?.anthropic_mock_active ? " · mock, API не вызывается" : ""} · Среда:{" "}
         {String(settings.environment)}
       </p>
+      {can("settings:read") && (
+        <p>
+          <button type="button" className="btn-link" onClick={() => void runAnthropicProbe()}>
+            Проверить Claude (тестовый запрос из .env)
+          </button>
+          {probeMsg && <span className="hint-inline"> {probeMsg}</span>}
+        </p>
+      )}
     </div>
   );
 }

@@ -8,6 +8,7 @@ from app.core.config import Settings, get_settings
 from app.models.app_setting import AppSetting
 from app.services.prompts.catalog import PROMPT_CATALOG
 from app.services.prompts.defaults import DEFAULT_LLM_PROVIDER, DEFAULT_SEARCH_PROVIDER, PROMPT_DEFAULTS
+from app.services.llm_runtime import fetch_llm_runtime_status
 from app.services.providers.registry import list_llm_providers, list_search_providers
 
 BASE_SETTING_KEYS: dict[str, type] = {
@@ -168,8 +169,10 @@ async def list_settings_bundle(db: AsyncSession, redis_client: redis.Redis) -> d
                 "default": p.default,
             }
         )
+    llm_runtime = await fetch_llm_runtime_status(db, redis_client, settings)
     return {
         "settings": flat,
+        "llm_runtime": llm_runtime,
         "llm_providers": [
             {"id": x.id, "label": x.label, "configured": x.configured, "hint": x.hint}
             for x in list_llm_providers(settings)
