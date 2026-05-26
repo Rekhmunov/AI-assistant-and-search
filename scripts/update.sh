@@ -27,7 +27,14 @@ else
   echo "==> No .git — skip pull"
 fi
 
-echo "==> nginx.prod.conf from hosting.config"
+echo "==> nginx.prod.conf from hosting.config (if missing or placeholder)"
+if [ -f hosting.config ]; then
+  if [ ! -f nginx/nginx.prod.conf ] || grep -q "make configure" nginx/nginx.prod.conf 2>/dev/null; then
+    bash scripts/render-nginx.sh
+  fi
+fi
+
+echo "==> nginx.prod.conf check"
 bash scripts/render-nginx.sh || true
 
 export GIT_COMMIT="$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
