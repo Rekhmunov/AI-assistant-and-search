@@ -131,10 +131,19 @@ export function Thread() {
           const tid = activeThreadIdRef.current ?? existingThreadId ?? id ?? threadId;
           if (tid) queryClient.invalidateQueries({ queryKey: ["thread", tid] });
         },
-        onError: (msg) => {
+        onError: (msg, code) => {
           streamingRef.current = false;
           setStreaming(false);
           setSearchPhase("idle");
+          const fatalThread =
+            code === "server_error" ||
+            code === "not_found" ||
+            msg.includes("Тред не найден");
+          if (fatalThread) {
+            activeThreadIdRef.current = null;
+            setThreadId(null);
+            if (id) navigate("/", { replace: true });
+          }
           setTurns((prev) =>
             prev.map((turn) =>
               turn.streaming ? { ...turn, answer: msg, streaming: false } : turn,

@@ -74,6 +74,7 @@ async def _ensure_table(db: AsyncSession) -> bool:
         await db.execute(text("SELECT 1 FROM query_url_log LIMIT 0"))
         _table_ok = True
     except ProgrammingError:
+        await db.rollback()
         _table_ok = False
         logger.warning("Table query_url_log missing — run alembic upgrade head")
     return _table_ok

@@ -65,6 +65,7 @@ async def _messages_have_debug_trace(db: AsyncSession) -> bool:
         await db.execute(text("SELECT debug_trace FROM messages LIMIT 0"))
         _debug_trace_column_ok = True
     except ProgrammingError:
+        await db.rollback()
         _debug_trace_column_ok = False
         logger.warning("Column messages.debug_trace missing — run alembic upgrade head")
     return _debug_trace_column_ok
@@ -183,6 +184,8 @@ class SearchFlowService:
         user_msg = Message(thread_id=thread.id, role=MessageRole.USER, content=display_content)
         db.add(user_msg)
         await db.flush()
+        # Сохраняем тред до долгого поиска: при сбое rollback не должен «стирать» уже отданный thread_id.
+        await db.commit()
 
         yield sse_event("thread", {"thread_id": str(thread.id)})
         yield sse_event(
@@ -330,6 +333,7 @@ class SearchFlowService:
                             hint_clarify=hint_clarify,
                             strict_facts=True,
                             fact_pack=fact_pack,
+                            intent_howto=howto,
                         ):
                             full_answer += chunk
                             yield sse_event("token", {"text": chunk})
@@ -390,12 +394,16 @@ class SearchFlowService:
             has_facts = bool(fact_pack and fact_pack.facts)
             if retrieval_ok or has_facts:
                 score = float((retrieval_trace or {}).get("score") or 0.35)
-                query_url_trace.recorded_count = await record_successful_urls(
-                    db,
-                    llm_query,
-                    sources,
-                    retrieval_score=score,
-                )
+                try:
+                    query_url_trace.recorded_count = await record_successful_urls(
+                        db,
+                        llm_query,
+                        sources,
+                        retrieval_score=score,
+                    )
+                except Exception:
+                    logger.exception("query_url_memory record failed")
+                    await db.rollback()
 
         debug_trace = build_debug_trace(
             display_content=display_content,

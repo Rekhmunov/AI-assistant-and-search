@@ -241,7 +241,7 @@ export interface SSEHandlers {
   onResetAnswer?: () => void;
   onFollowUps?: (questions: string[]) => void;
   onDone?: () => void;
-  onError?: (message: string) => void;
+  onError?: (message: string, code?: string) => void;
 }
 
 export interface UploadedFile {
@@ -353,7 +353,7 @@ export async function streamSearch(
             break;
           case "error":
             gotError = true;
-            handlers.onError?.(parsed.message);
+            handlers.onError?.(parsed.message, parsed.code as string | undefined);
             break;
         }
       }
