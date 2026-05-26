@@ -17,6 +17,17 @@ from app.services.providers.registry import VALID_LLM_IDS, VALID_SEARCH_IDS
 router = APIRouter(prefix="/settings", tags=["admin-settings"])
 
 
+def _audit_settings_details(updated: dict[str, Any]) -> dict[str, Any]:
+    """Не пишем полные промпты в audit (огромный JSON → риск 500 на commit)."""
+    out: dict[str, Any] = {}
+    for key, value in updated.items():
+        if key.startswith("prompt_"):
+            out[key] = {"chars": len(str(value))}
+        else:
+            out[key] = value
+    return out
+
+
 @router.get("", response_model=SettingsBundleOut)
 async def get_settings(
     db: Annotated[AsyncSession, Depends(get_db)],
@@ -71,7 +82,7 @@ async def update_settings(
         admin=admin,
         action="settings.update",
         resource_type="settings",
-        details=updated,
+        details=_audit_settings_details(updated),
         ip_address=request.client.host if request.client else None,
     )
     bundle = await list_settings_bundle(db, redis)

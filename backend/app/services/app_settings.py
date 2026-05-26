@@ -44,7 +44,11 @@ def _parse_value(key: str, raw: str) -> Any:
     if kind is bool:
         return raw.lower() in ("1", "true", "yes", "on")
     if kind is int:
-        return int(raw)
+        try:
+            return int(float(str(raw).strip()))
+        except (TypeError, ValueError):
+            fallback = default_for_key(key)
+            return int(fallback)
     return raw
 
 

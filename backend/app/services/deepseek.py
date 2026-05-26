@@ -101,10 +101,17 @@ class DeepSeekProvider(PromptedLLMMixin, LLMProvider):
             return httpx.AsyncClient(timeout=timeout, proxy=proxy)
         return httpx.AsyncClient(timeout=timeout)
 
-    def _thinking_payload(self, model: AnswerModel) -> dict[str, Any]:
-        if model == "pro":
-            return {"thinking": {"type": "enabled"}, "reasoning_effort": "high"}
-        return {"thinking": {"type": "disabled"}}
+    def _thinking_payload(
+        self,
+        model: AnswerModel,
+        *,
+        max_tokens: int,
+        stream: bool = False,
+    ) -> dict[str, Any]:
+        """Thinking на pro только для длинных non-stream запросов (иначе пустой content)."""
+        if model != "pro" or stream or max_tokens < 256:
+            return {"thinking": {"type": "disabled"}}
+        return {"thinking": {"type": "enabled"}, "reasoning_effort": "high"}
 
     async def _build_messages_from_fact_pack(
         self,
@@ -214,7 +221,10 @@ class DeepSeekProvider(PromptedLLMMixin, LLMProvider):
         if not choices:
             return ""
         msg = choices[0].get("message") or {}
-        return str(msg.get("content") or "")
+        content = str(msg.get("content") or "").strip()
+        if content:
+            return content
+        return str(msg.get("reasoning_content") or "").strip()
 
     async def complete_text(
         self,
@@ -231,7 +241,7 @@ class DeepSeekProvider(PromptedLLMMixin, LLMProvider):
             "model": model_id,
             "max_tokens": max_tokens,
             "messages": _to_openai_messages(messages),
-            **self._thinking_payload(model),
+            **self._thinking_payload(model, max_tokens=max_tokens),
         }
         if model == "lite":
             payload["temperature"] = temperature
@@ -268,7 +278,7 @@ class DeepSeekProvider(PromptedLLMMixin, LLMProvider):
             "max_tokens": max_tokens,
             "stream": True,
             "messages": _to_openai_messages(messages),
-            **self._thinking_payload(model),
+            **self._thinking_payload(model, max_tokens=max_tokens, stream=True),
         }
         if model == "lite":
             payload["temperature"] = temperature

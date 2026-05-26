@@ -102,7 +102,7 @@ export function SettingsPage() {
       llm_provider: llmProvider,
       search_provider: searchProvider,
     };
-    for (const p of prompts) {
+    for (const p of visiblePrompts) {
       payload[p.setting_key] = String(settings[p.setting_key] ?? p.value);
     }
     try {

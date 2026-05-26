@@ -48,10 +48,12 @@ async def probe_deepseek(settings: Settings | None = None) -> dict:
         text = await llm.complete_text(
             [{"role": "user", "text": "Ответь одним словом: ок"}],
             model="pro",
-            max_tokens=16,
+            max_tokens=64,
             temperature=0.0,
         )
         pro_ok = bool(text.strip())
+        if not pro_ok:
+            errors.append("pro: пустой ответ от API")
     except httpx.HTTPStatusError as e:
         errors.append(f"pro HTTP {e.response.status_code}")
         logger.warning("DeepSeek pro probe: %s", e.response.text[:300])
