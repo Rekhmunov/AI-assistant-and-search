@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_db, get_redis
 from app.core.admin_permissions import require_permission
 from app.models.admin_user import AdminUser
-from app.schemas.admin import SettingsBundleOut, SettingsOut, SettingsUpdate
+from app.schemas.admin import SettingsBundleOut, SettingsUpdate
 from app.services.admin_audit import log_admin_action
 from app.services.app_settings import SETTING_KEYS, list_settings, list_settings_bundle, set_setting
 from app.services.providers.registry import VALID_LLM_IDS, VALID_SEARCH_IDS
@@ -24,7 +24,7 @@ async def get_settings(
     return SettingsBundleOut(**bundle)
 
 
-@router.patch("", response_model=SettingsOut)
+@router.patch("", response_model=SettingsBundleOut)
 async def update_settings(
     body: SettingsUpdate,
     request: Request,

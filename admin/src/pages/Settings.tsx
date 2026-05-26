@@ -76,6 +76,7 @@ export function SettingsPage() {
 
   const save = async (e: FormEvent) => {
     e.preventDefault();
+    setMsg("");
     const payload: Record<string, unknown> = {
       free_searches_per_day: Number(settings.free_searches_per_day),
       pro_searches_per_day: Number(settings.pro_searches_per_day),
@@ -88,13 +89,20 @@ export function SettingsPage() {
     for (const p of prompts) {
       payload[p.setting_key] = String(settings[p.setting_key] ?? p.value);
     }
-    const updated = await apiFetch<SettingsBundle>("/api/admin/settings", {
-      method: "PATCH",
-      body: JSON.stringify({ settings: payload }),
-    });
-    setSettings(updated.settings);
-    setPrompts(updated.prompts);
-    setMsg("Сохранено");
+    try {
+      const updated = await apiFetch<SettingsBundle>("/api/admin/settings", {
+        method: "PATCH",
+        body: JSON.stringify({ settings: payload }),
+      });
+      setSettings(updated.settings ?? {});
+      if (updated.llm_providers?.length) setLlmProviders(updated.llm_providers);
+      if (updated.search_providers?.length) setSearchProviders(updated.search_providers);
+      if (updated.prompts?.length) setPrompts(updated.prompts);
+      setMsg("Сохранено");
+    } catch (err) {
+      const text = err instanceof Error ? err.message : "Ошибка сохранения";
+      setMsg(text);
+    }
   };
 
   return (
@@ -243,7 +251,11 @@ export function SettingsPage() {
         )}
       </form>
 
-      {msg && <p className="ok">{msg}</p>}
+      {msg && (
+        <p className={msg === "Сохранено" ? "ok" : "error"} role="alert">
+          {msg}
+        </p>
+      )}
       <p>
         Yandex: {settings.yandex_configured ? "настроен" : "mock"} · Claude:{" "}
         {settings.anthropic_configured ? "настроен" : "не задан"} · Среда:{" "}

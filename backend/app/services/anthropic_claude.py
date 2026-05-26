@@ -244,12 +244,39 @@ class AnthropicClaudeProvider(PromptedLLMMixin, LLMProvider):
         if system:
             payload["system"] = system
 
+        def _delta_text(event: dict) -> str | None:
+            et = event.get("type")
+            if et == "error":
+                err = event.get("error") or {}
+                msg = err.get("message") or str(err)
+                raise YandexServiceError("gpt", f"Claude stream: {msg}")
+            if et == "content_block_delta":
+                delta = event.get("delta") or {}
+                if delta.get("type") in (None, "text_delta", "input_json_delta"):
+                    text = delta.get("text")
+                    if text:
+                        return str(text)
+            if et == "message_delta":
+                delta = event.get("delta") or {}
+                text = delta.get("text")
+                if text:
+                    return str(text)
+            return None
+
         try:
             async with httpx.AsyncClient(timeout=120.0) as client:
                 async with client.stream(
                     "POST", MESSAGES_URL, headers=self._headers(), json=payload
                 ) as response:
-                    response.raise_for_status()
+                    if response.status_code >= 400:
+                        body = (await response.aread()).decode("utf-8", errors="replace")[:500]
+                        logger.error("Claude stream HTTP %s: %s", response.status_code, body)
+                        raise YandexServiceError(
+                            "gpt",
+                            f"Claude недоступен (HTTP {response.status_code})",
+                            response.status_code,
+                        )
+                    yielded = False
                     async for line in response.aiter_lines():
                         if not line.startswith("data:"):
                             continue
@@ -260,11 +287,12 @@ class AnthropicClaudeProvider(PromptedLLMMixin, LLMProvider):
                             event = json.loads(raw)
                         except json.JSONDecodeError:
                             continue
-                        if event.get("type") == "content_block_delta":
-                            delta = event.get("delta") or {}
-                            text = delta.get("text")
-                            if text:
-                                yield text
+                        text = _delta_text(event)
+                        if text:
+                            yielded = True
+                            yield text
+                    if not yielded:
+                        logger.warning("Claude stream returned no text deltas (model=%s)", payload.get("model"))
         except httpx.HTTPStatusError as e:
             logger.error("Claude stream HTTP %s: %s", e.response.status_code, e.response.text[:500])
             raise YandexServiceError(
