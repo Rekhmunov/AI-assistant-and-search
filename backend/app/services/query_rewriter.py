@@ -87,8 +87,8 @@ class QueryRewriter:
                 history_text=history_text or "(нет)",
                 continuation_label="да" if ctx.is_continuation else "нет",
             )
-        except KeyError:
-            logger.warning("Rewriter prompt template missing placeholders, using default")
+        except (KeyError, ValueError):
+            logger.warning("Rewriter prompt template invalid, using default")
             user_prompt = REWRITER_USER.format(
                 query=query[:900],
                 history_text=history_text or "(нет)",

@@ -167,6 +167,5 @@ class YandexSearchService:
             except (json.JSONDecodeError, UnicodeDecodeError):
                 pass
         if not sources:
-            logger.warning("Yandex Search: no documents in response")
-            raise YandexServiceError("search", "В выдаче нет документов")
+            logger.warning("Yandex Search: no documents in response (empty SERP)")
         return sources

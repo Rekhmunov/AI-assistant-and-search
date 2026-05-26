@@ -100,8 +100,8 @@ async def extract_facts_from_sources(
             prefilled=prefilled_text,
             sources_block=_format_sources_block(sources),
         )
-    except KeyError:
-        logger.warning("Extract prompt template missing placeholders, using default")
+    except (KeyError, ValueError):
+        logger.warning("Extract prompt template invalid, using default")
         user_text = EXTRACT_USER.format(
             query=query[:900],
             prefilled=prefilled_text,

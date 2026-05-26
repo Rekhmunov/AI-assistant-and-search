@@ -279,7 +279,7 @@ class AnthropicClaudeProvider(PromptedLLMMixin, LLMProvider):
                 raise YandexServiceError("gpt", f"Claude stream: {msg}")
             if et == "content_block_delta":
                 delta = event.get("delta") or {}
-                if delta.get("type") in (None, "text_delta", "input_json_delta"):
+                if delta.get("type") in (None, "text_delta"):
                     text = delta.get("text")
                     if text:
                         return str(text)
@@ -408,7 +408,8 @@ class AnthropicClaudeProvider(PromptedLLMMixin, LLMProvider):
         ]
         try:
             text = await self.complete_text(messages, model="lite", max_tokens=320, temperature=0.4)
-        except YandexServiceError:
+        except Exception:
+            logger.exception("Claude follow-ups failed")
             return _default_follow_up_suggestions(query)
 
         match = re.search(r"\[.*\]", text, re.DOTALL)

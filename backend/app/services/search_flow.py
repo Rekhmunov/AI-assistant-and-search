@@ -390,7 +390,10 @@ class SearchFlowService:
                     llm.generate_follow_ups(llm_query, full_answer)
                 )
             else:
-                follow_ups = await llm.generate_follow_ups(llm_query, full_answer)
+                try:
+                    follow_ups = await llm.generate_follow_ups(llm_query, full_answer)
+                except Exception:
+                    logger.exception("Follow-up suggestions failed (sync)")
 
         if (
             route.needs_search
@@ -414,41 +417,50 @@ class SearchFlowService:
                     logger.exception("query_url_memory record failed")
                     await db.rollback()
 
-        debug_trace = build_debug_trace(
-            llm=llm,
-            llm_provider_id=llm_provider_id,
-            display_content=display_content,
-            llm_query=llm_query,
-            route=route,
-            search_query_sent=search_q_sent,
-            sources=sources,
-            sources_json=sources_json,
-            needs_search=route.needs_search,
-            answer_model=route.answer_model,
-            gpt_messages_preview=gpt_preview,
-            rewrite=rewrite_trace,
-            search_attempts=search_attempts or None,
-            retrieval=retrieval_trace,
-            fact_pack=fact_pack.to_dict() if fact_pack else None,
-            page_cache=page_cache_trace,
-            query_url_memory=query_url_trace.to_dict() if query_url_trace else None,
-        )
-
-        trace_payload = debug_trace if await _messages_have_debug_trace(db) else None
-        assistant_msg = Message(
-            thread_id=thread.id,
-            role=MessageRole.ASSISTANT,
-            content=full_answer.strip(),
-            sources=sources_json if sources_json else None,
-            follow_up_questions=follow_ups or None,
-            debug_trace=trace_payload,
-        )
-        db.add(assistant_msg)
-        thread.message_count = (thread.message_count or 0) + 2
-        thread.last_message_at = datetime.now(timezone.utc)
-        if not thread_id:
-            thread.title = display_content[:200]
-        await db.commit()
+        try:
+            debug_trace = build_debug_trace(
+                llm=llm,
+                llm_provider_id=llm_provider_id,
+                display_content=display_content,
+                llm_query=llm_query,
+                route=route,
+                search_query_sent=search_q_sent,
+                sources=sources,
+                sources_json=sources_json,
+                needs_search=route.needs_search,
+                answer_model=route.answer_model,
+                gpt_messages_preview=gpt_preview,
+                rewrite=rewrite_trace,
+                search_attempts=search_attempts or None,
+                retrieval=retrieval_trace,
+                fact_pack=fact_pack.to_dict() if fact_pack else None,
+                page_cache=page_cache_trace,
+                query_url_memory=query_url_trace.to_dict() if query_url_trace else None,
+            )
+            trace_payload = debug_trace if await _messages_have_debug_trace(db) else None
+            assistant_msg = Message(
+                thread_id=thread.id,
+                role=MessageRole.ASSISTANT,
+                content=full_answer.strip(),
+                sources=sources_json if sources_json else None,
+                follow_up_questions=follow_ups or None,
+                debug_trace=trace_payload,
+            )
+            db.add(assistant_msg)
+            thread.message_count = (thread.message_count or 0) + 2
+            thread.last_message_at = datetime.now(timezone.utc)
+            if not thread_id:
+                thread.title = display_content[:200]
+            await db.commit()
+        except Exception:
+            logger.exception("Search finalize failed (persist assistant message)")
+            await db.rollback()
+            await limiter.release_search(str(user.id))
+            yield sse_event(
+                "error",
+                {"code": "server_error", "message": "Ошибка сервера. Попробуйте ещё раз."},
+            )
+            return
 
         yield sse_event(
             "done",
@@ -462,9 +474,18 @@ class SearchFlowService:
         )
 
         if follow_up_task is not None:
-            follow_ups = await follow_up_task
-            assistant_msg.follow_up_questions = follow_ups
-            await db.commit()
-            yield sse_event("follow_ups", {"questions": follow_ups})
+            try:
+                follow_ups = await follow_up_task
+            except Exception:
+                logger.exception("Follow-up suggestions failed (deferred)")
+            else:
+                if follow_ups:
+                    assistant_msg.follow_up_questions = follow_ups
+                    try:
+                        await db.commit()
+                        yield sse_event("follow_ups", {"questions": follow_ups})
+                    except Exception:
+                        logger.exception("Follow-up persist failed")
+                        await db.rollback()
         elif follow_ups:
             yield sse_event("follow_ups", {"questions": follow_ups})
