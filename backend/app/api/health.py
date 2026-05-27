@@ -161,6 +161,7 @@ async def api_health(db: Annotated[AsyncSession, Depends(get_db)]):
         "upload_api_version": UPLOAD_API_VERSION,
         "upload_images": True,
         "upload_formats_hint": UNSUPPORTED_FORMAT_MESSAGE,
+        "features": _build_features(),
     }
 
 
