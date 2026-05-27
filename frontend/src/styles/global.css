@@ -783,12 +783,6 @@ body:has(.page-thread) {
   letter-spacing: 0.02em;
 }
 
-.answer-code-copy {
-  width: 30px;
-  height: 30px;
-  flex-shrink: 0;
-}
-
 .answer-code-pre {
   margin: 0;
   padding: 12px 14px;
