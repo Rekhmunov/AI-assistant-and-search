@@ -21,7 +21,10 @@ function expandTextSegments(segments: AnswerSegment[]): AnswerSegment[] {
  * Незакрытый ``` в конце (стрим) — code с partial: true.
  * В тексте также ищет «голый» PHP/HTML/команды терминала.
  */
-export function parseAnswerSegments(raw: string): AnswerSegment[] {
+export function parseAnswerSegments(
+  raw: string,
+  options?: { expandUnfenced?: boolean },
+): AnswerSegment[] {
   if (!raw) return [];
 
   const text = raw.replace(/\r\n/g, "\n");
@@ -61,5 +64,6 @@ export function parseAnswerSegments(raw: string): AnswerSegment[] {
   }
 
   const base = segments.length > 0 ? segments : [{ type: "text", content: text }];
-  return expandTextSegments(base);
+  const expandUnfenced = options?.expandUnfenced ?? true;
+  return expandUnfenced ? expandTextSegments(base) : base;
 }

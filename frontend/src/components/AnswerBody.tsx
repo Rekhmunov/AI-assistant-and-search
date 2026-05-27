@@ -14,10 +14,11 @@ type Props = {
 };
 
 export function AnswerBody({ text, sources = [], isStreaming = false }: Props) {
-  const revealed = useStreamingReveal(text, isStreaming);
-  const rawText = isStreaming ? revealed : text;
-  const displayText = isStreaming ? rawText : moveCitationsToParagraphEnds(rawText);
-  const segments = parseAnswerSegments(displayText);
+  const { text: revealed, isTyping } = useStreamingReveal(text, isStreaming);
+  const revealActive = isStreaming || isTyping;
+  const rawText = revealActive ? revealed : text;
+  const displayText = revealActive ? rawText : moveCitationsToParagraphEnds(text);
+  const segments = parseAnswerSegments(displayText, { expandUnfenced: !revealActive });
   const children: ReactNode[] = [];
 
   segments.forEach((seg, i) => {
@@ -42,7 +43,7 @@ export function AnswerBody({ text, sources = [], isStreaming = false }: Props) {
   });
 
   return (
-    <div className={`answer${isStreaming ? " answer--streaming" : ""}`}>
+    <div className={`answer${revealActive ? " answer--streaming" : ""}`}>
       {children}
     </div>
   );
