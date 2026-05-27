@@ -45,8 +45,11 @@ def _build_features() -> dict[str, bool]:
         "page_cache": page_cache_on,
         "query_url_index": s.query_url_index_enabled,
         "page_fetch_parallel": s.page_fetch_max_concurrent > 1,
+        "page_fetch_max_pages": s.page_fetch_max_pages,
+        "page_fetch_skip_rich_snippet_chars": s.page_fetch_skip_rich_snippet_chars,
         "search_parallel_extra": s.search_parallel_extra_queries,
         "follow_ups_deferred": s.follow_ups_deferred,
+        "follow_ups_post_done_timeout_sec": s.follow_ups_post_done_timeout_sec,
         "currency_cbr": currency_cbr,
         "page_fetch": page_fetch,
     }

@@ -84,6 +84,7 @@ def test_follow_up_task_failure_still_emits_done():
             patch("app.services.search_flow.get_settings") as gs,
         ):
             gs.return_value.follow_ups_deferred = True
+            gs.return_value.follow_ups_post_done_timeout_sec = 4.0
             resolve.return_value = (
                 mock_llm,
                 MagicMock(),

@@ -14,7 +14,11 @@ from app.services.facts.orchestrator import FactOrchestrator
 from app.services.facts.slots import ranking_flags_from_slots, resolve_fact_slots
 from app.services.llm_provider import SearchSource
 from app.services.retrieval_quality import RetrievalAssessment, assess_retrieval
-from app.services.page_depth import FINANCIAL_NUMBER_RE, enrich_sources_deep
+from app.services.page_depth import (
+    FINANCIAL_NUMBER_RE,
+    effective_page_fetch_limit,
+    enrich_sources_deep,
+)
 from app.services.source_ranking import rank_sources
 from app.services.providers.factory import ChatLLM
 from app.services.yandex_gpt import YandexGPTProvider
@@ -201,7 +205,8 @@ class FactPipeline:
 
         page_cache_stats: dict[str, int] | None = None
         if sources:
-            max_pages = self._max_fetch_pages(slots, howto=howto, answer_model=answer_model)
+            base_pages = self._max_fetch_pages(slots, howto=howto, answer_model=answer_model)
+            max_pages = effective_page_fetch_limit(sources, base_max=base_pages)
             chunks_pp = 5 if "company_financial" in slots else MAX_CHUNKS_PER_PAGE
             sources, page_cache_stats = await enrich_sources_deep(
                 sources,
@@ -252,14 +257,14 @@ class FactPipeline:
                     confidence=f.confidence,
                 )
 
-        extract_model = "pro" if "course_program" in slots else "lite"
+        # Extract — lite (быстрее); финальный ответ может быть pro по route.answer_model
         fact_pack = await extract_facts_from_sources(
             self.llm,
             llm_query,
             sources,
             prefilled=provider_facts,
             fact_slots=slots,
-            model=extract_model,
+            model="lite",
         )
         if "company_financial" in slots:
             corpus = " ".join((s.snippet or "") for s in sources[:6])

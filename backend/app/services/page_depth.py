@@ -120,9 +120,28 @@ def build_deep_snippet(
     return combined
 
 
-def _snippet_already_rich(snippet: str) -> bool:
+def snippet_is_rich(snippet: str) -> bool:
+    """Сниппет Search достаточен — полную страницу можно не качать."""
     settings = get_settings()
     return len((snippet or "").strip()) >= settings.page_fetch_skip_rich_snippet_chars
+
+
+def _snippet_already_rich(snippet: str) -> bool:
+    return snippet_is_rich(snippet)
+
+
+def effective_page_fetch_limit(
+    sources: Sequence[SearchSource],
+    *,
+    base_max: int,
+) -> int:
+    """
+    Сколько страниц ещё имеет смысл качать: базовый лимит минус источники с богатым сниппетом.
+    """
+    if base_max <= 0 or not sources:
+        return max(0, base_max)
+    rich = sum(1 for s in sources if snippet_is_rich(s.snippet or ""))
+    return max(0, base_max - rich)
 
 
 async def _enrich_one_source(

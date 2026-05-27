@@ -487,18 +487,22 @@ class SearchFlowService:
         )
 
         if follow_up_task is not None:
+            timeout = max(0.5, settings.follow_ups_post_done_timeout_sec)
             try:
-                follow_ups = await follow_up_task
+                follow_ups = await asyncio.wait_for(follow_up_task, timeout=timeout)
+            except asyncio.TimeoutError:
+                logger.info("Follow-ups still generating after done (timeout=%.1fs)", timeout)
+                follow_ups = []
             except Exception:
                 logger.exception("Follow-up suggestions failed (deferred)")
-            else:
-                if follow_ups:
-                    assistant_msg.follow_up_questions = follow_ups
-                    try:
-                        await db.commit()
-                        yield sse_event("follow_ups", {"questions": follow_ups})
-                    except Exception:
-                        logger.exception("Follow-up persist failed")
-                        await db.rollback()
+                follow_ups = []
+            if follow_ups:
+                assistant_msg.follow_up_questions = follow_ups
+                try:
+                    await db.commit()
+                    yield sse_event("follow_ups", {"questions": follow_ups})
+                except Exception:
+                    logger.exception("Follow-up persist failed")
+                    await db.rollback()
         elif follow_ups:
             yield sse_event("follow_ups", {"questions": follow_ups})
