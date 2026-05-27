@@ -251,6 +251,35 @@ export interface UploadedFile {
   excerpt: string;
 }
 
+export class FileUploadError extends Error {
+  suggestPro: boolean;
+
+  constructor(message: string, suggestPro = false) {
+    super(message);
+    this.name = "FileUploadError";
+    this.suggestPro = suggestPro;
+  }
+}
+
+type UploadErrorDetail =
+  | string
+  | {
+      code?: string;
+      message?: string;
+      suggest_pro?: boolean;
+    };
+
+function parseUploadErrorDetail(detail: UploadErrorDetail | undefined): FileUploadError {
+  if (!detail) {
+    return new FileUploadError("Не удалось загрузить файл");
+  }
+  if (typeof detail === "string") {
+    return new FileUploadError(detail);
+  }
+  const message = detail.message || "Не удалось загрузить файл";
+  return new FileUploadError(message, Boolean(detail.suggest_pro));
+}
+
 export async function uploadFile(token: string, file: File): Promise<UploadedFile> {
   const form = new FormData();
   form.append("file", file);
@@ -264,7 +293,8 @@ export async function uploadFile(token: string, file: File): Promise<UploadedFil
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error((err as { detail?: string }).detail || "Upload failed");
+    const detail = (err as { detail?: UploadErrorDetail }).detail;
+    throw parseUploadErrorDetail(detail);
   }
   return res.json();
 }

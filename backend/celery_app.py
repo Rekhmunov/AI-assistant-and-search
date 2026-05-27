@@ -1,4 +1,5 @@
 from celery import Celery
+from celery.schedules import crontab
 
 from app.core.config import get_settings
 
@@ -16,5 +17,11 @@ celery.conf.update(
     result_serializer="json",
     timezone="Europe/Moscow",
     enable_utc=True,
-    imports=["app.workers.broadcast_tasks"],
+    imports=["app.workers.broadcast_tasks", "app.workers.maintenance_tasks"],
+    beat_schedule={
+        "cleanup-expired-uploads": {
+            "task": "cleanup_expired_uploads",
+            "schedule": crontab(hour=4, minute=15),
+        },
+    },
 )

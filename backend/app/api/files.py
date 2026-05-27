@@ -1,14 +1,18 @@
 from datetime import datetime, timedelta, timezone
-from typing import Annotated
+from typing import Annotated, Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_db
-from app.core.config import get_settings
+from app.constants.attachments import (
+    UPLOAD_TTL_HOURS,
+    max_upload_bytes,
+    max_upload_mb,
+)
 from app.models.uploaded_file import UploadedFile
 from app.models.user import Plan, User
 from app.services.file_parser import DOCUMENT_EXT, IMAGE_EXT, extract_text
@@ -38,6 +42,29 @@ def _resolve_extension(filename: str, content_type: str | None) -> str:
     return ext
 
 
+def _file_too_large_detail(filename: str, size: int, user: User) -> dict[str, Any]:
+    limit = max_upload_bytes(user.plan)
+    limit_mb = max_upload_mb(user.plan)
+    file_mb = round(size / (1024 * 1024), 1)
+    pro_mb = max_upload_mb(Plan.PRO)
+    if user.plan == Plan.FREE:
+        message = (
+            f"«{filename}» ({file_mb} МБ) превышает лимит Free ({limit_mb} МБ). "
+            f"Перейдите на Pro — до {pro_mb} МБ на файл."
+        )
+        suggest_pro = True
+    else:
+        message = f"«{filename}» ({file_mb} МБ) превышает лимит ({limit_mb} МБ)."
+        suggest_pro = False
+    return {
+        "code": "file_too_large",
+        "message": message,
+        "suggest_pro": suggest_pro,
+        "max_bytes": limit,
+        "size_bytes": size,
+    }
+
+
 class UploadedFileOut(BaseModel):
     id: UUID
     filename: str
@@ -51,8 +78,16 @@ async def upload_file(
     user: Annotated[User, Depends(get_current_user)],
     file: UploadFile = File(...),
 ):
-    settings = get_settings()
-    max_bytes = 20 * 1024 * 1024 if user.plan == Plan.PRO else 10 * 1024 * 1024
+    max_bytes = max_upload_bytes(user.plan)
+    now = datetime.now(timezone.utc)
+
+    await db.execute(
+        delete(UploadedFile).where(
+            UploadedFile.user_id == user.id,
+            UploadedFile.expires_at.isnot(None),
+            UploadedFile.expires_at < now,
+        )
+    )
 
     filename = file.filename or "file"
     ext = _resolve_extension(filename, file.content_type)
@@ -68,7 +103,7 @@ async def upload_file(
     if len(data) > max_bytes:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Файл слишком большой (макс. {max_bytes // 1024 // 1024} МБ)",
+            detail=_file_too_large_detail(filename, len(data), user),
         )
 
     try:
@@ -90,7 +125,7 @@ async def upload_file(
         mime_type=file.content_type,
         size_bytes=len(data),
         extracted_text=text,
-        expires_at=datetime.now(timezone.utc) + timedelta(hours=24),
+        expires_at=now + timedelta(hours=UPLOAD_TTL_HOURS),
     )
     db.add(row)
     await db.flush()

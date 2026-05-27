@@ -1,6 +1,7 @@
 import { FormEvent, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { uploadFile, fetchMe } from "../api/client";
+import { Link } from "react-router-dom";
+import { FileUploadError, uploadFile, fetchMe } from "../api/client";
 import { ComposerAttachMenu } from "./ComposerAttachMenu";
 import {
   ACCEPT_DOCUMENT_INPUT,
@@ -64,6 +65,7 @@ export function SearchComposer({
   const photoRef = useRef<HTMLInputElement>(null);
   const cameraRef = useRef<HTMLInputElement>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [uploadSuggestPro, setUploadSuggestPro] = useState(false);
   const [uploading, setUploading] = useState<UploadingItem[]>([]);
   const [inputFocused, setInputFocused] = useState(false);
 
@@ -72,7 +74,18 @@ export function SearchComposer({
     queryFn: () => fetchMe(token!),
     enabled: !!token,
   });
-  const maxBytes = me?.plan === "pro" ? MAX_FILE_BYTES_PRO : MAX_FILE_BYTES_FREE;
+  const plan = me?.plan === "pro" ? "pro" : "free";
+  const maxBytes = plan === "pro" ? MAX_FILE_BYTES_PRO : MAX_FILE_BYTES_FREE;
+
+  const setUploadFailure = (message: string, suggestPro = false) => {
+    setUploadError(message);
+    setUploadSuggestPro(suggestPro);
+  };
+
+  const clearUploadFailure = () => {
+    setUploadError(null);
+    setUploadSuggestPro(false);
+  };
 
   const voice = useVoiceInput((text) => onChange(value ? `${value} ${text}` : text));
 
@@ -97,14 +110,14 @@ export function SearchComposer({
 
   const openPicker = (ref: React.RefObject<HTMLInputElement | null>) => {
     if (!token) {
-      setUploadError(t("loginForFiles"));
+      setUploadFailure(t("loginForFiles"));
       return;
     }
     if (atLimit) {
-      setUploadError(t("attachLimit", { n: MAX_ATTACHMENTS }));
+      setUploadFailure(t("attachLimit", { n: MAX_ATTACHMENTS }));
       return;
     }
-    setUploadError(null);
+    clearUploadFailure();
     ref.current?.click();
   };
 
@@ -119,20 +132,20 @@ export function SearchComposer({
 
     let slots = MAX_ATTACHMENTS - attachments.length - uploading.length;
     if (slots <= 0) {
-      setUploadError(t("attachLimit", { n: MAX_ATTACHMENTS }));
+      setUploadFailure(t("attachLimit", { n: MAX_ATTACHMENTS }));
       return;
     }
 
     const batch = Array.from(files).slice(0, slots);
     if (files.length > batch.length) {
-      setUploadError(t("attachLimit", { n: MAX_ATTACHMENTS }));
+      setUploadFailure(t("attachLimit", { n: MAX_ATTACHMENTS }));
     }
 
     for (const raw of batch) {
       const file = await prepareFileForUpload(raw);
-      const err = validateFile(file, maxBytes, expected);
+      const err = validateFile(file, maxBytes, plan, expected);
       if (err) {
-        setUploadError(err);
+        setUploadFailure(err.message, err.suggestPro);
         continue;
       }
 
@@ -153,8 +166,12 @@ export function SearchComposer({
             previewUrl,
           },
         ]);
-      } catch {
-        setUploadError(t("attachUploadFailed"));
+      } catch (e) {
+        if (e instanceof FileUploadError) {
+          setUploadFailure(e.message, e.suggestPro);
+        } else {
+          setUploadFailure(t("attachUploadFailed"));
+        }
         if (previewUrl) URL.revokeObjectURL(previewUrl);
       } finally {
         setUploading((prev) => prev.filter((u) => u.localKey !== localKey));
@@ -181,7 +198,16 @@ export function SearchComposer({
 
   return (
     <div className={`composer-wrap${docked ? " composer-wrap--docked" : " composer-wrap--inline"}`}>
-      {(uploadError || voice.error) && <p className="composer-error">{uploadError || voice.error}</p>}
+      {(uploadError || voice.error) && (
+        <div className="composer-error-wrap">
+          <p className="composer-error">{uploadError || voice.error}</p>
+          {uploadSuggestPro && uploadError && (
+            <Link to="/profile" className="composer-error-upgrade">
+              {t("upgradePro")}
+            </Link>
+          )}
+        </div>
+      )}
       <form
         className={`search-composer${hasAttachment ? " search-composer--with-attachment" : ""}`}
         onSubmit={handleSubmit}

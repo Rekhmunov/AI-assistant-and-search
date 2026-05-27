@@ -523,10 +523,27 @@ body:has(.page-thread) {
   cursor: not-allowed;
 }
 
+.composer-error-wrap {
+  margin: 0 0 6px 4px;
+}
+
 .composer-error {
   color: #f87171;
   font-size: 0.8rem;
-  margin: 0 0 6px 4px;
+  margin: 0;
+}
+
+.composer-error-upgrade {
+  display: inline-block;
+  margin-top: 4px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.composer-error-upgrade:hover {
+  text-decoration: underline;
 }
 
 .source-carousel {

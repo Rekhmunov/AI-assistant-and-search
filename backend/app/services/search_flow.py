@@ -13,6 +13,7 @@ from app.constants.attachments import (
     MAX_ATTACHMENTS_PER_SEARCH,
     MAX_EXTRACT_CHARS_PER_FILE,
     MAX_TOTAL_ATTACHMENT_CHARS,
+    UPLOAD_TTL_HOURS,
 )
 from app.core.config import get_settings
 from app.core.limiter import RateLimiter
@@ -98,15 +99,18 @@ class SearchFlowService:
         if len(attachment_ids) > MAX_ATTACHMENTS_PER_SEARCH:
             raise ValueError("attachment_limit")
 
+        now = datetime.now(timezone.utc)
         result = await db.execute(
             select(UploadedFile).where(
                 UploadedFile.id.in_(attachment_ids),
                 UploadedFile.user_id == user.id,
+                UploadedFile.expires_at.isnot(None),
+                UploadedFile.expires_at > now,
             )
         )
         by_id = {f.id: f for f in result.scalars().all()}
         if len(by_id) != len(attachment_ids):
-            raise ValueError("attachment_not_found")
+            raise ValueError("attachment_expired")
 
         files = [by_id[fid] for fid in attachment_ids]
         names = [f.filename for f in files]
@@ -171,8 +175,14 @@ class SearchFlowService:
                 db, user, normalize_user_query(query), attachment_ids
             )
         except ValueError as e:
-            if str(e) == "attachment_limit":
+            code = str(e)
+            if code == "attachment_limit":
                 msg = f"Не более {MAX_ATTACHMENTS_PER_SEARCH} файлов за один запрос"
+            elif code == "attachment_expired":
+                msg = (
+                    f"Вложение устарело (хранится {UPLOAD_TTL_HOURS} ч). "
+                    "Загрузите файл снова."
+                )
             else:
                 msg = "Файл не найден или истёк"
             yield sse_event("error", {"code": "attachment", "message": msg})

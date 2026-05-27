@@ -85,6 +85,9 @@ $COMPOSE up -d --force-recreate frontend nginx
 echo "==> Alembic migrations"
 $COMPOSE exec -T backend alembic upgrade head
 
+echo "==> Cleanup expired uploads (optional)"
+$COMPOSE exec -T backend python scripts/cleanup_uploads.py 2>/dev/null || true
+
 if grep -qE '^DEEPSEEK_API_KEY=.+' .env 2>/dev/null; then
   echo "==> DeepSeek: синхронизация answer-промптов в БД"
   $COMPOSE exec -T backend python scripts/sync_provider_answer_prompts.py deepseek --apply || true
