@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { fetchThread, streamSearch } from "../api/client";
 import { AnswerBody } from "../components/AnswerBody";
 import { AnswerErrorBoundary } from "../components/AnswerErrorBoundary";
@@ -29,8 +29,12 @@ function updateLastStreamingTurn(
   return next;
 }
 
+type ThreadLocationState = { fromHistory?: boolean };
+
 export function Thread() {
   const { id } = useParams();
+  const location = useLocation();
+  const fromHistory = Boolean((location.state as ThreadLocationState | null)?.fromHistory);
   const [searchParams] = useSearchParams();
   const initialQuery = searchParams.get("q") ?? "";
   const initialFiles = searchParams.get("files")?.split(",").filter(Boolean) ?? [];
@@ -177,7 +181,7 @@ export function Thread() {
         <button
           type="button"
           className="icon-btn icon-btn-back"
-          onClick={() => navigate("/")}
+          onClick={() => navigate(fromHistory ? "/history" : "/")}
           aria-label={t("back")}
           title={t("back")}
         >

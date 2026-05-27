@@ -71,7 +71,9 @@ export function History() {
                 <button
                   type="button"
                   className="history-card"
-                  onClick={() => navigate(`/thread/${th.id}`)}
+                  onClick={() =>
+                    navigate(`/thread/${th.id}`, { state: { fromHistory: true } })
+                  }
                 >
                   <span className="history-card-title">{th.title}</span>
                   <small className="history-card-meta">
