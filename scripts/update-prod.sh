@@ -79,8 +79,8 @@ if grep -qE '^(ANTHROPIC_API_KEY|DEEPSEEK_API_KEY)=.+' .env 2>/dev/null; then
   $COMPOSE up -d --force-recreate backend worker
 fi
 
-echo "==> Recreate nginx (актуальный IP frontend/admin — иначе 502)"
-$COMPOSE up -d --force-recreate nginx
+echo "==> Recreate frontend + nginx (новый JS и upstream IP)"
+$COMPOSE up -d --force-recreate frontend nginx
 
 echo "==> Alembic migrations"
 $COMPOSE exec -T backend alembic upgrade head
@@ -110,6 +110,18 @@ done
 APP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "http://127.0.0.1:${PROXY_PORT}/" -H "Host: ${APP_HOST_CHECK}" || echo "000")
 ADMIN_CODE=$(curl -s -o /dev/null -w "%{http_code}" "http://127.0.0.1:${PROXY_PORT}/login" -H "Host: ${ADMIN_HOST_CHECK}" || echo "000")
 ADMIN_TITLE=$(curl -s "http://127.0.0.1:${PROXY_PORT}/login" -H "Host: ${ADMIN_HOST_CHECK}" | grep -oi '<title>[^<]*</title>' | head -1 || true)
+
+APP_HTML=$(curl -sf "http://127.0.0.1:${PROXY_PORT}/" -H "Host: ${APP_HOST_CHECK}" 2>/dev/null || true)
+APP_JS=$(echo "$APP_HTML" | grep -oE '/assets/index-[^"[:space:]]+\.js' | head -1 || true)
+if [ -n "$APP_JS" ]; then
+  if curl -sf "http://127.0.0.1:${PROXY_PORT}${APP_JS}" -H "Host: ${APP_HOST_CHECK}" | grep -q 'composer-attach-dropdown'; then
+    echo "    app bundle: attach menu OK (${APP_JS})"
+  else
+    echo "    WARN: app JS без меню вложений — пересоберите frontend: $COMPOSE build --no-cache frontend && $COMPOSE up -d --force-recreate frontend nginx"
+  fi
+else
+  echo "    WARN: не удалось найти /assets/index-*.js в index.html"
+fi
 
 echo "    app (${APP_HOST_CHECK}): HTTP ${APP_CODE}"
 echo "    admin (${ADMIN_HOST_CHECK}): HTTP ${ADMIN_CODE} ${ADMIN_TITLE}"

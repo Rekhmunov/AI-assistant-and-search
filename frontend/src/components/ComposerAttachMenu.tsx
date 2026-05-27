@@ -1,4 +1,5 @@
-import { useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { t } from "../i18n";
 
 type Props = {
@@ -16,34 +17,107 @@ export function ComposerAttachMenu({
 }: Props) {
   const menuId = useId();
   const rootRef = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
   const [open, setOpen] = useState(false);
+  const [menuStyle, setMenuStyle] = useState<{ top: number; left: number } | null>(null);
+
+  const positionMenu = useCallback(() => {
+    const btn = buttonRef.current;
+    if (!btn) return;
+    const rect = btn.getBoundingClientRect();
+    const menuWidth = 220;
+    const left = Math.min(
+      Math.max(8, rect.left),
+      window.innerWidth - menuWidth - 8,
+    );
+    setMenuStyle({ top: rect.top - 8, left });
+  }, []);
+
+  useLayoutEffect(() => {
+    if (!open) {
+      setMenuStyle(null);
+      return;
+    }
+    positionMenu();
+    window.addEventListener("resize", positionMenu);
+    window.addEventListener("scroll", positionMenu, true);
+    return () => {
+      window.removeEventListener("resize", positionMenu);
+      window.removeEventListener("scroll", positionMenu, true);
+    };
+  }, [open, positionMenu]);
 
   useEffect(() => {
     if (!open) return;
-    const onPointerDown = (e: MouseEvent) => {
-      if (rootRef.current && !rootRef.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
+    const onPointerDown = (e: MouseEvent | TouchEvent) => {
+      const target = e.target as Node;
+      if (rootRef.current?.contains(target)) return;
+      const menuEl = document.getElementById(menuId);
+      if (menuEl?.contains(target)) return;
+      setOpen(false);
     };
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") setOpen(false);
     };
-    document.addEventListener("mousedown", onPointerDown);
-    document.addEventListener("keydown", onKey);
+    const timer = window.setTimeout(() => {
+      document.addEventListener("mousedown", onPointerDown);
+      document.addEventListener("touchstart", onPointerDown, { passive: true });
+      document.addEventListener("keydown", onKey);
+    }, 0);
     return () => {
+      clearTimeout(timer);
       document.removeEventListener("mousedown", onPointerDown);
+      document.removeEventListener("touchstart", onPointerDown);
       document.removeEventListener("keydown", onKey);
     };
-  }, [open]);
+  }, [open, menuId]);
 
   const choose = (fn: () => void) => {
     setOpen(false);
     fn();
   };
 
+  const toggleOpen = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (disabled) return;
+    setOpen((v) => !v);
+  };
+
+  const dropdown =
+    open && menuStyle
+      ? createPortal(
+          <div
+            id={menuId}
+            className="composer-attach-dropdown composer-attach-dropdown--portal"
+            role="menu"
+            style={{
+              top: menuStyle.top,
+              left: menuStyle.left,
+              transform: "translateY(-100%)",
+            }}
+          >
+            <button type="button" role="menuitem" onClick={() => choose(onPickDocument)}>
+              <DocMenuIcon />
+              <span>{t("attachDocument")}</span>
+            </button>
+            <button type="button" role="menuitem" onClick={() => choose(onPickPhoto)}>
+              <ImageMenuIcon />
+              <span>{t("attachPhoto")}</span>
+            </button>
+            <button type="button" role="menuitem" onClick={() => choose(onTakePhoto)}>
+              <CameraMenuIcon />
+              <span>{t("attachCamera")}</span>
+            </button>
+          </div>,
+          document.body,
+        )
+      : null;
+
   return (
     <div className="composer-attach-menu" ref={rootRef}>
       <button
+        ref={buttonRef}
         type="button"
         className="composer-icon"
         aria-label={t("attachAdd")}
@@ -51,26 +125,11 @@ export function ComposerAttachMenu({
         aria-haspopup="menu"
         aria-controls={menuId}
         disabled={disabled}
-        onClick={() => setOpen((v) => !v)}
+        onClick={toggleOpen}
       >
         <PlusIcon />
       </button>
-      {open && (
-        <div id={menuId} className="composer-attach-dropdown" role="menu">
-          <button type="button" role="menuitem" onClick={() => choose(onPickDocument)}>
-            <DocMenuIcon />
-            <span>{t("attachDocument")}</span>
-          </button>
-          <button type="button" role="menuitem" onClick={() => choose(onPickPhoto)}>
-            <ImageMenuIcon />
-            <span>{t("attachPhoto")}</span>
-          </button>
-          <button type="button" role="menuitem" onClick={() => choose(onTakePhoto)}>
-            <CameraMenuIcon />
-            <span>{t("attachCamera")}</span>
-          </button>
-        </div>
-      )}
+      {dropdown}
     </div>
   );
 }

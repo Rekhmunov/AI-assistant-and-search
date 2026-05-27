@@ -303,6 +303,13 @@ body:has(.page-thread) {
   z-index: 120;
 }
 
+.composer-attach-dropdown--portal {
+  position: fixed;
+  bottom: auto;
+  min-width: 220px;
+  z-index: 1000;
+}
+
 .composer-attach-dropdown button {
   display: flex;
   align-items: center;
