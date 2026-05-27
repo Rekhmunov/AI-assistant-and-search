@@ -80,7 +80,9 @@ export function AppNavigation() {
   return (
     <>
       <nav className="sidebar-nav" aria-label={aria}>
-        <GlosixBrand className="glosix-wordmark--sidebar" />
+        <div className="sidebar-nav-brand">
+          <GlosixBrand className="glosix-wordmark--sidebar" />
+        </div>
         <div className="sidebar-nav-top">
           <NavItem to="/" end label={t("navSearch")} icon={<SearchNavIcon />} />
           <NavItem to="/history" label={t("navHistory")} icon={<HistoryNavIcon />} />
