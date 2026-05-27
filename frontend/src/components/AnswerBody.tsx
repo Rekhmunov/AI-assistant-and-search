@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 import type { Source } from "../api/client";
 import { useStreamingReveal } from "../hooks/useStreamingReveal";
 import { moveCitationsToParagraphEnds } from "../lib/moveCitationsToParagraphEnds";
@@ -11,10 +11,22 @@ type Props = {
   sources?: Source[];
   /** Плавное появление текста во время SSE-стрима */
   isStreaming?: boolean;
+  /** false — когда догоняющая печать закончилась (можно синхронизировать тред с API) */
+  onTypingChange?: (typing: boolean) => void;
 };
 
-export function AnswerBody({ text, sources = [], isStreaming = false }: Props) {
+export function AnswerBody({
+  text,
+  sources = [],
+  isStreaming = false,
+  onTypingChange,
+}: Props) {
   const { text: revealed, isTyping } = useStreamingReveal(text, isStreaming);
+
+  useEffect(() => {
+    onTypingChange?.(isTyping);
+  }, [isTyping, onTypingChange]);
+
   const revealActive = isStreaming || isTyping;
   const rawText = revealActive ? revealed : text;
   const displayText = revealActive ? rawText : moveCitationsToParagraphEnds(text);

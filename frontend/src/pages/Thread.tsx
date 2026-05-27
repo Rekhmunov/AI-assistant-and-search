@@ -51,6 +51,7 @@ export function Thread() {
   const [composerQuery, setComposerQuery] = useState("");
   const started = useRef(false);
   const streamingRef = useRef(false);
+  const isRevealingRef = useRef(false);
   const activeThreadIdRef = useRef<string | null>(id ?? null);
   const scrollTurnKeyRef = useRef<string | null>(null);
 
@@ -60,15 +61,30 @@ export function Thread() {
     enabled: !!(id ?? threadId),
   });
 
+  const syncTurnsFromThread = useCallback(() => {
+    if (!thread) return;
+    setTurns(messagesToTurns(thread.messages));
+  }, [thread]);
+
+  const handleAnswerTypingChange = useCallback(
+    (typing: boolean) => {
+      isRevealingRef.current = typing;
+      if (!typing && !streamingRef.current) {
+        syncTurnsFromThread();
+      }
+    },
+    [syncTurnsFromThread],
+  );
+
   useEffect(() => {
     if (id) activeThreadIdRef.current = id;
   }, [id]);
 
   useEffect(() => {
-    if (thread && !streamingRef.current) {
-      setTurns(messagesToTurns(thread.messages));
+    if (thread && !streamingRef.current && !isRevealingRef.current) {
+      syncTurnsFromThread();
     }
-  }, [thread]);
+  }, [thread, syncTurnsFromThread]);
 
   /** Прокрутка только при новом вопросе — ответ читаем с начала, без ухода вниз при стриме. */
   useEffect(() => {
@@ -221,6 +237,9 @@ export function Thread() {
                       text={turn.answer}
                       sources={turn.sources}
                       isStreaming={isActive && streaming}
+                      onTypingChange={
+                        index === turns.length - 1 ? handleAnswerTypingChange : undefined
+                      }
                     />
                   </AnswerErrorBoundary>
                   {!isActive && turn.answer.trim() && (
