@@ -1,8 +1,16 @@
 import csv
 import io
+import logging
 from pathlib import Path
 
-MAX_EXTRACT_CHARS = 32_000
+from app.constants.attachments import MAX_EXTRACT_CHARS_PER_FILE
+
+logger = logging.getLogger(__name__)
+
+MAX_EXTRACT_CHARS = MAX_EXTRACT_CHARS_PER_FILE
+
+IMAGE_EXT = frozenset({"jpg", "jpeg", "png", "webp"})
+DOCUMENT_EXT = frozenset({"txt", "md", "json", "csv", "pdf", "docx", "xlsx", "xls"})
 
 
 def _clip(text: str) -> str:
@@ -41,7 +49,14 @@ def extract_text(filename: str, data: bytes) -> str:
         return _clip(_parse_xlsx(data))
     if ext == "xls":
         return _clip(_parse_xls(data))
+    if ext in IMAGE_EXT:
+        return _clip(_parse_image(data))
     raise ValueError(f"Unsupported extension: {ext}")
+
+
+def is_image_filename(filename: str) -> bool:
+    ext = Path(filename).suffix.lower().lstrip(".")
+    return ext in IMAGE_EXT
 
 
 def _parse_csv(data: bytes) -> str:
@@ -89,6 +104,29 @@ def _parse_xlsx(data: bytes) -> str:
                 parts.append("\t".join(cells))
     wb.close()
     return "\n".join(parts)
+
+
+def _parse_image(data: bytes) -> str:
+    from PIL import Image
+    import pytesseract
+
+    try:
+        img = Image.open(io.BytesIO(data))
+    except Exception as e:
+        raise ValueError("Не удалось открыть изображение") from e
+
+    if img.mode not in ("RGB", "L"):
+        img = img.convert("RGB")
+
+    try:
+        text = pytesseract.image_to_string(img, lang="rus+eng")
+    except Exception:
+        logger.exception("OCR failed")
+        raise ValueError("Не удалось распознать текст на фото") from None
+
+    if not text.strip():
+        raise ValueError("На фото не найден текст. Попробуйте более чёткий снимок или загрузите PDF.")
+    return text
 
 
 def _parse_xls(data: bytes) -> str:

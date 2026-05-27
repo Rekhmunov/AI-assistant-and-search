@@ -285,6 +285,49 @@ body:has(.page-thread) {
   padding-bottom: 10px;
 }
 
+.composer-attach-menu {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.composer-attach-dropdown {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 8px);
+  min-width: 200px;
+  padding: 6px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  z-index: 120;
+}
+
+.composer-attach-dropdown button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  margin: 0;
+  padding: 10px 12px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font-size: 0.95rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.composer-attach-dropdown button:hover {
+  background: var(--surface-hover);
+}
+
+.composer-attach-dropdown button svg {
+  flex-shrink: 0;
+  color: var(--muted);
+}
+
 .composer-row {
   display: flex;
   align-items: flex-end;
@@ -315,6 +358,22 @@ body:has(.page-thread) {
 
 .composer-attachment-icon {
   flex-shrink: 0;
+  color: var(--muted);
+}
+
+.composer-attachment-thumb {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.composer-attachment--processing {
+  opacity: 0.75;
+}
+
+.composer-attachment--processing .composer-attachment-name {
   color: var(--muted);
 }
 

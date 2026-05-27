@@ -9,6 +9,11 @@ from sqlalchemy import select, text
 from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.constants.attachments import (
+    MAX_ATTACHMENTS_PER_SEARCH,
+    MAX_EXTRACT_CHARS_PER_FILE,
+    MAX_TOTAL_ATTACHMENT_CHARS,
+)
 from app.core.config import get_settings
 from app.core.limiter import RateLimiter
 from app.models.message import Message, MessageRole
@@ -90,20 +95,33 @@ class SearchFlowService:
         if not attachment_ids:
             return query, query
 
+        if len(attachment_ids) > MAX_ATTACHMENTS_PER_SEARCH:
+            raise ValueError("attachment_limit")
+
         result = await db.execute(
             select(UploadedFile).where(
                 UploadedFile.id.in_(attachment_ids),
                 UploadedFile.user_id == user.id,
             )
         )
-        files = list(result.scalars().all())
-        if len(files) != len(attachment_ids):
+        by_id = {f.id: f for f in result.scalars().all()}
+        if len(by_id) != len(attachment_ids):
             raise ValueError("attachment_not_found")
 
+        files = [by_id[fid] for fid in attachment_ids]
         names = [f.filename for f in files]
         parts = [query]
+        budget = MAX_TOTAL_ATTACHMENT_CHARS
         for f in files:
-            parts.append(f"\n\n--- Документ: {f.filename} ---\n{f.extracted_text}")
+            chunk = (f.extracted_text or "").strip()
+            if len(chunk) > MAX_EXTRACT_CHARS_PER_FILE:
+                chunk = chunk[:MAX_EXTRACT_CHARS_PER_FILE] + "\n… [обрезано]"
+            if len(chunk) > budget:
+                chunk = chunk[: max(0, budget)] + ("\n… [обрезано]" if budget > 0 else "")
+            budget -= len(chunk)
+            parts.append(f"\n\n--- Документ: {f.filename} ---\n{chunk}")
+            if budget <= 0:
+                break
         llm_query = "\n".join(parts)
         display = f"{query}\n\n[Файлы: {', '.join(names)}]" if names else query
         return llm_query, display
@@ -152,8 +170,12 @@ class SearchFlowService:
             llm_query, display_content = await self._resolve_attachments(
                 db, user, normalize_user_query(query), attachment_ids
             )
-        except ValueError:
-            yield sse_event("error", {"code": "attachment", "message": "Файл не найден или истёк"})
+        except ValueError as e:
+            if str(e) == "attachment_limit":
+                msg = f"Не более {MAX_ATTACHMENTS_PER_SEARCH} файлов за один запрос"
+            else:
+                msg = "Файл не найден или истёк"
+            yield sse_event("error", {"code": "attachment", "message": msg})
             return
 
         has_attachments = bool(attachment_ids)

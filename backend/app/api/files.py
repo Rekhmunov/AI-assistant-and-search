@@ -11,11 +11,31 @@ from app.api.deps import get_current_user, get_db
 from app.core.config import get_settings
 from app.models.uploaded_file import UploadedFile
 from app.models.user import Plan, User
-from app.services.file_parser import extract_text
+from app.services.file_parser import DOCUMENT_EXT, IMAGE_EXT, extract_text
 
 router = APIRouter(prefix="/files", tags=["files"])
 
-ALLOWED_EXT = {"txt", "md", "json", "csv", "pdf", "docx", "xlsx", "xls"}
+ALLOWED_EXT = DOCUMENT_EXT | IMAGE_EXT
+
+_MIME_TO_EXT = {
+    "image/jpeg": "jpg",
+    "image/png": "png",
+    "image/webp": "webp",
+    "application/pdf": "pdf",
+    "text/plain": "txt",
+    "text/csv": "csv",
+}
+
+
+def _resolve_extension(filename: str, content_type: str | None) -> str:
+    ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+    if ext in ALLOWED_EXT:
+        return ext
+    if content_type:
+        mapped = _MIME_TO_EXT.get(content_type.split(";")[0].strip().lower())
+        if mapped:
+            return mapped
+    return ext
 
 
 class UploadedFileOut(BaseModel):
@@ -35,12 +55,14 @@ async def upload_file(
     max_bytes = 20 * 1024 * 1024 if user.plan == Plan.PRO else 10 * 1024 * 1024
 
     filename = file.filename or "file"
-    ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+    ext = _resolve_extension(filename, file.content_type)
     if ext not in ALLOWED_EXT:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Формат не поддерживается. Допустимо: PDF, Word, Excel (xlsx/xls), CSV, текст.",
+            detail="Формат не поддерживается. Допустимо: PDF, Word, Excel, CSV, текст, JPEG, PNG, WebP.",
         )
+    if ext in IMAGE_EXT and "." not in filename:
+        filename = f"{filename}.{ext}"
 
     data = await file.read()
     if len(data) > max_bytes:

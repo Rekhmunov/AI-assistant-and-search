@@ -1,16 +1,30 @@
-import { FormEvent, useRef, useState } from "react";
+import { FormEvent, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { uploadFile, type UploadedFile, fetchMe } from "../api/client";
-import { ACCEPT_FILE_INPUT, MAX_FILE_BYTES_FREE, MAX_FILE_BYTES_PRO, validateFile } from "../constants/files";
+import { uploadFile, fetchMe } from "../api/client";
+import { ComposerAttachMenu } from "./ComposerAttachMenu";
+import {
+  ACCEPT_DOCUMENT_INPUT,
+  ACCEPT_IMAGE_INPUT,
+  MAX_ATTACHMENTS,
+  MAX_FILE_BYTES_FREE,
+  MAX_FILE_BYTES_PRO,
+  fileKind,
+  type FileKind,
+  validateFile,
+} from "../constants/files";
 import { useTypingPlaceholder } from "../hooks/useTypingPlaceholder";
 import { useVoiceInput } from "../hooks/useVoiceInput";
 import { t } from "../i18n";
-import { isMaxWebApp } from "../lib/maxApp";
+import { prepareFileForUpload } from "../lib/compressImage";
 import { useAuthStore } from "../store/authStore";
+
+export type AttachmentKind = "document" | "image";
 
 export interface ComposerAttachment {
   id: string;
   filename: string;
+  kind: AttachmentKind;
+  previewUrl?: string;
 }
 
 interface Props {
@@ -20,13 +34,18 @@ interface Props {
   disabled?: boolean;
   placeholder?: string;
   attachments: ComposerAttachment[];
-  onAttachmentsChange: (a: ComposerAttachment[]) => void;
-  /** false — в потоке страницы (главная без ввода); true — закреплено над нижним меню */
+  onAttachmentsChange: Dispatch<SetStateAction<ComposerAttachment[]>>;
   docked?: boolean;
-  /** Циклический «печатающийся» placeholder на главной */
   animatedPlaceholder?: boolean;
   placeholderPhrases?: string[];
 }
+
+type UploadingItem = {
+  localKey: string;
+  filename: string;
+  kind: AttachmentKind;
+  previewUrl?: string;
+};
 
 export function SearchComposer({
   value,
@@ -41,10 +60,11 @@ export function SearchComposer({
   placeholderPhrases = [],
 }: Props) {
   const token = useAuthStore((s) => s.token);
-  const inMax = isMaxWebApp();
-  const fileRef = useRef<HTMLInputElement>(null);
+  const documentRef = useRef<HTMLInputElement>(null);
+  const photoRef = useRef<HTMLInputElement>(null);
+  const cameraRef = useRef<HTMLInputElement>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
-  const [uploading, setUploading] = useState(false);
+  const [uploading, setUploading] = useState<UploadingItem[]>([]);
   const [inputFocused, setInputFocused] = useState(false);
 
   const { data: me } = useQuery({
@@ -56,49 +76,99 @@ export function SearchComposer({
 
   const voice = useVoiceInput((text) => onChange(value ? `${value} ${text}` : text));
 
+  const totalCount = attachments.length + uploading.length;
+  const isBusy = uploading.length > 0;
+  const atLimit = totalCount >= MAX_ATTACHMENTS;
+
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
     const q = value.trim();
     if (!q && attachments.length === 0) return;
-    if (disabled || uploading) return;
+    if (disabled || isBusy) return;
     onSubmit({
       query: q || t("analyzeFile"),
       attachmentIds: attachments.map((a) => a.id),
     });
+    for (const a of attachments) {
+      if (a.previewUrl) URL.revokeObjectURL(a.previewUrl);
+    }
     onAttachmentsChange([]);
   };
 
-  const onAttachClick = () => {
+  const openPicker = (ref: React.RefObject<HTMLInputElement | null>) => {
     if (!token) {
       setUploadError(t("loginForFiles"));
       return;
     }
-    fileRef.current?.click();
-  };
-
-  const onFilePick = async (files: FileList | null) => {
-    if (!files?.length || !token) return;
-    const file = files[0];
-    const err = validateFile(file, maxBytes);
-    if (err) {
-      setUploadError(err);
+    if (atLimit) {
+      setUploadError(t("attachLimit", { n: MAX_ATTACHMENTS }));
       return;
     }
     setUploadError(null);
-    setUploading(true);
-    try {
-      const uploaded: UploadedFile = await uploadFile(token, file);
-      onAttachmentsChange([...attachments, { id: uploaded.id, filename: uploaded.filename }]);
-    } catch {
-      setUploadError("Не удалось загрузить файл");
-    } finally {
-      setUploading(false);
-      if (fileRef.current) fileRef.current.value = "";
+    ref.current?.click();
+  };
+
+  const removeAttachment = (id: string) => {
+    const removed = attachments.find((a) => a.id === id);
+    if (removed?.previewUrl) URL.revokeObjectURL(removed.previewUrl);
+    onAttachmentsChange(attachments.filter((x) => x.id !== id));
+  };
+
+  const onFilesPicked = async (files: FileList | null, expected?: FileKind) => {
+    if (!files?.length || !token) return;
+
+    let slots = MAX_ATTACHMENTS - attachments.length - uploading.length;
+    if (slots <= 0) {
+      setUploadError(t("attachLimit", { n: MAX_ATTACHMENTS }));
+      return;
+    }
+
+    const batch = Array.from(files).slice(0, slots);
+    if (files.length > batch.length) {
+      setUploadError(t("attachLimit", { n: MAX_ATTACHMENTS }));
+    }
+
+    for (const raw of batch) {
+      const file = await prepareFileForUpload(raw);
+      const err = validateFile(file, maxBytes, expected);
+      if (err) {
+        setUploadError(err);
+        continue;
+      }
+
+      const kind = expected ?? fileKind(file) ?? "document";
+      const localKey = `up-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const previewUrl = kind === "image" ? URL.createObjectURL(file) : undefined;
+      const pending: UploadingItem = { localKey, filename: file.name, kind, previewUrl };
+      setUploading((prev) => [...prev, pending]);
+
+      try {
+        const uploaded = await uploadFile(token, file);
+        onAttachmentsChange((prev) => [
+          ...prev,
+          {
+            id: uploaded.id,
+            filename: uploaded.filename,
+            kind,
+            previewUrl,
+          },
+        ]);
+      } catch {
+        setUploadError(t("attachUploadFailed"));
+        if (previewUrl) URL.revokeObjectURL(previewUrl);
+      } finally {
+        setUploading((prev) => prev.filter((u) => u.localKey !== localKey));
+      }
     }
   };
 
-  const canSend = (value.trim().length > 0 || attachments.length > 0) && !disabled && !uploading;
-  const hasAttachment = attachments.length > 0;
+  const resetInput = (ref: React.RefObject<HTMLInputElement | null>) => {
+    if (ref.current) ref.current.value = "";
+  };
+
+  const canSend =
+    (value.trim().length > 0 || attachments.length > 0) && !disabled && !isBusy;
+  const hasAttachment = totalCount > 0;
   const showTypingOverlay =
     animatedPlaceholder && !value.trim() && !disabled && !inputFocused;
   const typingPlaceholder = useTypingPlaceholder(showTypingOverlay, placeholderPhrases);
@@ -119,40 +189,65 @@ export function SearchComposer({
         {hasAttachment && (
           <div className="composer-attachments">
             {attachments.map((a) => (
-              <div key={a.id} className="composer-attachment">
-                <FileDocIcon />
-                <span className="composer-attachment-name" title={a.filename}>
-                  {a.filename}
-                </span>
-                <button
-                  type="button"
-                  className="composer-attachment-remove"
-                  aria-label="Удалить файл"
-                  onClick={() => onAttachmentsChange(attachments.filter((x) => x.id !== a.id))}
-                >
-                  <CloseIcon />
-                </button>
-              </div>
+              <AttachmentChip
+                key={a.id}
+                filename={a.filename}
+                kind={a.kind}
+                previewUrl={a.previewUrl}
+                onRemove={() => removeAttachment(a.id)}
+              />
+            ))}
+            {uploading.map((u) => (
+              <AttachmentChip
+                key={u.localKey}
+                filename={u.filename}
+                kind={u.kind}
+                previewUrl={u.previewUrl}
+                processing
+              />
             ))}
           </div>
         )}
 
         <div className="composer-row">
-          <button
-            type="button"
-            className="composer-icon"
-            aria-label={t("attachFile")}
-            disabled={disabled || uploading || attachments.length >= 1}
-            onClick={onAttachClick}
-          >
-            <PlusIcon />
-          </button>
+          <ComposerAttachMenu
+            disabled={disabled || isBusy || atLimit}
+            onPickDocument={() => openPicker(documentRef)}
+            onPickPhoto={() => openPicker(photoRef)}
+            onTakePhoto={() => openPicker(cameraRef)}
+          />
           <input
-            ref={fileRef}
+            ref={documentRef}
             type="file"
-            accept={ACCEPT_FILE_INPUT}
+            accept={ACCEPT_DOCUMENT_INPUT}
+            multiple
             hidden
-            onChange={(e) => onFilePick(e.target.files)}
+            onChange={(e) => {
+              void onFilesPicked(e.target.files, "document");
+              resetInput(documentRef);
+            }}
+          />
+          <input
+            ref={photoRef}
+            type="file"
+            accept={ACCEPT_IMAGE_INPUT}
+            multiple
+            hidden
+            onChange={(e) => {
+              void onFilesPicked(e.target.files, "image");
+              resetInput(photoRef);
+            }}
+          />
+          <input
+            ref={cameraRef}
+            type="file"
+            accept={ACCEPT_IMAGE_INPUT}
+            capture="environment"
+            hidden
+            onChange={(e) => {
+              void onFilesPicked(e.target.files, "image");
+              resetInput(cameraRef);
+            }}
           />
           <div className="composer-input-wrap">
             {showTypingOverlay && typingPlaceholder && (
@@ -196,16 +291,42 @@ export function SearchComposer({
   );
 }
 
-function PlusIcon() {
+function AttachmentChip({
+  filename,
+  kind,
+  previewUrl,
+  processing,
+  onRemove,
+}: {
+  filename: string;
+  kind: AttachmentKind;
+  previewUrl?: string;
+  processing?: boolean;
+  onRemove?: () => void;
+}) {
   return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden>
-      <path
-        d="M12 5v14M5 12h14"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-      />
-    </svg>
+    <div
+      className={`composer-attachment${processing ? " composer-attachment--processing" : ""}`}
+    >
+      {kind === "image" && previewUrl ? (
+        <img src={previewUrl} alt="" className="composer-attachment-thumb" />
+      ) : (
+        <FileDocIcon />
+      )}
+      <span className="composer-attachment-name" title={filename}>
+        {processing ? t("attachProcessing") : filename}
+      </span>
+      {onRemove && (
+        <button
+          type="button"
+          className="composer-attachment-remove"
+          aria-label={t("attachRemove")}
+          onClick={onRemove}
+        >
+          <CloseIcon />
+        </button>
+      )}
+    </div>
   );
 }
 
