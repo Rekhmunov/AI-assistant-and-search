@@ -687,8 +687,15 @@ body:has(.page-thread) {
   animation: status-pulse 1.2s ease-in-out infinite;
 }
 
-.search-status-text {
-  animation: status-fade 2s ease-in-out infinite;
+.search-status-text--typing::after {
+  content: "";
+  display: inline-block;
+  width: 2px;
+  height: 0.95em;
+  margin-left: 2px;
+  vertical-align: text-bottom;
+  background: var(--muted);
+  animation: answer-caret-blink 1s step-end infinite;
 }
 
 @keyframes status-pulse {
@@ -700,16 +707,6 @@ body:has(.page-thread) {
   50% {
     opacity: 1;
     transform: scale(1);
-  }
-}
-
-@keyframes status-fade {
-  0%,
-  100% {
-    opacity: 0.65;
-  }
-  50% {
-    opacity: 1;
   }
 }
 
