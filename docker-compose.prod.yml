@@ -83,6 +83,7 @@ services:
       args:
         VITE_API_URL: ${VITE_API_URL:-}
         VITE_MAX_BOT_URL: ${VITE_MAX_BOT_URL:-https://max.ru}
+        VITE_BUILD_ID: ${GIT_COMMIT:-unknown}
     restart: unless-stopped
     depends_on:
       - backend

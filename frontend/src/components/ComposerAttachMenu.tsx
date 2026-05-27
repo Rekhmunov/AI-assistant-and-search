@@ -1,6 +1,8 @@
-import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { t } from "../i18n";
+
+const DROPDOWN_ID = "composer-attach-dropdown";
 
 type Props = {
   disabled?: boolean;
@@ -15,9 +17,9 @@ export function ComposerAttachMenu({
   onPickPhoto,
   onTakePhoto,
 }: Props) {
-  const menuId = useId();
   const rootRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
   const [menuStyle, setMenuStyle] = useState<{ top: number; left: number } | null>(null);
 
@@ -52,8 +54,7 @@ export function ComposerAttachMenu({
     const onPointerDown = (e: MouseEvent | TouchEvent) => {
       const target = e.target as Node;
       if (rootRef.current?.contains(target)) return;
-      const menuEl = document.getElementById(menuId);
-      if (menuEl?.contains(target)) return;
+      if (menuRef.current?.contains(target)) return;
       setOpen(false);
     };
     const onKey = (e: KeyboardEvent) => {
@@ -70,14 +71,14 @@ export function ComposerAttachMenu({
       document.removeEventListener("touchstart", onPointerDown);
       document.removeEventListener("keydown", onKey);
     };
-  }, [open, menuId]);
+  }, [open]);
 
   const choose = (fn: () => void) => {
     setOpen(false);
     fn();
   };
 
-  const toggleOpen = (e: React.MouseEvent) => {
+  const toggleOpen = (e: React.MouseEvent | React.TouchEvent) => {
     e.preventDefault();
     e.stopPropagation();
     if (disabled) return;
@@ -88,7 +89,8 @@ export function ComposerAttachMenu({
     open && menuStyle
       ? createPortal(
           <div
-            id={menuId}
+            ref={menuRef}
+            id={DROPDOWN_ID}
             className="composer-attach-dropdown composer-attach-dropdown--portal"
             role="menu"
             style={{
@@ -119,11 +121,11 @@ export function ComposerAttachMenu({
       <button
         ref={buttonRef}
         type="button"
-        className="composer-icon"
+        className="composer-icon composer-icon--attach"
         aria-label={t("attachAdd")}
         aria-expanded={open}
         aria-haspopup="menu"
-        aria-controls={menuId}
+        aria-controls={DROPDOWN_ID}
         disabled={disabled}
         onClick={toggleOpen}
       >

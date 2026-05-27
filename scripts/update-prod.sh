@@ -64,6 +64,7 @@ fi
 
 export GIT_COMMIT="$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
 echo "==> GIT_COMMIT=${GIT_COMMIT}"
+export GIT_COMMIT
 
 echo "==> Backup DB (optional)"
 bash scripts/backup-db.sh 2>/dev/null || echo "    backup skipped"
@@ -120,10 +121,14 @@ if [ -n "$APP_JS" ]; then
   if curl -sf "http://127.0.0.1:${PROXY_PORT}${APP_JS}" -H "Host: ${APP_HOST_CHECK}" | grep -q 'composer-attach-dropdown'; then
     echo "    app bundle: attach menu OK (${APP_JS})"
   else
-    echo "    WARN: app JS без меню вложений — пересоберите frontend: $COMPOSE build --no-cache frontend && $COMPOSE up -d --force-recreate frontend nginx"
+    echo "ERROR: app JS без меню вложений (старый frontend). Выполните:"
+    echo "       $COMPOSE build --no-cache frontend"
+    echo "       $COMPOSE up -d --force-recreate frontend nginx"
+    exit 1
   fi
 else
-  echo "    WARN: не удалось найти /assets/index-*.js в index.html"
+  echo "ERROR: не удалось найти /assets/index-*.js в index.html"
+  exit 1
 fi
 
 echo "    app (${APP_HOST_CHECK}): HTTP ${APP_CODE}"
