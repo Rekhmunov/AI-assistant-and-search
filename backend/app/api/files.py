@@ -15,31 +15,15 @@ from app.constants.attachments import (
 )
 from app.models.uploaded_file import UploadedFile
 from app.models.user import Plan, User
-from app.services.file_parser import DOCUMENT_EXT, IMAGE_EXT, extract_text
+from app.services.file_format import (
+    ALLOWED_EXT,
+    UNSUPPORTED_FORMAT_MESSAGE,
+    normalize_filename,
+    resolve_upload_extension,
+)
+from app.services.file_parser import IMAGE_EXT, extract_text, prepare_image_for_ocr
 
 router = APIRouter(prefix="/files", tags=["files"])
-
-ALLOWED_EXT = DOCUMENT_EXT | IMAGE_EXT
-
-_MIME_TO_EXT = {
-    "image/jpeg": "jpg",
-    "image/png": "png",
-    "image/webp": "webp",
-    "application/pdf": "pdf",
-    "text/plain": "txt",
-    "text/csv": "csv",
-}
-
-
-def _resolve_extension(filename: str, content_type: str | None) -> str:
-    ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
-    if ext in ALLOWED_EXT:
-        return ext
-    if content_type:
-        mapped = _MIME_TO_EXT.get(content_type.split(";")[0].strip().lower())
-        if mapped:
-            return mapped
-    return ext
 
 
 def _file_too_large_detail(filename: str, size: int, user: User) -> dict[str, Any]:
@@ -89,25 +73,36 @@ async def upload_file(
         )
     )
 
-    filename = file.filename or "file"
-    ext = _resolve_extension(filename, file.content_type)
+    filename = file.filename or "upload"
+    data = await file.read()
+
+    ext = resolve_upload_extension(filename, file.content_type, data)
     if ext not in ALLOWED_EXT:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Формат не поддерживается. Допустимо: PDF, Word, Excel, CSV, текст, JPEG, PNG, WebP.",
+            detail=UNSUPPORTED_FORMAT_MESSAGE,
         )
-    if ext in IMAGE_EXT and "." not in filename:
-        filename = f"{filename}.{ext}"
 
-    data = await file.read()
+    filename = normalize_filename(filename, ext)
+
     if len(data) > max_bytes:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=_file_too_large_detail(filename, len(data), user),
         )
 
+    ocr_data = data
+    if ext in IMAGE_EXT:
+        try:
+            ocr_data, ocr_ext = prepare_image_for_ocr(data, ext)
+            if ocr_ext != ext:
+                filename = normalize_filename(filename, ocr_ext)
+                ext = ocr_ext
+        except ValueError as e:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+
     try:
-        text = extract_text(filename, data)
+        text = extract_text(filename, ocr_data)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
     except Exception:

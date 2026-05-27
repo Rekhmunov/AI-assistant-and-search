@@ -2,7 +2,8 @@
 export const ACCEPT_DOCUMENT_INPUT =
   ".txt,.md,.json,.csv,.pdf,.docx,.xlsx,.xls,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/plain,text/csv";
 
-export const ACCEPT_IMAGE_INPUT = "image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp";
+export const ACCEPT_IMAGE_INPUT =
+  "image/jpeg,image/png,image/webp,image/heic,image/heif,.jpg,.jpeg,.png,.webp,.heic,.heif";
 
 export const ACCEPT_FILE_INPUT = `${ACCEPT_DOCUMENT_INPUT},${ACCEPT_IMAGE_INPUT}`;
 
@@ -17,7 +18,7 @@ export const IMAGE_COMPRESS_THRESHOLD_BYTES = 1_500_000;
 export const IMAGE_MAX_EDGE_PX = 2048;
 
 const DOCUMENT_EXT = new Set(["txt", "md", "json", "csv", "pdf", "docx", "xlsx", "xls"]);
-const IMAGE_EXT = new Set(["jpg", "jpeg", "png", "webp"]);
+const IMAGE_EXT = new Set(["jpg", "jpeg", "png", "webp", "heic", "heif"]);
 
 export type FileKind = "document" | "image";
 
@@ -44,7 +45,7 @@ export function validateFile(
   if (!kind) {
     return {
       message:
-        "Формат не поддерживается. Используйте PDF, Word, Excel, CSV, текст или фото (JPEG, PNG, WebP).",
+        "Формат не поддерживается. Используйте PDF, Word, Excel, CSV, текст или фото (JPEG, PNG, WebP, HEIC).",
       suggestPro: false,
     };
   }

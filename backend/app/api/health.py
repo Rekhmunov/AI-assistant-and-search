@@ -10,9 +10,12 @@ from app.services.anthropic_probe import probe_anthropic
 from app.services.deepseek_probe import probe_deepseek
 from app.services.llm_runtime import fetch_llm_runtime_status
 from app.services.query_router import POLICY_VERSION
+from app.services.file_format import UNSUPPORTED_FORMAT_MESSAGE
 from app.services.yandex_probe import probe_yandex
 
 router = APIRouter(tags=["health"])
+
+UPLOAD_API_VERSION = 2
 
 
 def _build_features() -> dict[str, bool]:
@@ -152,6 +155,9 @@ async def api_health(db: Annotated[AsyncSession, Depends(get_db)]):
             if settings.yandex_configured
             else "Добавьте YANDEX_FOLDER_ID и YANDEX_API_KEY в .env — см. docs/YANDEX_SETUP.md"
         ),
+        "upload_api_version": UPLOAD_API_VERSION,
+        "upload_images": True,
+        "upload_formats_hint": UNSUPPORTED_FORMAT_MESSAGE,
     }
 
 

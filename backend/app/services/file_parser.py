@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 
 MAX_EXTRACT_CHARS = MAX_EXTRACT_CHARS_PER_FILE
 
-IMAGE_EXT = frozenset({"jpg", "jpeg", "png", "webp"})
+IMAGE_EXT = frozenset({"jpg", "jpeg", "png", "webp", "heic", "heif"})
 DOCUMENT_EXT = frozenset({"txt", "md", "json", "csv", "pdf", "docx", "xlsx", "xls"})
 
 
@@ -106,10 +106,43 @@ def _parse_xlsx(data: bytes) -> str:
     return "\n".join(parts)
 
 
+def _register_heif_opener() -> None:
+    try:
+        import pillow_heif
+
+        pillow_heif.register_heif_opener()
+    except ImportError:
+        pass
+
+
+def prepare_image_for_ocr(data: bytes, ext: str) -> tuple[bytes, str]:
+    """Convert HEIC/HEIF to JPEG for OCR; pass through jpg/png/webp as-is."""
+    out_ext = "jpg" if ext == "jpeg" else ext
+    if ext not in ("heic", "heif"):
+        return data, out_ext
+
+    _register_heif_opener()
+    from PIL import Image
+
+    try:
+        img = Image.open(io.BytesIO(data))
+    except Exception as e:
+        raise ValueError(
+            "Не удалось открыть HEIC. Сохраните фото как JPEG или используйте «Сделать снимок»."
+        ) from e
+
+    if img.mode not in ("RGB", "L"):
+        img = img.convert("RGB")
+    buf = io.BytesIO()
+    img.save(buf, format="JPEG", quality=90)
+    return buf.getvalue(), "jpg"
+
+
 def _parse_image(data: bytes) -> str:
     from PIL import Image
     import pytesseract
 
+    _register_heif_opener()
     try:
         img = Image.open(io.BytesIO(data))
     except Exception as e:
