@@ -6,6 +6,21 @@ type FoundBlock = { start: number; end: number; content: string; lang?: string }
 function findUnfencedBlocks(text: string): FoundBlock[] {
   const found: FoundBlock[] = [];
 
+  const introCodeRe =
+    /(?:следующ(?:ий|ему)\s+код|пример\s+кода|создайте\s+файл|поместите\s+в\s+(?:него|файл)|код\s+(?:ниже|файла)|вот\s+код)[^\n]*\n+([\s\S]*?)(?=\n\n[A-Za-zА-Яа-яЁё]|\n\d+\.\s|$)/gi;
+  while ((m = introCodeRe.exec(text)) !== null) {
+    const body = m[1].trim();
+    if (body.length >= 8 && looksLikeCode(body) && !overlaps(found, m.index, m.index + m[0].length)) {
+      const lang = body.includes("<?php") ? "php" : body.includes("def ") ? "python" : "txt";
+      found.push({
+        start: m.index + m[0].indexOf(body),
+        end: m.index + m[0].indexOf(body) + body.length,
+        content: body,
+        lang,
+      });
+    }
+  }
+
   const phpRe = /<\?php[\s\S]*?\?>/g;
   let m: RegExpExecArray | null;
   while ((m = phpRe.exec(text)) !== null) {
@@ -68,6 +83,14 @@ function findUnfencedBlocks(text: string): FoundBlock[] {
 
 function overlaps(blocks: FoundBlock[], start: number, end: number): boolean {
   return blocks.some((b) => start < b.end && end > b.start);
+}
+
+function looksLikeCode(body: string): boolean {
+  const lines = body.split("\n").filter((l) => l.trim());
+  if (lines.length === 0) return false;
+  const codey =
+    /<\?php|^\s*(def |class |import |from |const |let |var |function |#include|public |private |echo |print\(|SELECT |INSERT )/im;
+  return codey.test(body) || lines.some((l) => /[{};]=/.test(l) && !/^[А-Яа-яЁё]/.test(l.trim()));
 }
 
 export function splitTextWithUnfencedCode(text: string): AnswerSegment[] {

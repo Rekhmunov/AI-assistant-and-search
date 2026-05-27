@@ -26,7 +26,7 @@ export function parseAnswerSegments(raw: string): AnswerSegment[] {
 
   const text = raw.replace(/\r\n/g, "\n");
   const segments: AnswerSegment[] = [];
-  const closedRe = /```(\w*)?\n?([\s\S]*?)```/g;
+  const closedRe = /```[ \t]*([\w-]*)?[ \t]*\r?\n([\s\S]*?)```/g;
   let last = 0;
   let match: RegExpExecArray | null;
 
@@ -34,11 +34,11 @@ export function parseAnswerSegments(raw: string): AnswerSegment[] {
     if (match.index > last) {
       segments.push({ type: "text", content: text.slice(last, match.index) });
     }
-    const lang = match[1]?.trim() || undefined;
+    const lang = match[1]?.trim().toLowerCase() || undefined;
     segments.push({
       type: "code",
       content: match[2].replace(/\n$/, ""),
-      lang,
+      lang: lang || undefined,
     });
     last = match.index + match[0].length;
   }
@@ -51,8 +51,8 @@ export function parseAnswerSegments(raw: string): AnswerSegment[] {
         segments.push({ type: "text", content: tail.slice(0, openAt) });
       }
       const afterFence = tail.slice(openAt + 3);
-      const langMatch = afterFence.match(/^(\w*)\r?\n?/);
-      const lang = langMatch?.[1]?.trim() || undefined;
+      const langMatch = afterFence.match(/^([\w-]*)[ \t]*\r?\n?/);
+      const lang = langMatch?.[1]?.trim().toLowerCase() || undefined;
       const code = langMatch ? afterFence.slice(langMatch[0].length) : afterFence;
       segments.push({ type: "code", content: code, lang, partial: true });
     } else {
