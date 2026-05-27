@@ -30,7 +30,10 @@ async def search_stream(
     redis = await get_redis()
     async with async_session_factory() as db:
         if await get_setting("maintenance_mode", db, redis):
-            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Maintenance mode")
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Делаем сервис лучше, повторите запрос через некоторое время",
+            )
 
     stream_headers = {
         "Cache-Control": "no-cache",
