@@ -1,10 +1,25 @@
+import { splitTextWithUnfencedCode } from "./extractUnfencedCode";
+
 export type AnswerSegment =
   | { type: "text"; content: string }
   | { type: "code"; content: string; lang?: string; partial?: boolean };
 
+function expandTextSegments(segments: AnswerSegment[]): AnswerSegment[] {
+  const out: AnswerSegment[] = [];
+  for (const seg of segments) {
+    if (seg.type === "code") {
+      out.push(seg);
+      continue;
+    }
+    out.push(...splitTextWithUnfencedCode(seg.content));
+  }
+  return out;
+}
+
 /**
  * Делит ответ на текст и fenced-блоки ```…``` (код, JSON, TXT и т.д.).
  * Незакрытый ``` в конце (стрим) — code с partial: true.
+ * В тексте также ищет «голый» PHP/HTML/команды терминала.
  */
 export function parseAnswerSegments(raw: string): AnswerSegment[] {
   if (!raw) return [];
@@ -45,5 +60,6 @@ export function parseAnswerSegments(raw: string): AnswerSegment[] {
     }
   }
 
-  return segments.length > 0 ? segments : [{ type: "text", content: text }];
+  const base = segments.length > 0 ? segments : [{ type: "text", content: text }];
+  return expandTextSegments(base);
 }
