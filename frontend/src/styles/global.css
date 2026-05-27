@@ -727,6 +727,23 @@ body:has(.page-thread) {
   white-space: pre-wrap;
 }
 
+.answer--streaming .answer-text:last-child::after {
+  content: "";
+  display: inline-block;
+  width: 2px;
+  height: 1.05em;
+  margin-left: 2px;
+  vertical-align: text-bottom;
+  background: var(--muted);
+  animation: answer-caret-blink 1s step-end infinite;
+}
+
+@keyframes answer-caret-blink {
+  50% {
+    opacity: 0;
+  }
+}
+
 .answer-inline-code {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 0.9em;

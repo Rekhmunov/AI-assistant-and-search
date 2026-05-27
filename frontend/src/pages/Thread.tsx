@@ -217,7 +217,11 @@ export function Thread() {
               {showAnswer && (
                 <section className="answer-section">
                   <AnswerErrorBoundary>
-                    <AnswerBody text={turn.answer} sources={turn.sources} />
+                    <AnswerBody
+                      text={turn.answer}
+                      sources={turn.sources}
+                      isStreaming={isActive && streaming}
+                    />
                   </AnswerErrorBoundary>
                   {!isActive && turn.answer.trim() && (
                     <AnswerFooter

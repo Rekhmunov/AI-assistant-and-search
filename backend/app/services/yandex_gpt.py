@@ -74,10 +74,14 @@ def _parse_completion_stream_line(line: str) -> str | None:
 async def _yield_text_paced(text: str) -> AsyncIterator[str]:
     if not text:
         return
+    import asyncio
+
     parts = re.split(r"(?<=\s)", text)
-    for part in parts:
+    for i, part in enumerate(parts):
         if part:
             yield part
+            if i < len(parts) - 1:
+                await asyncio.sleep(0.014)
 
 
 def _format_history(history: list[tuple[str, str]], max_turns: int = 6) -> str:
