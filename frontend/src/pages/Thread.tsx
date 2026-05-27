@@ -3,10 +3,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { fetchThread, streamSearch } from "../api/client";
 import { AnswerBody } from "../components/AnswerBody";
+import { AnswerErrorBoundary } from "../components/AnswerErrorBoundary";
 import { AnswerFooter } from "../components/AnswerFooter";
 import { SearchComposer, type ComposerAttachment } from "../components/SearchComposer";
 import { SearchStatusLine, type SearchPhase } from "../components/SearchStatusLine";
 import { t } from "../i18n";
+import { findLastIndex } from "../lib/arrayUtils";
 import { messagesToTurns, type ThreadTurn } from "../lib/threadTurns";
 import { useAuthStore } from "../store/authStore";
 
@@ -15,7 +17,7 @@ function updateLastStreamingTurn(
   patch: Partial<Pick<ThreadTurn, "answer" | "sources" | "followUps">>,
   appendAnswer?: string,
 ): ThreadTurn[] {
-  const idx = turns.findLastIndex((turn) => turn.streaming);
+  const idx = findLastIndex(turns, (turn) => turn.streaming);
   if (idx < 0) return turns;
   const current = turns[idx];
   const next = [...turns];
@@ -164,7 +166,10 @@ export function Thread() {
     runSearch(payload.query, threadId, payload.attachmentIds);
   };
 
-  const lastCompletedIndex = turns.findLastIndex((turn) => !turn.streaming && turn.answer.trim());
+  const lastCompletedIndex = findLastIndex(
+    turns,
+    (turn) => !turn.streaming && turn.answer.trim(),
+  );
 
   return (
     <div className="page page-thread">
@@ -207,7 +212,9 @@ export function Thread() {
 
               {showAnswer && (
                 <section className="answer-section">
-                  <AnswerBody text={turn.answer} sources={turn.sources} />
+                  <AnswerErrorBoundary>
+                    <AnswerBody text={turn.answer} sources={turn.sources} />
+                  </AnswerErrorBoundary>
                   {!isActive && turn.answer.trim() && (
                     <AnswerFooter
                       answer={turn.answer}

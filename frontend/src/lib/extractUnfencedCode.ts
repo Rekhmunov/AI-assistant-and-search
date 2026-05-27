@@ -5,6 +5,7 @@ type FoundBlock = { start: number; end: number; content: string; lang?: string }
 /** Выделяет код без ``` (LLM часто пишет «без markdown»). */
 function findUnfencedBlocks(text: string): FoundBlock[] {
   const found: FoundBlock[] = [];
+  let m: RegExpExecArray | null;
 
   const introCodeRe =
     /(?:следующ(?:ий|ему)\s+код|пример\s+кода|создайте\s+файл|поместите\s+в\s+(?:него|файл)|код\s+(?:ниже|файла)|вот\s+код)[^\n]*\n+([\s\S]*?)(?=\n\n[A-Za-zА-Яа-яЁё]|\n\d+\.\s|$)/gi;
@@ -22,7 +23,6 @@ function findUnfencedBlocks(text: string): FoundBlock[] {
   }
 
   const phpRe = /<\?php[\s\S]*?\?>/g;
-  let m: RegExpExecArray | null;
   while ((m = phpRe.exec(text)) !== null) {
     found.push({ start: m.index, end: m.index + m[0].length, content: m[0], lang: "php" });
   }
