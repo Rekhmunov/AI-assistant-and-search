@@ -51,9 +51,15 @@ ANTHROPIC_ANSWER_DOCUMENT = """Ты — ассистент Glosix. Разбор 
 Фрагменты файла и кода — в ```txt / ```php / ``` и т.д.
 """ + ANTHROPIC_CODE_FORMAT
 
+ANTHROPIC_ANSWER_VISION = """Ты — ассистент Glosix. Пользователь приложил фото и вопрос.
+Смотри на изображения и отвечай по-русски: что на фото, растение, блюдо, калории (оценочно), детали.
+Если данных мало — скажи, какой ракурс или информация нужны. OCR из запроса — только как подсказка.
+""" + ANTHROPIC_CODE_FORMAT
+
 ANTHROPIC_ANSWER_PROMPT_IDS: dict[str, str] = {
     "anthropic_claude_answer_search": ANTHROPIC_ANSWER_SEARCH,
     "anthropic_claude_answer_meta": ANTHROPIC_ANSWER_META,
     "anthropic_claude_answer_direct": ANTHROPIC_ANSWER_DIRECT,
     "anthropic_claude_answer_document": ANTHROPIC_ANSWER_DOCUMENT,
+    "anthropic_claude_answer_vision": ANTHROPIC_ANSWER_VISION,
 }

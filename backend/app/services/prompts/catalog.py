@@ -56,6 +56,14 @@ PROMPT_CATALOG: tuple[PromptDefinition, ...] = (
         rows=8,
     ),
     PromptDefinition(
+        id="yandex_gpt_answer_vision",
+        label="Ответ по фото (vision, Claude)",
+        group="Ответ пользователю",
+        provider="yandex_gpt",
+        description="Мультимодальный ответ по изображениям (используется через Claude API).",
+        rows=10,
+    ),
+    PromptDefinition(
         id="yandex_gpt_rewriter_system",
         label="Rewriter перед поиском (system)",
         group="Пайплайн поиска",

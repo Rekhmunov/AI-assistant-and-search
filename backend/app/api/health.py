@@ -15,7 +15,7 @@ from app.services.yandex_probe import probe_yandex
 
 router = APIRouter(tags=["health"])
 
-UPLOAD_API_VERSION = 2
+UPLOAD_API_VERSION = 3
 
 
 def _build_features() -> dict[str, bool]:

@@ -9,17 +9,13 @@ from sqlalchemy import select, text
 from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.constants.attachments import (
-    MAX_ATTACHMENTS_PER_SEARCH,
-    MAX_EXTRACT_CHARS_PER_FILE,
-    MAX_TOTAL_ATTACHMENT_CHARS,
-    UPLOAD_TTL_HOURS,
-)
+from app.constants.attachments import MAX_ATTACHMENTS_PER_SEARCH, UPLOAD_TTL_HOURS
+from app.services.attachment_bundle import resolve_attachment_bundle
+from app.services.vision_llm import VisionNotSupportedError, stream_vision_answer
 from app.core.config import get_settings
 from app.core.limiter import RateLimiter
 from app.models.message import Message, MessageRole
 from app.models.thread import Thread
-from app.models.uploaded_file import UploadedFile
 from app.models.user import User
 from app.services.llm_provider import SearchSource
 from app.services.answer_guard import is_template_evasion
@@ -78,57 +74,13 @@ async def _messages_have_debug_trace(db: AsyncSession) -> bool:
 
 
 _VALID_INTENTS: frozenset[str] = frozenset(
-    {"factual_current", "howto", "document", "edit_prior", "compare_analyze", "chitchat"}
+    {"factual_current", "howto", "document", "edit_prior", "compare_analyze", "chitchat", "vision_image"}
 )
 
 
 class SearchFlowService:
     def __init__(self):
         self.router = QueryRouter()
-
-    async def _resolve_attachments(
-        self,
-        db: AsyncSession,
-        user: User,
-        query: str,
-        attachment_ids: list[uuid.UUID] | None,
-    ) -> tuple[str, str]:
-        if not attachment_ids:
-            return query, query
-
-        if len(attachment_ids) > MAX_ATTACHMENTS_PER_SEARCH:
-            raise ValueError("attachment_limit")
-
-        now = datetime.now(timezone.utc)
-        result = await db.execute(
-            select(UploadedFile).where(
-                UploadedFile.id.in_(attachment_ids),
-                UploadedFile.user_id == user.id,
-                UploadedFile.expires_at.isnot(None),
-                UploadedFile.expires_at > now,
-            )
-        )
-        by_id = {f.id: f for f in result.scalars().all()}
-        if len(by_id) != len(attachment_ids):
-            raise ValueError("attachment_expired")
-
-        files = [by_id[fid] for fid in attachment_ids]
-        names = [f.filename for f in files]
-        parts = [query]
-        budget = MAX_TOTAL_ATTACHMENT_CHARS
-        for f in files:
-            chunk = (f.extracted_text or "").strip()
-            if len(chunk) > MAX_EXTRACT_CHARS_PER_FILE:
-                chunk = chunk[:MAX_EXTRACT_CHARS_PER_FILE] + "\n… [обрезано]"
-            if len(chunk) > budget:
-                chunk = chunk[: max(0, budget)] + ("\n… [обрезано]" if budget > 0 else "")
-            budget -= len(chunk)
-            parts.append(f"\n\n--- Документ: {f.filename} ---\n{chunk}")
-            if budget <= 0:
-                break
-        llm_query = "\n".join(parts)
-        display = f"{query}\n\n[Файлы: {', '.join(names)}]" if names else query
-        return llm_query, display
 
     def _is_guest(self, user: User) -> bool:
         return bool(user.guest_key) and not user.email
@@ -171,7 +123,7 @@ class SearchFlowService:
             return
 
         try:
-            llm_query, display_content = await self._resolve_attachments(
+            bundle = await resolve_attachment_bundle(
                 db, user, normalize_user_query(query), attachment_ids
             )
         except ValueError as e:
@@ -183,12 +135,19 @@ class SearchFlowService:
                     f"Вложение устарело (хранится {UPLOAD_TTL_HOURS} ч). "
                     "Загрузите файл снова."
                 )
+            elif code == "attachment_storage_missing":
+                msg = "Файл фото не найден на сервере. Загрузите снимок снова."
+            elif code == "attachment_empty":
+                msg = "Не удалось извлечь текст из файла"
             else:
                 msg = "Файл не найден или истёк"
             yield sse_event("error", {"code": "attachment", "message": msg})
             return
 
+        llm_query = bundle.llm_query
+        display_content = bundle.display_query
         has_attachments = bool(attachment_ids)
+        needs_vision = bundle.needs_vision
 
         thread: Thread | None = None
         if thread_id:
@@ -219,6 +178,11 @@ class SearchFlowService:
 
         thread_ctx = build_thread_context(prior_messages)
         route = await self.router.route(llm_query, thread_ctx, has_attachments, user.plan)
+        if needs_vision:
+            route.needs_search = False
+            route.intent = "vision_image"
+            route.reason = "photo_vision"
+            route.answer_model = "pro"
 
         user_msg = Message(thread_id=thread.id, role=MessageRole.USER, content=display_content)
         db.add(user_msg)
@@ -337,7 +301,24 @@ class SearchFlowService:
             )
 
             full_answer = ""
-            if route.needs_search:
+            if needs_vision:
+                try:
+                    async for chunk in stream_vision_answer(
+                        llm_query,
+                        bundle.vision_images,
+                        history,
+                        model=route.answer_model,
+                        prior_sources_block=prior_sources_block,
+                        prompt_store=_prompt_store,
+                    ):
+                        full_answer += chunk
+                        yield sse_event("token", {"text": chunk})
+                except VisionNotSupportedError as e:
+                    await db.rollback()
+                    await limiter.release_search(str(user.id))
+                    yield sse_event("error", {"code": "vision_unavailable", "message": str(e)})
+                    return
+            elif route.needs_search:
                 weak_retrieval = bool(retrieval_trace and not retrieval_trace.get("ok"))
 
                 full_answer = ""

@@ -59,6 +59,8 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
+    volumes:
+      - upload_data:/data/uploads
     networks:
       - internal
 
@@ -73,6 +75,8 @@ services:
     depends_on:
       - backend
       - redis
+    volumes:
+      - upload_data:/data/uploads
     command: celery -A celery_app worker --beat --loglevel=info
     networks:
       - internal
@@ -118,6 +122,7 @@ services:
 volumes:
   pgdata:
   redisdata:
+  upload_data:
 
 networks:
   internal:

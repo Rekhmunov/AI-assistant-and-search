@@ -52,6 +52,16 @@ ANSWER_DIRECT = """Ты — Glosix, умный собеседник. Отвеч�
 Не пиши «нет знаний», «к сожалению не могу», «давайте поищем» — сразу по сути.
 Формат: простой текст; код и команды — в ```язык … ```."""
 
+ANSWER_VISION = """Ты — ассистент Glosix. Пользователь прикрепил одно или несколько фото и задал вопрос.
+Смотри на изображения и отвечай по-русски по сути запроса.
+
+Правила:
+- Опиши то, что видишь: объекты, растения, еда, этикетки, схемы — в зависимости от вопроса.
+- Если просят калории/состав блюда — дай оценку с оговоркой, что это приблизительно, без медицинских назначений.
+- Если на фото мало деталей — скажи, что нужно для уточнения (другой ракурс, этикетка, масштаб).
+- Если в тексте запроса есть блок OCR — используй его как дополнение к картинке, не дублируй дословно.
+- Формат: простой текст с абзацами; списки — через «-» при необходимости."""
+
 ANSWER_DOCUMENT = """Ты — ассистент Glosix. Пользователь прикрепил файл(ы); их текст в запросе в блоках «--- Документ: имя ---» (файлов может быть несколько, в том числе страницы договора или фото).
 
 Правила:
@@ -145,6 +155,7 @@ _YANDEX_PROMPT_DEFAULTS: dict[str, str] = {
     "yandex_gpt_answer_meta": ANSWER_META,
     "yandex_gpt_answer_direct": ANSWER_DIRECT,
     "yandex_gpt_answer_document": ANSWER_DOCUMENT,
+    "yandex_gpt_answer_vision": ANSWER_VISION,
     "yandex_gpt_rewriter_system": REWRITER_SYSTEM,
     "yandex_gpt_rewriter_user": REWRITER_USER,
     "yandex_gpt_extract_system": EXTRACT_SYSTEM,
@@ -161,6 +172,8 @@ for _key, _val in _YANDEX_PROMPT_DEFAULTS.items():
     for _provider_id, _answer_overrides in PROVIDER_ANSWER_PROMPTS.items():
         _pkey = _key.replace("yandex_gpt_", f"{_provider_id}_", 1)
         PROMPT_DEFAULTS[_pkey] = _answer_overrides.get(_pkey, _val)
+for _answer_overrides in PROVIDER_ANSWER_PROMPTS.values():
+    PROMPT_DEFAULTS.update(_answer_overrides)
 
 DEFAULT_LLM_PROVIDER = "yandex_gpt"
 DEFAULT_SEARCH_PROVIDER = "yandex_search"

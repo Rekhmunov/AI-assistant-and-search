@@ -17,11 +17,13 @@ from app.services.facts.models import FactPack
 from app.services.facts.slots import uses_synthesis_grounding
 from app.services.llm_prompted import PromptedLLMMixin
 from app.services.llm_provider import LLMProvider, SearchSource
+from app.services.attachment_bundle import VisionImage
 from app.services.prompts.defaults import (
     ANSWER_DIRECT,
     ANSWER_DOCUMENT,
     ANSWER_META,
     ANSWER_SEARCH,
+    ANSWER_VISION,
     FOLLOW_UPS_SYSTEM,
 )
 from app.services.prompts.store import PromptStore
@@ -80,7 +82,11 @@ def _to_anthropic_messages(messages: list[dict]) -> tuple[str, list[dict]]:
                 system_parts.append(text)
             continue
         if role in ("user", "assistant"):
-            out.append({"role": role, "content": text})
+            raw_content = m.get("content")
+            if isinstance(raw_content, list):
+                out.append({"role": role, "content": raw_content})
+            elif text.strip():
+                out.append({"role": role, "content": text})
     system = "\n\n".join(system_parts)
     return system, out
 
@@ -378,6 +384,52 @@ class AnthropicClaudeProvider(PromptedLLMMixin, LLMProvider):
             model=model,
             max_tokens=max_tokens,
             temperature=0.35 if model == "pro" else 0.3,
+        ):
+            yield chunk
+
+    async def stream_answer_vision(
+        self,
+        query: str,
+        vision_images: list[VisionImage],
+        history: list[tuple[str, str]],
+        model: AnswerModel = "pro",
+        prior_sources_block: str = "",
+    ) -> AsyncIterator[str]:
+        if not self.configured:
+            async for part in _yield_text_paced("Анализ фото (mock Claude)."):
+                yield part
+            return
+
+        extra = f"\n\n{prior_sources_block}" if prior_sources_block else ""
+        user_text = f"""{_format_history(history)}{extra}
+
+{query}"""
+
+        content_blocks: list[dict] = []
+        for img in vision_images[:10]:
+            content_blocks.append(
+                {
+                    "type": "image",
+                    "source": {
+                        "type": "base64",
+                        "media_type": img.media_type,
+                        "data": img.data_base64,
+                    },
+                }
+            )
+        content_blocks.append({"type": "text", "text": user_text})
+
+        system = await self.get_prompt("answer_vision", ANSWER_VISION)
+        messages = [
+            {"role": "system", "text": system},
+            {"role": "user", "content": content_blocks},
+        ]
+        max_tokens = 3500 if model == "pro" else 2200
+        async for chunk in self._stream_messages(
+            messages,
+            model=model,
+            max_tokens=max_tokens,
+            temperature=0.35,
         ):
             yield chunk
 

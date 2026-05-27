@@ -70,6 +70,9 @@ class Settings(BaseSettings):
     pro_price_rub: int = 299
     pro_duration_days: int = 30
 
+    # Временное хранение бинарников фото для vision (TTL = uploaded_files.expires_at)
+    upload_storage_dir: str = "/data/uploads"
+
     admin_api_key: str = ""
     admin_session_expire_hours: int = 12
     admin_bootstrap_email: str = ""

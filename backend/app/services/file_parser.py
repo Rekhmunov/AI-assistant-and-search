@@ -162,6 +162,17 @@ def _parse_image(data: bytes) -> str:
     return text
 
 
+def ocr_image_bytes(data: bytes) -> str:
+    """OCR для загрузки: пустая строка, если текста нет (дальше — vision)."""
+    try:
+        return _parse_image(data).strip()
+    except ValueError:
+        return ""
+    except Exception:
+        logger.exception("OCR failed during upload")
+        return ""
+
+
 def _parse_xls(data: bytes) -> str:
     import xlrd
 
