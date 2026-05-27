@@ -85,6 +85,15 @@ $COMPOSE up -d --force-recreate nginx
 echo "==> Alembic migrations"
 $COMPOSE exec -T backend alembic upgrade head
 
+if grep -qE '^DEEPSEEK_API_KEY=.+' .env 2>/dev/null; then
+  echo "==> DeepSeek: синхронизация answer-промптов в БД"
+  $COMPOSE exec -T backend python scripts/sync_provider_answer_prompts.py deepseek --apply || true
+fi
+if grep -qE '^ANTHROPIC_API_KEY=.+' .env 2>/dev/null; then
+  echo "==> Claude: синхронизация answer-промптов в БД (отдельно от DeepSeek)"
+  $COMPOSE exec -T backend python scripts/sync_provider_answer_prompts.py anthropic_claude --apply || true
+fi
+
 echo "==> Health checks (127.0.0.1:${PROXY_PORT})"
 for i in $(seq 1 30); do
   if curl -sf "http://127.0.0.1:${PROXY_PORT}/api/health" -H "Host: ${API_HOST_CHECK}" >/dev/null 2>&1; then

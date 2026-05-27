@@ -154,16 +154,13 @@ _YANDEX_PROMPT_DEFAULTS: dict[str, str] = {
     "yandex_gpt_follow_ups_system": FOLLOW_UPS_SYSTEM,
 }
 
-from app.services.prompts.deepseek_defaults import DEEPSEEK_ANSWER_PROMPT_IDS
+from app.services.prompts.provider_answer_defaults import PROVIDER_ANSWER_PROMPTS
 
 PROMPT_DEFAULTS: dict[str, str] = dict(_YANDEX_PROMPT_DEFAULTS)
 for _key, _val in _YANDEX_PROMPT_DEFAULTS.items():
-    PROMPT_DEFAULTS[_key.replace("yandex_gpt_", "anthropic_claude_", 1)] = _val
-    deepseek_key = _key.replace("yandex_gpt_", "deepseek_", 1)
-    if deepseek_key in DEEPSEEK_ANSWER_PROMPT_IDS:
-        PROMPT_DEFAULTS[deepseek_key] = DEEPSEEK_ANSWER_PROMPT_IDS[deepseek_key]
-    else:
-        PROMPT_DEFAULTS[deepseek_key] = _val
+    for _provider_id, _answer_overrides in PROVIDER_ANSWER_PROMPTS.items():
+        _pkey = _key.replace("yandex_gpt_", f"{_provider_id}_", 1)
+        PROMPT_DEFAULTS[_pkey] = _answer_overrides.get(_pkey, _val)
 
 DEFAULT_LLM_PROVIDER = "yandex_gpt"
 DEFAULT_SEARCH_PROVIDER = "yandex_search"
