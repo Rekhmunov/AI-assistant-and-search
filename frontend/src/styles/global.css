@@ -17,8 +17,8 @@
   --sidebar-width: 220px;
   --desktop-nav-min: 900px;
   --desktop-search-max-width: min(2160px, calc(100vw - var(--sidebar-width) - 48px));
-  /* Веб: колонка ответа уже основной ширины (~20%) */
-  --desktop-answer-width: 80%;
+  /* Веб: узкая колонка треда по центру (~70% ширины области чата) */
+  --desktop-thread-column-width: 70%;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   color: var(--text);
   background: var(--bg);
@@ -1702,9 +1702,20 @@ body:has(.page-thread) {
     padding-bottom: calc(var(--composer-nav-gap) + 88px);
   }
 
-  .page-thread .thread-turn .answer-section {
-    width: var(--desktop-answer-width);
-    max-width: var(--desktop-answer-width);
+  .page-thread .thread-turn > .thread-query,
+  .page-thread .thread-turn > .search-status,
+  .page-thread .thread-turn > .answer-section,
+  .page-thread .thread-turn > .followups-section {
+    width: var(--desktop-thread-column-width);
+    max-width: var(--desktop-thread-column-width);
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  .page-thread .composer-wrap--docked .composer-error-wrap,
+  .page-thread .composer-wrap--docked .search-composer {
+    width: var(--desktop-thread-column-width);
+    max-width: var(--desktop-thread-column-width);
     margin-left: auto;
     margin-right: auto;
   }
@@ -1728,7 +1739,11 @@ body:has(.page-thread) {
   }
 
   .thread-scroll-down {
-    right: max(24px, calc((100vw - var(--sidebar-width) - var(--desktop-search-max-width)) / 2 + 16px));
+    right: calc(
+      (100vw - var(--sidebar-width) - min(var(--desktop-search-max-width), 100vw - var(--sidebar-width))) /
+        2 +
+        min(var(--desktop-search-max-width), 100vw - var(--sidebar-width)) * 0.15 + 16px
+    );
     bottom: calc(100px + env(safe-area-inset-bottom));
   }
 
