@@ -1,14 +1,21 @@
 import { FormEvent, useState } from "react";
 import { bindEmail, bindMax } from "../api/client";
+import type { UserProfile } from "../api/client";
 import { getMaxBotUrl, getMaxInitData, isMaxWebApp } from "../lib/maxApp";
 import { t } from "../i18n";
-import { useAuthStore } from "../store/authStore";
-import type { UserProfile } from "../api/client";
 
 interface Props {
   user: UserProfile;
   token: string;
   onUserUpdated: (user: UserProfile) => void;
+}
+
+function StatusBadge({ active, activeLabel, inactiveLabel }: { active: boolean; activeLabel: string; inactiveLabel: string }) {
+  return (
+    <span className={`profile-status-badge${active ? " profile-status-badge--ok" : ""}`}>
+      {active ? activeLabel : inactiveLabel}
+    </span>
+  );
 }
 
 export function ProfileAccountSection({ user, token, onUserUpdated }: Props) {
@@ -32,7 +39,7 @@ export function ProfileAccountSection({ user, token, onUserUpdated }: Props) {
       setEmail("");
       setPassword("");
     } catch (err) {
-      setBindError(err instanceof Error ? err.message : "Ошибка");
+      setBindError(err instanceof Error ? err.message : t("profileBindError"));
     } finally {
       setBindBusy(false);
     }
@@ -47,85 +54,92 @@ export function ProfileAccountSection({ user, token, onUserUpdated }: Props) {
       const updated = await bindMax(token, initData);
       onUserUpdated(updated);
     } catch (err) {
-      setBindError(err instanceof Error ? err.message : "Не удалось привязать MAX");
+      setBindError(err instanceof Error ? err.message : t("profileMaxBindError"));
     } finally {
       setMaxBusy(false);
     }
   };
 
   return (
-    <section className="profile-section">
-      <h2 className="profile-section-title">{t("accountLinks")}</h2>
+    <section className="profile-card">
+      <h2 className="profile-card-title">{t("accountLinks")}</h2>
 
-      <div className="profile-link-row">
-        <span>MAX</span>
-        <span className={hasMax ? "status-ok" : "status-muted"}>
-          {hasMax ? t("maxLinked") : t("maxNotLinked")}
-        </span>
+      <div className="profile-link-item">
+        <div className="profile-link-main">
+          <span className="profile-link-label">MAX</span>
+          <StatusBadge active={hasMax} activeLabel={t("maxLinked")} inactiveLabel={t("maxNotLinked")} />
+        </div>
+        {!hasMax && (
+          <div className="profile-bind-block">
+            {inMax ? (
+              <button type="button" className="btn-primary btn-block" disabled={maxBusy} onClick={onBindMaxInApp}>
+                {maxBusy ? "…" : t("linkMaxNow")}
+              </button>
+            ) : (
+              <>
+                <p className="profile-hint">{t("openInMaxHint")}</p>
+                <a
+                  href={getMaxBotUrl()}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="btn-primary btn-block"
+                >
+                  {t("openInMax")}
+                </a>
+              </>
+            )}
+          </div>
+        )}
       </div>
 
-      {!hasMax && (
-        <div className="profile-bind-block">
-          {inMax ? (
-            <button type="button" className="btn-primary btn-block" disabled={maxBusy} onClick={onBindMaxInApp}>
-              {maxBusy ? "…" : t("linkMaxNow")}
-            </button>
-          ) : (
-            <>
-              <p className="hint">{t("openInMaxHint")}</p>
-              <a href={getMaxBotUrl()} target="_blank" rel="noopener noreferrer" className="btn-primary btn-block">
-                {t("openInMax")}
-              </a>
-            </>
-          )}
+      <div className="profile-link-item">
+        <div className="profile-link-main">
+          <span className="profile-link-label">Email</span>
+          <StatusBadge
+            active={hasEmail}
+            activeLabel={user.email ?? t("emailNotSet")}
+            inactiveLabel={t("emailNotSet")}
+          />
         </div>
-      )}
-
-      <div className="profile-link-row" style={{ marginTop: 16 }}>
-        <span>Email</span>
-        <span className={hasEmail ? "status-ok" : "status-muted"}>
-          {hasEmail ? user.email : t("emailNotSet")}
-        </span>
+        {!hasEmail && hasMax && (
+          <div className="profile-bind-block">
+            <p className="profile-hint">{t("addEmailHint")}</p>
+            <form className="profile-bind-form" onSubmit={onBindEmail}>
+              <label className="auth-field">
+                <span className="auth-field-label">Email</span>
+                <input
+                  className="auth-field-input"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                  autoComplete="email"
+                  placeholder="name@example.com"
+                />
+              </label>
+              <label className="auth-field">
+                <span className="auth-field-label">{t("passwordLabel")}</span>
+                <input
+                  className="auth-field-input"
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  minLength={8}
+                  autoComplete="new-password"
+                />
+              </label>
+              <button type="submit" className="btn-secondary btn-block" disabled={bindBusy}>
+                {bindBusy ? "…" : t("addEmail")}
+              </button>
+            </form>
+          </div>
+        )}
       </div>
 
-      {!hasEmail && hasMax && (
-        <div className="profile-bind-block">
-          <p className="hint">{t("addEmailHint")}</p>
-          <form onSubmit={onBindEmail}>
-            <label>
-              Email
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                autoComplete="email"
-              />
-            </label>
-            <label>
-              {t("passwordLabel")}
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                minLength={8}
-                autoComplete="new-password"
-              />
-            </label>
-            {bindError && <p className="composer-error">{bindError}</p>}
-            <button type="submit" className="btn-secondary btn-block" disabled={bindBusy}>
-              {bindBusy ? "…" : t("addEmail")}
-            </button>
-          </form>
-        </div>
-      )}
+      {!hasEmail && !hasMax && inMax && <p className="profile-hint">{t("maxOnlyNoEmailNeeded")}</p>}
 
-      {!hasEmail && !hasMax && inMax && (
-        <p className="hint">{t("maxOnlyNoEmailNeeded")}</p>
-      )}
-
-      {bindError && hasEmail && <p className="composer-error">{bindError}</p>}
+      {bindError && <p className="auth-modal-error">{bindError}</p>}
     </section>
   );
 }
