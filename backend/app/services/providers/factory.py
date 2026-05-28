@@ -11,6 +11,7 @@ from app.core.config import Settings, get_settings
 from app.services.app_settings import get_setting
 from app.services.anthropic_claude import AnthropicClaudeProvider
 from app.services.deepseek import DeepSeekProvider
+from app.services.gigachat import GigaChatProvider
 from app.services.prompts.defaults import DEFAULT_LLM_PROVIDER, DEFAULT_SEARCH_PROVIDER
 from app.services.prompts.store import PromptStore
 from app.services.providers.llm_fallback import ClaudeWithYandexFallback, DeepSeekWithYandexFallback
@@ -22,6 +23,7 @@ ChatLLM = Union[
     YandexGPTProvider,
     AnthropicClaudeProvider,
     DeepSeekProvider,
+    GigaChatProvider,
     ClaudeWithYandexFallback,
     DeepSeekWithYandexFallback,
 ]
@@ -51,6 +53,8 @@ def create_llm_provider(
         return AnthropicClaudeProvider(settings, prompt_store=prompt_store)
     if provider_id == "deepseek":
         return DeepSeekProvider(settings, prompt_store=prompt_store)
+    if provider_id == "gigachat":
+        return GigaChatProvider(settings, prompt_store=prompt_store)
     raise ValueError(f"Unknown LLM provider: {provider_id}")
 
 
@@ -63,7 +67,7 @@ def create_search_provider(provider_id: str, settings: Settings | None) -> Yande
 
 def llm_model_label(llm: ChatLLM, answer_model: str) -> str:
     target = getattr(llm, "label_provider", llm)
-    if isinstance(target, (AnthropicClaudeProvider, DeepSeekProvider)):
+    if isinstance(target, (AnthropicClaudeProvider, DeepSeekProvider, GigaChatProvider)):
         return target._model_name(answer_model)  # type: ignore[arg-type]
     return target._model_uri(answer_model)  # type: ignore[arg-type]
 
@@ -95,6 +99,12 @@ async def resolve_runtime_providers(
 
         logging.getLogger(__name__).warning(
             "llm_provider=deepseek but DEEPSEEK_API_KEY missing — answers use mock, no API calls"
+        )
+    elif llm_id == "gigachat" and not settings.gigachat_configured:
+        import logging
+
+        logging.getLogger(__name__).warning(
+            "llm_provider=gigachat but GIGACHAT_CREDENTIALS missing — answers use mock"
         )
     search = create_search_provider(search_id, settings)
     return llm, search, prompt_store, llm_id, search_id

@@ -9,7 +9,12 @@ from app.models.app_setting import AppSetting
 from app.services.prompts.catalog import PROMPT_CATALOG
 from app.services.prompts.defaults import DEFAULT_LLM_PROVIDER, DEFAULT_SEARCH_PROVIDER, PROMPT_DEFAULTS
 from app.services.llm_runtime import fetch_llm_runtime_status
-from app.services.providers.registry import list_llm_providers, list_search_providers
+from app.services.providers.registry import (
+    list_llm_providers,
+    list_search_providers,
+    list_vision_providers,
+)
+from app.services.prompts.defaults import DEFAULT_VISION_PROVIDER
 
 BASE_SETTING_KEYS: dict[str, type] = {
     "free_searches_per_day": int,
@@ -19,6 +24,7 @@ BASE_SETTING_KEYS: dict[str, type] = {
     "bot_welcome_text": str,
     "llm_provider": str,
     "search_provider": str,
+    "vision_provider": str,
 }
 
 SETTING_KEYS: dict[str, type] = {
@@ -67,6 +73,8 @@ def default_for_key(key: str, settings: Settings | None = None) -> Any:
         return DEFAULT_LLM_PROVIDER
     if key == "search_provider":
         return DEFAULT_SEARCH_PROVIDER
+    if key == "vision_provider":
+        return DEFAULT_VISION_PROVIDER
     env_attr = ENV_DEFAULTS.get(key)
     if env_attr and hasattr(settings, env_attr):
         return getattr(settings, env_attr)
@@ -152,6 +160,7 @@ async def list_settings(db: AsyncSession, redis_client: redis.Redis) -> dict[str
     out["yandex_configured"] = settings.yandex_configured
     out["anthropic_configured"] = settings.anthropic_configured
     out["deepseek_configured"] = settings.deepseek_configured
+    out["gigachat_configured"] = settings.gigachat_configured
     out["environment"] = settings.environment
     return out
 
@@ -185,6 +194,10 @@ async def list_settings_bundle(db: AsyncSession, redis_client: redis.Redis) -> d
         "search_providers": [
             {"id": x.id, "label": x.label, "configured": x.configured, "hint": x.hint}
             for x in list_search_providers(settings)
+        ],
+        "vision_providers": [
+            {"id": x.id, "label": x.label, "configured": x.configured, "hint": x.hint}
+            for x in list_vision_providers(settings)
         ],
         "prompts": prompts,
     }

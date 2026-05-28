@@ -8,6 +8,7 @@ class TestLlmRuntime(unittest.TestCase):
         class S:
             anthropic_api_key = ""
             deepseek_api_key = ""
+            gigachat_credentials = ""
 
             @property
             def anthropic_configured(self):
@@ -15,6 +16,10 @@ class TestLlmRuntime(unittest.TestCase):
 
             @property
             def deepseek_configured(self):
+                return False
+
+            @property
+            def gigachat_configured(self):
                 return False
 
         st = build_llm_runtime_status("anthropic_claude", S())  # type: ignore[arg-type]
@@ -25,6 +30,7 @@ class TestLlmRuntime(unittest.TestCase):
         class S:
             anthropic_api_key = "sk-ant-api03-abcdefghijklmnop"
             deepseek_api_key = ""
+            gigachat_credentials = ""
 
             @property
             def anthropic_configured(self):
@@ -32,6 +38,10 @@ class TestLlmRuntime(unittest.TestCase):
 
             @property
             def deepseek_configured(self):
+                return False
+
+            @property
+            def gigachat_configured(self):
                 return False
 
         st = build_llm_runtime_status("anthropic_claude", S())  # type: ignore[arg-type]
@@ -42,6 +52,7 @@ class TestLlmRuntime(unittest.TestCase):
         class S:
             anthropic_api_key = ""
             deepseek_api_key = ""
+            gigachat_credentials = ""
 
             @property
             def anthropic_configured(self):
@@ -51,6 +62,32 @@ class TestLlmRuntime(unittest.TestCase):
             def deepseek_configured(self):
                 return False
 
+            @property
+            def gigachat_configured(self):
+                return False
+
         st = build_llm_runtime_status("deepseek", S())  # type: ignore[arg-type]
         self.assertTrue(st["deepseek_mock_active"])
         self.assertIn("DEEPSEEK_API_KEY", st["hint"] or "")
+
+    def test_mock_when_gigachat_without_credentials(self):
+        class S:
+            anthropic_api_key = ""
+            deepseek_api_key = ""
+            gigachat_credentials = ""
+
+            @property
+            def anthropic_configured(self):
+                return False
+
+            @property
+            def deepseek_configured(self):
+                return False
+
+            @property
+            def gigachat_configured(self):
+                return False
+
+        st = build_llm_runtime_status("gigachat", S())  # type: ignore[arg-type]
+        self.assertTrue(st["gigachat_mock_active"])
+        self.assertIn("GIGACHAT_CREDENTIALS", st["hint"] or "")

@@ -2,6 +2,7 @@
 
 from app.services.anthropic_claude import AnthropicClaudeProvider
 from app.services.deepseek import DeepSeekProvider
+from app.services.gigachat import GigaChatProvider
 from app.services.providers.factory import create_llm_provider, llm_model_label
 from app.services.prompts.store import PromptStore
 from app.services.yandex_gpt import YandexGPTProvider
@@ -22,6 +23,11 @@ def test_create_deepseek():
     assert isinstance(llm, DeepSeekProvider)
 
 
+def test_create_gigachat():
+    llm = create_llm_provider("gigachat", None, PromptStore(None, None))  # type: ignore[arg-type]
+    assert isinstance(llm, GigaChatProvider)
+
+
 def test_llm_model_label_yandex():
     llm = create_llm_provider("yandex_gpt", None, PromptStore(None, None))  # type: ignore[arg-type]
     uri = llm_model_label(llm, "lite")
@@ -36,3 +42,8 @@ def test_llm_model_label_claude():
 def test_llm_model_label_deepseek():
     llm = create_llm_provider("deepseek", None, PromptStore(None, None))  # type: ignore[arg-type]
     assert "deepseek" in llm_model_label(llm, "lite").lower()
+
+
+def test_llm_model_label_gigachat():
+    llm = create_llm_provider("gigachat", None, PromptStore(None, None))  # type: ignore[arg-type]
+    assert "giga" in llm_model_label(llm, "lite").lower()

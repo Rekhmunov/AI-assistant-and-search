@@ -150,6 +150,8 @@ class LlmRuntimeOut(BaseModel):
     deepseek_api_key_loaded: bool = False
     deepseek_key_suffix: str | None = None
     deepseek_mock_active: bool = False
+    gigachat_credentials_loaded: bool = False
+    gigachat_mock_active: bool = False
     hint: str | None = None
 
 
@@ -158,6 +160,7 @@ class SettingsBundleOut(BaseModel):
     llm_runtime: LlmRuntimeOut | None = None
     llm_providers: list[ProviderOptionOut]
     search_providers: list[ProviderOptionOut]
+    vision_providers: list[ProviderOptionOut] = []
     prompts: list[PromptFieldOut]
 
 

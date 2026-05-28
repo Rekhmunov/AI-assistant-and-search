@@ -9,6 +9,9 @@ export function Home() {
   const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
 
   const startSearch = (payload: { query: string; attachmentIds: string[] }) => {
+    if (!payload.query.trim() && payload.attachmentIds.length > 0) {
+      return;
+    }
     const params = new URLSearchParams();
     params.set("q", payload.query);
     if (payload.attachmentIds.length) {
@@ -31,6 +34,7 @@ export function Home() {
         docked={false}
         animatedPlaceholder={!hasDraft}
         placeholderPhrases={placeholderPhrases}
+        requireTextWithAttachments
       />
     </div>
   );

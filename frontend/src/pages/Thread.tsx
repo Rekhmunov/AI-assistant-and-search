@@ -286,6 +286,7 @@ export function Thread() {
         placeholder={t("askFollowUp")}
         attachments={attachments}
         onAttachmentsChange={setAttachments}
+        requireTextWithAttachments={turns.length === 0}
       />
     </div>
   );

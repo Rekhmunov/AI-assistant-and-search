@@ -12,7 +12,8 @@ from app.services.admin_audit import log_admin_action
 from app.services.app_settings import SETTING_KEYS, list_settings, list_settings_bundle, set_setting
 from app.services.anthropic_probe import probe_anthropic
 from app.services.deepseek_probe import probe_deepseek
-from app.services.providers.registry import VALID_LLM_IDS, VALID_SEARCH_IDS
+from app.services.gigachat_probe import probe_gigachat
+from app.services.providers.registry import VALID_LLM_IDS, VALID_SEARCH_IDS, VALID_VISION_IDS
 
 router = APIRouter(prefix="/settings", tags=["admin-settings"])
 
@@ -75,6 +76,33 @@ async def update_settings(
                 )
         if key == "search_provider" and str(value) not in VALID_SEARCH_IDS:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unknown search provider")
+        if key == "vision_provider" and str(value) not in VALID_VISION_IDS:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unknown vision provider")
+        if key == "vision_provider" and str(value) == "anthropic_claude":
+            if not env.anthropic_configured:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=(
+                        "ANTHROPIC_API_KEY не загружен в backend — vision через Claude недоступен."
+                    ),
+                )
+        if key == "vision_provider" and str(value) == "gigachat":
+            if not env.gigachat_configured:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=(
+                        "GIGACHAT_CREDENTIALS не загружен в backend — vision через GigaChat недоступен."
+                    ),
+                )
+        if key == "llm_provider" and str(value) == "gigachat":
+            if not env.gigachat_configured:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=(
+                        "GIGACHAT_CREDENTIALS не загружен в backend. "
+                        "Добавьте ключ в /opt/aisearch/.env и пересоздайте backend/worker."
+                    ),
+                )
         await set_setting(key, value, db, redis, admin.id)
         updated[key] = value
 
@@ -107,3 +135,11 @@ async def probe_deepseek_api(
 ):
     """Тестовый запрос к DeepSeek (lite + pro) с ключом из .env контейнера."""
     return await probe_deepseek()
+
+
+@router.post("/probe-gigachat")
+async def probe_gigachat_api(
+    _admin=Depends(require_permission("settings:read")),
+):
+    """Тестовый запрос к GigaChat (OAuth, lite + pro) с credentials из .env."""
+    return await probe_gigachat()

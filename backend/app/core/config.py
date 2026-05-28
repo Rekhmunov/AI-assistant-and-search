@@ -59,6 +59,15 @@ class Settings(BaseSettings):
     deepseek_base_url: str = "https://api.deepseek.com"
     deepseek_http_proxy: str = ""
 
+    gigachat_credentials: str = ""
+    gigachat_scope: str = "GIGACHAT_API_PERS"
+    gigachat_base_url: str = "https://gigachat.devices.sberbank.ru/api/v1"
+    gigachat_auth_url: str = "https://ngw.devices.sberbank.ru:9443/api/v2/oauth"
+    gigachat_model_lite: str = "GigaChat-2"
+    gigachat_model_pro: str = "GigaChat-2-Pro"
+    gigachat_verify_ssl_certs: bool = True
+    gigachat_ca_bundle_file: str = ""
+
     yookassa_shop_id: str = ""
     yookassa_secret_key: str = ""
 
@@ -96,6 +105,10 @@ class Settings(BaseSettings):
     @property
     def deepseek_configured(self) -> bool:
         return bool(self.deepseek_api_key.strip())
+
+    @property
+    def gigachat_configured(self) -> bool:
+        return bool(self.gigachat_credentials.strip())
 
     def yandex_model_uri(self, model: str) -> str:
         folder = self.yandex_folder_id

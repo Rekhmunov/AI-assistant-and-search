@@ -5,13 +5,14 @@ import uuid
 from collections.abc import AsyncIterator
 from datetime import datetime, timezone
 
-from sqlalchemy import select, text
+from sqlalchemy import func, select, text
 from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.constants.attachments import MAX_ATTACHMENTS_PER_SEARCH, UPLOAD_TTL_HOURS
 from app.services.attachment_bundle import resolve_attachment_bundle
-from app.services.vision_llm import VisionNotSupportedError, stream_vision_answer
+from app.services.vision_llm import VisionNotSupportedError, stream_vision_answer, summarize_vision_for_search
+from app.services.vision_routing import wants_web_search_with_vision
 from app.core.config import get_settings
 from app.core.limiter import RateLimiter
 from app.models.message import Message, MessageRole
@@ -144,10 +145,42 @@ class SearchFlowService:
             yield sse_event("error", {"code": "attachment", "message": msg})
             return
 
+        user_text = normalize_user_query(query)
         llm_query = bundle.llm_query
         display_content = bundle.display_query
         has_attachments = bool(attachment_ids)
         needs_vision = bundle.needs_vision
+        hybrid_vision_search = needs_vision and wants_web_search_with_vision(user_text)
+        vision_only_answer = needs_vision and not hybrid_vision_search
+
+        if has_attachments and not user_text.strip():
+            if thread_id is None:
+                yield sse_event(
+                    "error",
+                    {
+                        "code": "attachment_text_required",
+                        "message": (
+                            "Добавьте текст к фото или файлу. "
+                            "В первом сообщении диалога нельзя отправить только вложение."
+                        ),
+                    },
+                )
+                return
+            prior_count = await db.scalar(
+                select(func.count()).select_from(Message).where(Message.thread_id == thread_id)
+            )
+            if not prior_count:
+                yield sse_event(
+                    "error",
+                    {
+                        "code": "attachment_text_required",
+                        "message": (
+                            "Добавьте текст к фото или файлу. "
+                            "В первом сообщении диалога нельзя отправить только вложение."
+                        ),
+                    },
+                )
+                return
 
         thread: Thread | None = None
         if thread_id:
@@ -178,10 +211,15 @@ class SearchFlowService:
 
         thread_ctx = build_thread_context(prior_messages)
         route = await self.router.route(llm_query, thread_ctx, has_attachments, user.plan)
-        if needs_vision:
+        if vision_only_answer:
             route.needs_search = False
             route.intent = "vision_image"
             route.reason = "photo_vision"
+            route.answer_model = "pro"
+        elif hybrid_vision_search:
+            route.needs_search = True
+            route.intent = "document"
+            route.reason = "photo_vision_plus_search"
             route.answer_model = "pro"
 
         user_msg = Message(thread_id=thread.id, role=MessageRole.USER, content=display_content)
@@ -219,6 +257,27 @@ class SearchFlowService:
         page_cache_trace: dict | None = None
 
         try:
+            if hybrid_vision_search:
+                try:
+                    summary = await summarize_vision_for_search(
+                        llm_query,
+                        bundle.vision_images,
+                        history,
+                        db=db,
+                        redis_client=redis_client,
+                        prior_sources_block=prior_sources_block,
+                        prompt_store=_prompt_store,
+                    )
+                    if summary.strip():
+                        llm_query = (
+                            f"{llm_query}\n\n--- Содержимое фото (vision) ---\n{summary.strip()}"
+                        )
+                except VisionNotSupportedError as e:
+                    await db.rollback()
+                    await limiter.release_search(str(user.id))
+                    yield sse_event("error", {"code": "vision_unavailable", "message": str(e)})
+                    return
+
             if route.needs_search:
                 rewrite, (bootstrap_sources, query_url_trace) = await asyncio.gather(
                     rewriter.rewrite(llm_query, thread_ctx),
@@ -301,7 +360,7 @@ class SearchFlowService:
             )
 
             full_answer = ""
-            if needs_vision:
+            if vision_only_answer:
                 try:
                     async for chunk in stream_vision_answer(
                         llm_query,
@@ -310,6 +369,8 @@ class SearchFlowService:
                         model=route.answer_model,
                         prior_sources_block=prior_sources_block,
                         prompt_store=_prompt_store,
+                        db=db,
+                        redis_client=redis_client,
                     ):
                         full_answer += chunk
                         yield sse_event("token", {"text": chunk})

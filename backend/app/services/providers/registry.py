@@ -50,6 +50,17 @@ def list_llm_providers(settings: Settings) -> list[ProviderInfo]:
                 else "Нужен DEEPSEEK_API_KEY в .env"
             ),
         ),
+        ProviderInfo(
+            id="gigachat",
+            label="GigaChat",
+            kind="llm",
+            configured=settings.gigachat_configured,
+            hint=(
+                "Yandex Search + RAG; Lite/Pro в коде. Нужен GIGACHAT_CREDENTIALS в .env."
+                if settings.gigachat_configured
+                else "Нужен GIGACHAT_CREDENTIALS (authorization key из кабинета Сбера)"
+            ),
+        ),
     ]
 
 
@@ -66,5 +77,27 @@ def list_search_providers(settings: Settings) -> list[ProviderInfo]:
     ]
 
 
-VALID_LLM_IDS = frozenset({"yandex_gpt", "anthropic_claude", "deepseek"})
+VALID_LLM_IDS = frozenset({"yandex_gpt", "anthropic_claude", "deepseek", "gigachat"})
 VALID_SEARCH_IDS = frozenset({"yandex_search"})
+VALID_VISION_IDS = frozenset({"anthropic_claude", "gigachat"})
+
+
+def list_vision_providers(settings: Settings) -> list[ProviderInfo]:
+    claude_ok = settings.anthropic_configured
+    giga_ok = settings.gigachat_configured
+    return [
+        ProviderInfo(
+            id="gigachat",
+            label="GigaChat (vision)",
+            kind="vision",
+            configured=giga_ok,
+            hint=None if giga_ok else "Нужен GIGACHAT_CREDENTIALS в .env",
+        ),
+        ProviderInfo(
+            id="anthropic_claude",
+            label="Claude (vision)",
+            kind="vision",
+            configured=claude_ok,
+            hint=None if claude_ok else "Нужен ANTHROPIC_API_KEY в .env",
+        ),
+    ]

@@ -178,3 +178,4 @@ for _answer_overrides in PROVIDER_ANSWER_PROMPTS.values():
 
 DEFAULT_LLM_PROVIDER = "yandex_gpt"
 DEFAULT_SEARCH_PROVIDER = "yandex_search"
+DEFAULT_VISION_PROVIDER = "gigachat"

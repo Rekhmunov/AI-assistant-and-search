@@ -29,6 +29,8 @@ type LlmRuntime = {
   deepseek_api_key_loaded?: boolean;
   deepseek_key_suffix?: string | null;
   deepseek_mock_active?: boolean;
+  gigachat_credentials_loaded?: boolean;
+  gigachat_mock_active?: boolean;
   hint?: string | null;
 };
 
@@ -37,6 +39,7 @@ type SettingsBundle = {
   llm_runtime?: LlmRuntime | null;
   llm_providers: ProviderOption[];
   search_providers: ProviderOption[];
+  vision_providers?: ProviderOption[];
   prompts: PromptField[];
 };
 
@@ -45,11 +48,13 @@ export function SettingsPage() {
   const [settings, setSettings] = useState<Record<string, unknown>>({});
   const [llmProviders, setLlmProviders] = useState<ProviderOption[]>([]);
   const [searchProviders, setSearchProviders] = useState<ProviderOption[]>([]);
+  const [visionProviders, setVisionProviders] = useState<ProviderOption[]>([]);
   const [prompts, setPrompts] = useState<PromptField[]>([]);
   const [msg, setMsg] = useState("");
   const [llmRuntime, setLlmRuntime] = useState<LlmRuntime | null>(null);
   const [probeMsg, setProbeMsg] = useState("");
   const [deepseekProbeMsg, setDeepseekProbeMsg] = useState("");
+  const [gigachatProbeMsg, setGigachatProbeMsg] = useState("");
 
   useEffect(() => {
     apiFetch<SettingsBundle>("/api/admin/settings").then((r) => {
@@ -57,12 +62,14 @@ export function SettingsPage() {
       setLlmRuntime(r.llm_runtime ?? null);
       setLlmProviders(r.llm_providers);
       setSearchProviders(r.search_providers);
+      setVisionProviders(r.vision_providers ?? []);
       setPrompts(r.prompts);
     });
   }, []);
 
   const llmProvider = String(settings.llm_provider ?? "yandex_gpt");
   const searchProvider = String(settings.search_provider ?? "yandex_search");
+  const visionProvider = String(settings.vision_provider ?? "gigachat");
 
   const visiblePrompts = useMemo(
     () => prompts.filter((p) => p.provider === llmProvider),
@@ -101,6 +108,7 @@ export function SettingsPage() {
       bot_welcome_text: String(settings.bot_welcome_text),
       llm_provider: llmProvider,
       search_provider: searchProvider,
+      vision_provider: visionProvider,
     };
     for (const p of visiblePrompts) {
       payload[p.setting_key] = String(settings[p.setting_key] ?? p.value);
@@ -114,6 +122,7 @@ export function SettingsPage() {
       if (updated.llm_runtime) setLlmRuntime(updated.llm_runtime);
       if (updated.llm_providers?.length) setLlmProviders(updated.llm_providers);
       if (updated.search_providers?.length) setSearchProviders(updated.search_providers);
+      if (updated.vision_providers?.length) setVisionProviders(updated.vision_providers);
       if (updated.prompts?.length) setPrompts(updated.prompts);
       setMsg("Сохранено");
     } catch (err) {
@@ -140,6 +149,24 @@ export function SettingsPage() {
     }
   };
 
+  const runGigachatProbe = async () => {
+    setGigachatProbeMsg("Проверка…");
+    try {
+      const r = await apiFetch<{
+        ok: boolean;
+        credentials_suffix?: string;
+        message: string;
+      }>("/api/admin/settings/probe-gigachat", { method: "POST" });
+      setGigachatProbeMsg(
+        r.ok
+          ? `${r.message} (суффикс credentials …${r.credentials_suffix ?? "?"})`
+          : r.message,
+      );
+    } catch (err) {
+      setGigachatProbeMsg(err instanceof Error ? err.message : "Ошибка проверки");
+    }
+  };
+
   const runDeepseekProbe = async () => {
     setDeepseekProbeMsg("Проверка…");
     try {
@@ -162,7 +189,7 @@ export function SettingsPage() {
     <div className="settings-page">
       <h1>Настройки</h1>
       <p className="hint">
-        Секреты (BOT_TOKEN, Yandex API, Anthropic, DeepSeek) — только в .env на сервере. Ключ из чата Cursor не
+        Секреты (BOT_TOKEN, Yandex API, Anthropic, DeepSeek, GigaChat) — только в .env на сервере. Ключ из чата Cursor не
         используется. После смены .env: force-recreate backend. Lite/Pro выбирает код по типу запроса.
       </p>
       {llmRuntime?.hint && (
@@ -209,6 +236,27 @@ export function SettingsPage() {
                 </option>
               ))}
             </select>
+          </label>
+
+          <label>
+            LLM для фото (vision)
+            <select
+              value={visionProvider}
+              onChange={(e) => setSettings({ ...settings, vision_provider: e.target.value })}
+              disabled={!can("settings:write")}
+            >
+              {visionProviders.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.label}
+                  {!p.configured ? " (не настроен)" : ""}
+                </option>
+              ))}
+            </select>
+            {visionProviders.find((p) => p.id === visionProvider)?.hint && (
+              <span className="hint-inline">
+                {visionProviders.find((p) => p.id === visionProvider)?.hint}
+              </span>
+            )}
           </label>
           <p className="hint">
             У Yandex Search нет текстового промпта — только HTTP-запрос. Запросы в поиск формирует
@@ -324,8 +372,11 @@ export function SettingsPage() {
         {llmRuntime?.deepseek_key_suffix
           ? ` (…${llmRuntime.deepseek_key_suffix})`
           : ""}{" "}
-        · Активный LLM: {llmRuntime?.active_provider ?? llmProvider}
-        {llmRuntime?.anthropic_mock_active || llmRuntime?.deepseek_mock_active
+        · GigaChat в .env: {settings.gigachat_configured ? "да" : "нет"} · Активный LLM:{" "}
+        {llmRuntime?.active_provider ?? llmProvider}
+        {llmRuntime?.anthropic_mock_active ||
+        llmRuntime?.deepseek_mock_active ||
+        llmRuntime?.gigachat_mock_active
           ? " · mock, API не вызывается"
           : ""}{" "}
         · Среда:{" "}
@@ -345,6 +396,14 @@ export function SettingsPage() {
             Проверить DeepSeek (lite + pro из .env)
           </button>
           {deepseekProbeMsg && <span className="hint-inline"> {deepseekProbeMsg}</span>}
+        </p>
+      )}
+      {can("settings:read") && (
+        <p>
+          <button type="button" className="btn-link" onClick={() => void runGigachatProbe()}>
+            Проверить GigaChat (OAuth, lite + pro из .env)
+          </button>
+          {gigachatProbeMsg && <span className="hint-inline"> {gigachatProbeMsg}</span>}
         </p>
       )}
     </div>

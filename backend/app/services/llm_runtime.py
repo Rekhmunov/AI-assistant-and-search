@@ -34,8 +34,10 @@ def build_llm_runtime_status(
     s = settings or get_settings()
     anthropic_loaded = s.anthropic_configured
     deepseek_loaded = s.deepseek_configured
+    gigachat_loaded = s.gigachat_configured
     anthropic_mock = active_provider == "anthropic_claude" and not anthropic_loaded
     deepseek_mock = active_provider == "deepseek" and not deepseek_loaded
+    gigachat_mock = active_provider == "gigachat" and not gigachat_loaded
     hint: str | None = None
     if anthropic_mock:
         hint = (
@@ -49,7 +51,12 @@ def build_llm_runtime_status(
             "Проверьте /opt/aisearch/.env и выполните: "
             "docker compose -f docker-compose.prod.yml up -d --force-recreate backend worker"
         )
-    elif active_provider == "yandex_gpt" and (anthropic_loaded or deepseek_loaded):
+    elif gigachat_mock:
+        hint = (
+            "В админке выбран GigaChat, но GIGACHAT_CREDENTIALS не виден backend-контейнеру. "
+            "Проверьте /opt/aisearch/.env (scope GIGACHAT_API_PERS) и пересоздайте backend/worker."
+        )
+    elif active_provider == "yandex_gpt" and (anthropic_loaded or deepseek_loaded or gigachat_loaded):
         hint = (
             "В .env есть ключ альтернативного LLM, но в БД активен Yandex GPT — "
             "смените LLM в админке и нажмите «Сохранить»."
@@ -62,6 +69,8 @@ def build_llm_runtime_status(
         "deepseek_api_key_loaded": deepseek_loaded,
         "deepseek_key_suffix": deepseek_key_suffix(s),
         "deepseek_mock_active": deepseek_mock,
+        "gigachat_credentials_loaded": gigachat_loaded,
+        "gigachat_mock_active": gigachat_mock,
         "hint": hint,
     }
 
@@ -79,4 +88,6 @@ async def fetch_llm_runtime_status(
         logger.warning("LLM runtime: anthropic_claude selected but ANTHROPIC_API_KEY missing — mock mode")
     if status["deepseek_mock_active"]:
         logger.warning("LLM runtime: deepseek selected but DEEPSEEK_API_KEY missing — mock mode")
+    if status["gigachat_mock_active"]:
+        logger.warning("LLM runtime: gigachat selected but GIGACHAT_CREDENTIALS missing — mock mode")
     return status

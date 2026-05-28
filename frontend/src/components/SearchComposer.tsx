@@ -32,6 +32,8 @@ interface Props {
   value: string;
   onChange: (v: string) => void;
   onSubmit: (payload: { query: string; attachmentIds: string[] }) => void;
+  /** Первое сообщение в треде: нельзя отправить только вложение без текста */
+  requireTextWithAttachments?: boolean;
   disabled?: boolean;
   placeholder?: string;
   attachments: ComposerAttachment[];
@@ -59,6 +61,7 @@ export function SearchComposer({
   docked = true,
   animatedPlaceholder = false,
   placeholderPhrases = [],
+  requireTextWithAttachments = false,
 }: Props) {
   const token = useAuthStore((s) => s.token);
   const documentRef = useRef<HTMLInputElement>(null);
@@ -97,6 +100,10 @@ export function SearchComposer({
     e.preventDefault();
     const q = value.trim();
     if (!q && attachments.length === 0) return;
+    if (!q && attachments.length > 0 && requireTextWithAttachments) {
+      setUploadFailure(t("attachmentTextRequired"));
+      return;
+    }
     if (disabled || isBusy) return;
     onSubmit({
       query: q || t("analyzeFile"),
@@ -184,7 +191,9 @@ export function SearchComposer({
   };
 
   const canSend =
-    (value.trim().length > 0 || attachments.length > 0) && !disabled && !isBusy;
+    (value.trim().length > 0 || (attachments.length > 0 && !requireTextWithAttachments)) &&
+    !disabled &&
+    !isBusy;
   const hasAttachment = totalCount > 0;
   const showTypingOverlay =
     animatedPlaceholder && !value.trim() && !disabled && !inputFocused;
