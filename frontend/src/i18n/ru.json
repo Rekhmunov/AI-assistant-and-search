@@ -81,7 +81,7 @@
   "loginSubtitle": "Email и пароль для app.glosix.ru. В MAX вход автоматический.",
   "loginModeTabs": "Вход или регистрация",
   "loginError": "Ошибка входа",
-  "continueAsGuest": "Продолжить без входа",
+  "continueAsGuest": "Продолжить без регистрации",
   "createAccount": "Создать аккаунт",
   "firstName": "Имя",
   "firstNameOptional": "Необязательно",
