@@ -220,9 +220,17 @@ function ThumbUpIcon({ filled }: { filled: boolean }) {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
       <path
-        d="M7 11v10H4V11h3zm3.5-8a2 2 0 012 1.73l1.06 2.12 2.33.34a2 2 0 011.1 3.41l-1.69 1.64.4 2.32a2 2 0 01-2.9 2.11L12 15.9l-2.08 1.09a2 2 0 01-2.9-2.11l.4-2.32-1.69-1.64a2 2 0 011.1-3.41l2.33-.34L9.5 4.73A2 2 0 0112 3z"
+        d="M7 10v12"
         stroke="currentColor"
-        strokeWidth="1.6"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M15 5.88 14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2a3.13 3.13 0 0 1 3 3.88Z"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
         strokeLinejoin="round"
         fill={filled ? "currentColor" : "none"}
       />
@@ -234,9 +242,17 @@ function ThumbDownIcon({ filled }: { filled: boolean }) {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
       <path
-        d="M7 3v10H4V3h3zm3.5 14a2 2 0 01-2-1.73L7.44 13.15l-2.33-.34a2 2 0 01-1.1-3.41l1.69-1.64-.4-2.32a2 2 0 012.9-2.11L12 8.1l2.08-1.09a2 2 0 012.9 2.11l-.4 2.32 1.69 1.64a2 2 0 01-1.1 3.41l-2.33.34-1.06 2.12A2 2 0 0112 21z"
+        d="M17 14V2"
         stroke="currentColor"
-        strokeWidth="1.6"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M9 18.12 10 14H4.17a2 2 0 0 1-1.92-2.56l2.33-8A2 2 0 0 1 6.5 2H20a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-2.76a2 2 0 0 0-1.79 1.11L12 22a3.13 3.13 0 0 1-3-3.88Z"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
         strokeLinejoin="round"
         fill={filled ? "currentColor" : "none"}
       />
