@@ -17,6 +17,8 @@
   --sidebar-width: 220px;
   --desktop-nav-min: 900px;
   --desktop-search-max-width: min(2160px, calc(100vw - var(--sidebar-width) - 48px));
+  /* Веб: колонка ответа уже основной ширины (~20%) */
+  --desktop-answer-width: 80%;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   color: var(--text);
   background: var(--bg);
@@ -724,6 +726,53 @@ body:has(.page-thread) {
 
 .answer-section .answer-text {
   white-space: pre-wrap;
+}
+
+.answer-table-wrap {
+  margin: 16px 0;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.answer-table {
+  width: 100%;
+  min-width: 280px;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+.answer-table th,
+.answer-table td {
+  padding: 10px 14px;
+  text-align: left;
+  vertical-align: top;
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--text);
+}
+
+.answer-table th {
+  font-weight: 600;
+  background: var(--surface-hover);
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.answer-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.answer-table tbody tr:hover td {
+  background: rgba(32, 128, 141, 0.04);
+}
+
+.answer-table td .cite-link,
+.answer-table th .cite-link {
+  vertical-align: super;
 }
 
 .answer--streaming .answer-text:last-child::after {
