@@ -975,6 +975,38 @@ body:has(.page-thread) {
   margin-bottom: 12px;
 }
 
+.thread-scroll-down {
+  position: fixed;
+  z-index: 105;
+  right: 16px;
+  bottom: calc(
+    var(--bottom-nav-height) + var(--composer-nav-gap) + 96px + env(safe-area-inset-bottom)
+  );
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, transform 0.15s;
+}
+
+.thread-scroll-down:hover {
+  background: var(--surface-hover);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.thread-scroll-down:active {
+  transform: scale(0.96);
+}
+
 .icon-btn-back {
   display: inline-flex;
   align-items: center;
@@ -1637,6 +1669,11 @@ body:has(.page-thread) {
 
   .page-thread .search-composer {
     width: 100%;
+  }
+
+  .thread-scroll-down {
+    right: max(24px, calc((100vw - var(--sidebar-width) - var(--desktop-search-max-width)) / 2 + 16px));
+    bottom: calc(100px + env(safe-area-inset-bottom));
   }
 
   .glosix-header .header-login-btn {

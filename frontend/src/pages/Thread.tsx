@@ -10,6 +10,7 @@ import { SearchStatusLine, type SearchPhase } from "../components/SearchStatusLi
 import { t } from "../i18n";
 import { findLastIndex } from "../lib/arrayUtils";
 import { messagesToTurns, type ThreadTurn } from "../lib/threadTurns";
+import { useDesktopLayout } from "../hooks/useDesktopLayout";
 import { useAuthStore } from "../store/authStore";
 
 function updateLastStreamingTurn(
@@ -54,6 +55,9 @@ export function Thread() {
   const isRevealingRef = useRef(false);
   const activeThreadIdRef = useRef<string | null>(id ?? null);
   const scrollTurnKeyRef = useRef<string | null>(null);
+  const conversationRef = useRef<HTMLDivElement>(null);
+  const [showScrollDown, setShowScrollDown] = useState(false);
+  const isDesktop = useDesktopLayout();
 
   const { data: thread } = useQuery({
     queryKey: ["thread", id ?? threadId],
@@ -85,6 +89,38 @@ export function Thread() {
       syncTurnsFromThread();
     }
   }, [thread, syncTurnsFromThread]);
+
+  const updateScrollDownVisible = useCallback(() => {
+    const el = conversationRef.current;
+    if (!el || turns.length === 0) {
+      setShowScrollDown(false);
+      return;
+    }
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    setShowScrollDown(distanceFromBottom > 100);
+  }, [turns.length]);
+
+  useEffect(() => {
+    updateScrollDownVisible();
+  }, [turns, updateScrollDownVisible]);
+
+  useEffect(() => {
+    const el = conversationRef.current;
+    if (!el) return;
+    el.addEventListener("scroll", updateScrollDownVisible, { passive: true });
+    const ro = new ResizeObserver(() => updateScrollDownVisible());
+    ro.observe(el);
+    return () => {
+      el.removeEventListener("scroll", updateScrollDownVisible);
+      ro.disconnect();
+    };
+  }, [updateScrollDownVisible]);
+
+  const scrollConversationToBottom = useCallback(() => {
+    const el = conversationRef.current;
+    if (!el) return;
+    el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+  }, []);
 
   /** Прокрутка только при новом вопросе — ответ читаем с начала, без ухода вниз при стриме. */
   useEffect(() => {
@@ -193,19 +229,21 @@ export function Thread() {
 
   return (
     <div className="page page-thread">
-      <div className="thread-top">
-        <button
-          type="button"
-          className="icon-btn icon-btn-back"
-          onClick={() => navigate(fromHistory ? "/history" : "/")}
-          aria-label={t("back")}
-          title={t("back")}
-        >
-          <BackIcon />
-        </button>
-      </div>
+      {!isDesktop && (
+        <div className="thread-top">
+          <button
+            type="button"
+            className="icon-btn icon-btn-back"
+            onClick={() => navigate(fromHistory ? "/history" : "/")}
+            aria-label={t("back")}
+            title={t("back")}
+          >
+            <BackIcon />
+          </button>
+        </div>
+      )}
 
-      <div className="thread-conversation">
+      <div className="thread-conversation" ref={conversationRef}>
         {turns.length === 0 && !streaming && (
           <p className="thread-conversation-empty">{t("loading")}</p>
         )}
@@ -275,6 +313,18 @@ export function Thread() {
         })}
       </div>
 
+      {showScrollDown && (
+        <button
+          type="button"
+          className="thread-scroll-down"
+          onClick={scrollConversationToBottom}
+          aria-label={t("scrollToBottom")}
+          title={t("scrollToBottom")}
+        >
+          <ScrollDownIcon />
+        </button>
+      )}
+
       <SearchComposer
         value={composerQuery}
         onChange={setComposerQuery}
@@ -297,6 +347,20 @@ function BackIcon() {
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden>
       <path
         d="M15 6l-6 6 6 6"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function ScrollDownIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        d="M12 5v14M6 13l6 6 6-6"
         stroke="currentColor"
         strokeWidth="2"
         strokeLinecap="round"

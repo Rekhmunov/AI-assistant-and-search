@@ -58,6 +58,10 @@ PRO_KEYWORDS = (
     "плюсы и минусы",
     "подробный отчёт",
     "детальный разбор",
+    "подробн",
+    "разбор",
+    "обзор",
+    "расскажи подробно",
 )
 
 PRO_MIN_QUERY_LEN = 120
@@ -166,7 +170,7 @@ def _build_search_route(
     return RouteDecision(
         needs_search=True,
         search_query=search_q,
-        answer_model=_model_for_intent(intent, normalized, user_plan),
+        answer_model="pro",
         reason=reason,
         intent=intent,
     )

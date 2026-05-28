@@ -45,7 +45,18 @@ class TestLayer0Rules(unittest.TestCase):
 
             r2 = await router.route("курс доллара", empty, False, Plan.FREE)
             self.assertTrue(r2.needs_search)
+            self.assertEqual(r2.answer_model, "pro")
             self.assertEqual(r2.reason, "search_rag:v6.1")
+
+            r3 = await router.route("как дела", empty, False, Plan.FREE)
+            self.assertEqual(r3.answer_model, "lite")
+
+            r4 = await router.route(
+                "Сделай подробный разбор LLM от сбера", empty, False, Plan.FREE
+            )
+            self.assertTrue(r4.needs_search)
+            self.assertEqual(r4.intent, "compare_analyze")
+            self.assertEqual(r4.answer_model, "pro")
 
         import asyncio
 
