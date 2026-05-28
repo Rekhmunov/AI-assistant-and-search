@@ -429,26 +429,6 @@ export function SettingsPage() {
           {msg}
         </p>
       )}
-      <p>
-        Yandex: {settings.yandex_configured ? "настроен" : "mock"} · Claude в .env:{" "}
-        {settings.anthropic_configured ? "да" : "нет"}
-        {llmRuntime?.anthropic_key_suffix
-          ? ` (…${llmRuntime.anthropic_key_suffix})`
-          : ""}{" "}
-        · DeepSeek в .env: {settings.deepseek_configured ? "да" : "нет"}
-        {llmRuntime?.deepseek_key_suffix
-          ? ` (…${llmRuntime.deepseek_key_suffix})`
-          : ""}{" "}
-        · GigaChat в .env: {settings.gigachat_configured ? "да" : "нет"} · Активный LLM:{" "}
-        {llmRuntime?.active_provider ?? llmProvider}
-        {llmRuntime?.anthropic_mock_active ||
-        llmRuntime?.deepseek_mock_active ||
-        llmRuntime?.gigachat_mock_active
-          ? " · mock, API не вызывается"
-          : ""}{" "}
-        · Среда:{" "}
-        {String(settings.environment)}
-      </p>
     </div>
   );
 }
