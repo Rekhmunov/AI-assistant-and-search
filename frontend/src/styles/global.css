@@ -1653,6 +1653,13 @@ body:has(.page-thread) {
     padding-bottom: calc(var(--composer-nav-gap) + 88px);
   }
 
+  .page-thread .thread-turn .answer-section {
+    width: var(--desktop-answer-width);
+    max-width: var(--desktop-answer-width);
+    margin-left: auto;
+    margin-right: auto;
+  }
+
   .composer-wrap--docked {
     left: var(--sidebar-width);
     right: 0;
