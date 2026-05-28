@@ -2011,6 +2011,19 @@ body:has(.page-thread) {
   justify-content: center;
   min-height: 100dvh;
   color: var(--muted);
+  background: var(--bg);
+}
+
+.app-boot-placeholder {
+  flex: 1;
+  min-height: 40vh;
+  background: var(--bg);
+}
+
+.app-boot-error {
+  padding: 24px 16px;
+  text-align: center;
+  color: var(--muted);
 }
 
 .page-login {

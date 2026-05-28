@@ -54,6 +54,7 @@
   "queryLabel": "Запрос",
   "rateLimit": "Достигнут лимит поисков на сегодня",
   "loading": "Ищем ответ...",
+  "pageLoading": "Загрузка…",
   "thinking": "Анализируем запрос...",
   "searchingSolution": "Ищем решение...",
   "searchingWeb": "Ищем в интернете...",

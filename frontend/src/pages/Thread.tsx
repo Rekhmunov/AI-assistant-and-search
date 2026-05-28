@@ -252,10 +252,6 @@ export function Thread() {
       )}
 
       <div className="thread-conversation" ref={conversationRef}>
-        {turns.length === 0 && !streaming && (
-          <p className="thread-conversation-empty">{t("loading")}</p>
-        )}
-
         {turns.map((turn, index) => {
           const isActive = turn.streaming;
           const showStatus = isActive && streaming && !turn.answer.trim();

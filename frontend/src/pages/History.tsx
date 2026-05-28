@@ -60,7 +60,7 @@ export function History() {
   return (
     <div className="page page-history">
       <h1>{t("history")}</h1>
-      {isLoading && <p className="muted-text">{t("loading")}</p>}
+      {isLoading && <p className="muted-text">{t("pageLoading")}</p>}
       {!isLoading && threads.length === 0 && <p className="muted-text">{t("historyEmpty")}</p>}
       {[...groups.entries()].map(([label, items]) => (
         <div key={label}>

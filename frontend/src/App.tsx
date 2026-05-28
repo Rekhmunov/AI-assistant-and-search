@@ -14,22 +14,25 @@ const queryClient = new QueryClient();
 function AppRoutes() {
   const { ready, error } = useAuthBootstrap();
 
-  if (!ready) return <div className="loading-screen">{t("loading")}</div>;
-  if (error) return <div className="loading-screen">{error}</div>;
-
   return (
     <div className="app-shell">
       <AppNavigation />
       <main className="app-main">
-        <Routes>
-          <Route path="/login" element={<LoginPage />} />
-          <Route path="/" element={<Home />} />
-          <Route path="/thread" element={<Thread />} />
-          <Route path="/thread/:id" element={<Thread />} />
-          <Route path="/history" element={<History />} />
-          <Route path="/profile" element={<Profile />} />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
+        {error ? (
+          <div className="app-boot-error">{error}</div>
+        ) : ready ? (
+          <Routes>
+            <Route path="/login" element={<LoginPage />} />
+            <Route path="/" element={<Home />} />
+            <Route path="/thread" element={<Thread />} />
+            <Route path="/thread/:id" element={<Thread />} />
+            <Route path="/history" element={<History />} />
+            <Route path="/profile" element={<Profile />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        ) : (
+          <div className="app-boot-placeholder" aria-busy="true" aria-label={t("pageLoading")} />
+        )}
       </main>
     </div>
   );
