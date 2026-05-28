@@ -13,7 +13,7 @@ from app.services.gigachat_client import (
     iter_chat_stream,
     upload_file_bytes,
 )
-from app.services.answer_guard import answer_addon_for_slots, strict_answer_addon
+from app.services.answer_guard import answer_addon_for_slots, direct_system_addons, strict_answer_addon
 from app.services.facts.format import format_fact_pack_for_prompt
 from app.services.facts.models import FactPack
 from app.services.facts.slots import uses_synthesis_grounding
@@ -48,7 +48,7 @@ def _to_gigachat_messages(messages: list[dict]) -> list[dict[str, Any]]:
     for m in messages:
         role = m.get("role")
         if role == "system":
-            text = str(m.get("text") or "").strip()
+            text = str(m.get("text") or m.get("content") or "").strip()
             if text:
                 out.append({"role": "system", "content": text})
         elif role == "user":
@@ -56,7 +56,7 @@ def _to_gigachat_messages(messages: list[dict]) -> list[dict[str, Any]]:
                 out.append(
                     {
                         "role": "user",
-                        "content": str(m.get("content") or " ").strip() or " ",
+                        "content": str(m.get("content") or m.get("text") or " ").strip() or " ",
                         "attachments": list(m["attachments"]),
                     }
                 )
@@ -69,6 +69,21 @@ def _to_gigachat_messages(messages: list[dict]) -> list[dict[str, Any]]:
             if text:
                 out.append({"role": "assistant", "content": text})
     return out
+
+
+def _ensure_gigachat_payload(messages: list[dict]) -> list[dict[str, Any]]:
+    converted = _to_gigachat_messages(messages)
+    if not converted:
+        raise YandexServiceError(
+            "gpt",
+            "GigaChat: пустой запрос (проверьте system/user промпты в админке)",
+        )
+    if not any(m.get("role") == "user" for m in converted):
+        raise YandexServiceError(
+            "gpt",
+            "GigaChat: нет user-сообщения (проверьте шаблон промпта)",
+        )
+    return converted
 
 
 class GigaChatProvider(PromptedLLMMixin, LLMProvider):
@@ -143,7 +158,7 @@ class GigaChatProvider(PromptedLLMMixin, LLMProvider):
             return '{"needs_search": true, "search_query": "mock", "answer_model": "lite", "reason": "mock"}'
         payload = {
             "model": self._model_name(model),
-            "messages": _to_gigachat_messages(messages),
+            "messages": _ensure_gigachat_payload(messages),
             "max_tokens": max_tokens,
             "temperature": temperature,
         }
@@ -167,7 +182,7 @@ class GigaChatProvider(PromptedLLMMixin, LLMProvider):
             return
         payload: dict[str, Any] = {
             "model": self._model_name(model),
-            "messages": _to_gigachat_messages(messages),
+            "messages": _ensure_gigachat_payload(messages),
             "max_tokens": max_tokens,
             "temperature": temperature,
         }
@@ -339,6 +354,7 @@ class GigaChatProvider(PromptedLLMMixin, LLMProvider):
             system = await self.get_prompt("answer_meta", ANSWER_META)
         else:
             system = await self.get_prompt("answer_direct", ANSWER_DIRECT)
+        system += direct_system_addons(query)
         return [
             {"role": "system", "text": system},
             {"role": "user", "text": user_content},

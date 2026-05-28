@@ -96,6 +96,25 @@ def image_display_answer_addon() -> str:
     )
 
 
+def vision_capability_answer_addon() -> str:
+    return (
+        "\n\nВопрос про анализ фото без прикреплённого снимка. "
+        "Glosix умеет анализировать изображения, когда пользователь прикрепляет фото к сообщению "
+        "(калории/состав блюда, текст на упаковке, описание объектов). "
+        "Сейчас фото нет — коротко объясни это и попроси прикрепить снимок для анализа. "
+        "Не пиши «не могу по фото» или «нет vision». "
+        "Не используй цитаты [1], [2] — в этом режиме источников нет."
+    )
+
+
+def direct_system_addons(query: str) -> str:
+    from app.services.search_query import is_vision_capability_question
+
+    if is_vision_capability_question(query):
+        return vision_capability_answer_addon()
+    return ""
+
+
 def answer_addon_for_slots(fact_slots: list[str], *, synthesis: bool = False) -> str:
     if synthesis:
         return (

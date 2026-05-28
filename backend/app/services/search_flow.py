@@ -104,6 +104,8 @@ class SearchFlowService:
         llm, search, _prompt_store, llm_provider_id, search_provider_id = await resolve_runtime_providers(
             db, redis_client
         )
+        # Проверяем колонку debug_trace до долгого пайплайна — rollback здесь не ломает finalize.
+        await _messages_have_debug_trace(db)
         rewriter = QueryRewriter(llm)
         fact_pipeline = FactPipeline(search, llm)
         if attachment_ids and self._is_guest(user):
@@ -351,17 +353,21 @@ class SearchFlowService:
                 if sources_json:
                     yield sse_event("sources", {"sources": sources_json})
 
-            gpt_preview = await build_gpt_messages_preview(
-                llm,
-                llm_query=llm_query,
-                sources=sources,
-                history=history,
-                prior_sources_block=prior_sources_block,
-                needs_search=route.needs_search,
-                model=route.answer_model,
-                hint_clarify=hint_clarify,
-                fact_pack=fact_pack,
-            )
+            gpt_preview: list[dict[str, str]] = []
+            try:
+                gpt_preview = await build_gpt_messages_preview(
+                    llm,
+                    llm_query=llm_query,
+                    sources=sources,
+                    history=history,
+                    prior_sources_block=prior_sources_block,
+                    needs_search=route.needs_search,
+                    model=route.answer_model,
+                    hint_clarify=hint_clarify,
+                    fact_pack=fact_pack,
+                )
+            except Exception:
+                logger.exception("GPT messages preview failed (non-fatal)")
 
             full_answer = ""
             answer_hint = hint_clarify
@@ -518,7 +524,7 @@ class SearchFlowService:
                 page_cache=page_cache_trace,
                 query_url_memory=query_url_trace.to_dict() if query_url_trace else None,
             )
-            trace_payload = debug_trace if await _messages_have_debug_trace(db) else None
+            trace_payload = debug_trace if _debug_trace_column_ok else None
             assistant_msg = Message(
                 thread_id=thread.id,
                 role=MessageRole.ASSISTANT,

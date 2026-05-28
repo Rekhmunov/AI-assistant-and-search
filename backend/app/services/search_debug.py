@@ -40,7 +40,11 @@ async def build_gpt_messages_preview(
         )
     else:
         raw = await llm._build_messages_direct(llm_query, history, prior_sources_block)
-    return [{"role": m["role"], "text": _clip(m["text"])} for m in raw]
+    preview: list[dict[str, str]] = []
+    for m in raw:
+        text = m.get("text") or m.get("content") or ""
+        preview.append({"role": str(m.get("role") or "user"), "text": _clip(str(text))})
+    return preview
 
 
 def build_debug_trace(

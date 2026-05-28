@@ -11,7 +11,7 @@ from typing import Literal
 import httpx
 
 from app.core.config import Settings, get_settings
-from app.services.answer_guard import answer_addon_for_slots, strict_answer_addon
+from app.services.answer_guard import answer_addon_for_slots, direct_system_addons, strict_answer_addon
 from app.services.facts.format import format_fact_pack_for_prompt
 from app.services.facts.models import FactPack
 from app.services.facts.slots import uses_synthesis_grounding
@@ -218,6 +218,7 @@ class AnthropicClaudeProvider(PromptedLLMMixin, LLMProvider):
             system = await self.get_prompt("answer_meta", ANSWER_META)
         else:
             system = await self.get_prompt("answer_direct", ANSWER_DIRECT)
+        system += direct_system_addons(query)
         return [
             {"role": "system", "text": system},
             {"role": "user", "text": user_content},

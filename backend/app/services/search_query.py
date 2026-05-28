@@ -177,6 +177,32 @@ def is_meta_assistant_query(query: str) -> bool:
     return bool(_META_ASSISTANT_RE.search(q))
 
 
+_VISION_CAPABILITY_RE = re.compile(
+    r"(?:"
+    r"по\s+(?:фото|изображен|картин)|"
+    r"на\s+(?:фото|изображен|картин)|"
+    r"калори(?:и|й|ю|я)?.*(?:фото|изображ|картин)|"
+    r"(?:фото|изображ|картин).*(?:калори|состав)|"
+    r"(?:сч(?:ит|ита)(?:ать|аешь|ает)?|определи|распозна).*"
+    r"(?:фото|изображ|картин)|"
+    r"(?:фото|изображ|картин).*(?:анализ|распозна|опиши)|"
+    r"умеешь.*(?:фото|изображ|картин)|"
+    r"можешь.*(?:фото|изображ|картин)"
+    r")",
+    re.I,
+)
+
+
+def is_vision_capability_question(query: str) -> bool:
+    """«Можешь по фото?» без вложения — direct/meta, не vision API."""
+    q = query.strip()
+    if not q or len(q) > 280:
+        return False
+    if _has_attachment_marker(q):
+        return False
+    return bool(_VISION_CAPABILITY_RE.search(q))
+
+
 def _has_attachment_marker(query: str) -> bool:
     return "--- Документ:" in query or "[Файлы:" in query
 
