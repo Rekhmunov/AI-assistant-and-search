@@ -243,6 +243,7 @@ PostgreSQL (5432) и Redis **не** открывайте наружу.
 
 | Симптом | Решение |
 |---------|---------|
+| `git pull` / `diverged`, `Not possible to fast-forward` | На сервере есть локальный коммит, не попавший в GitHub. `git fetch origin && git reset --hard origin/main` (сохраните `nginx/nginx.prod.conf` и `.env`). Новые версии `scripts/update.sh` делают это автоматически. |
 | `InvalidPasswordError: password authentication failed for user "postgres"` при `alembic` | Не используйте `docker compose` без `-f docker-compose.prod.yml`. Миграции: `bash scripts/migrate.sh`. Пароль в `.env` (`POSTGRES_PASSWORD`) должен совпадать с тем, с которым **первый раз** создан том `pgdata` (смена пароля в `.env` без `ALTER USER` в Postgres не работает). |
 | `Found orphan containers (aisearch-nginx-1)` | Запущен dev-compose вместо prod: `docker compose -f docker-compose.prod.yml up -d --remove-orphans` |
 | Сайт «отклонил соединение», Docker OK | `systemctl status nginx`, `journalctl -u nginx -n 20` — часто `bind() to OLD_IP:443 failed`; `sudo bash scripts/ensure-nginx-glosix.sh` |
