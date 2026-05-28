@@ -56,6 +56,7 @@ export function SettingsPage() {
   const [deepseekProbeMsg, setDeepseekProbeMsg] = useState("");
   const [gigachatProbeMsg, setGigachatProbeMsg] = useState("");
   const [promptsOpen, setPromptsOpen] = useState(false);
+  const [limitsOpen, setLimitsOpen] = useState(false);
 
   useEffect(() => {
     apiFetch<SettingsBundle>("/api/admin/settings").then((r) => {
@@ -311,55 +312,68 @@ export function SettingsPage() {
           </section>
         )}
 
-        <section className="settings-section">
-          <h2 className="settings-section-title">Лимиты и сервис</h2>
-          <label>
-            Free поисков / день
-            <input
-              type="number"
-              value={String(settings.free_searches_per_day ?? "")}
-              onChange={(e) => setSettings({ ...settings, free_searches_per_day: e.target.value })}
-              disabled={!can("settings:write")}
-            />
-          </label>
-          <label>
-            Pro поисков / день
-            <input
-              type="number"
-              value={String(settings.pro_searches_per_day ?? "")}
-              onChange={(e) => setSettings({ ...settings, pro_searches_per_day: e.target.value })}
-              disabled={!can("settings:write")}
-            />
-          </label>
-          <label>
-            Yandex запросов / день (глобально)
-            <input
-              type="number"
-              value={String(settings.global_yandex_requests_per_day ?? "")}
-              onChange={(e) =>
-                setSettings({ ...settings, global_yandex_requests_per_day: e.target.value })
-              }
-              disabled={!can("settings:write")}
-            />
-          </label>
-          <label className="checkbox">
-            <input
-              type="checkbox"
-              checked={Boolean(settings.maintenance_mode)}
-              onChange={(e) => setSettings({ ...settings, maintenance_mode: e.target.checked })}
-              disabled={!can("settings:write")}
-            />
-            Режим обслуживания (блокирует поиск)
-          </label>
-          <label>
-            Текст приветствия бота
-            <textarea
-              rows={3}
-              value={String(settings.bot_welcome_text ?? "")}
-              onChange={(e) => setSettings({ ...settings, bot_welcome_text: e.target.value })}
-              disabled={!can("settings:write")}
-            />
-          </label>
+        <section className="settings-section settings-section--collapsible">
+          <button
+            type="button"
+            className="settings-section-toggle"
+            onClick={() => setLimitsOpen((open) => !open)}
+            aria-expanded={limitsOpen}
+            aria-controls="settings-limits-panel"
+          >
+            <span className="settings-section-toggle-label">Лимиты и сервис</span>
+            <ChevronIcon expanded={limitsOpen} />
+          </button>
+          {limitsOpen && (
+            <div id="settings-limits-panel" className="settings-section-panel">
+              <label>
+                Free поисков / день
+                <input
+                  type="number"
+                  value={String(settings.free_searches_per_day ?? "")}
+                  onChange={(e) => setSettings({ ...settings, free_searches_per_day: e.target.value })}
+                  disabled={!can("settings:write")}
+                />
+              </label>
+              <label>
+                Pro поисков / день
+                <input
+                  type="number"
+                  value={String(settings.pro_searches_per_day ?? "")}
+                  onChange={(e) => setSettings({ ...settings, pro_searches_per_day: e.target.value })}
+                  disabled={!can("settings:write")}
+                />
+              </label>
+              <label>
+                Yandex запросов / день (глобально)
+                <input
+                  type="number"
+                  value={String(settings.global_yandex_requests_per_day ?? "")}
+                  onChange={(e) =>
+                    setSettings({ ...settings, global_yandex_requests_per_day: e.target.value })
+                  }
+                  disabled={!can("settings:write")}
+                />
+              </label>
+              <label className="checkbox">
+                <input
+                  type="checkbox"
+                  checked={Boolean(settings.maintenance_mode)}
+                  onChange={(e) => setSettings({ ...settings, maintenance_mode: e.target.checked })}
+                  disabled={!can("settings:write")}
+                />
+                Режим обслуживания (блокирует поиск)
+              </label>
+              <label>
+                Текст приветствия бота
+                <textarea
+                  rows={3}
+                  value={String(settings.bot_welcome_text ?? "")}
+                  onChange={(e) => setSettings({ ...settings, bot_welcome_text: e.target.value })}
+                  disabled={!can("settings:write")}
+                />
+              </label>
+            </div>
+          )}
         </section>
 
         {can("settings:write") && (
