@@ -1,7 +1,10 @@
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import type { MessageFeedback } from "../api/client";
 import { submitMessageFeedback, type FeedbackReasonCode } from "../api/client";
 import { t } from "../i18n";
+
+const THANK_YOU_MS = 4500;
 
 const DOWN_REASONS: { code: FeedbackReasonCode; labelKey: string }[] = [
   { code: "outdated", labelKey: "feedbackReasonOutdated" },
@@ -23,10 +26,31 @@ export function AnswerFeedback({ messageId, token, initialFeedback }: Props) {
   const [otherText, setOtherText] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [thankYouVisible, setThankYouVisible] = useState(false);
+  const thankYouTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     setFeedback(initialFeedback ?? null);
   }, [initialFeedback, messageId]);
+
+  useEffect(() => {
+    return () => {
+      if (thankYouTimerRef.current !== null) {
+        window.clearTimeout(thankYouTimerRef.current);
+      }
+    };
+  }, []);
+
+  const showThankYou = useCallback(() => {
+    setThankYouVisible(true);
+    if (thankYouTimerRef.current !== null) {
+      window.clearTimeout(thankYouTimerRef.current);
+    }
+    thankYouTimerRef.current = window.setTimeout(() => {
+      setThankYouVisible(false);
+      thankYouTimerRef.current = null;
+    }, THANK_YOU_MS);
+  }, []);
 
   const submitUp = async () => {
     if (!token || busy) return;
@@ -35,6 +59,7 @@ export function AnswerFeedback({ messageId, token, initialFeedback }: Props) {
     try {
       const res = await submitMessageFeedback(token, messageId, { rating: "up" });
       setFeedback(res.feedback);
+      showThankYou();
     } catch (e) {
       setError(e instanceof Error ? e.message : t("feedbackSubmitFailed"));
     } finally {
@@ -56,6 +81,7 @@ export function AnswerFeedback({ messageId, token, initialFeedback }: Props) {
       setModalOpen(false);
       setSelectedReason(null);
       setOtherText("");
+      showThankYou();
     } catch (e) {
       setError(e instanceof Error ? e.message : t("feedbackSubmitFailed"));
     } finally {
@@ -178,6 +204,14 @@ export function AnswerFeedback({ messageId, token, initialFeedback }: Props) {
           </div>
         </div>
       )}
+
+      {thankYouVisible &&
+        createPortal(
+          <div className="feedback-thank-toast" role="status" aria-live="polite">
+            <p>{t("feedbackThankYou")}</p>
+          </div>,
+          document.body,
+        )}
     </>
   );
 }

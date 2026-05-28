@@ -99,5 +99,6 @@
   "feedbackSend": "Отправить",
   "feedbackSending": "Отправка…",
   "feedbackSubmitFailed": "Не удалось сохранить оценку",
-  "feedbackCommentRequired": "Введите комментарий"
+  "feedbackCommentRequired": "Введите комментарий",
+  "feedbackThankYou": "Спасибо за вашу оценку! Вы помогаете стать лучше."
 }
