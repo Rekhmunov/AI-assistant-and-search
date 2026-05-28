@@ -59,8 +59,6 @@ export function LoginPage() {
     <div className="page page-login">
       <AuthShell>
         <AuthModalCard
-          title={mode === "login" ? t("loginTitle") : t("registerTitle")}
-          subtitle={t("loginSubtitle")}
           footer={
             <Link to="/" className="auth-modal-link">
               {t("continueAsGuest")}
