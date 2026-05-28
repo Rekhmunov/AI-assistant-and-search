@@ -134,7 +134,9 @@ fi
 echo "    app (${APP_HOST_CHECK}): HTTP ${APP_CODE}"
 echo "    admin (${ADMIN_HOST_CHECK}): HTTP ${ADMIN_CODE} ${ADMIN_TITLE}"
 
-if echo "${ADMIN_TITLE:-}" | grep -qi Glosix; then
+if echo "${ADMIN_TITLE:-}" | grep -qi 'Glosix Admin'; then
+  echo "    admin: OK (Glosix Admin)"
+elif echo "${ADMIN_TITLE:-}" | grep -qi Glosix; then
   echo "ERROR: admin отдаёт frontend (Glosix) — проверьте server_name admin в nginx.prod.conf"
   exit 1
 fi

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from app.services.prompts.defaults import (
+from app.services.prompts.yandex_answer_core import (
     ANSWER_DIRECT,
     ANSWER_DOCUMENT,
     ANSWER_META,
