@@ -272,6 +272,33 @@ export function SettingsPage() {
                   </span>
                 )}
               </label>
+
+              {can("settings:read") && (
+                <div className="settings-probes">
+                  <p className="settings-probes-row">
+                    <button type="button" className="btn-link" onClick={() => void runAnthropicProbe()}>
+                      Проверить Claude (тестовый запрос из .env)
+                    </button>
+                    {probeMsg && <span className="hint-inline settings-probes-result">{probeMsg}</span>}
+                  </p>
+                  <p className="settings-probes-row">
+                    <button type="button" className="btn-link" onClick={() => void runDeepseekProbe()}>
+                      Проверить DeepSeek (lite + pro из .env)
+                    </button>
+                    {deepseekProbeMsg && (
+                      <span className="hint-inline settings-probes-result">{deepseekProbeMsg}</span>
+                    )}
+                  </p>
+                  <p className="settings-probes-row">
+                    <button type="button" className="btn-link" onClick={() => void runGigachatProbe()}>
+                      Проверить GigaChat (OAuth, lite + pro из .env)
+                    </button>
+                    {gigachatProbeMsg && (
+                      <span className="hint-inline settings-probes-result">{gigachatProbeMsg}</span>
+                    )}
+                  </p>
+                </div>
+              )}
             </div>
           )}
         </section>
@@ -422,30 +449,6 @@ export function SettingsPage() {
         · Среда:{" "}
         {String(settings.environment)}
       </p>
-      {can("settings:read") && (
-        <p>
-          <button type="button" className="btn-link" onClick={() => void runAnthropicProbe()}>
-            Проверить Claude (тестовый запрос из .env)
-          </button>
-          {probeMsg && <span className="hint-inline"> {probeMsg}</span>}
-        </p>
-      )}
-      {can("settings:read") && (
-        <p>
-          <button type="button" className="btn-link" onClick={() => void runDeepseekProbe()}>
-            Проверить DeepSeek (lite + pro из .env)
-          </button>
-          {deepseekProbeMsg && <span className="hint-inline"> {deepseekProbeMsg}</span>}
-        </p>
-      )}
-      {can("settings:read") && (
-        <p>
-          <button type="button" className="btn-link" onClick={() => void runGigachatProbe()}>
-            Проверить GigaChat (OAuth, lite + pro из .env)
-          </button>
-          {gigachatProbeMsg && <span className="hint-inline"> {gigachatProbeMsg}</span>}
-        </p>
-      )}
     </div>
   );
 }

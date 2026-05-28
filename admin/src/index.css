@@ -134,6 +134,29 @@ a {
   padding-bottom: 16px;
 }
 
+.settings-probes {
+  margin-top: 8px;
+  padding-top: 16px;
+  border-top: 1px solid #e5e7eb;
+}
+
+.settings-probes-row {
+  margin: 0 0 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.settings-probes-row:last-child {
+  margin-bottom: 0;
+}
+
+.settings-probes-result {
+  margin: 0;
+  max-width: 100%;
+}
+
 .settings-prompt-group {
   margin-bottom: 20px;
 }
