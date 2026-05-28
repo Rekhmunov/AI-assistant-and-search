@@ -343,6 +343,39 @@ export async function uploadFile(token: string, file: File): Promise<UploadedFil
   return res.json();
 }
 
+export async function transcribeVoice(
+  token: string,
+  blob: Blob,
+): Promise<{ text: string }> {
+  const ext =
+    blob.type.includes("mp4") ? "m4a" : blob.type.includes("ogg") ? "ogg" : "webm";
+  const file = new File([blob], `voice.${ext}`, {
+    type: blob.type || "audio/webm",
+  });
+  const form = new FormData();
+  form.append("file", file);
+  const res = await fetch(`${API_BASE}/api/voice/transcribe`, {
+    method: "POST",
+    headers: token
+      ? { Authorization: `Bearer ${token}`, ...getGuestSessionHeader() }
+      : getGuestSessionHeader(),
+    credentials: "include",
+    body: form,
+  });
+  if (!res.ok) {
+    let msg = "Не удалось распознать речь";
+    try {
+      const err = await res.json();
+      const detail = (err as { detail?: string }).detail;
+      if (detail) msg = detail;
+    } catch {
+      /* ignore */
+    }
+    throw new Error(msg);
+  }
+  return res.json();
+}
+
 function networkErrorMessage(err: unknown): string {
   if (err instanceof TypeError) {
     return "Нет связи с сервером. Проверьте интернет и обновите страницу.";

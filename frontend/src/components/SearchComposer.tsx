@@ -92,7 +92,10 @@ export function SearchComposer({
     setUploadSuggestPro(false);
   };
 
-  const voice = useVoiceInput((text) => onChange(value ? `${value} ${text}` : text));
+  const voice = useVoiceInput(
+    (text) => onChange(value ? `${value} ${text}` : text),
+    token,
+  );
 
   const totalCount = attachments.length + uploading.length;
   const isBusy = uploading.length > 0;

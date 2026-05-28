@@ -1,14 +1,36 @@
 import { useCallback, useRef, useState } from "react";
+import { transcribeVoice } from "../api/client";
 import { t } from "../i18n";
 import { isMaxWebApp } from "../lib/maxApp";
 
 type VoiceState = "idle" | "recording" | "transcribing";
 
-function getSpeechRecognitionCtor():
-  | (new () => SpeechRecognition)
-  | null {
+const MAX_RECORD_MS = 90_000;
+
+function getSpeechRecognitionCtor(): (new () => SpeechRecognition) | null {
   if (typeof window === "undefined") return null;
   return window.SpeechRecognition || window.webkitSpeechRecognition || null;
+}
+
+function preferServerStt(): boolean {
+  if (isMaxWebApp()) return true;
+  if (typeof MediaRecorder === "undefined") return false;
+  return !getSpeechRecognitionCtor();
+}
+
+function pickRecorderMimeType(): string | undefined {
+  if (typeof MediaRecorder === "undefined") return undefined;
+  const candidates = [
+    "audio/webm;codecs=opus",
+    "audio/webm",
+    "audio/mp4",
+    "audio/aac",
+    "audio/ogg;codecs=opus",
+  ];
+  for (const type of candidates) {
+    if (MediaRecorder.isTypeSupported(type)) return type;
+  }
+  return undefined;
 }
 
 function getRecognitionError(ev: Event): string {
@@ -27,24 +49,38 @@ function collectFinalTranscript(ev: SpeechRecognitionEvent): string {
   return text.trim();
 }
 
-/** Browser speech recognition; press mic to start, press again to stop. */
-export function useVoiceInput(onText: (text: string) => void) {
+/** Голосовой ввод: Web Speech API в браузере; в MAX — запись + сервер (Yandex STT). */
+export function useVoiceInput(onText: (text: string) => void, token: string | null) {
   const [state, setState] = useState<VoiceState>("idle");
   const [error, setError] = useState<string | null>(null);
 
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<BlobPart[]>([]);
+  const recorderMimeRef = useRef<string>("audio/webm");
   const transcriptRef = useRef("");
   const recordingRef = useRef(false);
   const startedAtRef = useRef(0);
   const userStopRef = useRef(false);
+  const autoStopTimerRef = useRef<number | null>(null);
 
-  const releaseMic = useCallback(() => {
-    streamRef.current?.getTracks().forEach((track) => track.stop());
-    streamRef.current = null;
+  const clearAutoStop = useCallback(() => {
+    if (autoStopTimerRef.current !== null) {
+      window.clearTimeout(autoStopTimerRef.current);
+      autoStopTimerRef.current = null;
+    }
   }, []);
 
-  const finishSession = useCallback(
+  const releaseMic = useCallback(() => {
+    clearAutoStop();
+    streamRef.current?.getTracks().forEach((track) => track.stop());
+    streamRef.current = null;
+    recorderRef.current = null;
+    chunksRef.current = [];
+  }, [clearAutoStop]);
+
+  const finishBrowserSession = useCallback(
     (opts?: { showNoSpeech?: boolean }) => {
       recordingRef.current = false;
       releaseMic();
@@ -69,18 +105,139 @@ export function useVoiceInput(onText: (text: string) => void) {
     [onText, releaseMic],
   );
 
-  const stop = useCallback(() => {
+  const uploadRecording = useCallback(
+    async (blob: Blob) => {
+      if (!token) {
+        setError(t("loginForFiles"));
+        setState("idle");
+        return;
+      }
+      setState("transcribing");
+      try {
+        const res = await transcribeVoice(token, blob);
+        const text = res.text.trim();
+        if (!text) {
+          setError(t("voiceNoSpeech"));
+        } else {
+          onText(text);
+          setError(null);
+        }
+      } catch (e) {
+        setError(e instanceof Error ? e.message : t("voiceRecognizeFailed"));
+      } finally {
+        releaseMic();
+        recordingRef.current = false;
+        setState("idle");
+      }
+    },
+    [onText, releaseMic, token],
+  );
+
+  const stopServerRecording = useCallback(() => {
+    if (!recordingRef.current) return;
+    userStopRef.current = true;
+    clearAutoStop();
+    const rec = recorderRef.current;
+    if (rec && rec.state !== "inactive") {
+      try {
+        rec.stop();
+      } catch {
+        recordingRef.current = false;
+        releaseMic();
+        setState("idle");
+      }
+      return;
+    }
+    recordingRef.current = false;
+    releaseMic();
+    setState("idle");
+  }, [clearAutoStop, releaseMic]);
+
+  const startServerRecording = useCallback(async () => {
+    setError(null);
+    userStopRef.current = false;
+    chunksRef.current = [];
+
+    if (!token) {
+      setError(t("loginForFiles"));
+      return;
+    }
+
+    const mimeType = pickRecorderMimeType();
+    if (!mimeType || !navigator.mediaDevices?.getUserMedia) {
+      setError(t("voiceUnavailableMax"));
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      releaseMic();
+      streamRef.current = stream;
+      recorderMimeRef.current = mimeType;
+
+      const rec = new MediaRecorder(stream, { mimeType });
+      recorderRef.current = rec;
+
+      rec.ondataavailable = (ev) => {
+        if (ev.data.size > 0) chunksRef.current.push(ev.data);
+      };
+
+      rec.onerror = () => {
+        recordingRef.current = false;
+        releaseMic();
+        setState("idle");
+        setError(t("voiceStartFailed"));
+      };
+
+      rec.onstop = () => {
+        const chunks = chunksRef.current;
+        chunksRef.current = [];
+        stream.getTracks().forEach((track) => track.stop());
+        streamRef.current = null;
+        recorderRef.current = null;
+
+        if (!userStopRef.current) {
+          recordingRef.current = false;
+          setState("idle");
+          return;
+        }
+
+        const blob = new Blob(chunks, { type: mimeType });
+        const elapsed = Date.now() - startedAtRef.current;
+        if (blob.size < 256 || elapsed < 400) {
+          recordingRef.current = false;
+          setError(t("voiceNoSpeech"));
+          setState("idle");
+          return;
+        }
+        void uploadRecording(blob);
+      };
+
+      recordingRef.current = true;
+      startedAtRef.current = Date.now();
+      setState("recording");
+      rec.start(250);
+      autoStopTimerRef.current = window.setTimeout(() => {
+        if (recordingRef.current) stopServerRecording();
+      }, MAX_RECORD_MS);
+    } catch {
+      releaseMic();
+      setError(isMaxWebApp() ? t("voiceMicDeniedMax") : t("voiceMicDenied"));
+    }
+  }, [releaseMic, stopServerRecording, token, uploadRecording]);
+
+  const stopBrowserRecording = useCallback(() => {
     if (!recordingRef.current) return;
     userStopRef.current = true;
     setState("transcribing");
     try {
       recognitionRef.current?.stop();
     } catch {
-      finishSession({ showNoSpeech: true });
+      finishBrowserSession({ showNoSpeech: true });
     }
-  }, [finishSession]);
+  }, [finishBrowserSession]);
 
-  const start = useCallback(async () => {
+  const startBrowserRecording = useCallback(async () => {
     setError(null);
     userStopRef.current = false;
     transcriptRef.current = "";
@@ -91,7 +248,7 @@ export function useVoiceInput(onText: (text: string) => void) {
         releaseMic();
         streamRef.current = stream;
       } catch {
-        setError(isMaxWebApp() ? t("voiceMicDeniedMax") : t("voiceMicDenied"));
+        setError(t("voiceMicDenied"));
         return;
       }
     }
@@ -135,12 +292,12 @@ export function useVoiceInput(onText: (text: string) => void) {
       setState("idle");
 
       if (code === "not-allowed" || code === "audio-capture") {
-        setError(isMaxWebApp() ? t("voiceMicDeniedMax") : t("voiceMicDenied"));
+        setError(t("voiceMicDenied"));
         return;
       }
 
       if (code === "service-not-allowed" || code === "network") {
-        setError(isMaxWebApp() ? t("voiceUnavailableMax") : t("voiceUnavailable"));
+        setError(t("voiceUnavailable"));
         return;
       }
 
@@ -152,7 +309,7 @@ export function useVoiceInput(onText: (text: string) => void) {
       }
 
       if (elapsed < 400) {
-        setError(isMaxWebApp() ? t("voiceUnavailableMax") : t("voiceStartFailed"));
+        setError(t("voiceStartFailed"));
         return;
       }
 
@@ -164,11 +321,11 @@ export function useVoiceInput(onText: (text: string) => void) {
         try {
           rec.start();
         } catch {
-          finishSession();
+          finishBrowserSession();
         }
         return;
       }
-      finishSession({ showNoSpeech: userStopRef.current });
+      finishBrowserSession({ showNoSpeech: userStopRef.current });
     };
 
     try {
@@ -180,7 +337,23 @@ export function useVoiceInput(onText: (text: string) => void) {
       setState("idle");
       setError(t("voiceStartFailed"));
     }
-  }, [finishSession, releaseMic]);
+  }, [finishBrowserSession, releaseMic]);
+
+  const start = useCallback(async () => {
+    if (preferServerStt()) {
+      await startServerRecording();
+    } else {
+      await startBrowserRecording();
+    }
+  }, [startBrowserRecording, startServerRecording]);
+
+  const stop = useCallback(() => {
+    if (preferServerStt()) {
+      stopServerRecording();
+    } else {
+      stopBrowserRecording();
+    }
+  }, [stopBrowserRecording, stopServerRecording]);
 
   const toggle = useCallback(() => {
     if (state === "recording") {
