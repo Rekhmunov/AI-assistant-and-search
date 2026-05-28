@@ -91,6 +91,49 @@ a {
   font-size: 1.05rem;
 }
 
+.settings-section-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  color: inherit;
+  font: inherit;
+}
+
+.settings-section-toggle-label {
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+
+.settings-section-toggle:hover .settings-section-toggle-label {
+  color: #20808d;
+}
+
+.settings-chevron {
+  flex-shrink: 0;
+  color: #6b7280;
+  transition: transform 0.2s ease;
+}
+
+.settings-chevron--expanded {
+  transform: rotate(90deg);
+}
+
+.settings-section-panel {
+  margin-top: 16px;
+}
+
+.settings-section--collapsible {
+  padding-bottom: 16px;
+}
+
 .settings-prompt-group {
   margin-bottom: 20px;
 }

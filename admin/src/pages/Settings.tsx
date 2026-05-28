@@ -55,6 +55,7 @@ export function SettingsPage() {
   const [probeMsg, setProbeMsg] = useState("");
   const [deepseekProbeMsg, setDeepseekProbeMsg] = useState("");
   const [gigachatProbeMsg, setGigachatProbeMsg] = useState("");
+  const [promptsOpen, setPromptsOpen] = useState(false);
 
   useEffect(() => {
     apiFetch<SettingsBundle>("/api/admin/settings").then((r) => {
@@ -68,6 +69,10 @@ export function SettingsPage() {
   }, []);
 
   const llmProvider = String(settings.llm_provider ?? "yandex_gpt");
+
+  useEffect(() => {
+    setPromptsOpen(false);
+  }, [llmProvider]);
   const searchProvider = String(settings.search_provider ?? "yandex_search");
   const visionProvider = String(settings.vision_provider ?? "gigachat");
 
@@ -188,10 +193,6 @@ export function SettingsPage() {
   return (
     <div className="settings-page">
       <h1>Настройки</h1>
-      <p className="hint">
-        Секреты (BOT_TOKEN, Yandex API, Anthropic, DeepSeek, GigaChat) — только в .env на сервере. Ключ из чата Cursor не
-        используется. После смены .env: force-recreate backend. Lite/Pro выбирает код по типу запроса.
-      </p>
       {llmRuntime?.hint && (
         <p className="error" role="alert">
           {llmRuntime.hint}
@@ -258,44 +259,55 @@ export function SettingsPage() {
               </span>
             )}
           </label>
-          <p className="hint">
-            У Yandex Search нет текстового промпта — только HTTP-запрос. Запросы в поиск формирует
-            блок «Пайплайн поиска» ниже (rewriter).
-          </p>
         </section>
 
         {visiblePrompts.length > 0 && (
-          <section className="settings-section">
-            <h2 className="settings-section-title">Промпты: {llmProviders.find((p) => p.id === llmProvider)?.label}</h2>
-            {[...promptsByGroup.entries()].map(([group, items]) => (
-              <div key={group} className="settings-prompt-group">
-                <h3 className="settings-prompt-group-title">{group}</h3>
-                {items.map((p) => (
-                  <label key={p.id} className="settings-prompt-label">
-                    <span className="settings-prompt-head">
-                      <span>{p.label}</span>
-                      {can("settings:write") && (
-                        <button
-                          type="button"
-                          className="btn-link"
-                          onClick={() => resetPrompt(p)}
-                        >
-                          Сбросить к умолчанию
-                        </button>
-                      )}
-                    </span>
-                    {p.description && <span className="hint-inline">{p.description}</span>}
-                    <textarea
-                      rows={p.rows}
-                      value={String(settings[p.setting_key] ?? p.value)}
-                      onChange={(e) => setPromptValue(p.setting_key, e.target.value)}
-                      disabled={!can("settings:write")}
-                      spellCheck={false}
-                    />
-                  </label>
+          <section className="settings-section settings-section--collapsible">
+            <button
+              type="button"
+              className="settings-section-toggle"
+              onClick={() => setPromptsOpen((open) => !open)}
+              aria-expanded={promptsOpen}
+              aria-controls="settings-prompts-panel"
+            >
+              <span className="settings-section-toggle-label">
+                Промпты: {llmProviders.find((p) => p.id === llmProvider)?.label}
+              </span>
+              <ChevronIcon expanded={promptsOpen} />
+            </button>
+            {promptsOpen && (
+              <div id="settings-prompts-panel" className="settings-section-panel">
+                {[...promptsByGroup.entries()].map(([group, items]) => (
+                  <div key={group} className="settings-prompt-group">
+                    <h3 className="settings-prompt-group-title">{group}</h3>
+                    {items.map((p) => (
+                      <label key={p.id} className="settings-prompt-label">
+                        <span className="settings-prompt-head">
+                          <span>{p.label}</span>
+                          {can("settings:write") && (
+                            <button
+                              type="button"
+                              className="btn-link"
+                              onClick={() => resetPrompt(p)}
+                            >
+                              Сбросить к умолчанию
+                            </button>
+                          )}
+                        </span>
+                        {p.description && <span className="hint-inline">{p.description}</span>}
+                        <textarea
+                          rows={p.rows}
+                          value={String(settings[p.setting_key] ?? p.value)}
+                          onChange={(e) => setPromptValue(p.setting_key, e.target.value)}
+                          disabled={!can("settings:write")}
+                          spellCheck={false}
+                        />
+                      </label>
+                    ))}
+                  </div>
                 ))}
               </div>
-            ))}
+            )}
           </section>
         )}
 
@@ -407,5 +419,26 @@ export function SettingsPage() {
         </p>
       )}
     </div>
+  );
+}
+
+function ChevronIcon({ expanded }: { expanded: boolean }) {
+  return (
+    <svg
+      className={`settings-chevron${expanded ? " settings-chevron--expanded" : ""}`}
+      width="18"
+      height="18"
+      viewBox="0 0 24 24"
+      fill="none"
+      aria-hidden
+    >
+      <path
+        d="M9 6l6 6-6 6"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
   );
 }
