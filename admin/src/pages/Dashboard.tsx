@@ -20,11 +20,18 @@ interface FeedbackRecentItem {
   created_at: string;
 }
 
+interface FeedbackRecentPage {
+  items: FeedbackRecentItem[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
 interface FeedbackDashboardBlock {
   thumbs_up: number;
   thumbs_down: number;
   down_by_reason: FeedbackReasonStat[];
-  recent: FeedbackRecentItem[];
+  recent_total: number;
 }
 
 interface DashboardMetrics {
@@ -35,11 +42,10 @@ interface DashboardMetrics {
   broadcasts_total: number;
   messages_today: number;
   searches_today_estimate: number;
-  yandex_configured: boolean;
-  redis_ok: boolean;
-  maintenance_mode: boolean;
   answer_feedback: FeedbackDashboardBlock;
 }
+
+const RECENT_PAGE_SIZE = 30;
 
 function formatDate(iso: string): string {
   try {
@@ -58,6 +64,11 @@ function formatDate(iso: string): string {
 export function DashboardPage() {
   const [data, setData] = useState<DashboardMetrics | null>(null);
   const [error, setError] = useState("");
+  const [recentOpen, setRecentOpen] = useState(false);
+  const [recentPage, setRecentPage] = useState(1);
+  const [recentData, setRecentData] = useState<FeedbackRecentPage | null>(null);
+  const [recentLoading, setRecentLoading] = useState(false);
+  const [recentError, setRecentError] = useState("");
 
   useEffect(() => {
     apiFetch<DashboardMetrics>("/api/admin/dashboard")
@@ -68,6 +79,29 @@ export function DashboardPage() {
       });
   }, []);
 
+  useEffect(() => {
+    if (!recentOpen) return;
+    setRecentLoading(true);
+    setRecentError("");
+    apiFetch<FeedbackRecentPage>(
+      `/api/admin/dashboard/feedback-recent?page=${recentPage}&page_size=${RECENT_PAGE_SIZE}`,
+    )
+      .then(setRecentData)
+      .catch((e) => {
+        setRecentError(e instanceof Error ? e.message : String(e));
+        setRecentData(null);
+      })
+      .finally(() => setRecentLoading(false));
+  }, [recentOpen, recentPage]);
+
+  const toggleRecent = () => {
+    setRecentOpen((open) => {
+      if (open) return false;
+      setRecentPage(1);
+      return true;
+    });
+  };
+
   if (error) return <p className="error">{error}</p>;
   if (!data) return <p>Загрузка метрик…</p>;
 
@@ -75,9 +109,12 @@ export function DashboardPage() {
     thumbs_up: 0,
     thumbs_down: 0,
     down_by_reason: [],
-    recent: [],
+    recent_total: 0,
   };
   const downTotal = fb.thumbs_down || 0;
+  const recentTotalPages = recentData
+    ? Math.max(1, Math.ceil(recentData.total / recentData.page_size))
+    : Math.max(1, Math.ceil(fb.recent_total / RECENT_PAGE_SIZE));
 
   return (
     <div>
@@ -157,70 +194,110 @@ export function DashboardPage() {
             </ul>
           </div>
         )}
-        {fb.recent.length > 0 ? (
+        {fb.recent_total > 0 ? (
           <div className="feedback-recent">
-            <h3>Последние оценки</h3>
-            <div className="feedback-recent-table-wrap">
-              <table className="feedback-recent-table">
-                <thead>
-                  <tr>
-                    <th>Дата</th>
-                    <th>Оценка</th>
-                    <th>Причина</th>
-                    <th>Пользователь</th>
-                    <th>Фрагмент ответа</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {fb.recent.map((item) => (
-                    <tr key={item.id}>
-                      <td className="feedback-recent-date">{formatDate(item.created_at)}</td>
-                      <td>
-                        <span
-                          className={`feedback-rating-badge feedback-rating-badge--${item.rating}`}
+            <button
+              type="button"
+              className="feedback-recent-toggle"
+              onClick={toggleRecent}
+              aria-expanded={recentOpen}
+            >
+              <span className={`feedback-recent-chevron${recentOpen ? " feedback-recent-chevron--open" : ""}`} aria-hidden>
+                ▶
+              </span>
+              <span className="feedback-recent-toggle-title">Последние оценки</span>
+              <span className="feedback-recent-toggle-count">{fb.recent_total}</span>
+            </button>
+            {recentOpen && (
+              <div className="feedback-recent-body">
+                {recentLoading && <p className="feedback-recent-loading">Загрузка…</p>}
+                {recentError && <p className="error">{recentError}</p>}
+                {!recentLoading && !recentError && recentData && recentData.items.length > 0 && (
+                  <>
+                    <div className="feedback-recent-table-wrap">
+                      <table className="feedback-recent-table">
+                        <thead>
+                          <tr>
+                            <th>Дата</th>
+                            <th>Оценка</th>
+                            <th>Причина</th>
+                            <th>Пользователь</th>
+                            <th>Фрагмент ответа</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {recentData.items.map((item) => (
+                            <tr key={item.id}>
+                              <td className="feedback-recent-date">{formatDate(item.created_at)}</td>
+                              <td>
+                                <span
+                                  className={`feedback-rating-badge feedback-rating-badge--${item.rating}`}
+                                >
+                                  {item.rating === "up" ? "👍" : "👎"}
+                                </span>
+                              </td>
+                              <td>
+                                {item.rating === "down" ? (
+                                  <span className="feedback-recent-reason">
+                                    {item.reason_label ?? "—"}
+                                    {item.comment ? (
+                                      <span className="feedback-recent-comment" title={item.comment}>
+                                        {item.comment.length > 80
+                                          ? `${item.comment.slice(0, 77)}…`
+                                          : item.comment}
+                                      </span>
+                                    ) : null}
+                                  </span>
+                                ) : (
+                                  "—"
+                                )}
+                              </td>
+                              <td className="feedback-recent-user">
+                                {item.user_email ?? item.user_id.slice(0, 8)}
+                              </td>
+                              <td className="feedback-recent-preview" title={item.answer_preview}>
+                                {item.answer_preview || "—"}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    {recentData.total > RECENT_PAGE_SIZE && (
+                      <div className="feedback-recent-pager">
+                        <button
+                          type="button"
+                          className="btn-secondary"
+                          disabled={recentPage <= 1 || recentLoading}
+                          onClick={() => setRecentPage((p) => Math.max(1, p - 1))}
                         >
-                          {item.rating === "up" ? "👍" : "👎"}
+                          Назад
+                        </button>
+                        <span className="feedback-recent-pager-info">
+                          Страница {recentPage} из {recentTotalPages}
                         </span>
-                      </td>
-                      <td>
-                        {item.rating === "down" ? (
-                          <span className="feedback-recent-reason">
-                            {item.reason_label ?? "—"}
-                            {item.comment ? (
-                              <span className="feedback-recent-comment" title={item.comment}>
-                                {item.comment.length > 80
-                                  ? `${item.comment.slice(0, 77)}…`
-                                  : item.comment}
-                              </span>
-                            ) : null}
-                          </span>
-                        ) : (
-                          "—"
-                        )}
-                      </td>
-                      <td className="feedback-recent-user">{item.user_email ?? item.user_id.slice(0, 8)}</td>
-                      <td className="feedback-recent-preview" title={item.answer_preview}>
-                        {item.answer_preview || "—"}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                        <button
+                          type="button"
+                          className="btn-secondary"
+                          disabled={recentPage >= recentTotalPages || recentLoading}
+                          onClick={() => setRecentPage((p) => p + 1)}
+                        >
+                          Далее
+                        </button>
+                      </div>
+                    )}
+                  </>
+                )}
+                {!recentLoading && !recentError && recentData?.items.length === 0 && (
+                  <p className="feedback-empty">Нет оценок на этой странице</p>
+                )}
+              </div>
+            )}
           </div>
         ) : (
           <p className="feedback-empty">Пока нет оценок ответов</p>
         )}
       </section>
-
-      <h2>Система</h2>
-      <ul className="status-list">
-        <li className={data.yandex_configured ? "ok" : "warn"}>Yandex API: {data.yandex_configured ? "настроен" : "mock"}</li>
-        <li className={data.redis_ok ? "ok" : "bad"}>Redis: {data.redis_ok ? "ok" : "ошибка"}</li>
-        <li className={data.maintenance_mode ? "warn" : "ok"}>
-          Режим обслуживания: {data.maintenance_mode ? "включён" : "выключен"}
-        </li>
-      </ul>
     </div>
   );
 }

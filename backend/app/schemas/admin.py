@@ -59,7 +59,14 @@ class FeedbackDashboardBlock(BaseModel):
     thumbs_up: int = 0
     thumbs_down: int = 0
     down_by_reason: list[FeedbackReasonStat] = []
-    recent: list[FeedbackRecentItem] = []
+    recent_total: int = 0
+
+
+class FeedbackRecentPage(BaseModel):
+    items: list[FeedbackRecentItem]
+    total: int
+    page: int
+    page_size: int
 
 
 class DashboardMetrics(BaseModel):

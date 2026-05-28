@@ -714,12 +714,85 @@ pre.small {
   background: rgba(192, 57, 43, 0.06);
 }
 
-.feedback-reasons h3,
-.feedback-recent h3 {
+.feedback-reasons h3 {
   margin: 0 0 12px;
   font-size: 0.9375rem;
   font-weight: 600;
   color: var(--text);
+}
+
+.feedback-recent-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  color: var(--text);
+}
+
+.feedback-recent-toggle:hover .feedback-recent-toggle-title {
+  color: var(--accent);
+}
+
+.feedback-recent-chevron {
+  display: inline-flex;
+  flex-shrink: 0;
+  width: 1rem;
+  font-size: 0.7rem;
+  color: var(--muted);
+  transition: transform 0.15s ease;
+}
+
+.feedback-recent-chevron--open {
+  transform: rotate(90deg);
+}
+
+.feedback-recent-toggle-title {
+  font-size: 0.9375rem;
+  font-weight: 600;
+}
+
+.feedback-recent-toggle-count {
+  margin-left: auto;
+  font-size: 0.8125rem;
+  color: var(--muted);
+  background: var(--surface-hover);
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  padding: 2px 10px;
+}
+
+.feedback-recent-body {
+  margin-top: 12px;
+}
+
+.feedback-recent-loading {
+  margin: 8px 0 0;
+  font-size: 0.875rem;
+  color: var(--muted);
+}
+
+.feedback-recent-pager {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.feedback-recent-pager-info {
+  font-size: 0.8125rem;
+  color: var(--muted);
+}
+
+.feedback-recent-pager .btn-secondary {
+  margin-right: 0;
 }
 
 .feedback-reason-bars {

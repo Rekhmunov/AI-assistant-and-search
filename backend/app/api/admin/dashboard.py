@@ -2,7 +2,7 @@ import logging
 from datetime import datetime, timedelta, timezone
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import distinct, func, select
 from sqlalchemy.exc import DBAPIError, ProgrammingError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,13 +12,14 @@ from app.core.admin_permissions import require_permission
 from app.core.config import get_settings
 from app.models.broadcast import Broadcast
 from app.models.message import Message
-from app.models.message_feedback import FEEDBACK_REASON_LABELS, FeedbackRating, MessageFeedback
+from app.models.message_feedback import FeedbackRating, MessageFeedback
 from app.models.thread import Thread
 from app.models.user import Plan, User
 from app.schemas.admin import (
     DashboardMetrics,
     FeedbackDashboardBlock,
     FeedbackRecentItem,
+    FeedbackRecentPage,
     FeedbackReasonStat,
 )
 from app.schemas.feedback import reason_label
@@ -26,8 +27,58 @@ from app.services.app_settings import get_setting
 
 router = APIRouter(tags=["admin-dashboard"])
 
-
 logger = logging.getLogger(__name__)
+
+FEEDBACK_RECENT_DEFAULT_PAGE_SIZE = 30
+
+
+def _answer_preview(content: str | None) -> str:
+    preview = (content or "").strip().replace("\n", " ")
+    if len(preview) > 160:
+        return preview[:157] + "…"
+    return preview
+
+
+async def _fetch_feedback_recent_page(
+    db: AsyncSession,
+    *,
+    page: int,
+    page_size: int,
+) -> FeedbackRecentPage:
+    total = await db.scalar(select(func.count()).select_from(MessageFeedback)) or 0
+    offset = (page - 1) * page_size
+    items: list[FeedbackRecentItem] = []
+
+    if total > 0 and offset < total:
+        recent_q = (
+            select(MessageFeedback, Message, Thread, User)
+            .join(Message, Message.id == MessageFeedback.message_id)
+            .join(Thread, Thread.id == Message.thread_id)
+            .join(User, User.id == MessageFeedback.user_id)
+            .order_by(MessageFeedback.created_at.desc())
+            .offset(offset)
+            .limit(page_size)
+        )
+        recent_rows = await db.execute(recent_q)
+        for fb, msg, thread, u in recent_rows.all():
+            items.append(
+                FeedbackRecentItem(
+                    id=fb.id,
+                    message_id=fb.message_id,
+                    thread_id=thread.id,
+                    user_id=u.id,
+                    user_email=u.email,
+                    rating=fb.rating.value,
+                    reason_label=reason_label(fb.reason_code)
+                    if fb.rating == FeedbackRating.DOWN
+                    else None,
+                    comment=fb.comment,
+                    answer_preview=_answer_preview(msg.content),
+                    created_at=fb.created_at,
+                )
+            )
+
+    return FeedbackRecentPage(items=items, total=total, page=page, page_size=page_size)
 
 
 @router.get("/dashboard", response_model=DashboardMetrics)
@@ -107,6 +158,7 @@ async def dashboard(
         )
         feedback_block.thumbs_up = thumbs_up or 0
         feedback_block.thumbs_down = thumbs_down or 0
+        feedback_block.recent_total = (thumbs_up or 0) + (thumbs_down or 0)
 
         reason_rows = await db.execute(
             select(MessageFeedback.reason_code, func.count())
@@ -119,34 +171,6 @@ async def dashboard(
                 FeedbackReasonStat(reason_code=code, label=label, count=cnt or 0)
             )
         feedback_block.down_by_reason.sort(key=lambda x: -x.count)
-
-        recent_q = (
-            select(MessageFeedback, Message, Thread, User)
-            .join(Message, Message.id == MessageFeedback.message_id)
-            .join(Thread, Thread.id == Message.thread_id)
-            .join(User, User.id == MessageFeedback.user_id)
-            .order_by(MessageFeedback.created_at.desc())
-            .limit(25)
-        )
-        recent_rows = await db.execute(recent_q)
-        for fb, msg, thread, u in recent_rows.all():
-            preview = (msg.content or "").strip().replace("\n", " ")
-            if len(preview) > 160:
-                preview = preview[:157] + "…"
-            feedback_block.recent.append(
-                FeedbackRecentItem(
-                    id=fb.id,
-                    message_id=fb.message_id,
-                    thread_id=thread.id,
-                    user_id=u.id,
-                    user_email=u.email,
-                    rating=fb.rating.value,
-                    reason_label=reason_label(fb.reason_code) if fb.rating == FeedbackRating.DOWN else None,
-                    comment=fb.comment,
-                    answer_preview=preview,
-                    created_at=fb.created_at,
-                )
-            )
     except ProgrammingError:
         logger.warning("message_feedback table missing — run alembic upgrade head")
 
@@ -163,3 +187,20 @@ async def dashboard(
         maintenance_mode=bool(maintenance),
         answer_feedback=feedback_block,
     )
+
+
+@router.get("/dashboard/feedback-recent", response_model=FeedbackRecentPage)
+async def dashboard_feedback_recent(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    _admin=Depends(require_permission("dashboard:read")),
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int, Query(ge=1, le=100)] = FEEDBACK_RECENT_DEFAULT_PAGE_SIZE,
+):
+    try:
+        return await _fetch_feedback_recent_page(db, page=page, page_size=page_size)
+    except ProgrammingError as exc:
+        logger.warning("message_feedback table missing — run alembic upgrade head")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Таблица оценок не найдена — выполните alembic upgrade head",
+        ) from exc
