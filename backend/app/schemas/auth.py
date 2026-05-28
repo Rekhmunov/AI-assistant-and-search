@@ -7,6 +7,16 @@ class InitDataRequest(BaseModel):
     init_data: str = Field(..., min_length=1)
 
 
+class BindMaxCompleteRequest(BaseModel):
+    bind_token: str = Field(..., min_length=8, max_length=128)
+    init_data: str = Field(..., min_length=1)
+
+
+class BindMaxStartResponse(BaseModel):
+    bind_token: str
+    expires_in: int = 900
+
+
 class EmailRegisterRequest(BaseModel):
     email: EmailStr
     password: str = Field(..., min_length=8, max_length=128)

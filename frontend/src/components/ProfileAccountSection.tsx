@@ -1,7 +1,12 @@
-import { FormEvent, useState } from "react";
-import { bindEmail, bindMax } from "../api/client";
+import { FormEvent, useEffect, useState } from "react";
+import { bindEmail, bindMax, startBindMax } from "../api/client";
 import type { UserProfile } from "../api/client";
-import { getMaxBotUrl, getMaxInitData, isMaxWebApp } from "../lib/maxApp";
+import {
+  buildMaxDeepLink,
+  getMaxInitData,
+  isMaxWebApp,
+  takeMaxBindError,
+} from "../lib/maxApp";
 import { t } from "../i18n";
 
 interface Props {
@@ -22,6 +27,7 @@ export function ProfileAccountSection({ user, token, onUserUpdated }: Props) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [bindError, setBindError] = useState("");
+  const [bindInfo, setBindInfo] = useState("");
   const [bindBusy, setBindBusy] = useState(false);
   const [maxBusy, setMaxBusy] = useState(false);
 
@@ -29,9 +35,15 @@ export function ProfileAccountSection({ user, token, onUserUpdated }: Props) {
   const hasMax = Boolean(user.max_linked);
   const hasEmail = Boolean(user.email);
 
+  useEffect(() => {
+    const pending = takeMaxBindError();
+    if (pending) setBindError(pending);
+  }, []);
+
   const onBindEmail = async (e: FormEvent) => {
     e.preventDefault();
     setBindError("");
+    setBindInfo("");
     setBindBusy(true);
     try {
       const updated = await bindEmail(token, email, password);
@@ -50,9 +62,25 @@ export function ProfileAccountSection({ user, token, onUserUpdated }: Props) {
     if (!initData) return;
     setMaxBusy(true);
     setBindError("");
+    setBindInfo("");
     try {
       const updated = await bindMax(token, initData);
       onUserUpdated(updated);
+    } catch (err) {
+      setBindError(err instanceof Error ? err.message : t("profileMaxBindError"));
+    } finally {
+      setMaxBusy(false);
+    }
+  };
+
+  const onOpenMaxForBind = async () => {
+    setBindError("");
+    setBindInfo("");
+    setMaxBusy(true);
+    try {
+      const { bind_token: bindToken } = await startBindMax(token);
+      setBindInfo(t("openInMaxPending"));
+      window.location.assign(buildMaxDeepLink(`bind_${bindToken}`));
     } catch (err) {
       setBindError(err instanceof Error ? err.message : t("profileMaxBindError"));
     } finally {
@@ -78,16 +106,17 @@ export function ProfileAccountSection({ user, token, onUserUpdated }: Props) {
             ) : (
               <>
                 <p className="profile-hint">{t("openInMaxHint")}</p>
-                <a
-                  href={getMaxBotUrl()}
-                  target="_blank"
-                  rel="noopener noreferrer"
+                <button
+                  type="button"
                   className="btn-primary btn-block"
+                  disabled={maxBusy}
+                  onClick={() => void onOpenMaxForBind()}
                 >
-                  {t("openInMax")}
-                </a>
+                  {maxBusy ? "…" : t("openInMax")}
+                </button>
               </>
             )}
+            {bindInfo && <p className="profile-hint profile-hint--ok">{bindInfo}</p>}
           </div>
         )}
       </div>

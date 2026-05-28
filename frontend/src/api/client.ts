@@ -151,6 +151,30 @@ export async function bindMax(token: string, initData: string): Promise<UserProf
   return res.json();
 }
 
+export async function startBindMax(token: string): Promise<{ bind_token: string; expires_in: number }> {
+  const res = await fetch(`${API_BASE}/api/auth/bind-max/start`, {
+    method: "POST",
+    headers: apiHeaders(token),
+    credentials: "include",
+  });
+  if (!res.ok) throw new Error(await parseAuthError(res));
+  return res.json();
+}
+
+export async function completeBindMax(
+  bindToken: string,
+  initData: string,
+): Promise<{ access_token: string; user: UserProfile }> {
+  const res = await fetch(`${API_BASE}/api/auth/bind-max/complete`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ bind_token: bindToken, init_data: initData }),
+  });
+  if (!res.ok) throw new Error(await parseAuthError(res));
+  return res.json();
+}
+
 export async function fetchSession(token: string | null): Promise<SessionStatus> {
   const res = await fetch(`${API_BASE}/api/auth/session`, {
     headers: apiHeaders(token),

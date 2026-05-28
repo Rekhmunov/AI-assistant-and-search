@@ -1,8 +1,14 @@
 import { useEffect, useState } from "react";
-import { bindMax, fetchMe, loginWithInitData } from "../api/client";
+import { bindMax, completeBindMax, fetchMe, loginWithInitData } from "../api/client";
+import {
+  getMaxInitData,
+  getMaxStartParam,
+  parseMaxBindToken,
+  setMaxBindError,
+} from "../lib/maxApp";
 import { useAuthStore } from "../store/authStore";
 
-/** JWT, then MAX initData (miniapp), else guest-ready web session. */
+/** JWT, then MAX deeplink bind, then MAX initData login, else guest-ready web session. */
 export function useAuthBootstrap() {
   const { token, setAuth, setUser, clear } = useAuthStore();
   const [ready, setReady] = useState(false);
@@ -14,6 +20,25 @@ export function useAuthBootstrap() {
     async function bootstrap() {
       try {
         if (window.WebApp?.ready) window.WebApp.ready();
+
+        const initData = getMaxInitData();
+        const bindToken = parseMaxBindToken(getMaxStartParam());
+        if (bindToken && initData) {
+          try {
+            const data = await completeBindMax(bindToken, initData);
+            if (!cancelled) {
+              setAuth(data.access_token, data.user);
+              setReady(true);
+              return;
+            }
+          } catch (err) {
+            if (!cancelled) {
+              setMaxBindError(err instanceof Error ? err.message : "Не удалось привязать MAX");
+              setReady(true);
+              return;
+            }
+          }
+        }
 
         if (token) {
           try {
@@ -29,7 +54,6 @@ export function useAuthBootstrap() {
           }
         }
 
-        const initData = window.WebApp?.initData?.trim();
         if (initData) {
           try {
             const data = await loginWithInitData(initData);
@@ -62,7 +86,7 @@ export function useAuthBootstrap() {
 }
 
 async function tryBindMax(token: string) {
-  const initData = window.WebApp?.initData?.trim();
+  const initData = getMaxInitData();
   if (!initData) return;
   try {
     const user = await bindMax(token, initData);

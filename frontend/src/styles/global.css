@@ -299,6 +299,10 @@ body:has(.page-thread) {
   text-align: center;
 }
 
+.profile-hint--ok {
+  color: var(--accent);
+}
+
 .profile-link-item + .profile-link-item {
   margin-top: 16px;
   padding-top: 16px;

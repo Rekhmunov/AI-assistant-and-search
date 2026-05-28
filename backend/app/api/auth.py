@@ -15,6 +15,7 @@ from app.api.deps import (
     get_current_user,
     get_db,
     get_rate_limiter,
+    get_redis,
     guest_by_key,
 )
 from app.core.config import get_settings
@@ -35,6 +36,8 @@ from app.models.user import Plan, User
 from app.models.thread import Thread
 from app.schemas.auth import (
     AuthResponse,
+    BindMaxCompleteRequest,
+    BindMaxStartResponse,
     EmailLoginRequest,
     EmailRegisterRequest,
     InitDataRequest,
@@ -42,6 +45,9 @@ from app.schemas.auth import (
     TokenResponse,
 )
 from app.schemas.user import UserProfile
+from app.services.max_bind_token import BIND_TOKEN_TTL_SEC, consume_max_bind_token, create_max_bind_token
+
+import redis.asyncio as redis
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -102,6 +108,36 @@ async def _merge_guest_session(
         return
     await db.execute(update(Thread).where(Thread.user_id == guest.id).values(user_id=user.id))
     await db.delete(guest)
+
+
+def _validate_init_data(init_data: str) -> dict:
+    settings = get_settings()
+    if not settings.skip_init_data_validation:
+        if not settings.bot_token:
+            raise HTTPException(status_code=500, detail="Bot token not configured")
+        if not validate_max_init_data(init_data, settings.bot_token):
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid initData")
+        if not init_data_is_fresh(init_data, settings.init_data_max_age_seconds):
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="initData expired")
+
+    user_data = parse_init_data_user(init_data)
+    if not user_data or "id" not in user_data:
+        if settings.skip_init_data_validation:
+            return {"id": 1, "first_name": "Dev", "last_name": "User", "language_code": "ru"}
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="User data missing")
+    return user_data
+
+
+async def _attach_max_identity(db: AsyncSession, user: User, user_data: dict) -> None:
+    max_user_id = int(user_data["id"])
+    other = await db.execute(select(User).where(User.max_user_id == max_user_id, User.id != user.id))
+    if other.scalar_one_or_none():
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Этот MAX уже привязан к другому аккаунту")
+
+    user.max_user_id = max_user_id
+    user.first_name = user_data.get("first_name") or user.first_name
+    user.last_name = user_data.get("last_name") or user.last_name
+    user.username = user_data.get("username") or user.username
 
 
 @router.get("/session", response_model=SessionStatus)
@@ -318,34 +354,62 @@ async def bind_max(
     user: Annotated[User, Depends(get_current_user)],
     limiter: Annotated[RateLimiter, Depends(get_rate_limiter)],
 ):
-    """Привязать MAX-аккаунт к текущему пользователю (после входа по email)."""
-    settings = get_settings()
-    init_data = body.init_data.strip()
+    """Привязать MAX-аккаунт к текущему пользователю (миниапп, тот же WebView)."""
+    if user.max_user_id is not None:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="MAX уже привязан")
 
-    if not settings.skip_init_data_validation:
-        if not settings.bot_token:
-            raise HTTPException(status_code=500, detail="Bot token not configured")
-        if not validate_max_init_data(init_data, settings.bot_token):
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid initData")
-        if not init_data_is_fresh(init_data, settings.init_data_max_age_seconds):
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="initData expired")
-
-    user_data = parse_init_data_user(init_data)
-    if not user_data or "id" not in user_data:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="User data missing")
-
-    max_user_id = int(user_data["id"])
-    other = await db.execute(select(User).where(User.max_user_id == max_user_id, User.id != user.id))
-    if other.scalar_one_or_none():
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Этот MAX уже привязан к другому аккаунту")
-
-    user.max_user_id = max_user_id
-    user.first_name = user_data.get("first_name") or user.first_name
-    user.last_name = user_data.get("last_name") or user.last_name
-    user.username = user_data.get("username") or user.username
+    user_data = _validate_init_data(body.init_data.strip())
+    await _attach_max_identity(db, user, user_data)
 
     used, limit = await _limits_for_user(user, limiter)
     return _user_profile(user, used, limit)
+
+
+@router.post("/bind-max/start", response_model=BindMaxStartResponse)
+async def bind_max_start(
+    user: Annotated[User, Depends(get_current_user)],
+    redis_client: Annotated[redis.Redis, Depends(get_redis)],
+):
+    """С сайта: одноразовый токен для deeplink startapp=bind_<token>."""
+    if user.max_user_id is not None:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="MAX уже привязан")
+
+    bind_token = await create_max_bind_token(redis_client, user.id)
+    return BindMaxStartResponse(bind_token=bind_token, expires_in=BIND_TOKEN_TTL_SEC)
+
+
+@router.post("/bind-max/complete", response_model=AuthResponse)
+async def bind_max_complete(
+    body: BindMaxCompleteRequest,
+    response: Response,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    limiter: Annotated[RateLimiter, Depends(get_rate_limiter)],
+    redis_client: Annotated[redis.Redis, Depends(get_redis)],
+    guest_session: Annotated[str | None, Cookie(alias=GUEST_COOKIE)] = None,
+):
+    """Миниапп MAX: завершить привязку по токену из startapp и initData."""
+    user_id = await consume_max_bind_token(redis_client, body.bind_token.strip())
+    if not user_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Ссылка для привязки устарела. Вернитесь на сайт и нажмите «Открыть в MAX» снова.",
+        )
+
+    result = await db.execute(select(User).where(User.id == user_id, User.deleted_at.is_(None)))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Пользователь не найден")
+    if user.max_user_id is not None:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="MAX уже привязан")
+
+    user_data = _validate_init_data(body.init_data.strip())
+    await _attach_max_identity(db, user, user_data)
+
+    await _merge_guest_session(db, guest_session, user)
+    clear_guest_cookie(response)
+    access, _ = _set_auth_cookies(response, str(user.id))
+    used, limit = await _limits_for_user(user, limiter)
+    return AuthResponse(access_token=access, user=_user_profile(user, used, limit))
 
 
 @router.post("/refresh", response_model=TokenResponse)

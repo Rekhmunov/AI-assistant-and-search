@@ -102,6 +102,7 @@
   "passwordLabel": "Пароль",
   "openInMax": "Открыть в MAX",
   "openInMaxHint": "Откройте бота в MAX и запустите миниапп — аккаунт привяжется автоматически",
+  "openInMaxPending": "Откройте Glosix в приложении MAX — привязка выполнится автоматически",
   "linkMaxNow": "Привязать этот MAX",
   "maxOnlyNoEmailNeeded": "В MAX вход уже выполнен. Email нужен только для входа с сайта.",
   "signOut": "Выйти",
