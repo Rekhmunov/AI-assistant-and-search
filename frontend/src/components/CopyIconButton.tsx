@@ -1,5 +1,7 @@
 import { useState } from "react";
+import { buildCopyText, isProPlan } from "../lib/copyAttribution";
 import { t } from "../i18n";
+import { useAuthStore } from "../store/authStore";
 
 type Props = {
   text: string;
@@ -8,11 +10,15 @@ type Props = {
 
 export function CopyIconButton({ text, className = "answer-icon-btn" }: Props) {
   const [copied, setCopied] = useState(false);
+  const plan = useAuthStore((s) => s.user?.plan);
+  const isPro = isProPlan(plan);
 
   const copy = async () => {
     if (!text) return;
+    const payload = buildCopyText(text, isPro);
+    if (!payload) return;
     try {
-      await navigator.clipboard.writeText(text);
+      await navigator.clipboard.writeText(payload);
       setCopied(true);
       window.setTimeout(() => setCopied(false), 2000);
     } catch {

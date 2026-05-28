@@ -1,7 +1,9 @@
 import { useState } from "react";
 import type { MessageFeedback, Source } from "../api/client";
 import { formatAnswerForDisplay } from "../lib/formatAnswer";
+import { buildCopyText, isProPlan } from "../lib/copyAttribution";
 import { t } from "../i18n";
+import { useAuthStore } from "../store/authStore";
 import { AnswerFeedback } from "./AnswerFeedback";
 
 type Props = {
@@ -19,15 +21,18 @@ const UUID_RE =
 export function AnswerFooter({ answer, title, sources, messageId, token, userFeedback }: Props) {
   const [copied, setCopied] = useState(false);
   const [sourcesOpen, setSourcesOpen] = useState(false);
+  const plan = useAuthStore((s) => s.user?.plan);
+  const isPro = isProPlan(plan);
 
   if (!answer.trim()) return null;
 
   const plainAnswer = formatAnswerForDisplay(answer);
+  const copyText = buildCopyText(plainAnswer, isPro);
   const hasSources = sources.length > 0;
 
   const copy = async () => {
     try {
-      await navigator.clipboard.writeText(plainAnswer);
+      await navigator.clipboard.writeText(copyText);
       setCopied(true);
       window.setTimeout(() => setCopied(false), 2000);
     } catch {
@@ -36,7 +41,7 @@ export function AnswerFooter({ answer, title, sources, messageId, token, userFee
   };
 
   const share = async () => {
-    const payload = { title: title || "Glosix", text: plainAnswer };
+    const payload = { title: title || "Glosix", text: copyText };
     try {
       if (navigator.share) {
         await navigator.share(payload);

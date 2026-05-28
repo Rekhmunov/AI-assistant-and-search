@@ -69,6 +69,7 @@
   "sourcesCount": "{n} источников",
   "copyAnswer": "Копировать",
   "copied": "Скопировано",
+  "copyAttribution": "Ответ сгенерирован с помощью Glosix: {url}",
   "share": "Поделиться",
   "routeSearchLite": "Поиск в интернете",
   "routeSearchPro": "Поиск в интернете · Pro",
