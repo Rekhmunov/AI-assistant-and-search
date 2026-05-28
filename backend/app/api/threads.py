@@ -4,6 +4,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
+from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -60,14 +61,17 @@ async def get_thread(
     assistant_ids = [m.id for m in thread.messages if m.role == MessageRole.ASSISTANT]
     feedback_by_message: dict = {}
     if assistant_ids:
-        fb_rows = await db.execute(
-            select(MessageFeedback).where(
-                MessageFeedback.user_id == user.id,
-                MessageFeedback.message_id.in_(assistant_ids),
+        try:
+            fb_rows = await db.execute(
+                select(MessageFeedback).where(
+                    MessageFeedback.user_id == user.id,
+                    MessageFeedback.message_id.in_(assistant_ids),
+                )
             )
-        )
-        for fb in fb_rows.scalars().all():
-            feedback_by_message[fb.message_id] = fb
+            for fb in fb_rows.scalars().all():
+                feedback_by_message[fb.message_id] = fb
+        except ProgrammingError:
+            await db.rollback()
 
     messages_out: list[MessageOut] = []
     for m in thread.messages:

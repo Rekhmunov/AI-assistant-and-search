@@ -13,21 +13,29 @@ from alembic import op
 from sqlalchemy.dialects import postgresql
 
 revision: str = "010_message_feedback"
-down_revision: Union[str, None] = "009_uploaded_files_vision_storage"
+down_revision: Union[str, None] = "009"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    rating_enum = postgresql.ENUM("up", "down", name="message_feedback_rating_enum", create_type=False)
-    rating_enum.create(op.get_bind(), checkfirst=True)
+    op.execute(
+        "DO $$ BEGIN "
+        "CREATE TYPE message_feedback_rating_enum AS ENUM ('up', 'down'); "
+        "EXCEPTION WHEN duplicate_object THEN NULL; "
+        "END $$"
+    )
 
     op.create_table(
         "message_feedback",
         sa.Column("id", sa.UUID(), nullable=False),
         sa.Column("message_id", sa.UUID(), nullable=False),
         sa.Column("user_id", sa.UUID(), nullable=False),
-        sa.Column("rating", rating_enum, nullable=False),
+        sa.Column(
+            "rating",
+            postgresql.ENUM("up", "down", name="message_feedback_rating_enum", create_type=False),
+            nullable=False,
+        ),
         sa.Column("reason_code", sa.Text(), nullable=True),
         sa.Column("comment", sa.Text(), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
