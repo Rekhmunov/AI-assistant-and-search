@@ -43,6 +43,38 @@ logger = logging.getLogger(__name__)
 AnswerModel = Literal["lite", "pro"]
 
 
+def _gigachat_service_error(exc: Exception) -> YandexServiceError:
+    import httpx
+
+    if isinstance(exc, httpx.HTTPStatusError):
+        code = exc.response.status_code
+        if code == 402:
+            return YandexServiceError(
+                "gpt",
+                "GigaChat: закончился лимит или требуется оплата (402). "
+                "Пополните баланс в кабинете GigaChat или временно переключите LLM на Yandex GPT в админке.",
+                status_code=402,
+            )
+        if code == 401:
+            return YandexServiceError(
+                "gpt",
+                "GigaChat: ошибка авторизации (401). Проверьте GIGACHAT_CREDENTIALS в .env.",
+                status_code=401,
+            )
+        if code == 429:
+            return YandexServiceError(
+                "gpt",
+                "GigaChat: слишком много запросов (429). Попробуйте через минуту.",
+                status_code=429,
+            )
+        return YandexServiceError(
+            "gpt",
+            f"GigaChat HTTP {code}: {exc.response.text[:200]}",
+            status_code=code,
+        )
+    return YandexServiceError("gpt", f"GigaChat недоступен: {exc}")
+
+
 def _to_gigachat_messages(messages: list[dict]) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     for m in messages:
@@ -166,7 +198,7 @@ class GigaChatProvider(PromptedLLMMixin, LLMProvider):
             return await chat_completion_text(payload, settings=self.settings)
         except Exception as e:
             logger.exception("GigaChat complete_text failed")
-            raise YandexServiceError("gpt", f"GigaChat недоступен: {e}") from e
+            raise _gigachat_service_error(e) from e
 
     async def _stream_messages(
         self,
@@ -191,7 +223,7 @@ class GigaChatProvider(PromptedLLMMixin, LLMProvider):
                 yield chunk
         except Exception as e:
             logger.exception("GigaChat stream failed")
-            raise YandexServiceError("gpt", f"GigaChat недоступен: {e}") from e
+            raise _gigachat_service_error(e) from e
 
     async def summarize_vision_for_search(
         self,
@@ -223,7 +255,7 @@ class GigaChatProvider(PromptedLLMMixin, LLMProvider):
             return await chat_completion_text(payload, settings=self.settings)
         except Exception as e:
             logger.exception("GigaChat vision summary failed")
-            raise YandexServiceError("gpt", f"GigaChat vision: {e}") from e
+            raise _gigachat_service_error(e) from e
 
     async def stream_answer_vision(
         self,

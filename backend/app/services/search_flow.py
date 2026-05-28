@@ -101,6 +101,9 @@ class SearchFlowService:
 
             redis_client = await get_redis()
 
+        user_id_str = str(user.id)
+        user_uuid = user.id
+
         llm, search, _prompt_store, llm_provider_id, search_provider_id = await resolve_runtime_providers(
             db, redis_client
         )
@@ -115,13 +118,13 @@ class SearchFlowService:
             )
             return
 
-        allowed, used, limit = await limiter.check_search_limit(str(user.id), user.plan, user)
+        allowed, used, limit = await limiter.check_search_limit(user_id_str, user.plan, user)
         if not allowed:
             yield sse_event("error", {"code": "rate_limit", "message": f"Лимит поисков: {limit}/день"})
             return
 
         if not await limiter.check_global_yandex_limit():
-            await limiter.release_search(str(user.id))
+            await limiter.release_search(user_id_str)
             yield sse_event("error", {"code": "global_limit", "message": "Сервис временно перегружен"})
             return
 
@@ -190,7 +193,7 @@ class SearchFlowService:
             result = await db.execute(
                 select(Thread).where(
                     Thread.id == thread_id,
-                    Thread.user_id == user.id,
+                    Thread.user_id == user_uuid,
                     Thread.deleted_at.is_(None),
                 )
             )
@@ -199,7 +202,7 @@ class SearchFlowService:
                 yield sse_event("error", {"code": "not_found", "message": "Тред не найден"})
                 return
         else:
-            thread = Thread(user_id=user.id, title=display_content[:200])
+            thread = Thread(user_id=user_uuid, title=display_content[:200])
             db.add(thread)
             await db.flush()
 
@@ -280,7 +283,7 @@ class SearchFlowService:
                         )
                 except VisionNotSupportedError as e:
                     await db.rollback()
-                    await limiter.release_search(str(user.id))
+                    await limiter.release_search(user_id_str)
                     yield sse_event("error", {"code": "vision_unavailable", "message": str(e)})
                     return
 
@@ -389,7 +392,7 @@ class SearchFlowService:
                         yield sse_event("token", {"text": chunk})
                 except VisionNotSupportedError as e:
                     await db.rollback()
-                    await limiter.release_search(str(user.id))
+                    await limiter.release_search(user_id_str)
                     yield sse_event("error", {"code": "vision_unavailable", "message": str(e)})
                     return
             elif route.needs_search:
@@ -461,7 +464,7 @@ class SearchFlowService:
                     yield sse_event("token", {"text": chunk})
         except YandexServiceError as e:
             await db.rollback()
-            await limiter.release_search(str(user.id))
+            await limiter.release_search(user_id_str)
             yield sse_event(
                 "error",
                 {"code": "yandex_error", "message": str(e)},
@@ -542,7 +545,7 @@ class SearchFlowService:
         except Exception:
             logger.exception("Search finalize failed (persist assistant message)")
             await db.rollback()
-            await limiter.release_search(str(user.id))
+            await limiter.release_search(user_id_str)
             yield sse_event(
                 "error",
                 {"code": "server_error", "message": "Ошибка сервера. Попробуйте ещё раз."},
