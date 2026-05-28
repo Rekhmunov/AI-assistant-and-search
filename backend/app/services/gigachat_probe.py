@@ -9,6 +9,19 @@ from app.services.gigachat import GigaChatProvider
 
 logger = logging.getLogger(__name__)
 
+_SSL_HINT = (
+    " SSL: установите корень НУЦ (Russian Trusted Root CA) — "
+    "GIGACHAT_CA_BUNDLE_FILE=/path/in/container/russian_trusted_root_ca.pem "
+    "или временно GIGACHAT_VERIFY_SSL_CERTS=false. См. docs/GIGACHAT_SETUP.md"
+)
+
+
+def _format_probe_error(label: str, exc: Exception) -> str:
+    msg = str(exc)
+    if "CERTIFICATE_VERIFY_FAILED" in msg or "certificate verify failed" in msg.lower():
+        return f"{label}: {msg}{_SSL_HINT}"
+    return f"{label}: {msg}"
+
 
 async def probe_gigachat(settings: Settings | None = None) -> dict:
     s = settings or get_settings()
@@ -41,7 +54,7 @@ async def probe_gigachat(settings: Settings | None = None) -> dict:
         lite_ok = bool(text.strip())
     except Exception as e:
         logger.exception("GigaChat probe lite failed")
-        errors.append(f"lite: {e}")
+        errors.append(_format_probe_error("lite", e))
 
     try:
         text = await llm.complete_text(
@@ -53,7 +66,7 @@ async def probe_gigachat(settings: Settings | None = None) -> dict:
         pro_ok = bool(text.strip())
     except Exception as e:
         logger.exception("GigaChat probe pro failed")
-        errors.append(f"pro: {e}")
+        errors.append(_format_probe_error("pro", e))
 
     ok = lite_ok and pro_ok
     if ok:
