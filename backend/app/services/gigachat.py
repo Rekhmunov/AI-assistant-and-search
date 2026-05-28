@@ -75,6 +75,12 @@ def _gigachat_service_error(exc: Exception) -> YandexServiceError:
     return YandexServiceError("gpt", f"GigaChat недоступен: {exc}")
 
 
+def _is_gigachat_pro_payment_error(exc: Exception) -> bool:
+    import httpx
+
+    return isinstance(exc, httpx.HTTPStatusError) and exc.response.status_code == 402
+
+
 def _to_gigachat_messages(messages: list[dict]) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     for m in messages:
@@ -197,6 +203,14 @@ class GigaChatProvider(PromptedLLMMixin, LLMProvider):
         try:
             return await chat_completion_text(payload, settings=self.settings)
         except Exception as e:
+            if model == "pro" and _is_gigachat_pro_payment_error(e):
+                logger.warning("GigaChat Pro 402 — fallback to lite for complete_text")
+                payload["model"] = self._model_name("lite")
+                try:
+                    return await chat_completion_text(payload, settings=self.settings)
+                except Exception as retry_exc:
+                    logger.exception("GigaChat complete_text lite fallback failed")
+                    raise _gigachat_service_error(retry_exc) from retry_exc
             logger.exception("GigaChat complete_text failed")
             raise _gigachat_service_error(e) from e
 
@@ -222,6 +236,18 @@ class GigaChatProvider(PromptedLLMMixin, LLMProvider):
             async for chunk in iter_chat_stream(payload, settings=self.settings):
                 yield chunk
         except Exception as e:
+            if model == "pro" and _is_gigachat_pro_payment_error(e):
+                logger.warning("GigaChat Pro 402 — fallback to lite for stream")
+                payload["model"] = self._model_name("lite")
+                if payload["max_tokens"] > 2200:
+                    payload["max_tokens"] = 2200
+                try:
+                    async for chunk in iter_chat_stream(payload, settings=self.settings):
+                        yield chunk
+                    return
+                except Exception as retry_exc:
+                    logger.exception("GigaChat stream lite fallback failed")
+                    raise _gigachat_service_error(retry_exc) from retry_exc
             logger.exception("GigaChat stream failed")
             raise _gigachat_service_error(e) from e
 

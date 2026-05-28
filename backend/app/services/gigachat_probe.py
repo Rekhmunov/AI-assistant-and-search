@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 
 from app.core.config import Settings, get_settings
-from app.services.gigachat import GigaChatProvider
+from app.services.gigachat import GigaChatProvider, _is_gigachat_pro_payment_error
 
 logger = logging.getLogger(__name__)
 
@@ -65,14 +65,25 @@ async def probe_gigachat(settings: Settings | None = None) -> dict:
         )
         pro_ok = bool(text.strip())
     except Exception as e:
-        logger.exception("GigaChat probe pro failed")
-        errors.append(_format_probe_error("pro", e))
+        if _is_gigachat_pro_payment_error(e):
+            logger.warning("GigaChat probe pro: 402 Payment Required (lite fallback enabled)")
+            errors.append(
+                "pro: 402 Payment Required — лимит Pro исчерпан, ответы пойдут через GigaChat-2 (lite)"
+            )
+        else:
+            logger.exception("GigaChat probe pro failed")
+            errors.append(_format_probe_error("pro", e))
 
-    ok = lite_ok and pro_ok
+    ok = lite_ok
+    pro_fallback = lite_ok and not pro_ok
     if ok:
         message = f"GigaChat lite и pro ответили ({s.gigachat_model_lite} / {s.gigachat_model_pro})"
-    elif lite_ok:
-        message = f"Lite OK; pro: {errors[-1] if errors else 'нет ответа'}"
+    elif lite_ok and not pro_ok:
+        message = (
+            f"Lite OK ({s.gigachat_model_lite}); pro недоступен — "
+            f"{errors[-1] if errors else 'нет ответа'}. "
+            "Поиск будет использовать lite как fallback для pro."
+        )
     elif pro_ok:
         message = f"Pro OK; lite: {errors[0] if errors else 'нет ответа'}"
     else:
@@ -83,6 +94,7 @@ async def probe_gigachat(settings: Settings | None = None) -> dict:
         "ok": ok,
         "lite_ok": lite_ok,
         "pro_ok": pro_ok,
+        "pro_fallback_to_lite": pro_fallback,
         "credentials_suffix": suffix,
         "scope": s.gigachat_scope,
         "models": {"lite": s.gigachat_model_lite, "pro": s.gigachat_model_pro},
