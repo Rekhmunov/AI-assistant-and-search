@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { devActivatePro, fetchMe, deleteAccount, fetchSession } from "../api/client";
+import { AuthGate } from "../components/AuthGate";
 import { ProfileAccountSection } from "../components/ProfileAccountSection";
 import { isMaxWebApp } from "../lib/maxApp";
 import { t } from "../i18n";
@@ -31,20 +32,14 @@ export function Profile() {
 
   if (!token) {
     return (
-      <div className="page">
-        <h1>{t("profile")}</h1>
-        <p className="auth-gate-text">
-          {inMax ? t("profileMaxLoginHint") : t("profileLoginHint")}
-        </p>
-        {!inMax && (
-          <Link to="/login" className="btn-primary btn-block">
-            {t("signIn")}
-          </Link>
-        )}
-        <Link to="/" className="btn-link" style={{ display: "block", marginTop: 16, textAlign: "center" }}>
-          {t("backToSearch")}
-        </Link>
-      </div>
+      <AuthGate
+        title={t("profile")}
+        hint={inMax ? t("profileMaxLoginHint") : t("profileLoginHint")}
+        primaryTo="/login"
+        primaryLabel={t("signIn")}
+        showPrimary={!inMax}
+        showSecondary
+      />
     );
   }
 

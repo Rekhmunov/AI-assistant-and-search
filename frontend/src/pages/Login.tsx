@@ -1,7 +1,8 @@
 import { FormEvent, useEffect, useState } from "react";
-import { Navigate, useNavigate } from "react-router-dom";
+import { Link, Navigate, useNavigate } from "react-router-dom";
 import { loginEmail, registerEmail } from "../api/client";
-import { GlosixHeader } from "../components/GlosixHeader";
+import { AuthModalCard, AuthShell } from "../components/AuthModalCard";
+import { t } from "../i18n";
 import { isMaxWebApp } from "../lib/maxApp";
 import { useAuthStore } from "../store/authStore";
 
@@ -43,65 +44,99 @@ export function LoginPage() {
       setAuth(data.access_token, data.user);
       navigate("/", { replace: true });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Ошибка входа");
+      setError(err instanceof Error ? err.message : t("loginError"));
     } finally {
       setBusy(false);
     }
   };
 
+  const switchMode = (next: "login" | "register") => {
+    setMode(next);
+    setError("");
+  };
+
   return (
     <div className="page page-login">
-      <GlosixHeader showLimits={false} showBrand={false} />
-      <div className="login-card">
-        <h1>{mode === "login" ? "Вход на сайт" : "Регистрация"}</h1>
-        <p className="hint">Email и пароль для app.glosix.ru. В MAX вход автоматический.</p>
-        <button type="button" className="btn-link" style={{ marginBottom: 16 }} onClick={() => navigate("/")}>
-          Продолжить без входа
-        </button>
-        <form onSubmit={onSubmit}>
-          {mode === "register" && (
-            <label>
-              Имя
-              <input value={firstName} onChange={(e) => setFirstName(e.target.value)} autoComplete="given-name" />
-            </label>
-          )}
-          <label>
-            Email
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              autoComplete="username"
-            />
-          </label>
-          <label>
-            Пароль {mode === "register" && <span className="hint">(мин. 8 символов)</span>}
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              minLength={mode === "register" ? 8 : 1}
-              autoComplete={mode === "login" ? "current-password" : "new-password"}
-            />
-          </label>
-          {error && <p className="composer-error">{error}</p>}
-          <button type="submit" className="btn-primary btn-block" disabled={busy}>
-            {busy ? "…" : mode === "login" ? "Войти" : "Создать аккаунт"}
-          </button>
-        </form>
-        <button
-          type="button"
-          className="btn-link"
-          onClick={() => {
-            setMode(mode === "login" ? "register" : "login");
-            setError("");
-          }}
+      <AuthShell>
+        <AuthModalCard
+          title={mode === "login" ? t("loginTitle") : t("registerTitle")}
+          subtitle={t("loginSubtitle")}
+          footer={
+            <Link to="/" className="auth-modal-link">
+              {t("continueAsGuest")}
+            </Link>
+          }
         >
-          {mode === "login" ? "Нет аккаунта? Зарегистрироваться" : "Уже есть аккаунт? Войти"}
-        </button>
-      </div>
+          <div className="auth-mode-tabs" role="tablist" aria-label={t("loginModeTabs")}>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={mode === "login"}
+              className={`auth-mode-tab${mode === "login" ? " auth-mode-tab--active" : ""}`}
+              onClick={() => switchMode("login")}
+            >
+              {t("signIn")}
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={mode === "register"}
+              className={`auth-mode-tab${mode === "register" ? " auth-mode-tab--active" : ""}`}
+              onClick={() => switchMode("register")}
+            >
+              {t("register")}
+            </button>
+          </div>
+
+          <form className="auth-form" onSubmit={onSubmit}>
+            {mode === "register" && (
+              <label className="auth-field">
+                <span className="auth-field-label">{t("firstName")}</span>
+                <input
+                  className="auth-field-input"
+                  value={firstName}
+                  onChange={(e) => setFirstName(e.target.value)}
+                  autoComplete="given-name"
+                  placeholder={t("firstNameOptional")}
+                />
+              </label>
+            )}
+            <label className="auth-field">
+              <span className="auth-field-label">Email</span>
+              <input
+                className="auth-field-input"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                autoComplete="username"
+                placeholder="name@example.com"
+              />
+            </label>
+            <label className="auth-field">
+              <span className="auth-field-label">
+                {t("password")}
+                {mode === "register" && (
+                  <span className="auth-field-label-note"> ({t("passwordMinHint")})</span>
+                )}
+              </span>
+              <input
+                className="auth-field-input"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                minLength={mode === "register" ? 8 : 1}
+                autoComplete={mode === "login" ? "current-password" : "new-password"}
+              />
+            </label>
+            {error && <p className="auth-modal-error">{error}</p>}
+            <button type="submit" className="btn-primary btn-block" disabled={busy}>
+              {busy ? "…" : mode === "login" ? t("signIn") : t("createAccount")}
+            </button>
+          </form>
+        </AuthModalCard>
+      </AuthShell>
     </div>
   );
 }

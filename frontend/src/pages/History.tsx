@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { fetchThreads } from "../api/client";
+import { AuthGate, HistoryGateIcon } from "../components/AuthGate";
 import { ThreadHistoryMenu } from "../components/ThreadHistoryMenu";
 import { isMaxWebApp } from "../lib/maxApp";
 import { t } from "../i18n";
@@ -30,23 +31,15 @@ export function History() {
 
   if (!token) {
     return (
-      <div className="page">
-        <h1>{t("history")}</h1>
-        <p className="auth-gate-text">{t("historyLoginHint")}</p>
-        {!inMax && (
-          <Link to="/login" className="btn-primary btn-block">
-            {t("signIn")}
-          </Link>
-        )}
-        {inMax && (
-          <Link to="/profile" className="btn-primary btn-block">
-            {t("navProfile")}
-          </Link>
-        )}
-        <Link to="/" className="btn-link" style={{ display: "block", marginTop: 16, textAlign: "center" }}>
-          {t("backToSearch")}
-        </Link>
-      </div>
+      <AuthGate
+        title={t("history")}
+        hint={t("historyLoginHint")}
+        primaryTo={inMax ? "/profile" : "/login"}
+        primaryLabel={inMax ? t("navProfile") : t("signIn")}
+        showPrimary
+        showSecondary
+        icon={<HistoryGateIcon />}
+      />
     );
   }
 
