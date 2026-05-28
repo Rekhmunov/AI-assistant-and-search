@@ -55,6 +55,7 @@ export function SettingsPage() {
   const [probeMsg, setProbeMsg] = useState("");
   const [deepseekProbeMsg, setDeepseekProbeMsg] = useState("");
   const [gigachatProbeMsg, setGigachatProbeMsg] = useState("");
+  const [providersOpen, setProvidersOpen] = useState(false);
   const [promptsOpen, setPromptsOpen] = useState(false);
   const [limitsOpen, setLimitsOpen] = useState(false);
 
@@ -201,65 +202,78 @@ export function SettingsPage() {
       )}
 
       <form className="card settings-form" onSubmit={save}>
-        <section className="settings-section">
-          <h2 className="settings-section-title">Провайдеры</h2>
-          <label>
-            LLM (ответы и анализ)
-            <select
-              value={llmProvider}
-              onChange={(e) => setSettings({ ...settings, llm_provider: e.target.value })}
-              disabled={!can("settings:write")}
-            >
-              {llmProviders.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.label}
-                  {!p.configured ? " (не настроен)" : ""}
-                </option>
-              ))}
-            </select>
-            {llmProviders.find((p) => p.id === llmProvider)?.hint && (
-              <span className="hint-inline">
-                {llmProviders.find((p) => p.id === llmProvider)?.hint}
-              </span>
-            )}
-          </label>
+        <section className="settings-section settings-section--collapsible">
+          <button
+            type="button"
+            className="settings-section-toggle"
+            onClick={() => setProvidersOpen((open) => !open)}
+            aria-expanded={providersOpen}
+            aria-controls="settings-providers-panel"
+          >
+            <span className="settings-section-toggle-label">Провайдеры</span>
+            <ChevronIcon expanded={providersOpen} />
+          </button>
+          {providersOpen && (
+            <div id="settings-providers-panel" className="settings-section-panel">
+              <label>
+                LLM (ответы и анализ)
+                <select
+                  value={llmProvider}
+                  onChange={(e) => setSettings({ ...settings, llm_provider: e.target.value })}
+                  disabled={!can("settings:write")}
+                >
+                  {llmProviders.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.label}
+                      {!p.configured ? " (не настроен)" : ""}
+                    </option>
+                  ))}
+                </select>
+                {llmProviders.find((p) => p.id === llmProvider)?.hint && (
+                  <span className="hint-inline">
+                    {llmProviders.find((p) => p.id === llmProvider)?.hint}
+                  </span>
+                )}
+              </label>
 
-          <label>
-            Веб-поиск
-            <select
-              value={searchProvider}
-              onChange={(e) => setSettings({ ...settings, search_provider: e.target.value })}
-              disabled={!can("settings:write")}
-            >
-              {searchProviders.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.label}
-                  {!p.configured ? " (не настроен)" : ""}
-                </option>
-              ))}
-            </select>
-          </label>
+              <label>
+                Веб-поиск
+                <select
+                  value={searchProvider}
+                  onChange={(e) => setSettings({ ...settings, search_provider: e.target.value })}
+                  disabled={!can("settings:write")}
+                >
+                  {searchProviders.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.label}
+                      {!p.configured ? " (не настроен)" : ""}
+                    </option>
+                  ))}
+                </select>
+              </label>
 
-          <label>
-            LLM для фото (vision)
-            <select
-              value={visionProvider}
-              onChange={(e) => setSettings({ ...settings, vision_provider: e.target.value })}
-              disabled={!can("settings:write")}
-            >
-              {visionProviders.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.label}
-                  {!p.configured ? " (не настроен)" : ""}
-                </option>
-              ))}
-            </select>
-            {visionProviders.find((p) => p.id === visionProvider)?.hint && (
-              <span className="hint-inline">
-                {visionProviders.find((p) => p.id === visionProvider)?.hint}
-              </span>
-            )}
-          </label>
+              <label>
+                LLM для фото (vision)
+                <select
+                  value={visionProvider}
+                  onChange={(e) => setSettings({ ...settings, vision_provider: e.target.value })}
+                  disabled={!can("settings:write")}
+                >
+                  {visionProviders.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.label}
+                      {!p.configured ? " (не настроен)" : ""}
+                    </option>
+                  ))}
+                </select>
+                {visionProviders.find((p) => p.id === visionProvider)?.hint && (
+                  <span className="hint-inline">
+                    {visionProviders.find((p) => p.id === visionProvider)?.hint}
+                  </span>
+                )}
+              </label>
+            </div>
+          )}
         </section>
 
         {visiblePrompts.length > 0 && (
