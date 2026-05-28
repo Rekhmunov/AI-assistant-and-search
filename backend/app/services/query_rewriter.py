@@ -5,6 +5,7 @@ import logging
 from dataclasses import dataclass, field
 
 from app.services.facts.slots import normalize_fact_slots
+from app.services.facts.grounding import GroundingMode, normalize_grounding, resolve_grounding_mode
 from app.services.prompts.defaults import REWRITER_SYSTEM, REWRITER_USER
 from app.services.search_query import normalize_user_query
 from app.services.providers.factory import ChatLLM
@@ -22,6 +23,7 @@ class RewriteResult:
     intent: str
     reason: str
     fact_slots: list[str] = field(default_factory=list)
+    grounding: GroundingMode | None = None
 
 
 def _parse_rewrite_json(text: str, fallback_query: str) -> RewriteResult | None:
@@ -60,6 +62,7 @@ def _parse_rewrite_json(text: str, fallback_query: str) -> RewriteResult | None:
     intent = str(data.get("intent") or "factual_current")[:32]
     reason = str(data.get("reason") or "rewriter")[:64]
     fact_slots = normalize_fact_slots(data.get("fact_slots"))
+    grounding = normalize_grounding(data.get("grounding"))
 
     return RewriteResult(
         search_queries=queries[:3],
@@ -68,6 +71,7 @@ def _parse_rewrite_json(text: str, fallback_query: str) -> RewriteResult | None:
         intent=intent,
         reason=reason,
         fact_slots=fact_slots,
+        grounding=grounding,
     )
 
 
@@ -108,18 +112,31 @@ class QueryRewriter:
             )
             parsed = _parse_rewrite_json(raw, fallback)
             if parsed:
-                return self._ensure_queries(query, parsed)
+                result = self._ensure_queries(query, parsed)
+                result.grounding = resolve_grounding_mode(
+                    fact_slots=result.fact_slots,
+                    intent=result.intent,
+                    rewriter_grounding=result.grounding,
+                    query=query,
+                )
+                return result
         except Exception:
             logger.exception("Query rewrite failed")
 
-        return RewriteResult(
+        fallback_result = RewriteResult(
             search_queries=[fallback],
             needs_clarification=False,
             clarification_question=None,
             intent="factual_current",
             reason="rewriter_fallback",
             fact_slots=[],
+            grounding=resolve_grounding_mode(
+                fact_slots=[],
+                intent="factual_current",
+                query=query,
+            ),
         )
+        return fallback_result
 
     def _ensure_queries(self, query: str, result: RewriteResult) -> RewriteResult:
         if result.search_queries:
@@ -131,4 +148,5 @@ class QueryRewriter:
             intent=result.intent,
             reason=result.reason,
             fact_slots=result.fact_slots,
+            grounding=result.grounding,
         )

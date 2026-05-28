@@ -11,10 +11,9 @@ from typing import Any, Literal
 import httpx
 
 from app.core.config import Settings, get_settings
-from app.services.answer_guard import answer_addon_for_slots, direct_system_addons, strict_answer_addon
+from app.services.answer_guard import direct_system_addons, search_answer_addon, strict_answer_addon
 from app.services.facts.format import format_fact_pack_for_prompt
 from app.services.facts.models import FactPack
-from app.services.facts.slots import uses_synthesis_grounding
 from app.services.llm_prompted import PromptedLLMMixin
 from app.services.llm_provider import LLMProvider, SearchSource
 from app.services.prompts.defaults import (
@@ -124,6 +123,7 @@ class DeepSeekProvider(PromptedLLMMixin, LLMProvider):
         hint_clarify: str | None = None,
         strict_facts: bool = False,
         intent_howto: bool = False,
+        grounding_mode: str = "strict",
     ) -> list[dict]:
         extra = f"\n\n{prior_sources_block}" if prior_sources_block else ""
         clarify_block = ""
@@ -133,18 +133,18 @@ class DeepSeekProvider(PromptedLLMMixin, LLMProvider):
                 f"В конце ответа задай уточнение: {hint_clarify}"
             )
         slots = fact_pack.fact_slots or []
-        synthesis = uses_synthesis_grounding(slots, intent_howto=intent_howto)
-        if strict_facts and not synthesis:
-            strict_block = strict_answer_addon()
-        elif synthesis:
-            strict_block = answer_addon_for_slots(slots, synthesis=True)
-        else:
-            strict_block = ""
+        strict_block = search_answer_addon(
+            grounding=grounding_mode,
+            strict_facts=strict_facts,
+            fact_slots=slots,
+            intent_howto=intent_howto,
+        )
         facts_block = format_fact_pack_for_prompt(
             fact_pack,
             sources,
             fact_slots=slots,
             intent_howto=intent_howto,
+            grounding=grounding_mode,  # type: ignore[arg-type]
         )
         user_content = f"""{facts_block}
 {_format_history(history)}{extra}{clarify_block}{strict_block}
@@ -167,6 +167,7 @@ class DeepSeekProvider(PromptedLLMMixin, LLMProvider):
         strict_facts: bool = False,
         fact_pack: FactPack | None = None,
         intent_howto: bool = False,
+        grounding_mode: str = "strict",
     ) -> list[dict]:
         if fact_pack is not None:
             return await self._build_messages_from_fact_pack(
@@ -178,12 +179,16 @@ class DeepSeekProvider(PromptedLLMMixin, LLMProvider):
                 hint_clarify=hint_clarify,
                 strict_facts=strict_facts,
                 intent_howto=intent_howto,
+                grounding_mode=grounding_mode,
             )
         extra = f"\n\n{prior_sources_block}" if prior_sources_block else ""
         clarify_block = ""
         if hint_clarify:
             clarify_block = f"\n\nПодсказка: в выдаче может не хватать данных. В конце ответа задай уточнение: {hint_clarify}"
-        strict_block = strict_answer_addon() if strict_facts else ""
+        strict_block = search_answer_addon(
+            grounding=grounding_mode,
+            strict_facts=strict_facts,
+        )
         user_content = f"""Источники:
 {_format_sources(sources)}
 {_format_history(history)}{extra}{clarify_block}{strict_block}
@@ -343,6 +348,7 @@ class DeepSeekProvider(PromptedLLMMixin, LLMProvider):
         strict_facts: bool = False,
         fact_pack: FactPack | None = None,
         intent_howto: bool = False,
+        grounding_mode: str = "strict",
     ) -> AsyncIterator[str]:
         if not self.configured:
             mock = "Ответ в режиме mock (задайте DEEPSEEK_API_KEY). [1]"
@@ -360,6 +366,7 @@ class DeepSeekProvider(PromptedLLMMixin, LLMProvider):
             strict_facts=strict_facts,
             fact_pack=fact_pack,
             intent_howto=intent_howto,
+            grounding_mode=grounding_mode,
         )
         async for chunk in self._stream_completion(
             messages,

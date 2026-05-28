@@ -263,6 +263,7 @@ class SearchFlowService:
         query_url_trace: QueryUrlMemoryTrace | None = None
         howto = False
         fact_slots: list[str] = []
+        grounding_mode: str = "strict"
         page_cache_trace: dict | None = None
 
         try:
@@ -293,12 +294,14 @@ class SearchFlowService:
                     lookup_bootstrap_sources(db, llm_query, llm_query),
                 )
                 fact_slots = resolve_fact_slots(rewrite.fact_slots)
+                grounding_mode = rewrite.grounding or "strict"
                 rewrite_trace = {
                     "search_queries": rewrite.search_queries,
                     "needs_clarification": rewrite.needs_clarification,
                     "clarification_question": rewrite.clarification_question,
                     "intent": rewrite.intent,
                     "fact_slots": fact_slots,
+                    "grounding": grounding_mode,
                     "reason": rewrite.reason,
                 }
                 if rewrite.intent in _VALID_INTENTS:
@@ -397,6 +400,7 @@ class SearchFlowService:
                     return
             elif route.needs_search:
                 weak_retrieval = bool(retrieval_trace and not retrieval_trace.get("ok"))
+                use_strict_facts = weak_retrieval and grounding_mode == "strict"
 
                 full_answer = ""
                 async for chunk in llm.stream_answer(
@@ -406,18 +410,24 @@ class SearchFlowService:
                     model=route.answer_model,
                     prior_sources_block=prior_sources_block,
                     hint_clarify=answer_hint,
-                    strict_facts=weak_retrieval,
+                    strict_facts=use_strict_facts,
                     fact_pack=fact_pack,
                     intent_howto=howto,
+                    grounding_mode=grounding_mode,
                 ):
                     full_answer += chunk
                     yield sse_event("token", {"text": chunk})
 
-                if fact_pack and fact_pack.facts:
+                if (
+                    fact_pack
+                    and fact_pack.facts
+                    and grounding_mode == "strict"
+                ):
                     ok, unsupported = verify_answer_against_facts(
                         full_answer,
                         fact_pack,
                         fact_slots=fact_slots,
+                        grounding=grounding_mode,
                     )
                     if not ok:
                         logger.info("Answer verify failed, unsupported numbers: %s", unsupported)
@@ -433,6 +443,7 @@ class SearchFlowService:
                             strict_facts=True,
                             fact_pack=fact_pack,
                             intent_howto=howto,
+                            grounding_mode=grounding_mode,
                         ):
                             full_answer += chunk
                             yield sse_event("token", {"text": chunk})
@@ -447,9 +458,10 @@ class SearchFlowService:
                         model=route.answer_model,
                         prior_sources_block=prior_sources_block,
                         hint_clarify=answer_hint,
-                        strict_facts=True,
+                        strict_facts=(grounding_mode == "strict"),
                         fact_pack=fact_pack,
                         intent_howto=howto,
+                        grounding_mode=grounding_mode,
                     ):
                         full_answer += chunk
                         yield sse_event("token", {"text": chunk})

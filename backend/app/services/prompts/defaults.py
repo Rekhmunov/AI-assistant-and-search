@@ -37,11 +37,16 @@ REWRITER_USER = """Ты — модуль анализа вопроса пере�
    Если в вопросе «подробный», «детальный», «пошаговый», «план» — запросы на страницы с конкретным планом (недели, меню, тренировки), не общие статьи «советы».
 5. «А завтра?» / «а там?» — полный самодостаточный запрос из истории.
 6. needs_clarification=true только если без параметра (город, дата, компания) факт недостижим; один короткий вопрос. Не подставляй город по умолчанию.
-7. how-to: intent=howto, в search_queries — «официальная документация» / «инструкция».
-8. Если needs_clarification=false — минимум один search_queries.
+7. how-to: intent=howto, grounding=synthesis, в search_queries — «официальная документация» / «инструкция».
+8. grounding — как отвечать после поиска:
+   - strict — курс валют, погода, финансы, актуальные цифры/даты: только факты из источников [n]
+   - hybrid — код, IT, «напиши/сгенерируй», посты, объяснения: знания модели + поиск; [n] только на факты из сети
+   - synthesis — программы, похудение, пошаговые планы: структура из [n], без выдуманных метрик
+   Примеры: «курс USD» → strict; «напиши функцию на Go» → hybrid; «курс похудения на 4 недели» → synthesis + course_program
+9. Если needs_clarification=false — минимум один search_queries.
 
 Ответь ТОЛЬКО JSON:
-{{"intent": "factual_current", "fact_slots": [], "search_queries": ["..."], "needs_clarification": false, "clarification_question": null, "reason": "..."}}"""
+{{"intent": "factual_current", "fact_slots": [], "grounding": "strict", "search_queries": ["..."], "needs_clarification": false, "clarification_question": null, "reason": "..."}}"""
 
 EXTRACT_SYSTEM = (
     "Ты извлекаешь факты из источников для ответа на вопрос пользователя. "

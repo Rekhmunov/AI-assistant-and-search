@@ -115,6 +115,38 @@ def direct_system_addons(query: str) -> str:
     return ""
 
 
+def hybrid_answer_addon() -> str:
+    return (
+        "\n\nРежим hybrid: опирайся на свои знания модели для кода, объяснений, структуры текста "
+        "и best practices. Источники [n] ниже — для актуальных фактов, версий, цен, дат и цитат. "
+        "Цифры, даты, курсы, температуры — только из [n] или блока фактов; общие знания — без [n]. "
+        "Если в источниках мало полезного — не отказывайся: ответь по сути из знаний, поиск — дополнение."
+    )
+
+
+def search_answer_addon(
+    *,
+    grounding: str,
+    strict_facts: bool = False,
+    fact_slots: list[str] | None = None,
+    intent_howto: bool = False,
+) -> str:
+    from app.services.facts.grounding import effective_grounding_for_prompt
+
+    mode = effective_grounding_for_prompt(
+        grounding,  # type: ignore[arg-type]
+        fact_slots,
+        intent_howto=intent_howto,
+    )
+    if mode == "hybrid":
+        return hybrid_answer_addon()
+    if mode == "synthesis":
+        return answer_addon_for_slots(fact_slots or [], synthesis=True)
+    if strict_facts or mode == "strict":
+        return strict_answer_addon()
+    return ""
+
+
 def answer_addon_for_slots(fact_slots: list[str], *, synthesis: bool = False) -> str:
     if synthesis:
         return (

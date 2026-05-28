@@ -95,6 +95,7 @@ class ClaudeWithYandexFallback:
         strict_facts: bool = False,
         fact_pack: FactPack | None = None,
         intent_howto: bool = False,
+        grounding_mode: str = "strict",
     ) -> AsyncIterator[str]:
         try:
             self._last_label_provider = self.primary
@@ -108,6 +109,7 @@ class ClaudeWithYandexFallback:
                 strict_facts=strict_facts,
                 fact_pack=fact_pack,
                 intent_howto=intent_howto,
+                grounding_mode=grounding_mode,
             ):
                 yield chunk
         except YandexServiceError as e:
@@ -121,6 +123,7 @@ class ClaudeWithYandexFallback:
                 strict_facts=strict_facts,
                 fact_pack=fact_pack,
                 intent_howto=intent_howto,
+                grounding_mode=grounding_mode,
             )
             async for chunk in self._stream_with_fallback(e, fb):
                 yield chunk
@@ -240,6 +243,7 @@ class DeepSeekWithYandexFallback:
         strict_facts: bool = False,
         fact_pack: FactPack | None = None,
         intent_howto: bool = False,
+        grounding_mode: str = "strict",
     ) -> AsyncIterator[str]:
         try:
             self._last_label_provider = self.primary
@@ -253,6 +257,7 @@ class DeepSeekWithYandexFallback:
                 strict_facts=strict_facts,
                 fact_pack=fact_pack,
                 intent_howto=intent_howto,
+                grounding_mode=grounding_mode,
             ):
                 yield chunk
         except YandexServiceError as e:
@@ -266,6 +271,7 @@ class DeepSeekWithYandexFallback:
                 strict_facts=strict_facts,
                 fact_pack=fact_pack,
                 intent_howto=intent_howto,
+                grounding_mode=grounding_mode,
             )
             async for chunk in self._stream_with_fallback(e, fb):
                 yield chunk

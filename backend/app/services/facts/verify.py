@@ -2,6 +2,7 @@
 
 import re
 
+from app.services.facts.grounding import GroundingMode, should_verify_answer_numbers
 from app.services.facts.models import FactPack
 
 _ANSWER_NUMBER_RE = re.compile(
@@ -40,16 +41,15 @@ def verify_answer_against_facts(
     pack: FactPack,
     *,
     fact_slots: list[str] | None = None,
+    grounding: GroundingMode = "strict",
 ) -> tuple[bool, list[str]]:
     """
     Возвращает (ok, список чисел в ответе без подтверждения в facts).
     Пустой pack — проверку не блокируем.
-    Для course_program / how-to не блокируем ответ (цифры редко критичны).
+    Для hybrid / synthesis не блокируем ответ (цифры редко критичны).
     """
-    from app.services.facts.slots import uses_synthesis_grounding
-
     slots = fact_slots or pack.fact_slots or []
-    if uses_synthesis_grounding(slots):
+    if not should_verify_answer_numbers(grounding, slots):
         return True, []
 
     if not answer.strip() or not pack.facts:
