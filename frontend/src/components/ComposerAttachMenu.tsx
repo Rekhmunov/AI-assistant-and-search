@@ -6,16 +6,22 @@ const DROPDOWN_ID = "composer-attach-dropdown";
 
 type Props = {
   disabled?: boolean;
-  onPickDocument: () => void;
-  onPickPhoto: () => void;
-  onTakePhoto: () => void;
+  /** Веб: сразу открыть системный выбор файлов */
+  directPick?: boolean;
+  onDirectPick?: () => void;
+  /** Мобильная / миниапп: подменю */
+  onPickGallery?: () => void;
+  onPickCamera?: () => void;
+  onPickFiles?: () => void;
 };
 
 export function ComposerAttachMenu({
   disabled,
-  onPickDocument,
-  onPickPhoto,
-  onTakePhoto,
+  directPick = false,
+  onDirectPick,
+  onPickGallery,
+  onPickCamera,
+  onPickFiles,
 }: Props) {
   const rootRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
@@ -78,15 +84,21 @@ export function ComposerAttachMenu({
     fn();
   };
 
-  const toggleOpen = (e: React.MouseEvent | React.TouchEvent) => {
+  const onAttachClick = (e: React.MouseEvent | React.TouchEvent) => {
     e.preventDefault();
     e.stopPropagation();
     if (disabled) return;
+
+    if (directPick) {
+      onDirectPick?.();
+      return;
+    }
+
     setOpen((v) => !v);
   };
 
   const dropdown =
-    open && menuStyle
+    open && menuStyle && !directPick
       ? createPortal(
           <div
             ref={menuRef}
@@ -99,17 +111,17 @@ export function ComposerAttachMenu({
               transform: "translateY(-100%)",
             }}
           >
-            <button type="button" role="menuitem" onClick={() => choose(onPickDocument)}>
-              <DocMenuIcon />
-              <span>{t("attachDocument")}</span>
-            </button>
-            <button type="button" role="menuitem" onClick={() => choose(onPickPhoto)}>
+            <button type="button" role="menuitem" onClick={() => choose(() => onPickGallery?.())}>
               <ImageMenuIcon />
-              <span>{t("attachPhoto")}</span>
+              <span>{t("attachGallery")}</span>
             </button>
-            <button type="button" role="menuitem" onClick={() => choose(onTakePhoto)}>
+            <button type="button" role="menuitem" onClick={() => choose(() => onPickCamera?.())}>
               <CameraMenuIcon />
               <span>{t("attachCamera")}</span>
+            </button>
+            <button type="button" role="menuitem" onClick={() => choose(() => onPickFiles?.())}>
+              <DocMenuIcon />
+              <span>{t("attachChooseFiles")}</span>
             </button>
           </div>,
           document.body,
@@ -122,12 +134,12 @@ export function ComposerAttachMenu({
         ref={buttonRef}
         type="button"
         className="composer-icon composer-icon--attach"
-        aria-label={t("attachAdd")}
-        aria-expanded={open}
-        aria-haspopup="menu"
-        aria-controls={DROPDOWN_ID}
+        aria-label={directPick ? t("attachUploadAll") : t("attachAdd")}
+        aria-expanded={directPick ? undefined : open}
+        aria-haspopup={directPick ? undefined : "menu"}
+        aria-controls={directPick ? undefined : DROPDOWN_ID}
         disabled={disabled}
-        onClick={toggleOpen}
+        onClick={onAttachClick}
       >
         <PlusIcon />
       </button>

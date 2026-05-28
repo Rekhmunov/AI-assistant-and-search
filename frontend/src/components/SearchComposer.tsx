@@ -4,7 +4,7 @@ import { Link } from "react-router-dom";
 import { FileUploadError, uploadFile, fetchMe } from "../api/client";
 import { ComposerAttachMenu } from "./ComposerAttachMenu";
 import {
-  ACCEPT_DOCUMENT_INPUT,
+  ACCEPT_FILE_INPUT,
   ACCEPT_IMAGE_INPUT,
   MAX_ATTACHMENTS,
   MAX_FILE_BYTES_FREE,
@@ -13,6 +13,7 @@ import {
   type FileKind,
   validateFile,
 } from "../constants/files";
+import { useDesktopLayout } from "../hooks/useDesktopLayout";
 import { useTypingPlaceholder } from "../hooks/useTypingPlaceholder";
 import { useVoiceInput } from "../hooks/useVoiceInput";
 import { t } from "../i18n";
@@ -64,7 +65,8 @@ export function SearchComposer({
   requireTextWithAttachments = false,
 }: Props) {
   const token = useAuthStore((s) => s.token);
-  const documentRef = useRef<HTMLInputElement>(null);
+  const isDesktop = useDesktopLayout();
+  const allFilesRef = useRef<HTMLInputElement>(null);
   const photoRef = useRef<HTMLInputElement>(null);
   const cameraRef = useRef<HTMLInputElement>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
@@ -247,19 +249,21 @@ export function SearchComposer({
         <div className="composer-row">
           <ComposerAttachMenu
             disabled={disabled || isBusy || atLimit}
-            onPickDocument={() => openPicker(documentRef)}
-            onPickPhoto={() => openPicker(photoRef)}
-            onTakePhoto={() => openPicker(cameraRef)}
+            directPick={isDesktop}
+            onDirectPick={() => openPicker(allFilesRef)}
+            onPickGallery={() => openPicker(photoRef)}
+            onPickCamera={() => openPicker(cameraRef)}
+            onPickFiles={() => openPicker(allFilesRef)}
           />
           <input
-            ref={documentRef}
+            ref={allFilesRef}
             type="file"
-            accept={ACCEPT_DOCUMENT_INPUT}
+            accept={ACCEPT_FILE_INPUT}
             multiple
             hidden
             onChange={(e) => {
-              void onFilesPicked(e.target.files, "document");
-              resetInput(documentRef);
+              void onFilesPicked(e.target.files);
+              resetInput(allFilesRef);
             }}
           />
           <input
