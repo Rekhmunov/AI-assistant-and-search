@@ -56,6 +56,7 @@ export function Thread() {
   const activeThreadIdRef = useRef<string | null>(id ?? null);
   const scrollTurnKeyRef = useRef<string | null>(null);
   const conversationRef = useRef<HTMLDivElement>(null);
+  const answerResetPendingRef = useRef(false);
   const [showScrollDown, setShowScrollDown] = useState(false);
   const isDesktop = useDesktopLayout();
 
@@ -74,6 +75,17 @@ export function Thread() {
     (typing: boolean) => {
       isRevealingRef.current = typing;
       if (!typing && !streamingRef.current) {
+        setTurns((prev) => {
+          const idx = findLastIndex(
+            prev,
+            (turn) => !turn.streaming && !!turn.messageId && turn.key.startsWith("stream-"),
+          );
+          if (idx < 0) return prev;
+          const turn = prev[idx];
+          const next = [...prev];
+          next[idx] = { ...turn, key: turn.messageId! };
+          return next;
+        });
         syncTurnsFromThread();
       }
     },
@@ -169,10 +181,22 @@ export function Thread() {
         },
         onToken: (chunk) => {
           setSearchPhase("answering");
-          setTurns((prev) => updateLastStreamingTurn(prev, {}, chunk));
+          setTurns((prev) => {
+            const idx = findLastIndex(prev, (turn) => turn.streaming);
+            if (idx < 0) return prev;
+            const current = prev[idx];
+            const next = [...prev];
+            if (answerResetPendingRef.current) {
+              answerResetPendingRef.current = false;
+              next[idx] = { ...current, answer: chunk };
+            } else {
+              next[idx] = { ...current, answer: current.answer + chunk };
+            }
+            return next;
+          });
         },
         onResetAnswer: () => {
-          setTurns((prev) => updateLastStreamingTurn(prev, { answer: "" }));
+          answerResetPendingRef.current = true;
         },
         onFollowUps: (questions) => {
           setTurns((prev) => updateLastStreamingTurn(prev, { followUps: questions }));
@@ -181,6 +205,7 @@ export function Thread() {
           streamingRef.current = false;
           setStreaming(false);
           setSearchPhase("idle");
+          answerResetPendingRef.current = false;
           const messageId = done?.message_id;
           setTurns((prev) =>
             prev.map((turn) => {
@@ -188,7 +213,8 @@ export function Thread() {
               return {
                 ...turn,
                 streaming: false,
-                key: messageId && /^[0-9a-f-]{36}$/i.test(messageId) ? messageId : turn.key,
+                messageId:
+                  messageId && /^[0-9a-f-]{36}$/i.test(messageId) ? messageId : turn.messageId,
               };
             }),
           );
@@ -289,7 +315,7 @@ export function Thread() {
                       answer={turn.answer}
                       title={turn.query}
                       sources={turn.sources}
-                      messageId={turn.key}
+                      messageId={turn.messageId ?? turn.key}
                       token={token}
                       userFeedback={turn.userFeedback}
                     />

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 # Явный запрос «опиши картинку» — без интернета.
 VISION_ONLY_MARKERS: tuple[str, ...] = (
     "что на фото",
@@ -60,3 +62,23 @@ def wants_web_search_with_vision(query: str) -> bool:
     if is_vision_only_user_query(query):
         return False
     return any(m in q for m in SEARCH_WITH_VISION_MARKERS)
+
+
+_IMAGE_DISPLAY_RE = re.compile(
+    r"покаж(?:и|ите)\s+(?:мне\s+)?(?:фото|картин|изображ)|"
+    r"show\s+me\s+(?:a\s+|the\s+|an\s+)?(?:photo|picture|image)|"
+    r"найди\s+(?:мне\s+)?(?:фото|картин|изображ)|"
+    r"пришли\s+(?:фото|картин|изображ)|"
+    r"скинь\s+(?:фото|картин|изображ)",
+    re.I,
+)
+
+
+def is_image_display_request(query: str) -> bool:
+    """Запрос «покажи фото X» без вложения — текстовый ответ по теме, не vision."""
+    q = _norm(query)
+    if not q:
+        return False
+    if _IMAGE_DISPLAY_RE.search(q):
+        return True
+    return q.startswith("фото ") and len(q.split()) >= 2

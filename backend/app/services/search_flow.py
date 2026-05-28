@@ -12,14 +12,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.constants.attachments import MAX_ATTACHMENTS_PER_SEARCH, UPLOAD_TTL_HOURS
 from app.services.attachment_bundle import resolve_attachment_bundle
 from app.services.vision_llm import VisionNotSupportedError, stream_vision_answer, summarize_vision_for_search
-from app.services.vision_routing import wants_web_search_with_vision
+from app.services.vision_routing import is_image_display_request, wants_web_search_with_vision
 from app.core.config import get_settings
 from app.core.limiter import RateLimiter
 from app.models.message import Message, MessageRole
 from app.models.thread import Thread
 from app.models.user import User
 from app.services.llm_provider import SearchSource
-from app.services.answer_guard import is_template_evasion
+from app.services.answer_guard import image_display_answer_addon, is_template_evasion
 from app.services.query_router import QueryRouter
 from app.services.query_rewriter import QueryRewriter
 from app.services.facts.pipeline import FactPipeline
@@ -152,6 +152,7 @@ class SearchFlowService:
         needs_vision = bundle.needs_vision
         hybrid_vision_search = needs_vision and wants_web_search_with_vision(user_text)
         vision_only_answer = needs_vision and not hybrid_vision_search
+        image_display_request = not has_attachments and is_image_display_request(user_text)
 
         if has_attachments and not user_text.strip():
             if thread_id is None:
@@ -221,6 +222,9 @@ class SearchFlowService:
             route.intent = "document"
             route.reason = "photo_vision_plus_search"
             route.answer_model = "pro"
+        elif image_display_request:
+            route.needs_search = True
+            route.reason = "image_display_text"
 
         user_msg = Message(thread_id=thread.id, role=MessageRole.USER, content=display_content)
         db.add(user_msg)
@@ -360,6 +364,9 @@ class SearchFlowService:
             )
 
             full_answer = ""
+            answer_hint = hint_clarify
+            if image_display_request:
+                answer_hint = f"{answer_hint or ''}{image_display_answer_addon()}"
             if vision_only_answer:
                 try:
                     async for chunk in stream_vision_answer(
@@ -389,7 +396,7 @@ class SearchFlowService:
                     history,
                     model=route.answer_model,
                     prior_sources_block=prior_sources_block,
-                    hint_clarify=hint_clarify,
+                    hint_clarify=answer_hint,
                     strict_facts=weak_retrieval,
                     fact_pack=fact_pack,
                     intent_howto=howto,
@@ -413,7 +420,7 @@ class SearchFlowService:
                             history,
                             model=route.answer_model,
                             prior_sources_block=prior_sources_block,
-                            hint_clarify=hint_clarify,
+                            hint_clarify=answer_hint,
                             strict_facts=True,
                             fact_pack=fact_pack,
                             intent_howto=howto,
@@ -430,7 +437,7 @@ class SearchFlowService:
                         history,
                         model=route.answer_model,
                         prior_sources_block=prior_sources_block,
-                        hint_clarify=hint_clarify,
+                        hint_clarify=answer_hint,
                         strict_facts=True,
                         fact_pack=fact_pack,
                         intent_howto=howto,

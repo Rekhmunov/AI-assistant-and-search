@@ -2,6 +2,8 @@ import type { Message, MessageFeedback, Source } from "../api/client";
 
 export type ThreadTurn = {
   key: string;
+  /** UUID сообщения ассистента после done — для футера до смены key */
+  messageId?: string;
   query: string;
   answer: string;
   sources: Source[];
