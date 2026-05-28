@@ -10,20 +10,25 @@ if [ ! -f "$CONF" ]; then
   exit 1
 fi
 
+PROXY_PORT="${PROXY_PORT:-18080}"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+LISTEN_IP="$("$ROOT/scripts/nginx-listen-ip.sh")"
+
 cp "$CONF" "$BACKUP"
 echo "Backup: $BACKUP"
+echo "listen IP: $LISTEN_IP (proxy -> 127.0.0.1:${PROXY_PORT})"
 
-cat > "$CONF" << 'NGINX'
+cat > "$CONF" << NGINX
 server {
         server_name admin.glosix.ru www.admin.glosix.ru;
         charset off;
-        disable_symlinks if_not_owner from=$root_path;
+        disable_symlinks if_not_owner from=\$root_path;
         include /etc/nginx/vhosts-includes/*.conf;
         include /etc/nginx/vhosts-resources/admin.glosix.ru/*.conf;
         access_log /var/www/httpd-logs/admin.glosix.ru.access.log;
         error_log /var/www/httpd-logs/admin.glosix.ru.error.log notice;
-        return 301 https://$host$request_uri;
-        listen 192.168.0.175:80;
+        return 301 https://\$host\$request_uri;
+        listen ${LISTEN_IP}:80;
 }
 server {
         server_name admin.glosix.ru www.admin.glosix.ru;
@@ -34,7 +39,7 @@ server {
         ssl_protocols TLSv1 TLSv1.1 TLSv1.2 TLSv1.3;
         ssl_dhparam /etc/ssl/certs/dhparam4096.pem;
         charset off;
-        disable_symlinks if_not_owner from=$root_path;
+        disable_symlinks if_not_owner from=\$root_path;
         include /etc/nginx/vhosts-includes/*.conf;
         include /etc/nginx/vhosts-resources/admin.glosix.ru/*.conf;
         access_log /var/www/httpd-logs/admin.glosix.ru.access.log;
@@ -44,14 +49,14 @@ server {
         gzip_disable "msie6";
         gzip_types text/plain text/css application/json application/x-javascript text/xml application/xml application/xml+rss text/javascript application/javascript image/svg+xml;
         location / {
-                proxy_pass http://127.0.0.1:18080;
+                proxy_pass http://127.0.0.1:${PROXY_PORT};
                 proxy_http_version 1.1;
-                proxy_set_header Host $host;
-                proxy_set_header X-Real-IP $remote_addr;
-                proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-                proxy_set_header X-Forwarded-Proto $scheme;
+                proxy_set_header Host \$host;
+                proxy_set_header X-Real-IP \$remote_addr;
+                proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+                proxy_set_header X-Forwarded-Proto \$scheme;
         }
-        listen 192.168.0.175:443 ssl;
+        listen ${LISTEN_IP}:443 ssl;
 }
 NGINX
 

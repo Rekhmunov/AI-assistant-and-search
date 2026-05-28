@@ -18,8 +18,11 @@ if [ -z "$CRTACA" ] || [ -z "$KEY" ]; then
 fi
 
 PROXY_PORT="${PROXY_PORT:-18080}"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+LISTEN_IP="$("$ROOT/scripts/nginx-listen-ip.sh")"
 
 cp "$CONF" "$BACKUP"
+echo "listen IP: $LISTEN_IP (proxy -> 127.0.0.1:${PROXY_PORT})"
 echo "Backup: $BACKUP"
 echo "SSL: $CRTACA"
 
@@ -33,7 +36,7 @@ server {
         access_log /var/www/httpd-logs/app.glosix.ru.access.log;
         error_log /var/www/httpd-logs/app.glosix.ru.error.log notice;
         return 301 https://\$host\$request_uri;
-        listen 192.168.0.175:80;
+        listen ${LISTEN_IP}:80;
 }
 server {
         server_name app.glosix.ru www.app.glosix.ru;
@@ -61,7 +64,7 @@ server {
                 proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
                 proxy_set_header X-Forwarded-Proto \$scheme;
         }
-        listen 192.168.0.175:443 ssl;
+        listen ${LISTEN_IP}:443 ssl;
 }
 NGINX
 
