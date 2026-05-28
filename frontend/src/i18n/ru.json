@@ -85,5 +85,19 @@
   "cancel": "Отмена",
   "saveTitle": "Сохранить",
   "threadTitleRequired": "Введите название",
-  "questionsCount": "вопросов"
+  "questionsCount": "вопросов",
+  "feedbackThumbUp": "Полезный ответ",
+  "feedbackThumbDown": "Не полезный ответ",
+  "feedbackModalTitle": "Что не так с ответом?",
+  "feedbackModalHint": "Выберите причину — это поможет улучшить Glosix",
+  "feedbackReasonOutdated": "Устарело",
+  "feedbackReasonInaccurate": "Неточно",
+  "feedbackReasonWrongSources": "Неверные источники",
+  "feedbackReasonOther": "Другое",
+  "feedbackOtherLabel": "Ваш комментарий",
+  "feedbackOtherPlaceholder": "Опишите, что не так…",
+  "feedbackSend": "Отправить",
+  "feedbackSending": "Отправка…",
+  "feedbackSubmitFailed": "Не удалось сохранить оценку",
+  "feedbackCommentRequired": "Введите комментарий"
 }

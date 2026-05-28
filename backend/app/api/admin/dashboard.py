@@ -12,9 +12,16 @@ from app.core.admin_permissions import require_permission
 from app.core.config import get_settings
 from app.models.broadcast import Broadcast
 from app.models.message import Message
+from app.models.message_feedback import FEEDBACK_REASON_LABELS, FeedbackRating, MessageFeedback
 from app.models.thread import Thread
 from app.models.user import Plan, User
-from app.schemas.admin import DashboardMetrics
+from app.schemas.admin import (
+    DashboardMetrics,
+    FeedbackDashboardBlock,
+    FeedbackRecentItem,
+    FeedbackReasonStat,
+)
+from app.schemas.feedback import reason_label
 from app.services.app_settings import get_setting
 
 router = APIRouter(tags=["admin-dashboard"])
@@ -86,6 +93,63 @@ async def dashboard(
 
     maintenance = await get_setting("maintenance_mode", db, redis, settings)
 
+    feedback_block = FeedbackDashboardBlock()
+    try:
+        thumbs_up = await db.scalar(
+            select(func.count())
+            .select_from(MessageFeedback)
+            .where(MessageFeedback.rating == FeedbackRating.UP)
+        )
+        thumbs_down = await db.scalar(
+            select(func.count())
+            .select_from(MessageFeedback)
+            .where(MessageFeedback.rating == FeedbackRating.DOWN)
+        )
+        feedback_block.thumbs_up = thumbs_up or 0
+        feedback_block.thumbs_down = thumbs_down or 0
+
+        reason_rows = await db.execute(
+            select(MessageFeedback.reason_code, func.count())
+            .where(MessageFeedback.rating == FeedbackRating.DOWN)
+            .group_by(MessageFeedback.reason_code)
+        )
+        for code, cnt in reason_rows.all():
+            label = reason_label(code) or (code or "—")
+            feedback_block.down_by_reason.append(
+                FeedbackReasonStat(reason_code=code, label=label, count=cnt or 0)
+            )
+        feedback_block.down_by_reason.sort(key=lambda x: -x.count)
+
+        recent_q = (
+            select(MessageFeedback, Message, Thread, User)
+            .join(Message, Message.id == MessageFeedback.message_id)
+            .join(Thread, Thread.id == Message.thread_id)
+            .join(User, User.id == MessageFeedback.user_id)
+            .order_by(MessageFeedback.created_at.desc())
+            .limit(25)
+        )
+        recent_rows = await db.execute(recent_q)
+        for fb, msg, thread, u in recent_rows.all():
+            preview = (msg.content or "").strip().replace("\n", " ")
+            if len(preview) > 160:
+                preview = preview[:157] + "…"
+            feedback_block.recent.append(
+                FeedbackRecentItem(
+                    id=fb.id,
+                    message_id=fb.message_id,
+                    thread_id=thread.id,
+                    user_id=u.id,
+                    user_email=u.email,
+                    rating=fb.rating.value,
+                    reason_label=reason_label(fb.reason_code) if fb.rating == FeedbackRating.DOWN else None,
+                    comment=fb.comment,
+                    answer_preview=preview,
+                    created_at=fb.created_at,
+                )
+            )
+    except ProgrammingError:
+        logger.warning("message_feedback table missing — run alembic upgrade head")
+
     return DashboardMetrics(
         users_total=users_total or 0,
         users_new_7d=users_new_7d or 0,
@@ -97,4 +161,5 @@ async def dashboard(
         yandex_configured=settings.yandex_configured,
         redis_ok=redis_ok,
         maintenance_mode=bool(maintenance),
+        answer_feedback=feedback_block,
     )

@@ -177,12 +177,20 @@ export function Thread() {
         onFollowUps: (questions) => {
           setTurns((prev) => updateLastStreamingTurn(prev, { followUps: questions }));
         },
-        onDone: () => {
+        onDone: (done) => {
           streamingRef.current = false;
           setStreaming(false);
           setSearchPhase("idle");
+          const messageId = done?.message_id;
           setTurns((prev) =>
-            prev.map((turn) => (turn.streaming ? { ...turn, streaming: false } : turn)),
+            prev.map((turn) => {
+              if (!turn.streaming) return turn;
+              return {
+                ...turn,
+                streaming: false,
+                key: messageId && /^[0-9a-f-]{36}$/i.test(messageId) ? messageId : turn.key,
+              };
+            }),
           );
           queryClient.invalidateQueries({ queryKey: ["session"] });
           queryClient.invalidateQueries({ queryKey: ["threads"] });
@@ -285,6 +293,9 @@ export function Thread() {
                       answer={turn.answer}
                       title={turn.query}
                       sources={turn.sources}
+                      messageId={turn.key}
+                      token={token}
+                      userFeedback={turn.userFeedback}
                     />
                   )}
                 </section>

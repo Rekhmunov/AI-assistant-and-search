@@ -4,6 +4,7 @@ from uuid import UUID
 from pydantic import BaseModel, Field
 
 from app.models.message import MessageRole
+from app.schemas.feedback import MessageFeedbackOut
 
 
 class ThreadCreate(BaseModel):
@@ -25,6 +26,7 @@ class MessageOut(BaseModel):
     content: str
     sources: list[SourceOut] | None
     follow_up_questions: list[str] | None
+    user_feedback: MessageFeedbackOut | None = None
     created_at: datetime
 
     model_config = {"from_attributes": True}

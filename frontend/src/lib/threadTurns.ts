@@ -1,4 +1,4 @@
-import type { Message, Source } from "../api/client";
+import type { Message, MessageFeedback, Source } from "../api/client";
 
 export type ThreadTurn = {
   key: string;
@@ -6,6 +6,7 @@ export type ThreadTurn = {
   answer: string;
   sources: Source[];
   followUps: string[];
+  userFeedback?: MessageFeedback | null;
   streaming?: boolean;
 };
 
@@ -27,6 +28,7 @@ export function messagesToTurns(messages: Message[]): ThreadTurn[] {
         answer: m.content,
         sources: m.sources ?? [],
         followUps: m.follow_up_questions ?? [],
+        userFeedback: m.user_feedback ?? null,
       });
       pendingUser = null;
     }

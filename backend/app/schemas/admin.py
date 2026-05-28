@@ -36,6 +36,32 @@ class AdminUserUpdate(BaseModel):
     password: str | None = Field(default=None, min_length=8)
 
 
+class FeedbackReasonStat(BaseModel):
+    reason_code: str | None = None
+    label: str
+    count: int
+
+
+class FeedbackRecentItem(BaseModel):
+    id: UUID
+    message_id: UUID
+    thread_id: UUID
+    user_id: UUID
+    user_email: str | None = None
+    rating: str
+    reason_label: str | None = None
+    comment: str | None = None
+    answer_preview: str = ""
+    created_at: datetime
+
+
+class FeedbackDashboardBlock(BaseModel):
+    thumbs_up: int = 0
+    thumbs_down: int = 0
+    down_by_reason: list[FeedbackReasonStat] = []
+    recent: list[FeedbackRecentItem] = []
+
+
 class DashboardMetrics(BaseModel):
     users_total: int
     users_new_7d: int
@@ -47,6 +73,7 @@ class DashboardMetrics(BaseModel):
     yandex_configured: bool
     redis_ok: bool
     maintenance_mode: bool
+    answer_feedback: FeedbackDashboardBlock = Field(default_factory=FeedbackDashboardBlock)
 
 
 class BroadcastCreate(BaseModel):

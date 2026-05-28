@@ -10,7 +10,7 @@ type Props = {
   keyPrefix: string;
 };
 
-function renderCell(text: string, sources: Source[], key: string): ReactNode {
+function renderCell(text: string, sources: Source[]): ReactNode {
   const plain = formatMarkdownText(text);
   const cited = renderTextWithCitations(plain, sources);
   if (cited.length === 1 && typeof cited[0] === "string") {
@@ -37,7 +37,7 @@ export function AnswerTable({ header, rows, sources, keyPrefix }: Props) {
         <thead>
           <tr>
             {head.map((cell, i) => (
-              <th key={`${keyPrefix}-h-${i}`}>{renderCell(cell, sources, `${keyPrefix}-h-${i}`)}</th>
+              <th key={`${keyPrefix}-h-${i}`}>{renderCell(cell, sources)}</th>
             ))}
           </tr>
         </thead>

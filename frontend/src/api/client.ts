@@ -42,12 +42,22 @@ export interface Source {
   domain: string;
 }
 
+export interface MessageFeedback {
+  rating: "up" | "down";
+  reason_code?: string | null;
+  reason_label?: string | null;
+  comment?: string | null;
+}
+
+export type FeedbackReasonCode = "outdated" | "inaccurate" | "wrong_sources" | "other";
+
 export interface Message {
   id: string;
   role: "user" | "assistant";
   content: string;
   sources: Source[] | null;
   follow_up_questions: string[] | null;
+  user_feedback?: MessageFeedback | null;
   created_at: string;
 }
 
@@ -233,6 +243,12 @@ export interface RouteInfo {
   reason?: string;
 }
 
+export interface SearchDonePayload {
+  message_id?: string;
+  searches_today?: number;
+  searches_limit?: number;
+}
+
 export interface SSEHandlers {
   onThread?: (id: string) => void;
   onRoute?: (route: RouteInfo) => void;
@@ -240,8 +256,36 @@ export interface SSEHandlers {
   onToken?: (text: string) => void;
   onResetAnswer?: () => void;
   onFollowUps?: (questions: string[]) => void;
-  onDone?: () => void;
+  onDone?: (payload: SearchDonePayload) => void;
   onError?: (message: string, code?: string) => void;
+}
+
+export async function submitMessageFeedback(
+  token: string,
+  messageId: string,
+  body: {
+    rating: "up" | "down";
+    reason_code?: FeedbackReasonCode | null;
+    comment?: string | null;
+  },
+): Promise<{ ok: boolean; feedback: MessageFeedback }> {
+  const res = await fetch(`${API_BASE}/api/messages/${messageId}/feedback`, {
+    method: "POST",
+    headers: apiHeaders(token),
+    credentials: "include",
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    let msg = "Не удалось отправить оценку";
+    try {
+      const err = await res.json();
+      msg = (err as { detail?: string }).detail || msg;
+    } catch {
+      /* ignore */
+    }
+    throw new Error(msg);
+  }
+  return res.json();
 }
 
 export interface UploadedFile {
@@ -399,7 +443,7 @@ export async function streamSearch(
             break;
           case "done":
             finished = true;
-            handlers.onDone?.();
+            handlers.onDone?.(parsed as SearchDonePayload);
             break;
           case "error":
             gotError = true;

@@ -8,8 +8,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.api.deps import SearchUserResult, get_current_user, get_db, get_existing_search_user
-from app.models.message import Message
+from app.models.message import Message, MessageRole
+from app.models.message_feedback import MessageFeedback
 from app.models.thread import Thread
+from app.schemas.feedback import MessageFeedbackOut, reason_label
 from app.models.user import Plan, User
 from app.schemas.thread import MessageOut, SourceOut, ThreadDetail, ThreadListItem, ThreadUpdate
 
@@ -55,11 +57,32 @@ async def get_thread(
     if not thread:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Thread not found")
 
+    assistant_ids = [m.id for m in thread.messages if m.role == MessageRole.ASSISTANT]
+    feedback_by_message: dict = {}
+    if assistant_ids:
+        fb_rows = await db.execute(
+            select(MessageFeedback).where(
+                MessageFeedback.user_id == user.id,
+                MessageFeedback.message_id.in_(assistant_ids),
+            )
+        )
+        for fb in fb_rows.scalars().all():
+            feedback_by_message[fb.message_id] = fb
+
     messages_out: list[MessageOut] = []
     for m in thread.messages:
         sources = None
         if m.sources:
             sources = [SourceOut(**s) for s in m.sources]
+        uf = None
+        fb = feedback_by_message.get(m.id)
+        if fb:
+            uf = MessageFeedbackOut(
+                rating=fb.rating.value,
+                reason_code=fb.reason_code,
+                reason_label=reason_label(fb.reason_code),
+                comment=fb.comment,
+            )
         messages_out.append(
             MessageOut(
                 id=m.id,
@@ -67,6 +90,7 @@ async def get_thread(
                 content=m.content,
                 sources=sources,
                 follow_up_questions=m.follow_up_questions,
+                user_feedback=uf,
                 created_at=m.created_at,
             )
         )

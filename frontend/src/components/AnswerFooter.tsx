@@ -1,15 +1,22 @@
 import { useState } from "react";
-import type { Source } from "../api/client";
+import type { MessageFeedback, Source } from "../api/client";
 import { formatAnswerForDisplay } from "../lib/formatAnswer";
 import { t } from "../i18n";
+import { AnswerFeedback } from "./AnswerFeedback";
 
 type Props = {
   answer: string;
   title?: string;
   sources: Source[];
+  messageId?: string;
+  token?: string | null;
+  userFeedback?: MessageFeedback | null;
 };
 
-export function AnswerFooter({ answer, title, sources }: Props) {
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+export function AnswerFooter({ answer, title, sources, messageId, token, userFeedback }: Props) {
   const [copied, setCopied] = useState(false);
   const [sourcesOpen, setSourcesOpen] = useState(false);
 
@@ -63,6 +70,9 @@ export function AnswerFooter({ answer, title, sources }: Props) {
           >
             <CopyIcon />
           </button>
+          {messageId && UUID_RE.test(messageId) && (
+            <AnswerFeedback messageId={messageId} token={token ?? null} initialFeedback={userFeedback} />
+          )}
           {hasSources && (
             <button
               type="button"
