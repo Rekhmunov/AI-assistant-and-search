@@ -497,8 +497,19 @@ body:has(.page-thread) {
 }
 
 .composer-icon.recording {
-  color: #dc2626;
-  background: rgba(220, 38, 38, 0.1);
+  color: #e53935;
+  background: rgba(229, 57, 53, 0.16);
+  animation: composer-mic-pulse 1.25s ease-in-out infinite;
+}
+
+@keyframes composer-mic-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(229, 57, 53, 0.35);
+  }
+  50% {
+    box-shadow: 0 0 0 6px rgba(229, 57, 53, 0);
+  }
 }
 
 .composer-icon:disabled {

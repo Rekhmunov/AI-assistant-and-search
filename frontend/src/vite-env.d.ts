@@ -11,6 +11,7 @@ interface ImportMeta {
 
 interface SpeechRecognition extends EventTarget {
   lang: string;
+  continuous: boolean;
   interimResults: boolean;
   maxAlternatives: number;
   start(): void;
@@ -18,6 +19,11 @@ interface SpeechRecognition extends EventTarget {
   onresult: ((ev: SpeechRecognitionEvent) => void) | null;
   onerror: ((ev: Event) => void) | null;
   onend: (() => void) | null;
+}
+
+interface SpeechRecognitionErrorEvent extends Event {
+  error: string;
+  message?: string;
 }
 
 interface SpeechRecognitionEvent extends Event {

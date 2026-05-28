@@ -310,12 +310,13 @@ export function SearchComposer({
           </div>
           <button
             type="button"
-            className={`composer-icon ${voice.state === "recording" ? "recording" : ""}`}
+            className={`composer-icon${voice.state === "recording" ? " recording" : ""}`}
             aria-label={t("voiceInput")}
-            disabled={disabled}
+            aria-pressed={voice.state === "recording"}
+            disabled={disabled || voice.state === "transcribing"}
             onClick={voice.toggle}
           >
-            <MicIcon />
+            <MicIcon recording={voice.state === "recording"} />
           </button>
           <button type="submit" className="composer-send" disabled={!canSend} aria-label={t("send")}>
             <SendIcon />
@@ -365,7 +366,7 @@ function AttachmentChip({
   );
 }
 
-function MicIcon() {
+function MicIcon({ recording }: { recording?: boolean }) {
   return (
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden>
       <path
@@ -374,6 +375,7 @@ function MicIcon() {
         strokeWidth="1.8"
         strokeLinecap="round"
         strokeLinejoin="round"
+        fill={recording ? "currentColor" : "none"}
       />
       <path
         d="M19 11v1a7 7 0 01-14 0v-1M12 18v3M8 21h8"
