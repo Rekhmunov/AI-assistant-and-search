@@ -211,7 +211,22 @@ bash scripts/update.sh
 
 ---
 
-## 8. Firewall
+## 8. Устойчивость после перезагрузки VPS
+
+После сбоя сайт может не открываться, хотя Docker жив: в ISPmanager в `listen` остаётся **старый IP** сервера.
+
+**Один раз на VPS:**
+
+```bash
+cd /opt/aisearch && git pull origin main
+sudo bash scripts/setup-prod-resilience.sh
+```
+
+Подробнее: [PROD_RESILIENCE.md](./PROD_RESILIENCE.md).
+
+---
+
+## 9. Firewall
 
 ```bash
 ufw allow 22/tcp
@@ -230,6 +245,7 @@ PostgreSQL (5432) и Redis **не** открывайте наружу.
 |---------|---------|
 | `InvalidPasswordError: password authentication failed for user "postgres"` при `alembic` | Не используйте `docker compose` без `-f docker-compose.prod.yml`. Миграции: `bash scripts/migrate.sh`. Пароль в `.env` (`POSTGRES_PASSWORD`) должен совпадать с тем, с которым **первый раз** создан том `pgdata` (смена пароля в `.env` без `ALTER USER` в Postgres не работает). |
 | `Found orphan containers (aisearch-nginx-1)` | Запущен dev-compose вместо prod: `docker compose -f docker-compose.prod.yml up -d --remove-orphans` |
+| Сайт «отклонил соединение», Docker OK | `systemctl status nginx`, `journalctl -u nginx -n 20` — часто `bind() to OLD_IP:443 failed`; `sudo bash scripts/ensure-nginx-glosix.sh` |
 | 502 Bad Gateway | `docker compose -f docker-compose.prod.yml ps`, логи backend |
 | CORS error в миниаппе | `CORS_ORIGINS` должен содержать `https://app...` |
 | Invalid initData | `SKIP_INIT_DATA_VALIDATION=false`, верный `BOT_TOKEN` |
