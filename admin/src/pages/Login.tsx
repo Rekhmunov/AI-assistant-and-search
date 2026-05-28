@@ -30,7 +30,11 @@ export function LoginPage() {
   return (
     <div className="login-page">
       <form className="card login-card" onSubmit={onSubmit}>
-        <h1>Вход в админку</h1>
+        <p className="login-brand">
+          <span className="glosix-wordmark">Glosix</span>
+          <span className="admin-sidebar-badge">Admin</span>
+        </p>
+        <h1>Вход</h1>
         <label>
           Email
           <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required autoComplete="username" />

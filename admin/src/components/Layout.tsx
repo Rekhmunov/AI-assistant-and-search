@@ -1,4 +1,4 @@
-import { Link, NavLink, Outlet } from "react-router-dom";
+import { NavLink, Outlet } from "react-router-dom";
 import { useAuth } from "../AuthContext";
 
 const NAV: { to: string; label: string; perm: string }[] = [
@@ -15,27 +15,35 @@ export function Layout() {
   const { admin, logout, can } = useAuth();
 
   return (
-    <div className="layout">
-      <aside className="sidebar">
-        <div className="brand">AI Search Admin</div>
-        <nav>
+    <div className="admin-shell">
+      <aside className="admin-sidebar">
+        <div className="admin-sidebar-brand">
+          <span className="glosix-wordmark glosix-wordmark--sidebar">Glosix</span>
+          <span className="admin-sidebar-badge">Admin</span>
+        </div>
+        <nav className="admin-sidebar-nav" aria-label="Разделы админки">
           {NAV.filter((n) => can(n.perm)).map((item) => (
-            <NavLink key={item.to} to={item.to} end={item.to === "/"} className={({ isActive }) => (isActive ? "active" : "")}>
+            <NavLink
+              key={item.to}
+              to={item.to}
+              end={item.to === "/"}
+              className={({ isActive }) => (isActive ? "active" : undefined)}
+            >
               {item.label}
             </NavLink>
           ))}
         </nav>
-        <div className="sidebar-footer">
+        <div className="admin-sidebar-footer">
           <div className="user-meta">
-            {admin?.email}
+            <span className="user-meta-email">{admin?.email}</span>
             <span className="role">{admin?.role}</span>
           </div>
-          <button type="button" className="btn-secondary" onClick={() => logout()}>
+          <button type="button" className="btn-secondary btn-secondary--block" onClick={() => logout()}>
             Выйти
           </button>
         </div>
       </aside>
-      <main className="content">
+      <main className="admin-content">
         <Outlet />
       </main>
     </div>
