@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import { AppErrorBoundary } from "./components/AppErrorBoundary";
 import { AppNavigation } from "./components/AppNavigation";
 import { useAuthBootstrap } from "./hooks/useAuth";
 import { t } from "./i18n";
@@ -31,7 +32,9 @@ function AppRoutes() {
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         ) : (
-          <div className="app-boot-placeholder" aria-busy="true" aria-label={t("pageLoading")} />
+          <div className="app-boot-placeholder" aria-busy="true" aria-label={t("pageLoading")}>
+            {t("pageLoading")}
+          </div>
         )}
       </main>
     </div>
@@ -42,7 +45,9 @@ export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
-        <AppRoutes />
+        <AppErrorBoundary>
+          <AppRoutes />
+        </AppErrorBoundary>
       </BrowserRouter>
     </QueryClientProvider>
   );

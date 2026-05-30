@@ -2379,6 +2379,11 @@ body:has(.page-thread) {
   flex: 1;
   min-height: 40vh;
   background: var(--bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+  font-size: 0.95rem;
 }
 
 .app-boot-error {
