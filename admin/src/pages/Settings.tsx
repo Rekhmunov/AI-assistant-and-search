@@ -52,9 +52,6 @@ export function SettingsPage() {
   const [prompts, setPrompts] = useState<PromptField[]>([]);
   const [msg, setMsg] = useState("");
   const [llmRuntime, setLlmRuntime] = useState<LlmRuntime | null>(null);
-  const [probeMsg, setProbeMsg] = useState("");
-  const [deepseekProbeMsg, setDeepseekProbeMsg] = useState("");
-  const [gigachatProbeMsg, setGigachatProbeMsg] = useState("");
   const [providersOpen, setProvidersOpen] = useState(false);
   const [promptsOpen, setPromptsOpen] = useState(false);
   const [limitsOpen, setLimitsOpen] = useState(false);
@@ -138,60 +135,6 @@ export function SettingsPage() {
     }
   };
 
-  const runAnthropicProbe = async () => {
-    setProbeMsg("Проверка…");
-    try {
-      const r = await apiFetch<{
-        ok: boolean;
-        key_suffix?: string;
-        message: string;
-      }>("/api/admin/settings/probe-anthropic", { method: "POST" });
-      setProbeMsg(
-        r.ok
-          ? `${r.message} (суффикс ключа …${r.key_suffix ?? "?"})`
-          : r.message,
-      );
-    } catch (err) {
-      setProbeMsg(err instanceof Error ? err.message : "Ошибка проверки");
-    }
-  };
-
-  const runGigachatProbe = async () => {
-    setGigachatProbeMsg("Проверка…");
-    try {
-      const r = await apiFetch<{
-        ok: boolean;
-        credentials_suffix?: string;
-        message: string;
-      }>("/api/admin/settings/probe-gigachat", { method: "POST" });
-      setGigachatProbeMsg(
-        r.ok
-          ? `${r.message} (суффикс credentials …${r.credentials_suffix ?? "?"})`
-          : r.message,
-      );
-    } catch (err) {
-      setGigachatProbeMsg(err instanceof Error ? err.message : "Ошибка проверки");
-    }
-  };
-
-  const runDeepseekProbe = async () => {
-    setDeepseekProbeMsg("Проверка…");
-    try {
-      const r = await apiFetch<{
-        ok: boolean;
-        key_suffix?: string;
-        message: string;
-      }>("/api/admin/settings/probe-deepseek", { method: "POST" });
-      setDeepseekProbeMsg(
-        r.ok
-          ? `${r.message} (суффикс ключа …${r.key_suffix ?? "?"})`
-          : r.message,
-      );
-    } catch (err) {
-      setDeepseekProbeMsg(err instanceof Error ? err.message : "Ошибка проверки");
-    }
-  };
-
   return (
     <div className="settings-page">
       <h1>Настройки</h1>
@@ -272,33 +215,6 @@ export function SettingsPage() {
                   </span>
                 )}
               </label>
-
-              {can("settings:read") && (
-                <div className="settings-probes">
-                  <p className="settings-probes-row">
-                    <button type="button" className="btn-link" onClick={() => void runAnthropicProbe()}>
-                      Проверить Claude
-                    </button>
-                    {probeMsg && <span className="hint-inline settings-probes-result">{probeMsg}</span>}
-                  </p>
-                  <p className="settings-probes-row">
-                    <button type="button" className="btn-link" onClick={() => void runDeepseekProbe()}>
-                      Проверить DeepSeek
-                    </button>
-                    {deepseekProbeMsg && (
-                      <span className="hint-inline settings-probes-result">{deepseekProbeMsg}</span>
-                    )}
-                  </p>
-                  <p className="settings-probes-row">
-                    <button type="button" className="btn-link" onClick={() => void runGigachatProbe()}>
-                      Проверить GigaChat
-                    </button>
-                    {gigachatProbeMsg && (
-                      <span className="hint-inline settings-probes-result">{gigachatProbeMsg}</span>
-                    )}
-                  </p>
-                </div>
-              )}
             </div>
           )}
         </section>
