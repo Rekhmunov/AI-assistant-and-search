@@ -51,31 +51,33 @@ function renderTextParagraph(paragraph: string, sources: Source[], keyPrefix: st
   const body = renderInlineText(text, keyPrefix);
 
   if (!body.length && indices.length === 0) {
-    return <></>;
+    return null;
   }
 
   return (
     <div className="answer-paragraph">
       {body.length > 0 && <div className="answer-paragraph-body">{body}</div>}
-      {indices.length > 0 && (
-        <SourceChipsRow indices={indices} sources={sources} />
-      )}
+      {indices.length > 0 && <SourceChipsRow indices={indices} sources={sources} />}
     </div>
   );
 }
 
-function renderPlainTextFragment(text: string, sources: Source[], keyPrefix: string): ReactNode[] {
+function renderPlainTextFragment(text: string, sources: Source[], keyPrefix: string): ReactNode | null {
   const formatted = formatMarkdownText(text);
-  if (!formatted) return [];
+  if (!formatted) return null;
 
   const paragraphs = formatted.split(/\n\n+/).filter((p) => p.trim());
-  if (!paragraphs.length) return [];
+  if (!paragraphs.length) return null;
 
-  return paragraphs.map((paragraph, index) => (
-    <span key={`${keyPrefix}-para-${index}`}>
-      {renderTextParagraph(paragraph, sources, `${keyPrefix}-p-${index}`)}
-    </span>
-  ));
+  return (
+    <div className="answer-text-part">
+      {paragraphs.map((paragraph, index) => (
+        <div key={`${keyPrefix}-para-${index}`}>
+          {renderTextParagraph(paragraph, sources, `${keyPrefix}-p-${index}`)}
+        </div>
+      ))}
+    </div>
+  );
 }
 
 /** Текстовый фрагмент: таблицы GFM + markdown без блоков + чипы источников + inline `code`. */
@@ -99,13 +101,7 @@ export function renderAnswerTextSegment(text: string, sources: Source[], keyPref
       continue;
     }
     const chunk = renderPlainTextFragment(block.content, sources, `${keyPrefix}-t-${id}`);
-    if (chunk.length > 0) {
-      nodes.push(
-        <span key={`${keyPrefix}-txt-${id}`} className="answer-text-part">
-          {chunk}
-        </span>,
-      );
-    }
+    if (chunk) nodes.push(<div key={`${keyPrefix}-txt-${id}`}>{chunk}</div>);
   }
 
   return nodes;

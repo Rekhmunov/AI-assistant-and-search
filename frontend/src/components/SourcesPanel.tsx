@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { createPortal } from "react-dom";
 import type { Source } from "../api/client";
+import { useBodyScrollLock } from "../hooks/useBodyScrollLock";
 import { sourceDomainLabel, faviconUrl } from "../lib/sourceDomainLabel";
 import { t } from "../i18n";
 
@@ -12,6 +13,8 @@ type Props = {
 };
 
 export function SourcesPanel({ open, query, sources, onClose }: Props) {
+  useBodyScrollLock(open);
+
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
@@ -28,9 +31,9 @@ export function SourcesPanel({ open, query, sources, onClose }: Props) {
     : t("sources");
 
   return createPortal(
-    <div className="sources-panel-overlay" role="presentation" onClick={onClose}>
+    <div className="sources-panel-overlay app-modal-overlay" role="presentation" onClick={onClose}>
       <div
-        className="sources-panel"
+        className="sources-panel app-modal app-modal--wide"
         role="dialog"
         aria-modal="true"
         aria-labelledby="sources-panel-title"

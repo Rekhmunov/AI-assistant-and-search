@@ -2,6 +2,7 @@ import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { MessageFeedback } from "../api/client";
 import { submitMessageFeedback, type FeedbackReasonCode } from "../api/client";
+import { useBodyScrollLock } from "../hooks/useBodyScrollLock";
 import { t } from "../i18n";
 
 const THANK_YOU_MS = 4500;
@@ -109,6 +110,8 @@ export function AnswerFeedback({ messageId, token, initialFeedback }: Props) {
   const upActive = feedback?.rating === "up";
   const downActive = feedback?.rating === "down";
 
+  useBodyScrollLock(modalOpen);
+
   return (
     <>
       <button
@@ -134,76 +137,78 @@ export function AnswerFeedback({ messageId, token, initialFeedback }: Props) {
         <ThumbDownIcon filled={downActive} />
       </button>
 
-      {modalOpen && (
-        <div
-          className="feedback-modal-overlay"
-          role="presentation"
-          onClick={() => !busy && setModalOpen(false)}
-        >
+      {modalOpen &&
+        createPortal(
           <div
-            className="feedback-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="feedback-modal-title"
-            onClick={(e) => e.stopPropagation()}
+            className="feedback-modal-overlay app-modal-overlay"
+            role="presentation"
+            onClick={() => !busy && setModalOpen(false)}
           >
-            <h2 id="feedback-modal-title" className="feedback-modal-title">
-              {t("feedbackModalTitle")}
-            </h2>
-            <p className="feedback-modal-hint">{t("feedbackModalHint")}</p>
-            <form onSubmit={onModalSubmit}>
-              <div className="feedback-reason-list">
-                {DOWN_REASONS.map(({ code, labelKey }) => (
-                  <label key={code} className="feedback-reason-option">
-                    <input
-                      type="radio"
-                      name="feedback-reason"
-                      value={code}
-                      checked={selectedReason === code}
-                      onChange={() => {
-                        setSelectedReason(code);
-                        setError("");
-                      }}
+            <div
+              className="feedback-modal app-modal"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="feedback-modal-title"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h2 id="feedback-modal-title" className="feedback-modal-title">
+                {t("feedbackModalTitle")}
+              </h2>
+              <p className="feedback-modal-hint">{t("feedbackModalHint")}</p>
+              <form onSubmit={onModalSubmit}>
+                <div className="feedback-reason-list">
+                  {DOWN_REASONS.map(({ code, labelKey }) => (
+                    <label key={code} className="feedback-reason-option">
+                      <input
+                        type="radio"
+                        name="feedback-reason"
+                        value={code}
+                        checked={selectedReason === code}
+                        onChange={() => {
+                          setSelectedReason(code);
+                          setError("");
+                        }}
+                      />
+                      <span>{t(labelKey)}</span>
+                    </label>
+                  ))}
+                </div>
+                {selectedReason === "other" && (
+                  <label className="feedback-other-label">
+                    {t("feedbackOtherLabel")}
+                    <textarea
+                      className="feedback-other-input"
+                      rows={3}
+                      value={otherText}
+                      onChange={(e) => setOtherText(e.target.value)}
+                      placeholder={t("feedbackOtherPlaceholder")}
+                      maxLength={2000}
                     />
-                    <span>{t(labelKey)}</span>
                   </label>
-                ))}
-              </div>
-              {selectedReason === "other" && (
-                <label className="feedback-other-label">
-                  {t("feedbackOtherLabel")}
-                  <textarea
-                    className="feedback-other-input"
-                    rows={3}
-                    value={otherText}
-                    onChange={(e) => setOtherText(e.target.value)}
-                    placeholder={t("feedbackOtherPlaceholder")}
-                    maxLength={2000}
-                  />
-                </label>
-              )}
-              {error && (
-                <p className="feedback-modal-error" role="alert">
-                  {error}
-                </p>
-              )}
-              <div className="feedback-modal-actions">
-                <button
-                  type="button"
-                  className="btn-secondary"
-                  onClick={() => setModalOpen(false)}
-                  disabled={busy}
-                >
-                  {t("cancel")}
-                </button>
-                <button type="submit" className="btn-primary" disabled={busy || !selectedReason}>
-                  {busy ? t("feedbackSending") : t("feedbackSend")}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+                )}
+                {error && (
+                  <p className="feedback-modal-error" role="alert">
+                    {error}
+                  </p>
+                )}
+                <div className="feedback-modal-actions">
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    onClick={() => setModalOpen(false)}
+                    disabled={busy}
+                  >
+                    {t("cancel")}
+                  </button>
+                  <button type="submit" className="btn-primary" disabled={busy || !selectedReason}>
+                    {busy ? t("feedbackSending") : t("feedbackSend")}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>,
+          document.body,
+        )}
 
       {thankYouVisible &&
         createPortal(
