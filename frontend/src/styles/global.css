@@ -1864,15 +1864,6 @@ body:has(.page-thread) {
   text-align: left;
 }
 
-.followups-heading {
-  margin: 0 0 10px;
-  font-size: 0.8125rem;
-  font-weight: 600;
-  color: var(--muted);
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
-}
-
 .followups-list {
   list-style: none;
   margin: 0;

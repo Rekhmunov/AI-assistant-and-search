@@ -354,7 +354,6 @@ export function Thread() {
 
               {showFollowUps && (
                 <section className="followups-section">
-                  <h3 className="followups-heading">{t("followUps")}</h3>
                   <ul className="followups-list">
                     {turn.followUps.map((q) => (
                       <li key={q}>
