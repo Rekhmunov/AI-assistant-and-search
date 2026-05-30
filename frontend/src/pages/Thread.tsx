@@ -324,12 +324,12 @@ export function Thread() {
                       }
                     />
                   </AnswerErrorBoundary>
-                  {!isActive && turn.answer.trim() && (
+                  {turn.answer.trim() && (
                     <AnswerFooter
                       answer={turn.answer}
                       title={turn.query}
                       sources={sources}
-                      messageId={turn.messageId ?? turn.key}
+                      messageId={turn.messageId}
                       token={token}
                       userFeedback={turn.userFeedback}
                     />

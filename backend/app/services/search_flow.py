@@ -367,15 +367,59 @@ class SearchFlowService:
                     )
                     query_url_trace.bootstrap_count += extra_trace.bootstrap_count
 
-                pipeline_result = await fact_pipeline.run(
-                    llm_query,
-                    queries,
-                    enhance_fn=_enhance,
-                    fact_slots=fact_slots,
-                    howto=howto,
-                    answer_model=route.answer_model,
-                    bootstrap_sources=bootstrap_sources or None,
+                pipeline_task = asyncio.create_task(
+                    fact_pipeline.run(
+                        llm_query,
+                        queries,
+                        enhance_fn=_enhance,
+                        fact_slots=fact_slots,
+                        howto=howto,
+                        answer_model=route.answer_model,
+                        bootstrap_sources=bootstrap_sources or None,
+                    )
                 )
+                pipeline_result = None
+                images_emitted = False
+                image_ready_task: asyncio.Task | None = None
+
+                if image_task is not None:
+
+                    async def _load_entity_images() -> list:
+                        try:
+                            return await asyncio.wait_for(
+                                image_task,
+                                timeout=settings.entity_images_total_timeout_sec,
+                            )
+                        except asyncio.TimeoutError:
+                            image_task.cancel()
+                            logger.info("Entity image search timed out")
+                            return []
+                        except Exception:
+                            logger.exception("Entity image search failed (non-fatal)")
+                            return []
+
+                    image_ready_task = asyncio.create_task(_load_entity_images())
+
+                pending_tasks: set[asyncio.Task] = {pipeline_task}
+                if image_ready_task is not None:
+                    pending_tasks.add(image_ready_task)
+
+                while pending_tasks:
+                    done, pending_tasks = await asyncio.wait(
+                        pending_tasks, return_when=asyncio.FIRST_COMPLETED
+                    )
+                    for task in done:
+                        if task is image_ready_task and not images_emitted:
+                            images_emitted = True
+                            entity_images_json = entity_images_to_json(task.result())
+                            if entity_images_json:
+                                yield sse_event("images", {"images": entity_images_json})
+                        elif task is pipeline_task:
+                            pipeline_result = task.result()
+
+                if pipeline_result is None:
+                    pipeline_result = await pipeline_task
+
                 sources = pipeline_result.sources
                 fact_pack = pipeline_result.fact_pack
                 search_attempts = pipeline_result.search_attempts
@@ -386,21 +430,6 @@ class SearchFlowService:
                 sources_json = sources_to_json(sources)
                 if sources_json:
                     yield sse_event("sources", {"sources": sources_json})
-
-                if image_task is not None:
-                    try:
-                        validated_images = await asyncio.wait_for(
-                            image_task,
-                            timeout=settings.entity_images_total_timeout_sec,
-                        )
-                        entity_images_json = entity_images_to_json(validated_images)
-                        if entity_images_json:
-                            yield sse_event("images", {"images": entity_images_json})
-                    except asyncio.TimeoutError:
-                        image_task.cancel()
-                        logger.info("Entity image search timed out")
-                    except Exception:
-                        logger.exception("Entity image search failed (non-fatal)")
 
             gpt_preview: list[dict[str, str]] = []
             try:

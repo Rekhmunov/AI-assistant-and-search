@@ -6,19 +6,6 @@ type Props = {
 };
 
 const VISIBLE = 3;
-const MIN_SIDE = 80;
-
-function preloadImage(url: string): Promise<boolean> {
-  return new Promise((resolve) => {
-    const img = new Image();
-    img.referrerPolicy = "no-referrer";
-    img.onload = () => {
-      resolve(img.naturalWidth >= MIN_SIDE && img.naturalHeight >= MIN_SIDE);
-    };
-    img.onerror = () => resolve(false);
-    img.src = url;
-  });
-}
 
 type LightboxState = {
   url: string;
@@ -27,33 +14,23 @@ type LightboxState = {
 };
 
 export function TurnImageGallery({ images }: Props) {
-  const [validated, setValidated] = useState<EntityImage[]>([]);
+  const [failedUrls, setFailedUrls] = useState<Set<string>>(() => new Set());
   const [start, setStart] = useState(0);
   const [lightbox, setLightbox] = useState<LightboxState | null>(null);
 
+  const validated = useMemo(
+    () => images.filter((img) => img.url && !failedUrls.has(img.url)).slice(0, 5),
+    [images, failedUrls],
+  );
+
   useEffect(() => {
-    let cancelled = false;
     setStart(0);
-
-    (async () => {
-      const out: EntityImage[] = [];
-      for (const img of images) {
-        if (!img.url || cancelled) break;
-        const ok = await preloadImage(img.url);
-        if (ok) out.push(img);
-        if (out.length >= 5) break;
-      }
-      if (!cancelled) setValidated(out);
-    })();
-
-    return () => {
-      cancelled = true;
-    };
+    setFailedUrls(new Set());
   }, [images]);
 
   const maxStart = Math.max(0, validated.length - VISIBLE);
   const clampedStart = Math.min(start, maxStart);
-  const window = useMemo(
+  const visibleImages = useMemo(
     () => validated.slice(clampedStart, clampedStart + VISIBLE),
     [validated, clampedStart],
   );
@@ -69,13 +46,22 @@ export function TurnImageGallery({ images }: Props) {
     setStart((s) => Math.min(maxStart, s + 1));
   }, [maxStart]);
 
+  const markFailed = useCallback((url: string) => {
+    setFailedUrls((prev) => {
+      if (prev.has(url)) return prev;
+      const next = new Set(prev);
+      next.add(url);
+      return next;
+    });
+  }, []);
+
   useEffect(() => {
     if (!lightbox) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") setLightbox(null);
     };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    globalThis.addEventListener("keydown", onKey);
+    return () => globalThis.removeEventListener("keydown", onKey);
   }, [lightbox]);
 
   if (!validated.length) return null;
@@ -95,7 +81,7 @@ export function TurnImageGallery({ images }: Props) {
         )}
 
         <div className="turn-image-gallery-track">
-          {window.map((img) => (
+          {visibleImages.map((img) => (
             <button
               key={img.url}
               type="button"
@@ -112,9 +98,10 @@ export function TurnImageGallery({ images }: Props) {
               <img
                 src={img.url}
                 alt={img.title || ""}
-                loading="lazy"
+                loading="eager"
                 decoding="async"
                 referrerPolicy="no-referrer"
+                onError={() => markFailed(img.url)}
               />
             </button>
           ))}
