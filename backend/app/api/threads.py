@@ -14,7 +14,7 @@ from app.models.message_feedback import MessageFeedback
 from app.models.thread import Thread
 from app.schemas.feedback import MessageFeedbackOut, reason_label
 from app.models.user import Plan, User
-from app.schemas.thread import MessageOut, SourceOut, ThreadDetail, ThreadListItem, ThreadUpdate
+from app.schemas.thread import MessageOut, SourceOut, ThreadDetail, ThreadListItem, ThreadUpdate, EntityImageOut
 
 router = APIRouter(prefix="/threads", tags=["threads"])
 
@@ -78,6 +78,9 @@ async def get_thread(
         sources = None
         if m.sources:
             sources = [SourceOut(**s) for s in m.sources]
+        images = None
+        if m.images:
+            images = [EntityImageOut(**img) for img in m.images]
         uf = None
         fb = feedback_by_message.get(m.id)
         if fb:
@@ -93,6 +96,7 @@ async def get_thread(
                 role=m.role,
                 content=m.content,
                 sources=sources,
+                images=images,
                 follow_up_questions=m.follow_up_questions,
                 user_feedback=uf,
                 created_at=m.created_at,

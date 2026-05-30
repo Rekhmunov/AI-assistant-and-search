@@ -42,6 +42,14 @@ export interface Source {
   domain: string;
 }
 
+export interface EntityImage {
+  url: string;
+  title: string;
+  page_url: string;
+  width?: number | null;
+  height?: number | null;
+}
+
 export interface MessageFeedback {
   rating: "up" | "down";
   reason_code?: string | null;
@@ -56,6 +64,7 @@ export interface Message {
   role: "user" | "assistant";
   content: string;
   sources: Source[] | null;
+  images?: EntityImage[] | null;
   follow_up_questions: string[] | null;
   user_feedback?: MessageFeedback | null;
   created_at: string;
@@ -277,6 +286,7 @@ export interface SSEHandlers {
   onThread?: (id: string) => void;
   onRoute?: (route: RouteInfo) => void;
   onSources?: (sources: Source[]) => void;
+  onImages?: (images: EntityImage[]) => void;
   onToken?: (text: string) => void;
   onResetAnswer?: () => void;
   onFollowUps?: (questions: string[]) => void;
@@ -488,6 +498,9 @@ export async function streamSearch(
             break;
           case "sources":
             handlers.onSources?.(parsed.sources);
+            break;
+          case "images":
+            handlers.onImages?.(parsed.images);
             break;
           case "token":
             handlers.onToken?.(parsed.text);

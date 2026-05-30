@@ -42,6 +42,12 @@ class Settings(BaseSettings):
     yandex_folder_id: str = ""
     yandex_api_key: str = ""
     yandex_search_url: str = "https://searchapi.api.cloud.yandex.net/v2/web/search"
+    yandex_image_search_url: str = "https://searchapi.api.cloud.yandex.net/v2/image/search"
+    entity_images_enabled: bool = True
+    entity_images_max: int = 5
+    entity_images_candidate_limit: int = 14
+    entity_images_validate_timeout_sec: float = 4.0
+    entity_images_total_timeout_sec: float = 8.0
     # Model URI suffixes: gpt://{folder_id}/{name}/{version}
     yandex_gpt_lite_model: str = "yandexgpt-lite/latest"
     yandex_gpt_pro_model: str = "yandexgpt/latest"

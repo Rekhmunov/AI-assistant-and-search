@@ -6,7 +6,7 @@ import { AnswerBody } from "../components/AnswerBody";
 import { AnswerErrorBoundary } from "../components/AnswerErrorBoundary";
 import { AnswerFooter } from "../components/AnswerFooter";
 import { SearchComposer, type ComposerAttachment } from "../components/SearchComposer";
-import { SearchStatusLine, type SearchPhase } from "../components/SearchStatusLine";
+import { TurnImageGallery } from "../components/TurnImageGallery";
 import { t } from "../i18n";
 import { findLastIndex } from "../lib/arrayUtils";
 import { messagesToTurns, type ThreadTurn } from "../lib/threadTurns";
@@ -15,7 +15,7 @@ import { useAuthStore } from "../store/authStore";
 
 function updateLastStreamingTurn(
   turns: ThreadTurn[],
-  patch: Partial<Pick<ThreadTurn, "answer" | "sources" | "followUps">>,
+  patch: Partial<Pick<ThreadTurn, "answer" | "sources" | "images" | "followUps">>,
   appendAnswer?: string,
 ): ThreadTurn[] {
   const idx = findLastIndex(turns, (turn) => turn.streaming);
@@ -160,6 +160,7 @@ export function Thread() {
           query: text,
           answer: "",
           sources: [],
+          images: [],
           followUps: [],
           streaming: true,
         },
@@ -178,6 +179,9 @@ export function Thread() {
         onSources: (list) => {
           setSearchPhase("answering");
           setTurns((prev) => updateLastStreamingTurn(prev, { sources: list }));
+        },
+        onImages: (list) => {
+          setTurns((prev) => updateLastStreamingTurn(prev, { images: list }));
         },
         onToken: (chunk) => {
           setSearchPhase("answering");
@@ -293,6 +297,8 @@ export function Thread() {
               <div className="thread-query">
                 <p className="thread-query-text">{turn.query}</p>
               </div>
+
+              {turn.images.length > 0 && <TurnImageGallery images={turn.images} />}
 
               {showStatus && (
                 <SearchStatusLine phase={searchPhase} needsSearch={needsSearch} />

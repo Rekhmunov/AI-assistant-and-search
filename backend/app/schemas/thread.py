@@ -20,11 +20,20 @@ class SourceOut(BaseModel):
     domain: str
 
 
+class EntityImageOut(BaseModel):
+    url: str
+    title: str
+    page_url: str
+    width: int | None = None
+    height: int | None = None
+
+
 class MessageOut(BaseModel):
     id: UUID
     role: MessageRole
     content: str
     sources: list[SourceOut] | None
+    images: list[EntityImageOut] | None = None
     follow_up_questions: list[str] | None
     user_feedback: MessageFeedbackOut | None = None
     created_at: datetime

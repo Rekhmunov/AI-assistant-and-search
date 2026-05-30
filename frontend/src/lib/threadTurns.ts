@@ -1,4 +1,4 @@
-import type { Message, MessageFeedback, Source } from "../api/client";
+import type { Message, MessageFeedback, Source, EntityImage } from "../api/client";
 
 export type ThreadTurn = {
   key: string;
@@ -7,6 +7,7 @@ export type ThreadTurn = {
   query: string;
   answer: string;
   sources: Source[];
+  images: EntityImage[];
   followUps: string[];
   userFeedback?: MessageFeedback | null;
   streaming?: boolean;
@@ -29,6 +30,7 @@ export function messagesToTurns(messages: Message[]): ThreadTurn[] {
         query: pendingUser.content,
         answer: m.content,
         sources: m.sources ?? [],
+        images: m.images ?? [],
         followUps: m.follow_up_questions ?? [],
         userFeedback: m.user_feedback ?? null,
       });
@@ -42,6 +44,7 @@ export function messagesToTurns(messages: Message[]): ThreadTurn[] {
       query: pendingUser.content,
       answer: "",
       sources: [],
+      images: [],
       followUps: [],
     });
   }

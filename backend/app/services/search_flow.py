@@ -34,7 +34,9 @@ from app.services.query_url_memory import (
     lookup_bootstrap_sources,
     record_successful_urls,
 )
-from app.services.providers.factory import resolve_runtime_providers
+from app.services.entity_image import entity_images_to_json
+from app.services.entity_image_routing import build_entity_image_query, wants_entity_images
+from app.services.yandex_image_search import YandexImageSearchService
 import redis.asyncio as redis
 
 
@@ -254,6 +256,7 @@ class SearchFlowService:
 
         sources: list[SearchSource] = []
         sources_json: list[dict] = []
+        entity_images_json: list[dict] = []
         search_q_sent: str | None = None
         rewrite_trace: dict | None = None
         search_attempts: list[dict] = []
@@ -317,6 +320,28 @@ class SearchFlowService:
                 if howto or "course_program" in fact_slots:
                     route.answer_model = "pro"
 
+                settings = get_settings()
+                image_intent = rewrite.intent if rewrite.intent in _VALID_INTENTS else route.intent
+                show_entity_images = (
+                    settings.entity_images_enabled
+                    and settings.yandex_configured
+                    and not has_attachments
+                    and not vision_only_answer
+                    and wants_entity_images(user_text, intent=str(image_intent))
+                )
+                image_task: asyncio.Task | None = None
+                if show_entity_images:
+                    image_query = build_entity_image_query(user_text, llm_query)
+                    image_svc = YandexImageSearchService(settings)
+                    image_task = asyncio.create_task(
+                        image_svc.search_validated(
+                            image_query,
+                            limit=settings.entity_images_max,
+                            candidate_limit=settings.entity_images_candidate_limit,
+                            validate_timeout=settings.entity_images_validate_timeout_sec,
+                        )
+                    )
+
                 def _enhance(q: str) -> str:
                     return enhance_search_query(q, for_howto=howto)
 
@@ -358,6 +383,21 @@ class SearchFlowService:
                 sources_json = sources_to_json(sources)
                 if sources_json:
                     yield sse_event("sources", {"sources": sources_json})
+
+                if image_task is not None:
+                    try:
+                        validated_images = await asyncio.wait_for(
+                            image_task,
+                            timeout=settings.entity_images_total_timeout_sec,
+                        )
+                        entity_images_json = entity_images_to_json(validated_images)
+                        if entity_images_json:
+                            yield sse_event("images", {"images": entity_images_json})
+                    except asyncio.TimeoutError:
+                        image_task.cancel()
+                        logger.info("Entity image search timed out")
+                    except Exception:
+                        logger.exception("Entity image search failed (non-fatal)")
 
             gpt_preview: list[dict[str, str]] = []
             try:
@@ -545,6 +585,7 @@ class SearchFlowService:
                 role=MessageRole.ASSISTANT,
                 content=full_answer.strip(),
                 sources=sources_json if sources_json else None,
+                images=entity_images_json if entity_images_json else None,
                 follow_up_questions=follow_ups or None,
                 debug_trace=trace_payload,
             )
