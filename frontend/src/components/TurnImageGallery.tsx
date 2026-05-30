@@ -6,6 +6,8 @@ type Props = {
 };
 
 const VISIBLE = 3;
+const MIN_SIDE = 80;
+const MAX_IMAGES = 5;
 
 type LightboxState = {
   url: string;
@@ -13,26 +15,57 @@ type LightboxState = {
   pageUrl: string;
 };
 
+function preloadImage(url: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.referrerPolicy = "no-referrer";
+    img.decoding = "async";
+    img.onload = () => {
+      resolve(img.naturalWidth >= MIN_SIDE && img.naturalHeight >= MIN_SIDE);
+    };
+    img.onerror = () => resolve(false);
+    img.src = url;
+  });
+}
+
+async function preloadGalleryImages(images: EntityImage[]): Promise<EntityImage[]> {
+  const candidates = images.filter((img) => img.url).slice(0, MAX_IMAGES);
+  if (!candidates.length) return [];
+
+  const loaded = await Promise.all(
+    candidates.map(async (img) => ({
+      img,
+      ok: await preloadImage(img.url),
+    })),
+  );
+
+  return loaded.filter((entry) => entry.ok).map((entry) => entry.img);
+}
+
 export function TurnImageGallery({ images }: Props) {
-  const [failedUrls, setFailedUrls] = useState<Set<string>>(() => new Set());
+  const [readyImages, setReadyImages] = useState<EntityImage[]>([]);
   const [start, setStart] = useState(0);
   const [lightbox, setLightbox] = useState<LightboxState | null>(null);
 
-  const validated = useMemo(
-    () => images.filter((img) => img.url && !failedUrls.has(img.url)).slice(0, 5),
-    [images, failedUrls],
-  );
-
   useEffect(() => {
+    let cancelled = false;
     setStart(0);
-    setFailedUrls(new Set());
+    setReadyImages([]);
+
+    void preloadGalleryImages(images).then((loaded) => {
+      if (!cancelled) setReadyImages(loaded);
+    });
+
+    return () => {
+      cancelled = true;
+    };
   }, [images]);
 
-  const maxStart = Math.max(0, validated.length - VISIBLE);
+  const maxStart = Math.max(0, readyImages.length - VISIBLE);
   const clampedStart = Math.min(start, maxStart);
   const visibleImages = useMemo(
-    () => validated.slice(clampedStart, clampedStart + VISIBLE),
-    [validated, clampedStart],
+    () => readyImages.slice(clampedStart, clampedStart + VISIBLE),
+    [readyImages, clampedStart],
   );
 
   const canPrev = clampedStart > 0;
@@ -46,15 +79,6 @@ export function TurnImageGallery({ images }: Props) {
     setStart((s) => Math.min(maxStart, s + 1));
   }, [maxStart]);
 
-  const markFailed = useCallback((url: string) => {
-    setFailedUrls((prev) => {
-      if (prev.has(url)) return prev;
-      const next = new Set(prev);
-      next.add(url);
-      return next;
-    });
-  }, []);
-
   useEffect(() => {
     if (!lightbox) return;
     const onKey = (e: KeyboardEvent) => {
@@ -64,10 +88,16 @@ export function TurnImageGallery({ images }: Props) {
     return () => globalThis.removeEventListener("keydown", onKey);
   }, [lightbox]);
 
-  if (!validated.length) return null;
+  if (!readyImages.length) return null;
 
   return (
     <>
+      <div className="turn-image-gallery-preload" aria-hidden>
+        {readyImages.map((img) => (
+          <img key={`preload-${img.url}`} src={img.url} alt="" referrerPolicy="no-referrer" />
+        ))}
+      </div>
+
       <div className="turn-image-gallery" aria-label="Изображения">
         {canPrev && (
           <button
@@ -95,14 +125,7 @@ export function TurnImageGallery({ images }: Props) {
               }
               title={img.title}
             >
-              <img
-                src={img.url}
-                alt={img.title || ""}
-                loading="eager"
-                decoding="async"
-                referrerPolicy="no-referrer"
-                onError={() => markFailed(img.url)}
-              />
+              <img src={img.url} alt={img.title || ""} referrerPolicy="no-referrer" decoding="sync" />
             </button>
           ))}
         </div>
@@ -140,7 +163,7 @@ export function TurnImageGallery({ images }: Props) {
             >
               ×
             </button>
-            <img src={lightbox.url} alt={lightbox.title} referrerPolicy="no-referrer" />
+            <img src={lightbox.url} alt={lightbox.title} referrerPolicy="no-referrer" decoding="sync" />
             {lightbox.pageUrl && lightbox.pageUrl !== lightbox.url && (
               <a
                 className="image-lightbox-source"
