@@ -6,6 +6,7 @@ import { AnswerBody } from "../components/AnswerBody";
 import { AnswerErrorBoundary } from "../components/AnswerErrorBoundary";
 import { AnswerFooter } from "../components/AnswerFooter";
 import { SearchComposer, type ComposerAttachment } from "../components/SearchComposer";
+import { SearchStatusLine, type SearchPhase } from "../components/SearchStatusLine";
 import { TurnImageGallery } from "../components/TurnImageGallery";
 import { t } from "../i18n";
 import { findLastIndex } from "../lib/arrayUtils";
