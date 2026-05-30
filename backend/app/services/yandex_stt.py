@@ -59,6 +59,36 @@ def _ffmpeg_available() -> bool:
 
 
 def _convert_to_ogg_opus(input_bytes: bytes, input_ext: str) -> bytes:
+    return _ffmpeg_convert(
+        input_bytes,
+        input_ext,
+        [
+            "-vn",
+            "-ac",
+            "1",
+            "-ar",
+            "48000",
+            "-c:a",
+            "libopus",
+            "-application",
+            "voip",
+            "-b:a",
+            "32k",
+        ],
+        "out.ogg",
+    )
+
+
+def _convert_to_lpcm_raw(input_bytes: bytes, input_ext: str) -> bytes:
+    return _ffmpeg_convert(
+        input_bytes,
+        input_ext,
+        ["-vn", "-ac", "1", "-ar", "48000", "-f", "s16le", "-acodec", "pcm_s16le"],
+        "out.raw",
+    )
+
+
+def _ffmpeg_convert(input_bytes: bytes, input_ext: str, audio_args: list[str], out_name: str) -> bytes:
     if not _ffmpeg_available():
         raise SpeechTranscriptionError(
             "ffmpeg_missing",
@@ -66,27 +96,22 @@ def _convert_to_ogg_opus(input_bytes: bytes, input_ext: str) -> bytes:
         )
     with tempfile.TemporaryDirectory() as tmp:
         inp = Path(tmp) / f"in.{input_ext}"
-        out = Path(tmp) / "out.ogg"
+        out = Path(tmp) / out_name
         inp.write_bytes(input_bytes)
         proc = subprocess.run(
-            [
-                "ffmpeg",
-                "-y",
-                "-i",
-                str(inp),
-                "-c:a",
-                "libopus",
-                "-b:a",
-                "32k",
-                "-vn",
-                str(out),
-            ],
+            ["ffmpeg", "-y", "-i", str(inp), *audio_args, str(out)],
             capture_output=True,
             check=False,
         )
-        if proc.returncode != 0:
+        if proc.returncode != 0 or not out.exists() or out.stat().st_size < 128:
             err = proc.stderr.decode(errors="replace")[:300]
-            logger.warning("ffmpeg convert failed: %s", err)
+            logger.warning(
+                "ffmpeg convert failed (%s -> %s, in=%s bytes): %s",
+                input_ext,
+                out_name,
+                len(input_bytes),
+                err,
+            )
             raise SpeechTranscriptionError(
                 "audio_convert_failed",
                 "Не удалось обработать аудиозапись",
@@ -108,39 +133,83 @@ async def transcribe_audio(
         raise SpeechTranscriptionError("empty_audio", "Пустая аудиозапись")
 
     mime = (content_type or "audio/webm").split(";")[0].strip().lower()
-    fmt = "oggopus"
-    payload = audio
+    source_ext = _EXT_BY_MIME.get(mime, "webm")
+
+    attempts: list[tuple[str, bytes, str, dict[str, str], dict[str, str]]] = []
 
     if mime in ("audio/ogg", "audio/opus"):
-        payload = audio
+        attempts.append(("oggopus", audio, "audio/ogg", {"lang": "ru-RU", "format": "oggopus"}, {}))
     elif mime in ("audio/mpeg", "audio/mp3"):
-        fmt = "mp3"
-        payload = audio
+        attempts.append(("mp3", audio, "audio/mpeg", {"lang": "ru-RU", "format": "mp3"}, {}))
     elif mime in ("audio/wav", "audio/x-wav"):
-        fmt = "lpcm"
-        payload = audio
+        attempts.append(
+            (
+                "lpcm",
+                audio,
+                "audio/wav",
+                {"lang": "ru-RU", "format": "lpcm", "sampleRateHz": "48000"},
+                {},
+            )
+        )
     else:
-        ext = _EXT_BY_MIME.get(mime, "webm")
-        payload = await asyncio.to_thread(_convert_to_ogg_opus, audio, ext)
+        ogg = await asyncio.to_thread(_convert_to_ogg_opus, audio, source_ext)
+        attempts.append(("oggopus", ogg, "audio/ogg", {"lang": "ru-RU", "format": "oggopus"}, {}))
+        try:
+            lpcm = await asyncio.to_thread(_convert_to_lpcm_raw, audio, source_ext)
+            attempts.append(
+                (
+                    "lpcm",
+                    lpcm,
+                    "audio/wav",
+                    {"lang": "ru-RU", "format": "lpcm", "sampleRateHz": "48000"},
+                    {"fallback": "lpcm"},
+                )
+            )
+        except SpeechTranscriptionError:
+            pass
 
-    params: dict[str, str] = {
-        "folderId": settings.yandex_folder_id,
-        "lang": "ru-RU",
-        "format": fmt,
-    }
-    if fmt == "lpcm":
-        params["sampleRateHz"] = "48000"
+    headers_base = {"Authorization": f"Api-Key {settings.yandex_api_key}"}
+    last_empty = False
 
-    headers = {
-        "Authorization": f"Api-Key {settings.yandex_api_key}",
-    }
-    if fmt == "oggopus":
-        headers["Content-Type"] = "audio/ogg"
-    elif fmt == "mp3":
-        headers["Content-Type"] = "audio/mpeg"
-    else:
-        headers["Content-Type"] = "audio/wav"
+    for fmt, payload, content_header, fmt_params, meta in attempts:
+        params = {"folderId": settings.yandex_folder_id, **fmt_params}
+        headers = {**headers_base, "Content-Type": content_header}
+        try:
+            text = await _recognize_once(payload, params, headers)
+        except SpeechTranscriptionError as exc:
+            if exc.code == "no_speech":
+                last_empty = True
+                logger.info(
+                    "Yandex STT empty result (%s, %s bytes, source=%s %s bytes)",
+                    fmt,
+                    len(payload),
+                    mime,
+                    len(audio),
+                )
+                continue
+            raise
+        if text:
+            if meta.get("fallback"):
+                logger.info("Yandex STT succeeded via LPCM fallback (%s bytes)", len(payload))
+            return text
+        last_empty = True
+        logger.info(
+            "Yandex STT empty result (%s, %s bytes, source=%s %s bytes)",
+            fmt,
+            len(payload),
+            mime,
+            len(audio),
+        )
 
+    if last_empty:
+        raise SpeechTranscriptionError("no_speech", "Речь не распознана")
+    raise SpeechTranscriptionError(
+        "stt_upstream_error",
+        "Сервис распознавания речи временно недоступен",
+    )
+
+
+async def _recognize_once(payload: bytes, params: dict[str, str], headers: dict[str, str]) -> str:
     try:
         async with httpx.AsyncClient(timeout=60.0) as client:
             resp = await client.post(STT_URL, params=params, content=payload, headers=headers)

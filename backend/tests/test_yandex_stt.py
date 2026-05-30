@@ -58,3 +58,22 @@ def test_stt_http_status_maps_to_forbidden(monkeypatch):
     with pytest.raises(SpeechTranscriptionError) as exc:
         asyncio.run(transcribe_audio(b"audio-bytes", "audio/webm", settings))
     assert exc.value.code == "stt_forbidden"
+
+
+def test_transcribe_falls_back_to_lpcm_after_empty_ogg(monkeypatch):
+    calls: list[str] = []
+
+    async def fake_recognize(_payload, params, _headers):
+        calls.append(params["format"])
+        if params["format"] == "oggopus":
+            raise SpeechTranscriptionError("no_speech", "Речь не распознана")
+        return "привет"
+
+    settings = Settings(yandex_folder_id="f", yandex_api_key="k")
+    monkeypatch.setattr("app.services.yandex_stt._convert_to_ogg_opus", lambda audio, ext: b"ogg")
+    monkeypatch.setattr("app.services.yandex_stt._convert_to_lpcm_raw", lambda audio, ext: b"lpcm")
+    monkeypatch.setattr("app.services.yandex_stt._recognize_once", fake_recognize)
+
+    text = asyncio.run(transcribe_audio(b"audio-bytes", "audio/mp4", settings))
+    assert text == "привет"
+    assert calls == ["oggopus", "lpcm"]

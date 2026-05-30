@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
@@ -11,6 +12,8 @@ from app.api.deps import get_current_user
 from app.core.config import get_settings
 from app.models.user import User
 from app.services.yandex_stt import SpeechTranscriptionError, resolve_audio_content_type, transcribe_audio
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/voice", tags=["voice"])
 
@@ -41,6 +44,12 @@ async def transcribe_voice(
     try:
         text = await transcribe_audio(raw, resolved_type, settings)
     except SpeechTranscriptionError as exc:
+        logger.info(
+            "voice transcribe failed: code=%s bytes=%s type=%s",
+            exc.code,
+            len(raw),
+            resolved_type,
+        )
         status_code = status.HTTP_503_SERVICE_UNAVAILABLE
         if exc.code in ("empty_audio", "no_speech"):
             status_code = status.HTTP_400_BAD_REQUEST
