@@ -1583,38 +1583,43 @@ body:has(.page-thread) {
 .sources-trigger {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
-  padding: 6px 14px 6px 8px;
+  gap: 8px;
+  padding: 5px 12px 5px 6px;
   border-radius: 999px;
   border: 1px solid var(--border);
-  background: var(--bg);
+  background: var(--surface);
   color: var(--muted);
+  font-family: inherit;
   font-size: 0.8125rem;
-  line-height: 1.2;
+  font-weight: 400;
+  line-height: 1.25;
   cursor: pointer;
   box-shadow: none;
-  transition: background 0.15s ease, border-color 0.15s ease;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
 }
 
 .sources-trigger:hover {
   background: var(--surface-hover);
   border-color: #dcdcd6;
+  color: var(--text);
 }
 
-.sources-trigger-text {
+.sources-trigger-label {
   display: inline-flex;
   align-items: baseline;
+  gap: 0.35em;
   white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 
 .sources-trigger-count {
-  font-weight: 600;
-  color: #7a7a74;
+  font-weight: 500;
+  color: inherit;
 }
 
 .sources-trigger-word {
-  font-weight: 500;
-  color: #a3a39c;
+  font-weight: 400;
+  color: inherit;
 }
 
 .source-favicon-stack {

@@ -13,9 +13,9 @@ export function SourcesTriggerButton({ sources, onClick }: Props) {
   return (
     <button type="button" className="sources-trigger" onClick={onClick} aria-haspopup="dialog">
       <SourceFaviconStack sources={sources} max={3} size="sm" />
-      <span className="sources-trigger-text">
+      <span className="sources-trigger-label">
         <span className="sources-trigger-count">{count}</span>
-        <span className="sources-trigger-word"> {word}</span>
+        <span className="sources-trigger-word">{word}</span>
       </span>
     </button>
   );
