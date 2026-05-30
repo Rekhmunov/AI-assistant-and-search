@@ -31,6 +31,21 @@ function updateLastStreamingTurn(
   return next;
 }
 
+/** follow_ups приходят после done — streaming уже false, нужен последний завершённый turn. */
+function updateLastActiveTurn(
+  turns: ThreadTurn[],
+  patch: Partial<Pick<ThreadTurn, "followUps">>,
+): ThreadTurn[] {
+  const idx = findLastIndex(
+    turns,
+    (turn) => turn.streaming || Boolean(turn.messageId) || Boolean(turn.answer.trim()),
+  );
+  if (idx < 0) return turns;
+  const next = [...turns];
+  next[idx] = { ...next[idx], ...patch };
+  return next;
+}
+
 type ThreadLocationState = { fromHistory?: boolean };
 
 export function Thread() {
@@ -203,7 +218,7 @@ export function Thread() {
           answerResetPendingRef.current = true;
         },
         onFollowUps: (questions) => {
-          setTurns((prev) => updateLastStreamingTurn(prev, { followUps: questions }));
+          setTurns((prev) => updateLastActiveTurn(prev, { followUps: questions ?? [] }));
         },
         onDone: (done) => {
           streamingRef.current = false;
@@ -339,6 +354,7 @@ export function Thread() {
 
               {showFollowUps && (
                 <section className="followups-section">
+                  <h3 className="followups-heading">{t("followUps")}</h3>
                   <ul className="followups-list">
                     {turn.followUps.map((q) => (
                       <li key={q}>

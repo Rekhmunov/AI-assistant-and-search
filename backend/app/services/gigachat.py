@@ -509,7 +509,7 @@ class GigaChatProvider(PromptedLLMMixin, LLMProvider):
         try:
             data = json.loads(raw)
             if isinstance(data, list):
-                return [str(x).strip() for x in data if str(x).strip()][:3]
+                return [str(x).strip() for x in data if str(x).strip()][:5]
         except json.JSONDecodeError:
             pass
         return []

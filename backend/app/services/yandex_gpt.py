@@ -447,11 +447,16 @@ class YandexGPTProvider(PromptedLLMMixin, LLMProvider):
             try:
                 items = json.loads(match.group())
                 if isinstance(items, list):
-                    return _normalize_follow_up_suggestions([str(x) for x in items[:3]])
+                    normalized = _normalize_follow_up_suggestions([str(x) for x in items[:5]])
+                    if len(normalized) >= 3:
+                        return normalized
             except json.JSONDecodeError:
                 pass
-        lines = [q.strip() for q in text.split("\n") if q.strip()][:3]
-        return _normalize_follow_up_suggestions(lines) or _default_follow_up_suggestions(query)
+        lines = [q.strip() for q in text.split("\n") if q.strip()][:5]
+        normalized = _normalize_follow_up_suggestions(lines)
+        if len(normalized) >= 3:
+            return normalized
+        return _default_follow_up_suggestions(query)
 
 
 def _normalize_follow_up_suggestions(items: list[str]) -> list[str]:
@@ -465,7 +470,7 @@ def _normalize_follow_up_suggestions(items: list[str]) -> list[str]:
         if re.match(r"^(какие|какой|какая|как|есть ли|уточните)\b", s, re.I):
             continue
         out.append(s[:120])
-        if len(out) >= 3:
+        if len(out) >= 5:
             break
     return out
 

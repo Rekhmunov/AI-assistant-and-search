@@ -421,7 +421,7 @@ class DeepSeekProvider(PromptedLLMMixin, LLMProvider):
             try:
                 items = json.loads(match.group())
                 if isinstance(items, list):
-                    return _normalize_follow_up_suggestions([str(x) for x in items[:3]])
+                    return _normalize_follow_up_suggestions([str(x) for x in items[:5]])
             except json.JSONDecodeError:
                 pass
         return _default_follow_up_suggestions(query)

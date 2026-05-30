@@ -63,6 +63,11 @@ export function mergeThreadTurns(local: ThreadTurn[], api: ThreadTurn[]): Thread
   if (lastLocal.messageId) {
     const match = api.find((t) => t.key === lastLocal.messageId);
     if (match?.answer.trim()) {
+      if (lastLocal.followUps.length > 0 && match.followUps.length === 0) {
+        return api.map((t) =>
+          t.key === lastLocal.messageId ? { ...t, followUps: lastLocal.followUps } : t,
+        );
+      }
       return api;
     }
   }
