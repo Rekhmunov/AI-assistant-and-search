@@ -9,7 +9,7 @@ import httpx
 
 logger = logging.getLogger(__name__)
 
-_MIN_BYTES = 400
+_MIN_BYTES = 2048
 _MIN_WIDTH = 120
 _MIN_HEIGHT = 120
 
@@ -44,7 +44,7 @@ async def validate_image_url(
             if content_type and not content_type.startswith("image/"):
                 return False
             buf = bytearray()
-            async for chunk in resp.aiter_bytes(4096):
+            async for chunk in resp.aiter_bytes(8192):
                 buf.extend(chunk)
                 if len(buf) >= _MIN_BYTES:
                     break

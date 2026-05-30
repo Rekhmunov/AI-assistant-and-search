@@ -606,18 +606,51 @@ class SearchFlowService:
         except Exception:
             logger.exception("Search finalize failed (persist assistant message)")
             await db.rollback()
-            await limiter.release_search(user_id_str)
-            msg = "Ошибка сервера. Попробуйте ещё раз."
-            if not await messages_have_images_column(db):
-                msg = (
-                    "База не обновлена (нет колонки images). "
-                    "На сервере: bash scripts/migrate.sh"
+            assistant_msg = None
+            try:
+                assistant_msg = Message(
+                    thread_id=thread.id,
+                    role=MessageRole.ASSISTANT,
+                    content=full_answer.strip(),
+                    sources=sources_json if sources_json else None,
+                    images=None,
+                    follow_up_questions=follow_ups or None,
+                    debug_trace=None,
                 )
-            yield sse_event(
-                "error",
-                {"code": "server_error", "message": msg},
-            )
-            return
+                db.add(assistant_msg)
+                thread.message_count = (thread.message_count or 0) + 2
+                thread.last_message_at = datetime.now(timezone.utc)
+                if not thread_id:
+                    thread.title = display_content[:200]
+                await db.commit()
+                logger.info("Assistant message saved without images/debug_trace after retry")
+            except Exception:
+                logger.exception("Search finalize minimal persist failed")
+                await db.rollback()
+                await limiter.release_search(user_id_str)
+                if full_answer.strip():
+                    yield sse_event(
+                        "done",
+                        {
+                            "message_id": None,
+                            "searches_today": used,
+                            "searches_limit": limit,
+                            "needs_search": route.needs_search,
+                            "answer_model": route.answer_model,
+                        },
+                    )
+                    return
+                msg = "Ошибка сервера. Попробуйте ещё раз."
+                if not await messages_have_images_column(db):
+                    msg = (
+                        "База не обновлена (нет колонки images). "
+                        "На сервере: bash scripts/migrate.sh"
+                    )
+                yield sse_event(
+                    "error",
+                    {"code": "server_error", "message": msg},
+                )
+                return
 
         yield sse_event(
             "done",

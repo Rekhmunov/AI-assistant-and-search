@@ -10,7 +10,7 @@ import { SearchStatusLine, type SearchPhase } from "../components/SearchStatusLi
 import { TurnImageGallery } from "../components/TurnImageGallery";
 import { t } from "../i18n";
 import { findLastIndex } from "../lib/arrayUtils";
-import { messagesToTurns, type ThreadTurn } from "../lib/threadTurns";
+import { mergeThreadTurns, messagesToTurns, type ThreadTurn } from "../lib/threadTurns";
 import { useDesktopLayout } from "../hooks/useDesktopLayout";
 import { useAuthStore } from "../store/authStore";
 
@@ -69,7 +69,7 @@ export function Thread() {
 
   const syncTurnsFromThread = useCallback(() => {
     if (!thread) return;
-    setTurns(messagesToTurns(thread.messages));
+    setTurns((prev) => mergeThreadTurns(prev, messagesToTurns(thread.messages)));
   }, [thread]);
 
   const handleAnswerTypingChange = useCallback(
@@ -239,9 +239,15 @@ export function Thread() {
             if (id) navigate("/", { replace: true });
           }
           setTurns((prev) =>
-            prev.map((turn) =>
-              turn.streaming ? { ...turn, answer: msg, streaming: false } : turn,
-            ),
+            prev.map((turn) => {
+              if (!turn.streaming) return turn;
+              const keepAnswer = turn.answer.trim().length > 0;
+              return {
+                ...turn,
+                answer: keepAnswer ? turn.answer : msg,
+                streaming: false,
+              };
+            }),
           );
         },
       });

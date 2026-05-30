@@ -51,3 +51,36 @@ export function messagesToTurns(messages: Message[]): ThreadTurn[] {
 
   return turns;
 }
+
+/** Не затираем локальный ответ/фото, если API ещё не сохранил assistant message. */
+export function mergeThreadTurns(local: ThreadTurn[], api: ThreadTurn[]): ThreadTurn[] {
+  if (local.length === 0) return api;
+  if (api.length === 0) return local;
+
+  const lastLocal = local[local.length - 1];
+  const lastApi = api[api.length - 1];
+
+  if (lastLocal.messageId) {
+    const match = api.find((t) => t.key === lastLocal.messageId);
+    if (match?.answer.trim()) {
+      return api;
+    }
+  }
+
+  if (
+    lastLocal.query === lastApi.query &&
+    !lastApi.answer.trim() &&
+    (lastLocal.answer.trim() || lastLocal.images.length > 0)
+  ) {
+    return [
+      ...api.slice(0, -1),
+      {
+        ...lastLocal,
+        key: lastLocal.messageId ?? lastLocal.key,
+        streaming: false,
+      },
+    ];
+  }
+
+  return api;
+}
