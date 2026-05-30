@@ -58,10 +58,6 @@ export function AnswerFooter({ answer, title, sources, messageId, token, userFee
   return (
     <div className="answer-footer">
       <div className="answer-footer-row">
-        {hasSources && (
-          <SourcesTriggerButton sources={sources} onClick={() => setSourcesOpen(true)} />
-        )}
-
         <div className="answer-footer-icons">
           <button
             type="button"
@@ -85,6 +81,12 @@ export function AnswerFooter({ answer, title, sources, messageId, token, userFee
             <AnswerFeedback messageId={messageId} token={token ?? null} initialFeedback={userFeedback} />
           )}
         </div>
+
+        {hasSources && (
+          <div className="answer-footer-sources">
+            <SourcesTriggerButton sources={sources} onClick={() => setSourcesOpen(true)} />
+          </div>
+        )}
       </div>
 
       {hasSources && (
