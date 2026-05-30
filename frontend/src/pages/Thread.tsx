@@ -86,10 +86,9 @@ export function Thread() {
           next[idx] = { ...turn, key: turn.messageId! };
           return next;
         });
-        syncTurnsFromThread();
       }
     },
-    [syncTurnsFromThread],
+    [],
   );
 
   useEffect(() => {
@@ -178,10 +177,10 @@ export function Thread() {
         },
         onSources: (list) => {
           setSearchPhase("answering");
-          setTurns((prev) => updateLastStreamingTurn(prev, { sources: list }));
+          setTurns((prev) => updateLastStreamingTurn(prev, { sources: list ?? [] }));
         },
         onImages: (list) => {
-          setTurns((prev) => updateLastStreamingTurn(prev, { images: list }));
+          setTurns((prev) => updateLastStreamingTurn(prev, { images: list ?? [] }));
         },
         onToken: (chunk) => {
           setSearchPhase("answering");
@@ -284,6 +283,8 @@ export function Thread() {
       <div className="thread-conversation" ref={conversationRef}>
         {turns.map((turn, index) => {
           const isActive = turn.streaming;
+          const images = turn.images ?? [];
+          const sources = turn.sources ?? [];
           const showStatus = isActive && streaming && !turn.answer.trim();
           const showAnswer = Boolean(turn.answer.trim()) || isActive;
           const showFollowUps =
@@ -298,7 +299,7 @@ export function Thread() {
                 <p className="thread-query-text">{turn.query}</p>
               </div>
 
-              {turn.images.length > 0 && <TurnImageGallery images={turn.images} />}
+              {images.length > 0 && <TurnImageGallery images={images} />}
 
               {showStatus && (
                 <SearchStatusLine phase={searchPhase} needsSearch={needsSearch} />
@@ -309,7 +310,7 @@ export function Thread() {
                   <AnswerErrorBoundary>
                     <AnswerBody
                       text={turn.answer}
-                      sources={turn.sources}
+                      sources={sources}
                       isStreaming={isActive && streaming}
                       onTypingChange={
                         index === turns.length - 1 ? handleAnswerTypingChange : undefined
@@ -320,7 +321,7 @@ export function Thread() {
                     <AnswerFooter
                       answer={turn.answer}
                       title={turn.query}
-                      sources={turn.sources}
+                      sources={sources}
                       messageId={turn.messageId ?? turn.key}
                       token={token}
                       userFeedback={turn.userFeedback}

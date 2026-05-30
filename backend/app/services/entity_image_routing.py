@@ -8,7 +8,7 @@ from app.services.vision_routing import is_image_display_request
 
 _ENTITY_IMAGE_POSITIVE_RE = re.compile(
     r"(?:"
-    r"расскаж(?:и|ите)\s+(?:про|о\b|об\b)|"
+    r"расскаж\w*\s+(?:про|о\b|об\b)|"
     r"что\s+такое|кто\s+так(?:ой|ая|ие)|"
     r"опиши\s+(?:город|страну|место|животн|породу|архитектур|достоприм)|"
     r"обзор\s+(?:города|страны|породы|места)|"
@@ -30,7 +30,7 @@ _EXCLUDE_IMAGE_RE = re.compile(
 
 _IMAGE_QUERY_PREFIX_RE = re.compile(
     r"^(?:"
-    r"расскаж(?:и|ите)\s+(?:про|о|об)\s+|"
+    r"расскаж\w*\s+(?:про|о|об)\s+|"
     r"что\s+такое\s+|"
     r"кто\s+так(?:ой|ая|ие)\s+|"
     r"опиши\s+|"

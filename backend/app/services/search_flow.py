@@ -34,7 +34,7 @@ from app.services.query_url_memory import (
     lookup_bootstrap_sources,
     record_successful_urls,
 )
-from app.services.entity_image import entity_images_to_json
+from app.services.message_images_column import messages_have_images_column
 from app.services.entity_image_routing import build_entity_image_query, wants_entity_images
 from app.services.yandex_image_search import YandexImageSearchService
 import redis.asyncio as redis
@@ -111,6 +111,7 @@ class SearchFlowService:
         )
         # Проверяем колонку debug_trace до долгого пайплайна — rollback здесь не ломает finalize.
         await _messages_have_debug_trace(db)
+        await messages_have_images_column(db)
         rewriter = QueryRewriter(llm)
         fact_pipeline = FactPipeline(search, llm)
         if attachment_ids and self._is_guest(user):
@@ -580,12 +581,17 @@ class SearchFlowService:
                 query_url_memory=query_url_trace.to_dict() if query_url_trace else None,
             )
             trace_payload = debug_trace if _debug_trace_column_ok else None
+            images_payload = (
+                entity_images_json
+                if entity_images_json and await messages_have_images_column(db)
+                else None
+            )
             assistant_msg = Message(
                 thread_id=thread.id,
                 role=MessageRole.ASSISTANT,
                 content=full_answer.strip(),
                 sources=sources_json if sources_json else None,
-                images=entity_images_json if entity_images_json else None,
+                images=images_payload,
                 follow_up_questions=follow_ups or None,
                 debug_trace=trace_payload,
             )
@@ -599,9 +605,15 @@ class SearchFlowService:
             logger.exception("Search finalize failed (persist assistant message)")
             await db.rollback()
             await limiter.release_search(user_id_str)
+            msg = "Ошибка сервера. Попробуйте ещё раз."
+            if not await messages_have_images_column(db):
+                msg = (
+                    "База не обновлена (нет колонки images). "
+                    "На сервере: bash scripts/migrate.sh"
+                )
             yield sse_event(
                 "error",
-                {"code": "server_error", "message": "Ошибка сервера. Попробуйте ещё раз."},
+                {"code": "server_error", "message": msg},
             )
             return
 

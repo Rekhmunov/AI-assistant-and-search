@@ -111,6 +111,19 @@ async def api_health(db: Annotated[AsyncSession, Depends(get_db)]):
     required = {"email", "password_hash", "guest_key"}
     missing = sorted(required - cols)
 
+    msg_cols = await db.execute(
+        text(
+            """
+            SELECT column_name
+            FROM information_schema.columns
+            WHERE table_schema = 'public'
+              AND table_name = 'messages'
+              AND column_name = 'images'
+            """
+        )
+    )
+    message_images_column = bool(msg_cols.fetchall())
+
     redis_ok = True
     try:
         redis = await get_redis()
@@ -126,7 +139,7 @@ async def api_health(db: Annotated[AsyncSession, Depends(get_db)]):
             llm_runtime = await fetch_llm_runtime_status(db, redis, settings)
         except Exception:
             pass
-    status = "ok" if not missing and not missing_tables and redis_ok else "degraded"
+    status = "ok" if not missing and not missing_tables and redis_ok and message_images_column else "degraded"
     return {
         "status": status,
         "redis": redis_ok,
@@ -152,11 +165,12 @@ async def api_health(db: Annotated[AsyncSession, Depends(get_db)]):
             "pro": settings.gigachat_model_pro,
         },
         "db_columns": {c: c in cols for c in sorted(required)},
+        "message_images_column": message_images_column,
         "missing_migrations": missing,
         "missing_tables": missing_tables,
         "hint": (
             "На сервере: docker compose -f docker-compose.prod.yml exec backend alembic upgrade head"
-            if missing or missing_tables
+            if missing or missing_tables or not message_images_column
             else None
         ),
         "yandex_hint": (

@@ -497,10 +497,10 @@ export async function streamSearch(
             handlers.onRoute?.(parsed as RouteInfo);
             break;
           case "sources":
-            handlers.onSources?.(parsed.sources);
+            handlers.onSources?.(Array.isArray(parsed.sources) ? parsed.sources : []);
             break;
           case "images":
-            handlers.onImages?.(parsed.images);
+            handlers.onImages?.(Array.isArray(parsed.images) ? parsed.images : []);
             break;
           case "token":
             handlers.onToken?.(parsed.text);

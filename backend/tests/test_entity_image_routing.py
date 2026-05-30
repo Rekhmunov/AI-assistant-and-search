@@ -5,6 +5,7 @@ from app.services.entity_image_routing import build_entity_image_query, wants_en
 
 def test_wants_entity_images_positive():
     assert wants_entity_images("Расскажи про питбуля")
+    assert wants_entity_images("расскажип про питбуля")
     assert wants_entity_images("Что такое Колизей")
     assert wants_entity_images("Расскажите о Риме", intent="factual_current")
 
@@ -22,6 +23,7 @@ def test_image_display_request():
 
 def test_build_entity_image_query():
     assert build_entity_image_query("Расскажи про питбуля") == "питбуля"
+    assert build_entity_image_query("расскажип про питбуля") == "питбуля"
     assert build_entity_image_query("Покажи фото Рима") == "Рима"
     assert build_entity_image_query("", "fallback query") == "fallback query"
     assert build_entity_image_query("что такое квантовый компьютер") == "квантовый компьютер"
