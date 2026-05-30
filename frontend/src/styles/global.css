@@ -1956,7 +1956,7 @@ body:has(.page-thread) {
 }
 
 .thread-dropdown-actions .btn-secondary,
-.thread-dropdown-actions .btn-danger {
+.thread-dropdown-actions .danger {
   flex: 1;
   width: auto;
   min-height: 36px;
@@ -1967,14 +1967,37 @@ body:has(.page-thread) {
   justify-content: center;
   text-align: center;
   box-sizing: border-box;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 500;
+  font-family: inherit;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.thread-dropdown-actions .btn-secondary {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
 }
 
 .thread-dropdown-actions .btn-secondary:hover:not(:disabled) {
   background: var(--surface-hover);
+  border-color: #dcdcd6;
 }
 
-.thread-dropdown-actions .btn-danger:hover:not(:disabled) {
-  background: #b91c1c;
+.thread-dropdown-actions .danger {
+  background: transparent;
+  color: #f87171;
+}
+
+.thread-dropdown-actions .danger:hover:not(:disabled) {
+  background: rgba(248, 113, 113, 0.12);
+}
+
+.thread-dropdown-actions .danger:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 .btn-danger {

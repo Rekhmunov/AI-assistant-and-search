@@ -134,7 +134,7 @@ export function ThreadHistoryMenu({ threadId, title }: Props) {
             </button>
             <button
               type="button"
-              className="btn-danger"
+              className="danger"
               disabled={deleteMutation.isPending}
               onClick={() => deleteMutation.mutate()}
             >
