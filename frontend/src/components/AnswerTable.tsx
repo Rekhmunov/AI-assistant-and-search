@@ -20,11 +20,7 @@ function renderCell(text: string, sources: Source[], keyPrefix: string): ReactNo
     <>
       {body}
       {indices.length > 0 && (
-        <SourceChipsRow
-          indices={indices}
-          sources={sources}
-          className="source-chips-row source-chips-row--compact"
-        />
+        <SourceChipsRow indices={indices} sources={sources} className="source-chips-row" />
       )}
     </>
   );

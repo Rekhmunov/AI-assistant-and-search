@@ -1783,55 +1783,51 @@ body:has(.page-thread) {
 }
 
 .source-chips-row {
-  display: flex;
+  display: inline-flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
-  margin-top: 10px;
-}
-
-.source-chips-row--compact {
-  margin-top: 6px;
-  gap: 6px;
+  gap: 4px;
+  margin: 0 0 0 6px;
+  vertical-align: baseline;
 }
 
 .source-chip {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 5px 10px 5px 7px;
-  border-radius: 8px;
-  background: var(--bg);
-  color: #7a7a74;
-  font-size: 0.8125rem;
-  line-height: 1.2;
+  gap: 4px;
+  padding: 2px 7px 2px 5px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.045);
+  color: #8a8a85;
+  font-size: 0.6875rem;
+  line-height: 1.25;
   text-decoration: none;
-  border: 1px solid var(--border);
-  transition: background 0.15s ease, border-color 0.15s ease;
+  border: none;
+  transition: background 0.15s ease, color 0.15s ease;
 }
 
 .source-chip:hover {
-  background: var(--surface-hover);
-  border-color: #dcdcd6;
-  color: #6b6b6b;
+  background: rgba(0, 0, 0, 0.07);
+  color: #6f6f6a;
 }
 
 .source-chip-icon {
   flex-shrink: 0;
-  width: 16px;
-  height: 16px;
-  border-radius: 4px;
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
   object-fit: contain;
+  opacity: 0.85;
 }
 
 .source-chip-label {
-  font-weight: 500;
-  letter-spacing: 0.01em;
+  font-weight: 400;
+  letter-spacing: 0;
 }
 
 .source-chip-extra {
-  font-weight: 600;
-  opacity: 0.75;
+  font-weight: 500;
+  opacity: 0.8;
 }
 
 .answer-text-part {
@@ -1844,18 +1840,15 @@ body:has(.page-thread) {
   margin: 0;
 }
 
-.answer-paragraph-body {
-  display: inline;
-}
-
 @media (prefers-color-scheme: dark) {
   .source-chip {
-    background: rgba(255, 255, 255, 0.08);
-    color: var(--text);
+    background: rgba(255, 255, 255, 0.07);
+    color: rgba(255, 255, 255, 0.45);
   }
 
   .source-chip:hover {
-    background: rgba(255, 255, 255, 0.12);
+    background: rgba(255, 255, 255, 0.11);
+    color: rgba(255, 255, 255, 0.58);
   }
 }
 
