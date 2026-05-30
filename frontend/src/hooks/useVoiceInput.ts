@@ -45,10 +45,12 @@ function pickRecorderMimeType(): string | undefined {
   return undefined;
 }
 
-/** iOS WebView отдаёт fMP4-фрагменты при timeslice — один blob надёжнее для ffmpeg/STT. */
+/** Без timeslice: один blob; на iOS/MAX финальный chunk может прийти после onstop. */
 function useRecorderTimesliceMs(): number | undefined {
-  return preferMp4Recording() ? undefined : 250;
+  return preferSingleBlobRecording() ? undefined : 250;
 }
+
+const BLOB_FINALIZE_DELAY_MS = 120;
 
 function getRecognitionError(ev: Event): string {
   const err = (ev as SpeechRecognitionErrorEvent).error;
@@ -210,27 +212,37 @@ export function useVoiceInput(onText: (text: string) => void, token: string | nu
       };
 
       rec.onstop = () => {
-        const chunks = chunksRef.current;
-        chunksRef.current = [];
-        stream.getTracks().forEach((track) => track.stop());
-        streamRef.current = null;
-        recorderRef.current = null;
+        const mime = recorderMimeRef.current;
+        const stream = streamRef.current;
+        const finalize = () => {
+          const chunks = chunksRef.current;
+          chunksRef.current = [];
+          stream?.getTracks().forEach((track) => track.stop());
+          streamRef.current = null;
+          recorderRef.current = null;
 
-        if (!userStopRef.current) {
-          recordingRef.current = false;
-          setState("idle");
-          return;
-        }
+          if (!userStopRef.current) {
+            recordingRef.current = false;
+            setState("idle");
+            return;
+          }
 
-        const blob = new Blob(chunks, { type: mimeType });
-        const elapsed = Date.now() - startedAtRef.current;
-        if (blob.size < 256 || elapsed < 400) {
-          recordingRef.current = false;
-          setError(t("voiceNoSpeech"));
-          setState("idle");
-          return;
+          const blob = new Blob(chunks, { type: mime });
+          const elapsed = Date.now() - startedAtRef.current;
+          if (blob.size < 256 || elapsed < 400) {
+            recordingRef.current = false;
+            setError(t("voiceNoSpeech"));
+            setState("idle");
+            return;
+          }
+          void uploadRecording(blob);
+        };
+
+        if (preferSingleBlobRecording()) {
+          window.setTimeout(finalize, BLOB_FINALIZE_DELAY_MS);
+        } else {
+          finalize();
         }
-        void uploadRecording(blob);
       };
 
       recordingRef.current = true;
