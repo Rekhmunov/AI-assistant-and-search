@@ -447,16 +447,14 @@ class YandexGPTProvider(PromptedLLMMixin, LLMProvider):
             try:
                 items = json.loads(match.group())
                 if isinstance(items, list):
-                    normalized = _normalize_follow_up_suggestions([str(x) for x in items[:5]])
-                    if len(normalized) >= 3:
-                        return normalized
+                    return _finalize_follow_up_suggestions([str(x) for x in items], query)
             except json.JSONDecodeError:
                 pass
-        lines = [q.strip() for q in text.split("\n") if q.strip()][:5]
-        normalized = _normalize_follow_up_suggestions(lines)
-        if len(normalized) >= 3:
-            return normalized
-        return _default_follow_up_suggestions(query)
+        lines = [q.strip() for q in text.split("\n") if q.strip()]
+        return _finalize_follow_up_suggestions(lines, query)
+
+
+FOLLOW_UPS_COUNT = 3
 
 
 def _normalize_follow_up_suggestions(items: list[str]) -> list[str]:
@@ -470,9 +468,21 @@ def _normalize_follow_up_suggestions(items: list[str]) -> list[str]:
         if re.match(r"^(какие|какой|какая|как|есть ли|уточните)\b", s, re.I):
             continue
         out.append(s[:120])
-        if len(out) >= 5:
+        if len(out) >= FOLLOW_UPS_COUNT:
             break
     return out
+
+
+def _finalize_follow_up_suggestions(items: list[str], query: str) -> list[str]:
+    out = _normalize_follow_up_suggestions(items)
+    if len(out) >= FOLLOW_UPS_COUNT:
+        return out[:FOLLOW_UPS_COUNT]
+    for fallback in _default_follow_up_suggestions(query):
+        if len(out) >= FOLLOW_UPS_COUNT:
+            break
+        if fallback not in out:
+            out.append(fallback)
+    return out[:FOLLOW_UPS_COUNT]
 
 
 def _default_follow_up_suggestions(query: str) -> list[str]:

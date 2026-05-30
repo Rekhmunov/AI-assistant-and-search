@@ -218,7 +218,9 @@ export function Thread() {
           answerResetPendingRef.current = true;
         },
         onFollowUps: (questions) => {
-          setTurns((prev) => updateLastActiveTurn(prev, { followUps: questions ?? [] }));
+          setTurns((prev) =>
+            updateLastActiveTurn(prev, { followUps: (questions ?? []).slice(0, 3) }),
+          );
         },
         onDone: (done) => {
           streamingRef.current = false;
@@ -355,7 +357,7 @@ export function Thread() {
               {showFollowUps && (
                 <section className="followups-section">
                   <ul className="followups-list">
-                    {turn.followUps.map((q) => (
+                    {turn.followUps.slice(0, 3).map((q) => (
                       <li key={q}>
                         <button
                           type="button"

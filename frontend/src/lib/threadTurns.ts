@@ -43,7 +43,7 @@ export function messagesToTurns(messages: Message[]): ThreadTurn[] {
         answer: m.content,
         sources: m.sources ?? [],
         images: m.images ?? [],
-        followUps: m.follow_up_questions ?? [],
+        followUps: (m.follow_up_questions ?? []).slice(0, 3),
         userFeedback: m.user_feedback ?? null,
       });
       pendingUser = null;

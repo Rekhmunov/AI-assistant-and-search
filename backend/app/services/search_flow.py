@@ -565,7 +565,7 @@ class SearchFlowService:
                 )
             else:
                 try:
-                    follow_ups = await llm.generate_follow_ups(llm_query, full_answer)
+                    follow_ups = (await llm.generate_follow_ups(llm_query, full_answer))[:3]
                 except Exception:
                     logger.exception("Follow-up suggestions failed (sync)")
 
@@ -695,7 +695,7 @@ class SearchFlowService:
         if follow_up_task is not None:
             timeout = max(0.5, settings.follow_ups_post_done_timeout_sec)
             try:
-                follow_ups = await asyncio.wait_for(follow_up_task, timeout=timeout)
+                follow_ups = (await asyncio.wait_for(follow_up_task, timeout=timeout))[:3]
             except asyncio.TimeoutError:
                 logger.info("Follow-ups still generating after done (timeout=%.1fs)", timeout)
                 follow_ups = []

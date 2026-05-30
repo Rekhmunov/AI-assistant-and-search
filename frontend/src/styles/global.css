@@ -1568,20 +1568,19 @@ body:has(.page-thread) {
   gap: 10px;
   padding: 6px 14px 6px 8px;
   border-radius: 999px;
-  border: 1px solid var(--border-subtle);
-  background: var(--surface);
-  color: var(--text);
-  font-size: 0.875rem;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--muted);
+  font-size: 0.8125rem;
   line-height: 1.2;
   cursor: pointer;
-  box-shadow: var(--shadow-sm);
-  transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+  box-shadow: none;
+  transition: background 0.15s ease, border-color 0.15s ease;
 }
 
 .sources-trigger:hover {
   background: var(--surface-hover);
-  border-color: var(--border);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  border-color: #dcdcd6;
 }
 
 .sources-trigger-text {
@@ -1592,12 +1591,12 @@ body:has(.page-thread) {
 
 .sources-trigger-count {
   font-weight: 600;
-  color: var(--text);
+  color: #7a7a74;
 }
 
 .sources-trigger-word {
   font-weight: 500;
-  color: var(--muted);
+  color: #a3a39c;
 }
 
 .source-favicon-stack {
@@ -1806,18 +1805,19 @@ body:has(.page-thread) {
   gap: 6px;
   padding: 5px 10px 5px 7px;
   border-radius: 8px;
-  background: var(--border-subtle);
-  color: var(--text);
+  background: var(--bg);
+  color: #7a7a74;
   font-size: 0.8125rem;
   line-height: 1.2;
   text-decoration: none;
-  border: none;
-  transition: background 0.15s ease;
+  border: 1px solid var(--border);
+  transition: background 0.15s ease, border-color 0.15s ease;
 }
 
 .source-chip:hover {
-  background: var(--border);
-  color: var(--text);
+  background: var(--surface-hover);
+  border-color: #dcdcd6;
+  color: #6b6b6b;
 }
 
 .source-chip-icon {

@@ -464,7 +464,11 @@ class AnthropicClaudeProvider(PromptedLLMMixin, LLMProvider):
             yield chunk
 
     async def generate_follow_ups(self, query: str, answer: str) -> list[str]:
-        from app.services.yandex_gpt import _default_follow_up_suggestions, _normalize_follow_up_suggestions
+        from app.services.yandex_gpt import (
+            _default_follow_up_suggestions,
+            _finalize_follow_up_suggestions,
+            _normalize_follow_up_suggestions,
+        )
 
         if not self.configured:
             return _default_follow_up_suggestions(query)
@@ -485,7 +489,7 @@ class AnthropicClaudeProvider(PromptedLLMMixin, LLMProvider):
             try:
                 items = json.loads(match.group())
                 if isinstance(items, list):
-                    return _normalize_follow_up_suggestions([str(x) for x in items[:5]])
+                    return _finalize_follow_up_suggestions([str(x) for x in items], query)
             except json.JSONDecodeError:
                 pass
         return _default_follow_up_suggestions(query)

@@ -1,7 +1,6 @@
 import { useEffect, type ReactNode } from "react";
 import type { Source } from "../api/client";
 import { useStreamingReveal } from "../hooks/useStreamingReveal";
-import { moveCitationsToParagraphEnds } from "../lib/moveCitationsToParagraphEnds";
 import { parseAnswerSegments } from "../lib/parseAnswerSegments";
 import { renderAnswerTextSegment } from "../lib/renderAnswerText";
 import { CodeBlock } from "./CodeBlock";
@@ -29,8 +28,7 @@ export function AnswerBody({
 
   const revealActive = isStreaming || isTyping;
   const rawText = revealActive ? revealed : text;
-  const displayText = moveCitationsToParagraphEnds(rawText);
-  const segments = parseAnswerSegments(displayText, { expandUnfenced: !revealActive });
+  const segments = parseAnswerSegments(rawText, { expandUnfenced: !revealActive });
   const children: ReactNode[] = [];
 
   segments.forEach((seg, i) => {
