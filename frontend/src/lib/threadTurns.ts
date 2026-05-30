@@ -13,6 +13,17 @@ export type ThreadTurn = {
   streaming?: boolean;
 };
 
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+/** UUID assistant message for feedback footer — from messageId or stable turn key. */
+export function resolveAssistantMessageId(
+  turn: Pick<ThreadTurn, "key" | "messageId">,
+): string | undefined {
+  const candidate = turn.messageId ?? turn.key;
+  return UUID_RE.test(candidate) ? candidate : undefined;
+}
+
 /** Собирает пары вопрос–ответ из сообщений API (по порядку created_at). */
 export function messagesToTurns(messages: Message[]): ThreadTurn[] {
   const sorted = [...messages].sort(
@@ -27,6 +38,7 @@ export function messagesToTurns(messages: Message[]): ThreadTurn[] {
     } else if (m.role === "assistant" && pendingUser) {
       turns.push({
         key: m.id,
+        messageId: m.id,
         query: pendingUser.content,
         answer: m.content,
         sources: m.sources ?? [],

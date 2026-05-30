@@ -10,7 +10,7 @@ import { SearchStatusLine, type SearchPhase } from "../components/SearchStatusLi
 import { TurnImageGallery } from "../components/TurnImageGallery";
 import { t } from "../i18n";
 import { findLastIndex } from "../lib/arrayUtils";
-import { mergeThreadTurns, messagesToTurns, type ThreadTurn } from "../lib/threadTurns";
+import { mergeThreadTurns, messagesToTurns, resolveAssistantMessageId, type ThreadTurn } from "../lib/threadTurns";
 import { useDesktopLayout } from "../hooks/useDesktopLayout";
 import { useAuthStore } from "../store/authStore";
 
@@ -344,7 +344,7 @@ export function Thread() {
                       answer={turn.answer}
                       title={turn.query}
                       sources={sources}
-                      messageId={turn.messageId}
+                      messageId={resolveAssistantMessageId(turn)}
                       token={token}
                       userFeedback={turn.userFeedback}
                     />
