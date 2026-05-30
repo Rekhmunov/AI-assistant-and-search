@@ -19,11 +19,16 @@ def test_wants_entity_images_negative():
 
 def test_image_display_request():
     assert wants_entity_images("Покажи фото собаки колли")
+    assert wants_entity_images("Покажи питбуля")
+    assert wants_entity_images("покажи мне Рим")
+    assert not wants_entity_images("Покажи как написать макрос в Excel", intent="howto")
 
 
 def test_build_entity_image_query():
     assert build_entity_image_query("Расскажи про питбуля") == "питбуля"
     assert build_entity_image_query("расскажип про питбуля") == "питбуля"
     assert build_entity_image_query("Покажи фото Рима") == "Рима"
+    assert build_entity_image_query("Покажи питбуля") == "питбуля"
+    assert build_entity_image_query("покажи мне Рим") == "Рим"
     assert build_entity_image_query("", "fallback query") == "fallback query"
     assert build_entity_image_query("что такое квантовый компьютер") == "квантовый компьютер"

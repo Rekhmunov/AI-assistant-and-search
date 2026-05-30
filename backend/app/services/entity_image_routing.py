@@ -36,6 +36,7 @@ _IMAGE_QUERY_PREFIX_RE = re.compile(
     r"опиши\s+|"
     r"обзор\s+|"
     r"покаж(?:и|ите)\s+(?:мне\s+)?(?:фото|картин(?:ку|ки)|изображени(?:е|я))\s+|"
+    r"покаж(?:и|ите)\s+(?:мне\s+)?|"
     r"найди\s+(?:мне\s+)?(?:фото|картин(?:ку|ки)|изображени(?:е|я))\s+|"
     r"фото\s+"
     r")",
@@ -43,6 +44,13 @@ _IMAGE_QUERY_PREFIX_RE = re.compile(
 )
 
 _NO_IMAGE_INTENTS = frozenset({"howto", "edit_prior", "chitchat", "document", "vision_image"})
+
+# «Покажи питбуля», «покажи мне Рим» — без слова «фото»
+_SHOW_ENTITY_RE = re.compile(
+    r"покаж(?:и|ите)\s+(?:мне\s+)?"
+    r"(?!как\b|шаг|пример|код|макрос|функци|формул|sql|excel|эксель)",
+    re.I,
+)
 
 
 def wants_entity_images(query: str, *, intent: str = "factual_current") -> bool:
@@ -54,6 +62,8 @@ def wants_entity_images(query: str, *, intent: str = "factual_current") -> bool:
     if _EXCLUDE_IMAGE_RE.search(q):
         return False
     if is_image_display_request(q):
+        return True
+    if _SHOW_ENTITY_RE.search(q):
         return True
     return bool(_ENTITY_IMAGE_POSITIVE_RE.search(q))
 
