@@ -56,8 +56,10 @@ function renderTextParagraph(paragraph: string, sources: Source[], keyPrefix: st
 
   return (
     <div className="answer-paragraph">
-      {body.length > 0 && <div className="answer-paragraph-body">{body}</div>}
-      {indices.length > 0 && <SourceChipsRow indices={indices} sources={sources} />}
+      {body}
+      {indices.length > 0 && (
+        <SourceChipsRow indices={indices} sources={sources} className="source-chips-row" />
+      )}
     </div>
   );
 }

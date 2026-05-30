@@ -27,8 +27,8 @@ export function SourceChipsRow({ indices, sources, className }: Props) {
             className="source-chip-icon"
             src={faviconUrl(group.faviconDomain)}
             alt=""
-            width={16}
-            height={16}
+            width={12}
+            height={12}
             loading="lazy"
             decoding="async"
           />
