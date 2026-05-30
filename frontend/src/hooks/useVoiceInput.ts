@@ -22,9 +22,19 @@ function preferMp4Recording(): boolean {
   return getMaxPlatform() === "ios" || isIosLikeDevice();
 }
 
-function pickRecorderMimeType(): string | undefined {
-  if (typeof MediaRecorder === "undefined") return undefined;
-  const candidates = preferMp4Recording()
+function preferSingleBlobRecording(): boolean {
+  return isMaxWebApp() || preferMp4Recording();
+}
+
+/** Без timeslice: один blob; на iOS/MAX финальный chunk может прийти после onstop. */
+function useRecorderTimesliceMs(): number | undefined {
+  return preferSingleBlobRecording() ? undefined : 250;
+}
+
+const BLOB_FINALIZE_DELAY_MS = 120;
+
+function recorderMimeCandidates(): string[] {
+  return preferMp4Recording()
     ? [
         "audio/mp4",
         "audio/aac",
@@ -39,18 +49,53 @@ function pickRecorderMimeType(): string | undefined {
         "audio/aac",
         "audio/ogg;codecs=opus",
       ];
-  for (const type of candidates) {
-    if (MediaRecorder.isTypeSupported(type)) return type;
+}
+
+function createMediaRecorder(stream: MediaStream): { recorder: MediaRecorder; mimeType: string } {
+  if (typeof MediaRecorder === "undefined") {
+    throw new Error("recorder_unsupported");
   }
-  return undefined;
+  const tried = new Set<string>();
+  for (const candidate of recorderMimeCandidates()) {
+    if (!MediaRecorder.isTypeSupported(candidate)) continue;
+    tried.add(candidate);
+    try {
+      const recorder = new MediaRecorder(stream, { mimeType: candidate });
+      return { recorder, mimeType: recorder.mimeType || candidate };
+    } catch {
+      /* next candidate */
+    }
+  }
+  try {
+    const recorder = new MediaRecorder(stream);
+    return { recorder, mimeType: recorder.mimeType || "audio/webm" };
+  } catch {
+    throw new Error("recorder_unsupported");
+  }
 }
 
-/** Без timeslice: один blob; на iOS/MAX финальный chunk может прийти после onstop. */
-function useRecorderTimesliceMs(): number | undefined {
-  return preferSingleBlobRecording() ? undefined : 250;
+function mapVoiceStartError(err: unknown): string {
+  if (!(err instanceof Error)) {
+    return t("voiceStartFailed");
+  }
+  if (err.message === "recorder_unsupported") {
+    return t("voiceUnavailableMax");
+  }
+  const name = err.name;
+  if (name === "NotAllowedError" || name === "PermissionDeniedError") {
+    return isMaxWebApp() ? t("voiceMicDeniedMax") : t("voiceMicDenied");
+  }
+  if (name === "NotFoundError" || name === "DevicesNotFoundError") {
+    return t("voiceMicNotFound");
+  }
+  if (name === "NotReadableError" || name === "TrackStartError") {
+    return t("voiceMicBusy");
+  }
+  if (import.meta.env.DEV) {
+    console.warn("voice start failed:", name, err.message);
+  }
+  return t("voiceStartFailed");
 }
-
-const BLOB_FINALIZE_DELAY_MS = 120;
 
 function getRecognitionError(ev: Event): string {
   const err = (ev as SpeechRecognitionErrorEvent).error;
@@ -185,20 +230,24 @@ export function useVoiceInput(onText: (text: string) => void, token: string | nu
       return;
     }
 
-    const mimeType = pickRecorderMimeType();
-    if (!mimeType || !navigator.mediaDevices?.getUserMedia) {
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
       setError(t("voiceUnavailableMax"));
       return;
     }
 
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+        },
+      });
       releaseMic();
       streamRef.current = stream;
-      recorderMimeRef.current = mimeType;
 
-      const rec = new MediaRecorder(stream, { mimeType });
+      const { recorder: rec, mimeType } = createMediaRecorder(stream);
       recorderRef.current = rec;
+      recorderMimeRef.current = mimeType;
 
       rec.ondataavailable = (ev) => {
         if (ev.data.size > 0) chunksRef.current.push(ev.data);
@@ -257,9 +306,11 @@ export function useVoiceInput(onText: (text: string) => void, token: string | nu
       autoStopTimerRef.current = window.setTimeout(() => {
         if (recordingRef.current) stopServerRecording();
       }, MAX_RECORD_MS);
-    } catch {
+    } catch (err) {
       releaseMic();
-      setError(isMaxWebApp() ? t("voiceMicDeniedMax") : t("voiceMicDenied"));
+      recordingRef.current = false;
+      setState("idle");
+      setError(mapVoiceStartError(err));
     }
   }, [releaseMic, stopServerRecording, token, uploadRecording]);
 
