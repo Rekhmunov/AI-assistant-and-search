@@ -116,6 +116,7 @@
   "delete": "Удалить",
   "cancel": "Отмена",
   "saveTitle": "Сохранить",
+  "clearThreadTitle": "Очистить название",
   "threadTitleRequired": "Введите название",
   "questionsCount": "вопросов",
   "feedbackThumbUp": "Полезный ответ",

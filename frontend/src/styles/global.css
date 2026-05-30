@@ -1952,13 +1952,29 @@ body:has(.page-thread) {
 .thread-dropdown-actions {
   display: flex;
   gap: 8px;
+  align-items: stretch;
 }
 
 .thread-dropdown-actions .btn-secondary,
 .thread-dropdown-actions .btn-danger {
   flex: 1;
+  width: auto;
+  min-height: 36px;
   padding: 8px 10px;
   font-size: 0.875rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  box-sizing: border-box;
+}
+
+.thread-dropdown-actions .btn-secondary:hover:not(:disabled) {
+  background: var(--surface-hover);
+}
+
+.thread-dropdown-actions .btn-danger:hover:not(:disabled) {
+  background: #b91c1c;
 }
 
 .btn-danger {
@@ -2013,14 +2029,45 @@ body:has(.page-thread) {
   color: var(--muted);
 }
 
+.thread-rename-input-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
 .thread-rename-input {
   width: 100%;
-  padding: 12px 14px;
+  padding: 12px 40px 12px 14px;
   border-radius: 10px;
   border: 1px solid var(--border);
   background: var(--bg);
   color: var(--text);
   font-size: 1rem;
+  box-sizing: border-box;
+}
+
+.thread-rename-clear {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s;
+}
+
+.thread-rename-clear:hover {
+  color: var(--text);
+  background: var(--surface-hover);
 }
 
 .thread-rename-input:focus {

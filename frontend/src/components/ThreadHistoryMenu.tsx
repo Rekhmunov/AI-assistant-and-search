@@ -159,14 +159,27 @@ export function ThreadHistoryMenu({ threadId, title }: Props) {
             <label className="thread-rename-label" htmlFor={`rename-${threadId}`}>
               {t("renameThread")}
             </label>
-            <input
-              id={`rename-${threadId}`}
-              className="thread-rename-input"
-              value={draftTitle}
-              onChange={(e) => setDraftTitle(e.target.value)}
-              maxLength={500}
-              autoFocus
-            />
+            <div className="thread-rename-input-wrap">
+              <input
+                id={`rename-${threadId}`}
+                className="thread-rename-input"
+                value={draftTitle}
+                onChange={(e) => setDraftTitle(e.target.value)}
+                maxLength={500}
+                autoFocus
+              />
+              {draftTitle.length > 0 && (
+                <button
+                  type="button"
+                  className="thread-rename-clear"
+                  onClick={() => setDraftTitle("")}
+                  aria-label={t("clearThreadTitle")}
+                  title={t("clearThreadTitle")}
+                >
+                  <ClearIcon />
+                </button>
+              )}
+            </div>
             {error && <p className="thread-menu-error">{error}</p>}
             <div className="thread-rename-actions">
               <button type="button" className="btn-secondary" onClick={() => setRenaming(false)}>
@@ -216,6 +229,19 @@ function TrashIcon() {
         strokeWidth="1.8"
         strokeLinecap="round"
         strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function ClearIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        d="M6 6l12 12M18 6L6 18"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
       />
     </svg>
   );
