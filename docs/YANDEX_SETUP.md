@@ -115,6 +115,25 @@ docker compose -f docker-compose.prod.yml exec backend \
 2. Если нужен веб-поиск → **Yandex Search** → источники в SSE.
 3. Ответ стримится через **YandexGPT Lite** или **Pro** (`answer_model` в событии `route`).
 4. В миниаппе бейдж: «Поиск в интернете» / «Ответ по диалогу» · Lite/Pro.
+5. **Голосовой ввод в MAX** — запись через `MediaRecorder` в WebView, распознавание на сервере через **SpeechKit STT** (`POST /api/voice/transcribe`). Отдельного API записи голоса в MAX Bridge нет.
+
+---
+
+## 7. SpeechKit STT (голос в миниаппе MAX)
+
+MAX не предоставляет API распознавания речи — только стандартный доступ к микрофону (`getUserMedia`). Backend конвертирует webm/mp4 в OggOpus через **ffmpeg** и отправляет в Yandex SpeechKit.
+
+**Роли сервисного аккаунта / scope API-ключа:**
+
+- `ai.speechkit-stt.user` (или `yc.ai.speechkitStt.execute`)
+
+Проверка:
+
+```bash
+curl -s https://app.glosix.ru/api/health/yandex | jq '.stt_ok, .errors'
+```
+
+Если `stt_ok: false` и в `errors` есть `stt HTTP 403` — добавьте роль STT тому же ключу, что используется для Search/GPT.
 
 ---
 
@@ -125,6 +144,8 @@ docker compose -f docker-compose.prod.yml exec backend \
 | `yandex_configured: false` | Заполните `YANDEX_FOLDER_ID` и `YANDEX_API_KEY`, пересоберите backend |
 | `search HTTP 403` | Роль `search-api.webSearch.user`, включён Search API в каталоге |
 | `gpt_lite HTTP 403` | Роль `ai.languageModels.user`, биллинг AI Studio |
+| `stt HTTP 403` / `stt_ok: false` | Роль `ai.speechkit-stt.user` (или scope `yc.ai.speechkitStt.execute`) для API-ключа |
+| Голос в MAX: «Сервис распознавания речи временно недоступен» | Проверьте `/api/health/yandex` → `stt_ok`; логи backend (`Yandex STT HTTP …`) |
 | `gpt_pro HTTP 404` | Смените `YANDEX_GPT_PRO_MODEL` на `yandexgpt/latest` или `yandexgpt/rc` |
 | Mock-источники (habr, wikipedia) | Ключи пустые или не подхватились — проверьте `env_file: .env` в compose |
 | SSE `yandex_error` | Смотрите `docker compose ... logs backend` |

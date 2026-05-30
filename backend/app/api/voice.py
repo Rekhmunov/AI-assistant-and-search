@@ -10,7 +10,7 @@ from pydantic import BaseModel
 from app.api.deps import get_current_user
 from app.core.config import get_settings
 from app.models.user import User
-from app.services.yandex_stt import SpeechTranscriptionError, transcribe_audio
+from app.services.yandex_stt import SpeechTranscriptionError, resolve_audio_content_type, transcribe_audio
 
 router = APIRouter(prefix="/voice", tags=["voice"])
 
@@ -37,14 +37,17 @@ async def transcribe_voice(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Пустой файл")
 
     settings = get_settings()
+    resolved_type = resolve_audio_content_type(file.content_type, file.filename)
     try:
-        text = await transcribe_audio(raw, file.content_type, settings)
+        text = await transcribe_audio(raw, resolved_type, settings)
     except SpeechTranscriptionError as exc:
         status_code = status.HTTP_503_SERVICE_UNAVAILABLE
         if exc.code in ("empty_audio", "no_speech"):
             status_code = status.HTTP_400_BAD_REQUEST
-        elif exc.code == "audio_convert_failed":
+        elif exc.code in ("audio_convert_failed",):
             status_code = status.HTTP_422_UNPROCESSABLE_ENTITY
+        elif exc.code == "stt_forbidden":
+            status_code = status.HTTP_403_FORBIDDEN
         raise HTTPException(status_code=status_code, detail=str(exc)) from exc
 
     return VoiceTranscribeOut(text=text)

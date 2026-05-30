@@ -30,6 +30,24 @@ _EXT_BY_MIME: dict[str, str] = {
 }
 
 
+def resolve_audio_content_type(content_type: str | None, filename: str | None) -> str | None:
+    mime = (content_type or "").split(";")[0].strip().lower()
+    if mime and mime not in ("application/octet-stream", "binary/octet-stream"):
+        return mime
+    name = (filename or "").lower()
+    if name.endswith((".m4a", ".mp4", ".caf")):
+        return "audio/mp4"
+    if name.endswith(".webm"):
+        return "audio/webm"
+    if name.endswith(".ogg"):
+        return "audio/ogg"
+    if name.endswith((".mp3", ".mpeg")):
+        return "audio/mpeg"
+    if name.endswith(".wav"):
+        return "audio/wav"
+    return content_type
+
+
 class SpeechTranscriptionError(Exception):
     def __init__(self, code: str, message: str) -> None:
         self.code = code
@@ -129,8 +147,19 @@ async def transcribe_audio(
             resp.raise_for_status()
             data = resp.json()
     except httpx.HTTPStatusError as exc:
+        status = exc.response.status_code
         body = exc.response.text[:200]
-        logger.warning("Yandex STT HTTP %s: %s", exc.response.status_code, body)
+        logger.warning("Yandex STT HTTP %s: %s", status, body)
+        if status in (401, 403):
+            raise SpeechTranscriptionError(
+                "stt_forbidden",
+                "Нет доступа к SpeechKit STT. Проверьте API-ключ и роль ai.speechkit-stt.user",
+            ) from exc
+        if status == 400:
+            raise SpeechTranscriptionError(
+                "audio_convert_failed",
+                "Не удалось обработать аудиозапись",
+            ) from exc
         raise SpeechTranscriptionError(
             "stt_upstream_error",
             "Сервис распознавания речи временно недоступен",

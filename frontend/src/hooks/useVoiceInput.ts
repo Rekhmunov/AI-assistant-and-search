@@ -1,7 +1,7 @@
 import { useCallback, useRef, useState } from "react";
 import { transcribeVoice } from "../api/client";
 import { t } from "../i18n";
-import { isMaxWebApp } from "../lib/maxApp";
+import { getMaxPlatform, isIosLikeDevice, isMaxWebApp } from "../lib/maxApp";
 
 type VoiceState = "idle" | "recording" | "transcribing";
 
@@ -18,19 +18,36 @@ function preferServerStt(): boolean {
   return !getSpeechRecognitionCtor();
 }
 
+function preferMp4Recording(): boolean {
+  return getMaxPlatform() === "ios" || isIosLikeDevice();
+}
+
 function pickRecorderMimeType(): string | undefined {
   if (typeof MediaRecorder === "undefined") return undefined;
-  const candidates = [
-    "audio/webm;codecs=opus",
-    "audio/webm",
-    "audio/mp4",
-    "audio/aac",
-    "audio/ogg;codecs=opus",
-  ];
+  const candidates = preferMp4Recording()
+    ? [
+        "audio/mp4",
+        "audio/aac",
+        "audio/webm;codecs=opus",
+        "audio/webm",
+        "audio/ogg;codecs=opus",
+      ]
+    : [
+        "audio/webm;codecs=opus",
+        "audio/webm",
+        "audio/mp4",
+        "audio/aac",
+        "audio/ogg;codecs=opus",
+      ];
   for (const type of candidates) {
     if (MediaRecorder.isTypeSupported(type)) return type;
   }
   return undefined;
+}
+
+/** iOS WebView отдаёт fMP4-фрагменты при timeslice — один blob надёжнее для ffmpeg/STT. */
+function useRecorderTimesliceMs(): number | undefined {
+  return preferMp4Recording() ? undefined : 250;
 }
 
 function getRecognitionError(ev: Event): string {
@@ -140,6 +157,9 @@ export function useVoiceInput(onText: (text: string) => void, token: string | nu
     const rec = recorderRef.current;
     if (rec && rec.state !== "inactive") {
       try {
+        if (rec.state === "recording" && typeof rec.requestData === "function") {
+          rec.requestData();
+        }
         rec.stop();
       } catch {
         recordingRef.current = false;
@@ -216,7 +236,12 @@ export function useVoiceInput(onText: (text: string) => void, token: string | nu
       recordingRef.current = true;
       startedAtRef.current = Date.now();
       setState("recording");
-      rec.start(250);
+      const timeslice = useRecorderTimesliceMs();
+      if (timeslice != null) {
+        rec.start(timeslice);
+      } else {
+        rec.start();
+      }
       autoStopTimerRef.current = window.setTimeout(() => {
         if (recordingRef.current) stopServerRecording();
       }, MAX_RECORD_MS);

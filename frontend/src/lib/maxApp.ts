@@ -3,6 +3,16 @@ export function isMaxWebApp(): boolean {
   return typeof window !== "undefined" && Boolean(window.WebApp?.initData?.trim());
 }
 
+/** MAX client platform: ios | android | desktop | web */
+export function getMaxPlatform(): string {
+  return window.WebApp?.platform?.trim().toLowerCase() ?? "";
+}
+
+export function isIosLikeDevice(): boolean {
+  if (typeof navigator === "undefined") return false;
+  return /iPad|iPhone|iPod/i.test(navigator.userAgent);
+}
+
 export function getMaxInitData(): string {
   return window.WebApp?.initData?.trim() ?? "";
 }
