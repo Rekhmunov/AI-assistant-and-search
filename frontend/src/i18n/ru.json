@@ -35,6 +35,8 @@
   "save": "Сохранить",
   "saved": "Сохранено",
   "sources": "Источники",
+  "sourcesForQuery": "Источники для {query}",
+  "close": "Закрыть",
   "followUps": "Продолжить тему",
   "askFollowUp": "Задать вопрос...",
   "history": "История",

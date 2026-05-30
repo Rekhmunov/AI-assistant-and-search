@@ -2,10 +2,11 @@ import { useState } from "react";
 import type { MessageFeedback, Source } from "../api/client";
 import { formatAnswerForDisplay } from "../lib/formatAnswer";
 import { buildCopyText, isProPlan } from "../lib/copyAttribution";
-import { sourceDomainLabel } from "../lib/sourceDomainLabel";
 import { t } from "../i18n";
 import { useAuthStore } from "../store/authStore";
 import { AnswerFeedback } from "./AnswerFeedback";
+import { SourcesPanel } from "./SourcesPanel";
+import { SourcesTriggerButton } from "./SourcesTriggerButton";
 
 type Props = {
   answer: string;
@@ -57,6 +58,10 @@ export function AnswerFooter({ answer, title, sources, messageId, token, userFee
   return (
     <div className="answer-footer">
       <div className="answer-footer-row">
+        {hasSources && (
+          <SourcesTriggerButton sources={sources} onClick={() => setSourcesOpen(true)} />
+        )}
+
         <div className="answer-footer-icons">
           <button
             type="button"
@@ -79,54 +84,18 @@ export function AnswerFooter({ answer, title, sources, messageId, token, userFee
           {messageId && UUID_RE.test(messageId) && (
             <AnswerFeedback messageId={messageId} token={token ?? null} initialFeedback={userFeedback} />
           )}
-          {hasSources && (
-            <button
-              type="button"
-              className="sources-toggle"
-              onClick={() => setSourcesOpen((v) => !v)}
-              aria-expanded={sourcesOpen}
-            >
-              <span>{t("sources")}</span>
-              <ChevronIcon open={sourcesOpen} />
-            </button>
-          )}
         </div>
       </div>
 
-      {hasSources && sourcesOpen && (
-        <ul className="sources-list">
-          {sources.map((s) => (
-            <li key={s.index} id={`source-${s.index}`}>
-              <a href={s.url} target="_blank" rel="noopener noreferrer" className="sources-list-item">
-                <span className="sources-list-domain">{sourceDomainLabel(s.domain || s.url)}</span>
-                <span className="sources-list-title">{s.title}</span>
-              </a>
-            </li>
-          ))}
-        </ul>
+      {hasSources && (
+        <SourcesPanel
+          open={sourcesOpen}
+          query={title}
+          sources={sources}
+          onClose={() => setSourcesOpen(false)}
+        />
       )}
     </div>
-  );
-}
-
-function ChevronIcon({ open }: { open: boolean }) {
-  return (
-    <svg
-      width="16"
-      height="16"
-      viewBox="0 0 24 24"
-      fill="none"
-      aria-hidden
-      className={open ? "chevron-open" : ""}
-    >
-      <path
-        d="M6 9l6 6 6-6"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
   );
 }
 
