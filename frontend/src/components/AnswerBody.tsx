@@ -29,7 +29,7 @@ export function AnswerBody({
 
   const revealActive = isStreaming || isTyping;
   const rawText = revealActive ? revealed : text;
-  const displayText = revealActive ? rawText : moveCitationsToParagraphEnds(text);
+  const displayText = moveCitationsToParagraphEnds(rawText);
   const segments = parseAnswerSegments(displayText, { expandUnfenced: !revealActive });
   const children: ReactNode[] = [];
 

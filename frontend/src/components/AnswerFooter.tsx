@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { MessageFeedback, Source } from "../api/client";
 import { formatAnswerForDisplay } from "../lib/formatAnswer";
 import { buildCopyText, isProPlan } from "../lib/copyAttribution";
+import { sourceDomainLabel } from "../lib/sourceDomainLabel";
 import { t } from "../i18n";
 import { useAuthStore } from "../store/authStore";
 import { AnswerFeedback } from "./AnswerFeedback";
@@ -97,8 +98,7 @@ export function AnswerFooter({ answer, title, sources, messageId, token, userFee
           {sources.map((s) => (
             <li key={s.index} id={`source-${s.index}`}>
               <a href={s.url} target="_blank" rel="noopener noreferrer" className="sources-list-item">
-                <span className="sources-list-index">[{s.index}]</span>
-                <span className="sources-list-domain">{s.domain}</span>
+                <span className="sources-list-domain">{sourceDomainLabel(s.domain || s.url)}</span>
                 <span className="sources-list-title">{s.title}</span>
               </a>
             </li>

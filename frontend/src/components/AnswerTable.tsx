@@ -1,7 +1,8 @@
 import type { ReactNode } from "react";
 import type { Source } from "../api/client";
+import { SourceChipsRow } from "./SourceChipsRow";
 import { formatMarkdownText } from "../lib/formatMarkdownText";
-import { renderTextWithCitations } from "../lib/parseCitations";
+import { parseParagraphCitations } from "../lib/paragraphCitations";
 
 type Props = {
   header: string[];
@@ -10,13 +11,23 @@ type Props = {
   keyPrefix: string;
 };
 
-function renderCell(text: string, sources: Source[]): ReactNode {
+function renderCell(text: string, sources: Source[], keyPrefix: string): ReactNode {
   const plain = formatMarkdownText(text);
-  const cited = renderTextWithCitations(plain, sources);
-  if (cited.length === 1 && typeof cited[0] === "string") {
-    return cited[0];
-  }
-  return <>{cited}</>;
+  const { text: clean, indices } = parseParagraphCitations(plain);
+  const body = clean.replace(/\[\d+\]/g, "");
+
+  return (
+    <>
+      {body}
+      {indices.length > 0 && (
+        <SourceChipsRow
+          indices={indices}
+          sources={sources}
+          className="source-chips-row source-chips-row--compact"
+        />
+      )}
+    </>
+  );
 }
 
 export function AnswerTable({ header, rows, sources, keyPrefix }: Props) {
@@ -37,7 +48,7 @@ export function AnswerTable({ header, rows, sources, keyPrefix }: Props) {
         <thead>
           <tr>
             {head.map((cell, i) => (
-              <th key={`${keyPrefix}-h-${i}`}>{renderCell(cell, sources)}</th>
+              <th key={`${keyPrefix}-h-${i}`}>{renderCell(cell, sources, `${keyPrefix}-h-${i}`)}</th>
             ))}
           </tr>
         </thead>
@@ -46,7 +57,7 @@ export function AnswerTable({ header, rows, sources, keyPrefix }: Props) {
             <tr key={`${keyPrefix}-r-${ri}`}>
               {row.map((cell, ci) => (
                 <td key={`${keyPrefix}-r-${ri}-c-${ci}`}>
-                  {renderCell(cell, sources)}
+                  {renderCell(cell, sources, `${keyPrefix}-r-${ri}-c-${ci}`)}
                 </td>
               ))}
             </tr>

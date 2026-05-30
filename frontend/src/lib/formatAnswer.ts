@@ -1,5 +1,6 @@
 import { formatMarkdownText } from "./formatMarkdownText";
 import { parseAnswerSegments } from "./parseAnswerSegments";
+import { stripCitationMarkers } from "./paragraphCitations";
 
 /**
  * Плоский текст для копирования всего ответа (без markdown, код как текст).
@@ -15,7 +16,7 @@ export function formatAnswerForDisplay(text: string): string {
       const inner = seg.content.trim();
       if (inner) parts.push(inner);
     } else {
-      const formatted = formatMarkdownText(seg.content).trim();
+      const formatted = stripCitationMarkers(formatMarkdownText(seg.content)).trim();
       if (formatted) parts.push(formatted);
     }
   }

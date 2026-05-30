@@ -1,11 +1,12 @@
 import type { ReactNode } from "react";
 import { AnswerTable } from "../components/AnswerTable";
+import { SourceChipsRow } from "../components/SourceChipsRow";
 import type { Source } from "../api/client";
 import { formatMarkdownText } from "./formatMarkdownText";
+import { parseParagraphCitations } from "./paragraphCitations";
 import { splitTextWithMarkdownTables } from "./parseMarkdownTables";
-import { renderTextWithCitations } from "./parseCitations";
 
-function renderPlainTextFragment(text: string, sources: Source[], keyPrefix: string): ReactNode[] {
+function renderInlineText(text: string, keyPrefix: string): ReactNode[] {
   const formatted = formatMarkdownText(text);
   if (!formatted) return [];
 
@@ -17,14 +18,9 @@ function renderPlainTextFragment(text: string, sources: Source[], keyPrefix: str
 
   const pushPlain = (chunk: string) => {
     if (!chunk) return;
-    const cited = renderTextWithCitations(chunk, sources);
-    cited.forEach((node, i) => {
-      if (typeof node === "string") {
-        nodes.push(<span key={`${keyPrefix}-p-${k++}-${i}`}>{node}</span>);
-      } else {
-        nodes.push(node);
-      }
-    });
+    nodes.push(
+      <span key={`${keyPrefix}-p-${k++}`}>{chunk.replace(/\[\d+\]/g, "")}</span>,
+    );
   };
 
   while ((match = inlineRe.exec(formatted)) !== null) {
@@ -50,7 +46,39 @@ function renderPlainTextFragment(text: string, sources: Source[], keyPrefix: str
   return nodes;
 }
 
-/** Текстовый фрагмент: таблицы GFM + markdown без блоков + [1] + inline `code`. */
+function renderTextParagraph(paragraph: string, sources: Source[], keyPrefix: string): ReactNode {
+  const { text, indices } = parseParagraphCitations(paragraph);
+  const body = renderInlineText(text, keyPrefix);
+
+  if (!body.length && indices.length === 0) {
+    return <></>;
+  }
+
+  return (
+    <div className="answer-paragraph">
+      {body.length > 0 && <div className="answer-paragraph-body">{body}</div>}
+      {indices.length > 0 && (
+        <SourceChipsRow indices={indices} sources={sources} />
+      )}
+    </div>
+  );
+}
+
+function renderPlainTextFragment(text: string, sources: Source[], keyPrefix: string): ReactNode[] {
+  const formatted = formatMarkdownText(text);
+  if (!formatted) return [];
+
+  const paragraphs = formatted.split(/\n\n+/).filter((p) => p.trim());
+  if (!paragraphs.length) return [];
+
+  return paragraphs.map((paragraph, index) => (
+    <span key={`${keyPrefix}-para-${index}`}>
+      {renderTextParagraph(paragraph, sources, `${keyPrefix}-p-${index}`)}
+    </span>
+  ));
+}
+
+/** Текстовый фрагмент: таблицы GFM + markdown без блоков + чипы источников + inline `code`. */
 export function renderAnswerTextSegment(text: string, sources: Source[], keyPrefix: string): ReactNode[] {
   const blocks = splitTextWithMarkdownTables(text);
   const nodes: ReactNode[] = [];
