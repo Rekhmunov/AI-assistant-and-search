@@ -277,13 +277,13 @@ export function SettingsPage() {
                 <div className="settings-probes">
                   <p className="settings-probes-row">
                     <button type="button" className="btn-link" onClick={() => void runAnthropicProbe()}>
-                      Проверить Claude (тестовый запрос из .env)
+                      Проверить Claude
                     </button>
                     {probeMsg && <span className="hint-inline settings-probes-result">{probeMsg}</span>}
                   </p>
                   <p className="settings-probes-row">
                     <button type="button" className="btn-link" onClick={() => void runDeepseekProbe()}>
-                      Проверить DeepSeek (lite + pro из .env)
+                      Проверить DeepSeek
                     </button>
                     {deepseekProbeMsg && (
                       <span className="hint-inline settings-probes-result">{deepseekProbeMsg}</span>
@@ -291,7 +291,7 @@ export function SettingsPage() {
                   </p>
                   <p className="settings-probes-row">
                     <button type="button" className="btn-link" onClick={() => void runGigachatProbe()}>
-                      Проверить GigaChat (OAuth, lite + pro из .env)
+                      Проверить GigaChat
                     </button>
                     {gigachatProbeMsg && (
                       <span className="hint-inline settings-probes-result">{gigachatProbeMsg}</span>
