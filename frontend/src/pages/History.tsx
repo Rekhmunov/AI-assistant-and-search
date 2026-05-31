@@ -150,7 +150,7 @@ export function History() {
       </div>
 
       {!isDesktop && (
-        <div className="history-new-thread-bar">
+        <div className="mobile-new-thread-bar">
           <MobileNewThreadButton onClick={() => navigate("/")} />
         </div>
       )}

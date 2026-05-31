@@ -2,6 +2,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { devActivatePro, deleteAccount, fetchMe, fetchSession } from "../api/client";
 import { AuthGate } from "../components/AuthGate";
+import { MobileNewThreadButton } from "../components/MobileNewThreadButton";
 import { MobilePageHeader } from "../components/MobilePageHeader";
 import { ProfileAccountSection } from "../components/ProfileAccountSection";
 import { useDesktopLayout } from "../hooks/useDesktopLayout";
@@ -88,7 +89,7 @@ export function Profile() {
   };
 
   return (
-    <div className="page page-profile">
+    <div className={`page page-profile${isDesktop ? "" : " page-profile--mobile"}`}>
       {isDesktop ? (
         <header className="profile-page-header">
           <h1 className="mobile-page-title">{t("profile")}</h1>
@@ -97,6 +98,7 @@ export function Profile() {
         <MobilePageHeader variant="profile" title={t("profile")} />
       )}
 
+      <div className="profile-mobile-scroll">
       <div className="profile-hero">
         <div className={`profile-avatar profile-avatar--${profileTier}`} aria-label={profileTierLabel}>
           {profileTierLabel}
@@ -169,6 +171,13 @@ export function Profile() {
           {t("deleteAccount")}
         </button>
       </div>
+      </div>
+
+      {!isDesktop && (
+        <div className="mobile-new-thread-bar">
+          <MobileNewThreadButton onClick={() => navigate("/")} />
+        </div>
+      )}
     </div>
   );
 }
