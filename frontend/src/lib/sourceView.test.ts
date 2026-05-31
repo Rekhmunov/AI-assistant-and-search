@@ -24,7 +24,7 @@ describe("detectIframeEmbedState", () => {
           throw new DOMException("Blocked", "SecurityError");
         },
       },
-    } as HTMLIFrameElement;
+    } as unknown as HTMLIFrameElement;
 
     expect(detectIframeEmbedState(iframe)).toBe("ready");
   });
