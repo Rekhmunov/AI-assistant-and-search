@@ -1166,6 +1166,10 @@ body:has(.page-thread) {
   padding: 4px 0 16px;
 }
 
+.thread-panel[hidden] {
+  display: none !important;
+}
+
 .thread-images-tab-status {
   margin: 0;
   padding: 24px 0;

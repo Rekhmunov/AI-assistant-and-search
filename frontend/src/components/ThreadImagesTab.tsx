@@ -18,8 +18,15 @@ type LightboxState = {
 
 type ReadyGroup = ThreadImageGroup & { readyImages: EntityImage[] };
 
+function groupsToReady(groups: ThreadImageGroup[]): ReadyGroup[] {
+  return groups
+    .filter((group) => group.images.length > 0)
+    .map((group) => ({ ...group, readyImages: group.images }));
+}
+
 export function ThreadImagesTab({ groups, loading = false }: Props) {
-  const [readyGroups, setReadyGroups] = useState<ReadyGroup[]>([]);
+  const [readyGroups, setReadyGroups] = useState<ReadyGroup[]>(() => groupsToReady(groups));
+  const [preparing, setPreparing] = useState(false);
   const [lightbox, setLightbox] = useState<LightboxState | null>(null);
   const groupsKey = useMemo(
     () => groups.map((g) => `${g.turnKey}:${g.images.map((i) => i.url).join("|")}`).join(";"),
@@ -27,19 +34,30 @@ export function ThreadImagesTab({ groups, loading = false }: Props) {
   );
 
   useEffect(() => {
+    const initial = groupsToReady(groups);
+    setReadyGroups(initial);
+    if (!initial.length) {
+      setPreparing(false);
+      return;
+    }
+
     let cancelled = false;
-    setReadyGroups([]);
+    setPreparing(true);
 
     void (async () => {
       const loaded: ReadyGroup[] = [];
       for (const group of groups) {
-        const readyImages = await preloadEntityImages(group.images);
+        const validated = await preloadEntityImages(group.images);
         if (cancelled) return;
-        if (readyImages.length) {
+        const readyImages = validated.length > 0 ? validated : group.images;
+        if (readyImages.length > 0) {
           loaded.push({ ...group, readyImages });
         }
       }
-      if (!cancelled) setReadyGroups(loaded);
+      if (!cancelled) {
+        setReadyGroups(loaded.length > 0 ? loaded : initial);
+        setPreparing(false);
+      }
     })();
 
     return () => {
@@ -56,15 +74,17 @@ export function ThreadImagesTab({ groups, loading = false }: Props) {
     return () => globalThis.removeEventListener("keydown", onKey);
   }, [lightbox]);
 
+  const totalRaw = groups.reduce((sum, group) => sum + group.images.length, 0);
   const totalReady = readyGroups.reduce((sum, group) => sum + group.readyImages.length, 0);
+  const showLoading = loading || (preparing && totalReady === 0 && totalRaw > 0);
 
   return (
     <div className="thread-images-tab">
-      {loading && totalReady === 0 && (
+      {showLoading && (
         <p className="thread-images-tab-status">{t("imagesLoading")}</p>
       )}
 
-      {!loading && totalReady === 0 && (
+      {!showLoading && totalReady === 0 && (
         <p className="thread-images-tab-status">{t("imagesEmpty")}</p>
       )}
 

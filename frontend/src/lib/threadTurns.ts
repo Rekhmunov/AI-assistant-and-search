@@ -71,6 +71,19 @@ export function mergeThreadTurns(local: ThreadTurn[], api: ThreadTurn[]): Thread
   if (local.length === 0) return api;
   if (api.length === 0) return local;
 
+  const localByKey = new Map(local.map((turn) => [turn.key, turn]));
+
+  const preserveLocalMedia = (turns: ThreadTurn[]): ThreadTurn[] =>
+    turns.map((turn) => {
+      const prev = localByKey.get(turn.key);
+      if (!prev) return turn;
+      return {
+        ...turn,
+        images: turn.images?.length ? turn.images : prev.images,
+        sources: turn.sources?.length ? turn.sources : prev.sources,
+      };
+    });
+
   const lastLocal = local[local.length - 1];
   const lastApi = api[api.length - 1];
 
@@ -78,11 +91,13 @@ export function mergeThreadTurns(local: ThreadTurn[], api: ThreadTurn[]): Thread
     const match = api.find((t) => t.key === lastLocal.messageId);
     if (match?.answer.trim()) {
       if (lastLocal.followUps.length > 0 && match.followUps.length === 0) {
-        return api.map((t) =>
-          t.key === lastLocal.messageId ? { ...t, followUps: lastLocal.followUps } : t,
+        return preserveLocalMedia(
+          api.map((t) =>
+            t.key === lastLocal.messageId ? { ...t, followUps: lastLocal.followUps } : t,
+          ),
         );
       }
-      return api;
+      return preserveLocalMedia(api);
     }
   }
 
@@ -91,15 +106,15 @@ export function mergeThreadTurns(local: ThreadTurn[], api: ThreadTurn[]): Thread
     !lastApi.answer.trim() &&
     (lastLocal.answer.trim() || lastLocal.images.length > 0)
   ) {
-    return [
+    return preserveLocalMedia([
       ...api.slice(0, -1),
       {
         ...lastLocal,
         key: lastLocal.messageId ?? lastLocal.key,
         streaming: false,
       },
-    ];
+    ]);
   }
 
-  return api;
+  return preserveLocalMedia(api);
 }

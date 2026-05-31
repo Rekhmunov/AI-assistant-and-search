@@ -97,4 +97,32 @@ describe("mergeThreadTurns", () => {
       "Питание щенка",
     ]);
   });
+
+  it("preserves local images when API message has none yet", () => {
+    const images = [{ url: "https://img/1.jpg", title: "a", page_url: "https://a" }];
+    const local: ThreadTurn[] = [
+      {
+        key: "msg-1",
+        messageId: "msg-1",
+        query: "Gefu",
+        answer: "Ответ",
+        sources: [],
+        images,
+        followUps: [],
+      },
+    ];
+    const api: ThreadTurn[] = [
+      {
+        key: "msg-1",
+        query: "Gefu",
+        answer: "Ответ",
+        sources: [],
+        images: [],
+        followUps: [],
+      },
+    ];
+
+    const merged = mergeThreadTurns(local, api);
+    expect(merged[0].images).toEqual(images);
+  });
 });

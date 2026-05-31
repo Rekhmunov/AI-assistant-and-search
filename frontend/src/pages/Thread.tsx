@@ -336,10 +336,8 @@ export function Thread() {
       )}
 
       <div className="thread-conversation" ref={conversationRef}>
-        {activeTab === "images" ? (
-          <ThreadImagesTab groups={imageGroups} loading={imagesLoading} />
-        ) : (
-          turns.map((turn, index) => {
+        <div className="thread-panel thread-panel--answer" hidden={activeTab !== "answer"}>
+          {turns.map((turn, index) => {
             const isActive = turn.streaming;
             const sources = turn.sources ?? [];
             const showStatus = isActive && streaming && !turn.answer.trim();
@@ -404,8 +402,12 @@ export function Thread() {
                 )}
               </article>
             );
-          })
-        )}
+          })}
+        </div>
+
+        <div className="thread-panel thread-panel--images" hidden={activeTab !== "images"}>
+          <ThreadImagesTab groups={imageGroups} loading={imagesLoading} />
+        </div>
       </div>
 
       {showScrollDown && activeTab === "answer" && (
