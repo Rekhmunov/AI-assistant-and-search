@@ -5,10 +5,13 @@ import { HomeMobileHeader } from "../components/HomeMobileHeader";
 import { SearchComposer, type ComposerAttachment } from "../components/SearchComposer";
 import { getHomePlaceholderPhrases } from "../constants/homePlaceholders";
 import { useDesktopLayout } from "../hooks/useDesktopLayout";
+import { useAuthStore } from "../store/authStore";
 
 export function Home() {
   const navigate = useNavigate();
   const isDesktop = useDesktopLayout();
+  const userPlan = useAuthStore((s) => s.user?.plan);
+  const brandTier = userPlan === "pro" ? "pro" : "free";
   const [query, setQuery] = useState("");
   const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
 
@@ -45,7 +48,7 @@ export function Home() {
       ) : (
         <div className="home-mobile-main">
           <div className="home-mobile-brand-wrap">
-            <GlosixBrand asLink={false} className="home-mobile-brand" />
+            <GlosixBrand asLink={false} className="home-mobile-brand" tier={brandTier} />
           </div>
           <div className="home-mobile-composer-wrap">
             <SearchComposer
