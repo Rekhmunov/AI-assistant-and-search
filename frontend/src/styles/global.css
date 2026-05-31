@@ -494,7 +494,6 @@ body:has(.page-thread) {
 /* ——— Profile page ——— */
 .page-profile {
   max-width: 480px;
-  padding-top: 8px;
   padding-bottom: calc(32px + env(safe-area-inset-bottom));
 }
 

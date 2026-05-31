@@ -19,14 +19,17 @@ export function MobilePageHeader({
     <header className="thread-mobile-header mobile-page-header">
       <div className="thread-mobile-header-side thread-mobile-header-side--left">
         {variant === "profile" ? (
-          <Link
-            to="/history"
-            className="thread-header-icon-btn"
-            aria-label={t("navHistory")}
-            title={t("navHistory")}
-          >
-            <HistoryIcon />
-          </Link>
+          <>
+            <Link
+              to="/history"
+              className="thread-header-icon-btn"
+              aria-label={t("navHistory")}
+              title={t("navHistory")}
+            >
+              <HistoryIcon />
+            </Link>
+            <span className="thread-header-icon-spacer" aria-hidden />
+          </>
         ) : (
           <>
             <Link
