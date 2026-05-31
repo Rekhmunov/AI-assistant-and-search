@@ -853,15 +853,17 @@ body:has(.page-thread) {
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  width: 22px;
-  height: 22px;
+  width: 32px;
+  height: 32px;
   margin: 0;
   padding: 0;
   border: none;
-  border-radius: 6px;
+  border-radius: 8px;
   background: transparent;
   color: var(--muted);
   cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .composer-attachment-remove:hover {
@@ -1128,21 +1130,20 @@ body:has(.page-thread) {
 }
 
 .thread-query--mobile {
-  padding: 0;
-}
-
-.thread-query-trigger {
-  display: block;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
   width: 100%;
-  margin: 0;
-  padding: 12px 14px;
-  border: none;
-  border-radius: 12px;
-  background: transparent;
   text-align: left;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
   touch-action: manipulation;
+  font: inherit;
+  color: inherit;
+}
+
+.thread-query--mobile:active {
+  background: var(--surface-hover);
 }
 
 .thread-query--mobile .thread-query-text {
@@ -1151,39 +1152,16 @@ body:has(.page-thread) {
   -webkit-touch-callout: none;
 }
 
-.thread-query--menu-open .thread-query-trigger {
-  padding-bottom: 46px;
+.thread-query-copy-action {
+  margin-top: 10px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--accent);
 }
 
-.thread-query-menu {
-  position: absolute;
-  left: 10px;
-  bottom: 8px;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 4px;
-  border-radius: 999px;
-  background: var(--surface);
-  border: 1px solid var(--border-subtle);
-  box-shadow: var(--shadow-md, 0 4px 14px rgba(0, 0, 0, 0.08));
-  animation: thread-query-menu-in 0.15s ease-out;
-}
-
-.thread-query-copy-btn {
-  width: 34px;
-  height: 34px;
-}
-
-@keyframes thread-query-menu-in {
-  from {
-    opacity: 0;
-    transform: translateY(4px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+.thread-query--copied .thread-query-copy-action {
+  color: var(--muted);
 }
 
 .thread-query-text {
@@ -2359,8 +2337,8 @@ body:has(.page-thread) {
 .thread-tabs-segment {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 4px 8px;
+  gap: 6px;
+  padding: 5px 10px;
   border: 1px solid var(--border);
   border-radius: 999px;
   background: var(--surface);
@@ -2372,9 +2350,9 @@ body:has(.page-thread) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 52px;
-  width: 52px;
-  height: 40px;
+  min-width: 60px;
+  width: 60px;
+  height: 44px;
   padding: 0;
   border: none;
   border-radius: 999px;

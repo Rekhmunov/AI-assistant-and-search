@@ -73,7 +73,7 @@ export function ComposerAttachMenu({
       document.addEventListener("mousedown", onPointerDown);
       document.addEventListener("touchstart", onPointerDown, { passive: true });
       document.addEventListener("keydown", onKey);
-    }, 0);
+    }, 250);
     return () => {
       clearTimeout(timer);
       document.removeEventListener("mousedown", onPointerDown);
@@ -114,15 +114,30 @@ export function ComposerAttachMenu({
               transform: "translateY(-100%)",
             }}
           >
-            <button type="button" role="menuitem" onClick={() => choose(() => onPickGallery?.())}>
+            <button
+              type="button"
+              role="menuitem"
+              onPointerDown={(e) => e.preventDefault()}
+              onClick={() => choose(() => onPickGallery?.())}
+            >
               <ImageMenuIcon />
               <span>{t("attachGallery")}</span>
             </button>
-            <button type="button" role="menuitem" onClick={() => choose(() => onPickCamera?.())}>
+            <button
+              type="button"
+              role="menuitem"
+              onPointerDown={(e) => e.preventDefault()}
+              onClick={() => choose(() => onPickCamera?.())}
+            >
               <CameraMenuIcon />
               <span>{t("attachCamera")}</span>
             </button>
-            <button type="button" role="menuitem" onClick={() => choose(() => onPickFiles?.())}>
+            <button
+              type="button"
+              role="menuitem"
+              onPointerDown={(e) => e.preventDefault()}
+              onClick={() => choose(() => onPickFiles?.())}
+            >
               <DocMenuIcon />
               <span>{t("attachChooseFiles")}</span>
             </button>

@@ -482,7 +482,14 @@ function AttachmentChip({
           type="button"
           className="composer-attachment-remove"
           aria-label={t("attachRemove")}
-          onClick={onRemove}
+          onPointerDown={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+          }}
+          onClick={(e) => {
+            e.stopPropagation();
+            onRemove();
+          }}
         >
           <CloseIcon />
         </button>

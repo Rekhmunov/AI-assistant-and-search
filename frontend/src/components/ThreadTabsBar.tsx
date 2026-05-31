@@ -35,7 +35,7 @@ export function ThreadTabsBar({
           onClick={() => onTabChange("answer")}
           title={t("turnTabAnswer")}
         >
-          <AnswerTabIcon />
+          <AnswerTabIcon large />
         </button>
 
         {showImagesTab && (
@@ -49,7 +49,7 @@ export function ThreadTabsBar({
             onClick={() => onTabChange("images")}
             title={t("turnTabImages")}
           >
-            <ImagesTabIcon />
+            <ImagesTabIcon large />
             {totalImages > 0 && (
               <span className="thread-tabs-segment-badge">{totalImages}</span>
             )}
@@ -93,30 +93,34 @@ export function ThreadTabsBar({
   );
 }
 
-function AnswerTabIcon() {
+function AnswerTabIcon({ large }: { large?: boolean }) {
+  const size = large ? 22 : 16;
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden>
       <path
-        d="M12 3l1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5L12 3zM5 17l.8 2.4L8 20l-2.2.6L5 23l-.8-2.4L2 20l2.2-.6L5 17zm14 0l.8 2.4L22 20l-2.2.6L19 23l-.8-2.4L16 20l2.2-.6L19 17z"
+        d="M6 5h12a2 2 0 012 2v8a2 2 0 01-2 2H10l-4 3v-3H6a2 2 0 01-2-2V7a2 2 0 012-2z"
         stroke="currentColor"
-        strokeWidth="1.5"
+        strokeWidth="1.8"
         strokeLinejoin="round"
       />
+      <path d="M8 9h8M8 12.5h5.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
     </svg>
   );
 }
 
-function ImagesTabIcon() {
+function ImagesTabIcon({ large }: { large?: boolean }) {
+  const size = large ? 22 : 16;
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
-      <rect x="3" y="5" width="18" height="14" rx="2" stroke="currentColor" strokeWidth="1.6" />
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden>
+      <rect x="3" y="5" width="18" height="14" rx="2.5" stroke="currentColor" strokeWidth="1.8" />
+      <circle cx="8.5" cy="10" r="1.6" fill="currentColor" />
       <path
-        d="M8 11l2.5 2.5L14 10l4 5H6l2-4z"
+        d="M3 16l4.5-4 3.5 3 2.5-2L21 16"
         stroke="currentColor"
-        strokeWidth="1.6"
+        strokeWidth="1.8"
+        strokeLinecap="round"
         strokeLinejoin="round"
       />
-      <circle cx="9" cy="9" r="1.2" fill="currentColor" />
     </svg>
   );
 }
