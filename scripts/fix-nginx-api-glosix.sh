@@ -22,7 +22,6 @@ cat > "$CONF" << NGINX
 server {
         server_name api.glosix.ru www.api.glosix.ru;
         charset off;
-        disable_symlinks if_not_owner from=\$root_path;
         include /etc/nginx/vhosts-includes/*.conf;
         include /etc/nginx/vhosts-resources/api.glosix.ru/*.conf;
         access_log /var/www/httpd-logs/api.glosix.ru.access.log;
@@ -39,7 +38,6 @@ server {
         ssl_protocols TLSv1 TLSv1.1 TLSv1.2 TLSv1.3;
         ssl_dhparam /etc/ssl/certs/dhparam4096.pem;
         charset off;
-        disable_symlinks if_not_owner from=\$root_path;
         include /etc/nginx/vhosts-includes/*.conf;
         include /etc/nginx/vhosts-resources/api.glosix.ru/*.conf;
         access_log /var/www/httpd-logs/api.glosix.ru.access.log;
