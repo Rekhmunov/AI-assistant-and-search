@@ -79,6 +79,8 @@
   "imagesResultsFor": "Результаты изображений для: {query}",
   "imagesLoading": "Загружаем изображения…",
   "imagesEmpty": "Изображения не найдены",
+  "imageLightboxPrev": "Предыдущее фото",
+  "imageLightboxNext": "Следующее фото",
   "sourceLink": "Источник",
   "copied": "Скопировано",
   "sourceViewOpenExternal": "В браузере",
