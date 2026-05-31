@@ -2705,15 +2705,16 @@ body:has(.page-thread) {
 
 .composer-new-chat {
   flex: 0 0 auto;
+  align-self: stretch;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   width: 48px;
-  height: 48px;
   min-height: 48px;
+  height: auto;
   padding: 0;
   border: 1px solid var(--border);
-  border-radius: 50%;
+  border-radius: 22px;
   background: var(--surface);
   color: var(--text);
   box-shadow: var(--shadow-sm);
