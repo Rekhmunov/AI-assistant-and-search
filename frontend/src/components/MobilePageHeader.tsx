@@ -31,24 +31,14 @@ export function MobilePageHeader({ variant, title }: Props) {
             </Link>
           </>
         ) : (
-          <>
-            <Link
-              to="/profile"
-              className="thread-header-icon-btn"
-              aria-label={t("navProfile")}
-              title={t("navProfile")}
-            >
-              <ProfileIcon />
-            </Link>
-            <Link
-              to="/"
-              className="thread-header-icon-btn"
-              aria-label={t("newChat")}
-              title={t("newChat")}
-            >
-              <NewChatIcon />
-            </Link>
-          </>
+          <Link
+            to="/profile"
+            className="thread-header-icon-btn"
+            aria-label={t("navProfile")}
+            title={t("navProfile")}
+          >
+            <ProfileIcon />
+          </Link>
         )}
       </div>
       <h1 className="mobile-page-title">{title}</h1>

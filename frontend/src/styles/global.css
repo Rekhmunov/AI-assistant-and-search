@@ -249,9 +249,25 @@ body:has(.page-thread) {
   }
 
   .page-profile > :not(.thread-mobile-header),
-  .page-history > :not(.thread-mobile-header) {
+  .page-history > :not(.thread-mobile-header):not(.composer-wrap) {
     padding-left: 16px;
     padding-right: 16px;
+  }
+
+  .page-history--mobile {
+    display: flex;
+    flex-direction: column;
+    min-height: 100dvh;
+    max-height: 100dvh;
+    overflow: hidden;
+  }
+
+  .page-history--mobile .history-scroll {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: calc(28px + 88px + env(safe-area-inset-bottom));
   }
 
   .page-thread.page {
@@ -2704,6 +2720,14 @@ body:has(.page-thread) {
 }
 
 .page-thread .composer-wrap--docked.composer-wrap--thread-mobile {
+  left: 0;
+  right: 0;
+  max-width: none;
+  padding: 0 12px;
+  bottom: calc(28px + env(safe-area-inset-bottom));
+}
+
+.page-history .composer-wrap--docked.composer-wrap--thread-mobile {
   left: 0;
   right: 0;
   max-width: none;
