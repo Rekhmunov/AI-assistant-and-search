@@ -42,8 +42,8 @@ interface Props {
   docked?: boolean;
   animatedPlaceholder?: boolean;
   placeholderPhrases?: string[];
-  /** Mobile layout внутри треда (Perplexity-style) */
-  layoutMode?: "default" | "threadMobile";
+  /** Mobile layout: focus toolbar (+/send/mic), mic inline when unfocused */
+  layoutMode?: "default" | "threadMobile" | "homeMobile";
   onNewChat?: () => void;
 }
 
@@ -215,16 +215,17 @@ export function SearchComposer({
       ? " "
       : staticPlaceholder;
 
-  const isThreadMobile = layoutMode === "threadMobile" && !isDesktop;
-  const showComposerToolbar = isThreadMobile && inputFocused;
+  const isMobileFocusLayout =
+    (layoutMode === "threadMobile" || layoutMode === "homeMobile") && !isDesktop;
+  const showComposerToolbar = isMobileFocusLayout && inputFocused;
   const showAttachInToolbar = showComposerToolbar;
   const showSendInToolbar = showComposerToolbar;
-  const showInlineMic = isThreadMobile && !inputFocused;
-  const showDefaultRow = !isThreadMobile;
+  const showInlineMic = isMobileFocusLayout && !inputFocused;
+  const showDefaultRow = !isMobileFocusLayout;
 
   return (
     <div
-      className={`composer-wrap${docked ? " composer-wrap--docked" : " composer-wrap--inline"}${isThreadMobile ? " composer-wrap--thread-mobile" : ""}${inputFocused && isThreadMobile ? " composer-wrap--focused" : ""}`}
+      className={`composer-wrap${docked ? " composer-wrap--docked" : " composer-wrap--inline"}${isMobileFocusLayout ? " composer-wrap--thread-mobile" : ""}${inputFocused && isMobileFocusLayout ? " composer-wrap--focused" : ""}`}
     >
       {(uploadError || voice.error) && (
         <div className="composer-error-wrap">
@@ -236,9 +237,9 @@ export function SearchComposer({
           )}
         </div>
       )}
-      <div className={`composer-outer-row${isThreadMobile ? " composer-outer-row--thread-mobile" : ""}`}>
+      <div className={`composer-outer-row${isMobileFocusLayout ? " composer-outer-row--thread-mobile" : ""}`}>
       <form
-        className={`search-composer${hasAttachment ? " search-composer--with-attachment" : ""}${isThreadMobile ? " search-composer--thread-mobile" : ""}${inputFocused && isThreadMobile ? " search-composer--focused" : ""}`}
+        className={`search-composer${hasAttachment ? " search-composer--with-attachment" : ""}${isMobileFocusLayout ? " search-composer--thread-mobile" : ""}${inputFocused && isMobileFocusLayout ? " search-composer--focused" : ""}`}
         onSubmit={handleSubmit}
       >
         {hasAttachment && (
@@ -396,7 +397,7 @@ export function SearchComposer({
         )}
       </form>
 
-      {isThreadMobile && !inputFocused && onNewChat && (
+      {isMobileFocusLayout && layoutMode === "threadMobile" && !inputFocused && onNewChat && (
         <button
           type="button"
           className="composer-new-chat"

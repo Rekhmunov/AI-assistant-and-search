@@ -1,10 +1,14 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { GlosixBrand } from "../components/GlosixBrand";
+import { HomeMobileHeader } from "../components/HomeMobileHeader";
 import { SearchComposer, type ComposerAttachment } from "../components/SearchComposer";
 import { getHomePlaceholderPhrases } from "../constants/homePlaceholders";
+import { useDesktopLayout } from "../hooks/useDesktopLayout";
 
 export function Home() {
   const navigate = useNavigate();
+  const isDesktop = useDesktopLayout();
   const [query, setQuery] = useState("");
   const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
 
@@ -24,18 +28,37 @@ export function Home() {
   const placeholderPhrases = useMemo(() => getHomePlaceholderPhrases(), []);
 
   return (
-    <div className="page page-home">
-      <SearchComposer
-        value={query}
-        onChange={setQuery}
-        onSubmit={startSearch}
-        attachments={attachments}
-        onAttachmentsChange={setAttachments}
-        docked={false}
-        animatedPlaceholder={!hasDraft}
-        placeholderPhrases={placeholderPhrases}
-        requireTextWithAttachments
-      />
+    <div className={`page page-home${isDesktop ? "" : " page-home--mobile"}`}>
+      {!isDesktop && <HomeMobileHeader />}
+      {isDesktop ? (
+        <SearchComposer
+          value={query}
+          onChange={setQuery}
+          onSubmit={startSearch}
+          attachments={attachments}
+          onAttachmentsChange={setAttachments}
+          docked={false}
+          animatedPlaceholder={!hasDraft}
+          placeholderPhrases={placeholderPhrases}
+          requireTextWithAttachments
+        />
+      ) : (
+        <div className="home-mobile-bottom">
+          <GlosixBrand asLink={false} className="home-mobile-brand" />
+          <SearchComposer
+            value={query}
+            onChange={setQuery}
+            onSubmit={startSearch}
+            attachments={attachments}
+            onAttachmentsChange={setAttachments}
+            docked={false}
+            layoutMode="homeMobile"
+            animatedPlaceholder={!hasDraft}
+            placeholderPhrases={placeholderPhrases}
+            requireTextWithAttachments
+          />
+        </div>
+      )}
     </div>
   );
 }

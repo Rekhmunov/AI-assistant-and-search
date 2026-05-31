@@ -92,6 +92,75 @@ body:has(.page-thread) {
   padding-top: 0;
 }
 
+@media (max-width: 899px) {
+  .app-shell:has(.page-home) {
+    padding-bottom: 0;
+  }
+
+  .app-shell:has(.page-home) .bottom-nav {
+    display: none;
+  }
+
+  .page-home--mobile {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    max-width: none;
+    min-height: 100dvh;
+    margin: 0;
+    padding: 0;
+    justify-content: flex-start;
+  }
+
+  .home-mobile-header {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+
+  .home-mobile-bottom {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: calc(16px + env(safe-area-inset-bottom));
+    z-index: 90;
+    padding: 0 12px;
+    background: linear-gradient(to top, var(--bg) 72%, transparent);
+  }
+
+  .home-mobile-brand {
+    display: block;
+    margin: 0 0 14px;
+    text-align: center;
+  }
+
+  .home-mobile-brand .glosix-wordmark {
+    font-size: 1.75rem;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+  }
+
+  .home-mobile-bottom .composer-wrap--inline {
+    position: static;
+    max-width: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  .home-mobile-bottom .composer-outer-row--thread-mobile {
+    width: 100%;
+  }
+
+  .home-mobile-bottom .composer-outer-row--thread-mobile .search-composer {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .home-mobile-bottom .search-composer {
+    width: 100%;
+  }
+}
+
 .glosix-header {
   display: flex;
   align-items: center;
@@ -2327,8 +2396,14 @@ body:has(.page-thread) {
 
 .composer-outer-row--thread-mobile {
   display: flex;
-  align-items: flex-end;
+  align-items: stretch;
   gap: 8px;
+  width: 100%;
+}
+
+.composer-outer-row--thread-mobile .search-composer {
+  flex: 1;
+  min-width: 0;
 }
 
 .composer-wrap--thread-mobile.composer-wrap--focused .composer-outer-row--thread-mobile {
