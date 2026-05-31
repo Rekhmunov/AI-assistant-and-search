@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { NavLink } from "react-router-dom";
 import { GlosixBrand } from "./GlosixBrand";
 import { t } from "../i18n";
+import { useAuthStore } from "../store/authStore";
 
 function SearchNavIcon() {
   return (
@@ -76,12 +77,14 @@ function NavItem({
 
 export function AppNavigation() {
   const aria = t("navMain");
+  const userPlan = useAuthStore((s) => s.user?.plan);
+  const brandTier = userPlan === "pro" ? "pro" : "free";
 
   return (
     <>
       <nav className="sidebar-nav" aria-label={aria}>
         <div className="sidebar-nav-brand">
-          <GlosixBrand className="glosix-wordmark--sidebar" />
+          <GlosixBrand className="glosix-wordmark--sidebar" tier={brandTier} />
         </div>
         <div className="sidebar-nav-top">
           <NavItem to="/" end label={t("navSearch")} icon={<SearchNavIcon />} />

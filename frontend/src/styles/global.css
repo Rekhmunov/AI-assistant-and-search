@@ -341,14 +341,6 @@ body:has(.page-thread) {
     letter-spacing: inherit;
   }
 
-  .home-mobile-brand .glosix-wordmark-tier--pro {
-    color: var(--accent);
-  }
-
-  .home-mobile-brand .glosix-wordmark-tier--free {
-    color: var(--muted);
-  }
-
   .home-mobile-composer-wrap {
     flex: 0 0 auto;
     display: flex;
@@ -414,6 +406,21 @@ body:has(.page-thread) {
   font-weight: 500;
   letter-spacing: 0.05em;
   color: var(--text);
+  white-space: nowrap;
+}
+
+.glosix-wordmark-tier {
+  font-size: inherit;
+  font-weight: inherit;
+  letter-spacing: inherit;
+}
+
+.glosix-wordmark-tier--pro {
+  color: var(--accent);
+}
+
+.glosix-wordmark-tier--free {
+  color: var(--muted);
 }
 
 .profile-limits-card {
