@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { fetchThreads } from "../api/client";
+import { fetchThreads, searchThreads } from "../api/client";
 import { AuthGate, HistoryGateIcon } from "../components/AuthGate";
 import { MobilePageHeader } from "../components/MobilePageHeader";
 import { SearchComposer, type ComposerAttachment } from "../components/SearchComposer";
@@ -28,6 +28,9 @@ export function History() {
   const isDesktop = useDesktopLayout();
   const [query, setQuery] = useState("");
   const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
+  const [historySearchOpen, setHistorySearchOpen] = useState(false);
+  const [historySearchQuery, setHistorySearchQuery] = useState("");
+  const [debouncedHistorySearch, setDebouncedHistorySearch] = useState("");
   const placeholderPhrases = useMemo(() => getHomePlaceholderPhrases(), []);
 
   const { data: threads = [], isLoading } = useQuery({
@@ -36,8 +39,33 @@ export function History() {
     enabled: !!token,
   });
 
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setDebouncedHistorySearch(historySearchQuery.trim());
+    }, 300);
+    return () => window.clearTimeout(timer);
+  }, [historySearchQuery]);
+
+  const { data: searchResults = [], isFetching: isSearching } = useQuery({
+    queryKey: ["threads", "search", debouncedHistorySearch],
+    queryFn: () => searchThreads(token!, debouncedHistorySearch),
+    enabled: !!token && historySearchOpen && debouncedHistorySearch.length > 0,
+  });
+
   const inMax = isMaxWebApp();
   const hasDraft = Boolean(query.trim() || attachments.length > 0);
+  const isFiltering = historySearchOpen && debouncedHistorySearch.length > 0;
+  const visibleThreads = isFiltering ? searchResults : threads;
+
+  const toggleHistorySearch = () => {
+    setHistorySearchOpen((open) => {
+      if (open) {
+        setHistorySearchQuery("");
+        setDebouncedHistorySearch("");
+      }
+      return !open;
+    });
+  };
 
   const startSearch = (payload: { query: string; attachmentIds: string[] }) => {
     if (!payload.query.trim() && payload.attachmentIds.length > 0) {
@@ -65,8 +93,8 @@ export function History() {
     );
   }
 
-  const groups = new Map<string, typeof threads>();
-  for (const th of threads) {
+  const groups = new Map<string, typeof visibleThreads>();
+  for (const th of visibleThreads) {
     const label = dayLabel(new Date(th.last_message_at));
     if (!groups.has(label)) groups.set(label, []);
     groups.get(label)!.push(th);
@@ -79,12 +107,35 @@ export function History() {
           <h1 className="mobile-page-title">{t("history")}</h1>
         </header>
       ) : (
-        <MobilePageHeader variant="history" title={t("history")} />
+        <MobilePageHeader
+          variant="history"
+          title={t("history")}
+          historySearchActive={historySearchOpen}
+          onHistorySearchToggle={toggleHistorySearch}
+        />
       )}
 
       <div className="history-scroll">
-        {isLoading && <p className="muted-text">{t("pageLoading")}</p>}
-        {!isLoading && threads.length === 0 && <p className="muted-text">{t("historyEmpty")}</p>}
+        {!isDesktop && historySearchOpen && (
+          <label className="history-search-bar">
+            <SearchFieldIcon />
+            <input
+              type="search"
+              className="history-search-input"
+              value={historySearchQuery}
+              onChange={(event) => setHistorySearchQuery(event.target.value)}
+              placeholder={t("historySearchPlaceholder")}
+              autoFocus
+              enterKeyHint="search"
+            />
+          </label>
+        )}
+
+        {isLoading && !isFiltering && <p className="muted-text">{t("pageLoading")}</p>}
+        {isSearching && isFiltering && <p className="muted-text">{t("pageLoading")}</p>}
+        {!isLoading && !isSearching && visibleThreads.length === 0 && (
+          <p className="muted-text">{isFiltering ? t("historySearchEmpty") : t("historyEmpty")}</p>
+        )}
         {[...groups.entries()].map(([label, items]) => (
           <div key={label}>
             <div className="section-title">{label}</div>
@@ -130,5 +181,14 @@ export function History() {
         />
       )}
     </div>
+  );
+}
+
+function SearchFieldIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <circle cx="11" cy="11" r="6.5" stroke="currentColor" strokeWidth="2" />
+      <path d="M16 16l4.5 4.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    </svg>
   );
 }

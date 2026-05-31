@@ -2,8 +2,8 @@ from datetime import datetime, timedelta, timezone
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import exists, or_, select
 from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -39,6 +39,41 @@ async def list_threads(
     if cutoff:
         q = q.where(Thread.last_message_at >= cutoff)
     result = await db.execute(q)
+    return result.scalars().all()
+
+
+@router.get("/search", response_model=list[ThreadListItem])
+async def search_threads(
+    q: Annotated[str, Query(min_length=1, max_length=200)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+):
+    term = q.strip()
+    if not term:
+        return []
+
+    pattern = f"%{term}%"
+    cutoff = _history_cutoff(user)
+    message_match = exists(
+        select(Message.id).where(
+            Message.thread_id == Thread.id,
+            Message.content.ilike(pattern),
+        )
+    )
+
+    query = (
+        select(Thread)
+        .where(
+            Thread.user_id == user.id,
+            Thread.deleted_at.is_(None),
+            or_(Thread.title.ilike(pattern), message_match),
+        )
+        .order_by(Thread.last_message_at.desc())
+    )
+    if cutoff:
+        query = query.where(Thread.last_message_at >= cutoff)
+
+    result = await db.execute(query)
     return result.scalars().all()
 
 

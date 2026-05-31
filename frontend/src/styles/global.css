@@ -2583,6 +2583,12 @@ body:has(.page-thread) {
   border-color: var(--border-subtle);
 }
 
+.thread-header-icon-btn--active {
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+  border-color: rgba(32, 128, 141, 0.25);
+  color: var(--accent);
+}
+
 .thread-tabs-segment {
   display: inline-flex;
   align-items: center;
@@ -2873,6 +2879,40 @@ body:has(.page-thread) {
   background: var(--surface);
   color: var(--text);
   cursor: pointer;
+}
+
+.history-search-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 16px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.history-search-bar svg {
+  flex-shrink: 0;
+  color: var(--muted);
+}
+
+.history-search-input {
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font-size: 1rem;
+  line-height: 1.4;
+  outline: none;
+}
+
+.history-search-input::placeholder {
+  color: var(--muted);
 }
 
 .history-list {

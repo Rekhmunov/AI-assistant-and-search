@@ -211,6 +211,16 @@ export async function fetchThreads(token: string): Promise<ThreadListItem[]> {
   return res.json();
 }
 
+export async function searchThreads(token: string, query: string): Promise<ThreadListItem[]> {
+  const params = new URLSearchParams({ q: query.trim() });
+  const res = await fetch(`${API_BASE}/api/threads/search?${params}`, {
+    headers: apiHeaders(token),
+    credentials: "include",
+  });
+  if (!res.ok) throw new Error("Failed to search threads");
+  return res.json();
+}
+
 export async function fetchThread(token: string | null, id: string): Promise<ThreadDetail> {
   const res = await fetch(`${API_BASE}/api/threads/${id}`, {
     headers: apiHeaders(token),
