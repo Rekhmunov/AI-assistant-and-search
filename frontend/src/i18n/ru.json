@@ -82,6 +82,7 @@
   "sourceLink": "Источник",
   "copied": "Скопировано",
   "sourceViewOpenExternal": "В браузере",
+  "sourceViewEmbedBlocked": "Сайт не разрешает встроенный просмотр — откройте в браузере",
   "copyAttribution": "Ответ сгенерирован с помощью Glosix: {url}",
   "share": "Поделиться",
   "routeSearchLite": "Поиск в интернете",

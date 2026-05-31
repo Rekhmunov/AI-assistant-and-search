@@ -1,13 +1,20 @@
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Navigate, useNavigate, useSearchParams } from "react-router-dom";
 import { t } from "../i18n";
 import { isMaxWebApp } from "../lib/maxApp";
-import { parseSourceViewUrl } from "../lib/sourceView";
+import {
+  detectIframeEmbedState,
+  parseSourceViewUrl,
+  SOURCE_VIEW_EMBED_HINT_DELAY_MS,
+} from "../lib/sourceView";
 
 export function SourceViewPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const url = parseSourceViewUrl(searchParams.get("url"));
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const loadSettledRef = useRef(false);
+  const [showEmbedHint, setShowEmbedHint] = useState(false);
 
   const goBack = useCallback(() => {
     if (window.history.length > 1) {
@@ -16,6 +23,26 @@ export function SourceViewPage() {
     }
     navigate("/", { replace: true });
   }, [navigate]);
+
+  const openExternal = useCallback(() => {
+    if (!url) return;
+    if (window.WebApp?.openLink) {
+      window.WebApp.openLink(url);
+      return;
+    }
+    window.open(url, "_blank", "noopener,noreferrer");
+  }, [url]);
+
+  const syncEmbedHint = useCallback(() => {
+    const iframe = iframeRef.current;
+    if (!iframe) return;
+    setShowEmbedHint(detectIframeEmbedState(iframe) === "blocked");
+  }, []);
+
+  const handleIframeLoad = useCallback(() => {
+    loadSettledRef.current = true;
+    syncEmbedHint();
+  }, [syncEmbedHint]);
 
   useEffect(() => {
     if (!url) return;
@@ -31,17 +58,26 @@ export function SourceViewPage() {
     };
   }, [url, goBack]);
 
+  useEffect(() => {
+    if (!url) return;
+
+    setShowEmbedHint(false);
+    loadSettledRef.current = false;
+
+    const timer = window.setTimeout(() => {
+      if (loadSettledRef.current) {
+        syncEmbedHint();
+        return;
+      }
+      setShowEmbedHint(true);
+    }, SOURCE_VIEW_EMBED_HINT_DELAY_MS);
+
+    return () => window.clearTimeout(timer);
+  }, [url, syncEmbedHint]);
+
   if (!url) {
     return <Navigate to="/" replace />;
   }
-
-  const openExternal = () => {
-    if (window.WebApp?.openLink) {
-      window.WebApp.openLink(url);
-      return;
-    }
-    window.open(url, "_blank", "noopener,noreferrer");
-  };
 
   const host = url.replace(/^https?:\/\//, "").split("/")[0];
 
@@ -61,12 +97,25 @@ export function SourceViewPage() {
         </button>
       </header>
 
-      <iframe
-        className="source-view-frame"
-        src={url}
-        title={t("sources")}
-        referrerPolicy="no-referrer-when-downgrade"
-      />
+      <div className="source-view-frame-wrap">
+        <iframe
+          ref={iframeRef}
+          className="source-view-frame"
+          src={url}
+          title={t("sources")}
+          referrerPolicy="no-referrer-when-downgrade"
+          onLoad={handleIframeLoad}
+        />
+
+        {showEmbedHint && (
+          <div className="source-view-embed-hint" role="status">
+            <p className="source-view-embed-hint-text">{t("sourceViewEmbedBlocked")}</p>
+            <button type="button" className="source-view-embed-hint-btn" onClick={openExternal}>
+              {t("sourceViewOpenExternal")}
+            </button>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
