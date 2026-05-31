@@ -77,7 +77,7 @@ async def filter_valid_image_urls(
     seen_urls: set[str] = set()
 
     async with httpx.AsyncClient(
-        headers={"User-Agent": "Glosix/1.0 (+https://app.glosix.ru)"},
+        headers={"User-Agent": "Glosix/1.0 (+https://glosix.ru)"},
         follow_redirects=True,
     ) as client:
 

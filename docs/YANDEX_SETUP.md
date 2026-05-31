@@ -79,13 +79,13 @@ docker compose -f docker-compose.prod.yml up -d --build backend
 Проверка конфигурации (без вызова API):
 
 ```bash
-curl -s https://app.glosix.ru/api/health | jq '.yandex_configured, .yandex_models'
+curl -s https://glosix.ru/api/health | jq '.yandex_configured, .yandex_models'
 ```
 
 Полная проверка Search + Lite + Pro (~30 с):
 
 ```bash
-curl -s https://app.glosix.ru/api/health/yandex | jq
+curl -s https://glosix.ru/api/health/yandex | jq
 ```
 
 Ожидаемый ответ при успехе:
@@ -130,7 +130,7 @@ MAX не предоставляет API распознавания речи — 
 Проверка:
 
 ```bash
-curl -s https://app.glosix.ru/api/health/yandex | jq '.stt_ok, .errors'
+curl -s https://glosix.ru/api/health/yandex | jq '.stt_ok, .errors'
 ```
 
 Если `stt_ok: false` и в `errors` есть `stt HTTP 403` — добавьте роль STT тому же ключу, что используется для Search/GPT.

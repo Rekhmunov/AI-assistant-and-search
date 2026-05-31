@@ -41,8 +41,24 @@ POSTGRES_PW_VAL="${POSTGRES_PASSWORD:-$(gen_secret)}"
 
 # Пустой URL: запросы на /api того же хоста (app/admin), без cross-origin и CORS-ошибок
 VITE_URL=""
+VITE_PUBLIC="https://${APP_HOST}"
 VITE_MAX_BOT="${VITE_MAX_BOT_URL:-https://max.ru}"
-CORS="https://${APP_HOST},https://${API_HOST},https://${ADMIN_HOST}"
+
+APP_SERVER_NAMES="${APP_HOST}"
+if [ -n "${APP_HOST_ALIASES:-}" ]; then
+  APP_SERVER_NAMES="${APP_SERVER_NAMES} ${APP_HOST_ALIASES}"
+fi
+
+CORS="https://${APP_HOST}"
+if [ -n "${APP_HOST_ALIASES:-}" ]; then
+  for alias in ${APP_HOST_ALIASES}; do
+    CORS="${CORS},https://${alias}"
+  done
+fi
+CORS="${CORS},https://${API_HOST},https://${ADMIN_HOST}"
+if [ -n "${LEGACY_APP_HOST:-}" ]; then
+  CORS="${CORS},https://${LEGACY_APP_HOST}"
+fi
 
 if [ -f .env ] && [ "${FORCE:-0}" != "1" ]; then
   echo ".env уже существует. Для перезаписи: FORCE=1 bash scripts/configure-hosting.sh"
@@ -57,6 +73,7 @@ DEBUG=false
 SKIP_INIT_DATA_VALIDATION=false
 
 VITE_API_URL=${VITE_URL}
+VITE_PUBLIC_URL=${VITE_PUBLIC}
 VITE_MAX_BOT_URL=${VITE_MAX_BOT}
 CORS_ORIGINS=${CORS}
 
@@ -85,19 +102,7 @@ EOF
 
 chmod 600 .env
 
-render_nginx() {
-  if command -v envsubst >/dev/null 2>&1; then
-    export APP_HOST API_HOST ADMIN_HOST PROXY_PORT
-    envsubst '${APP_HOST} ${API_HOST} ${ADMIN_HOST}' \
-      < nginx/nginx.prod.conf.template > nginx/nginx.prod.conf
-  else
-    sed -e "s/\${APP_HOST}/${APP_HOST}/g" \
-        -e "s/\${API_HOST}/${API_HOST}/g" \
-        -e "s/\${ADMIN_HOST}/${ADMIN_HOST}/g" \
-        nginx/nginx.prod.conf.template > nginx/nginx.prod.conf
-  fi
-}
-render_nginx
+bash scripts/render-nginx.sh
 
 echo "==> Создано:"
 echo "    .env"
@@ -105,6 +110,9 @@ echo "    nginx/nginx.prod.conf"
 echo ""
 echo "Домены:"
 echo "    Миниапп (MAX): https://${APP_HOST}"
+if [ -n "${LEGACY_APP_HOST:-}" ]; then
+  echo "    Редирект:        https://${LEGACY_APP_HOST} → https://${APP_HOST}"
+fi
 echo "    API:           https://${API_HOST}"
 echo "    Admin:         https://${ADMIN_HOST}"
 echo ""

@@ -23,17 +23,19 @@
 Интернет → ISPmanager (HTTPS :443)
               ↓ reverse proxy
          127.0.0.1:8080 (Docker nginx)
-              ├── app.ваш-домен.ru  → frontend (миниапп)
-              ├── api.ваш-домен.ru  → backend (API + SSE)
-              └── admin.ваш-домен.ru → admin
+              ├── glosix.ru (и www)     → frontend (миниапп)
+              ├── api.glosix.ru         → backend (API + SSE)
+              └── admin.glosix.ru       → admin
          postgres, redis — только внутри Docker (наружу не открыты)
 ```
 
-Рекомендуем **3 поддомена**:
+Рекомендуем **корневой домен + поддомены API/admin**:
 
-- `app.` — миниапп (URL в MAX)
+- `glosix.ru` (или `app.`) — миниапп (URL в MAX)
 - `api.` — бэкенд
 - `admin.` — рассылки
+
+Подробный перенос с `app.*` на apex: [DOMAIN_MIGRATION.md](./DOMAIN_MIGRATION.md)
 
 ---
 
@@ -64,13 +66,14 @@ sudo bash scripts/install-docker.sh
 
 | Имя | Тип | Значение |
 |-----|-----|----------|
-| `app` | A | IP VPS |
+| `@` или `app` | A | IP VPS |
+| `www` | A | IP VPS |
 | `api` | A | IP VPS |
 | `admin` | A | IP VPS |
 
 Админка: вход по email/паролю (`ADMIN_BOOTSTRAP_*` в `.env`, первый запуск создаёт owner). В `CORS_ORIGINS` должен быть `https://admin.ваш-домен`.
 
-Подождите 5–30 минут, проверьте: `dig +short app.ваш-домен.ru`
+Подождите 5–30 минут, проверьте: `dig +short glosix.ru`
 
 ---
 

@@ -40,6 +40,7 @@ docker compose -f docker-compose.prod.yml ps
 ```bash
 cd /opt/aisearch
 export PROXY_PORT=18080   # как в hosting.config
+sudo bash scripts/fix-nginx-glosix-root.sh
 sudo bash scripts/fix-nginx-app-glosix.sh
 sudo bash scripts/fix-nginx-api-glosix.sh
 sudo bash scripts/fix-nginx-admin-glosix.sh
@@ -52,7 +53,8 @@ sudo nginx -t
 sudo systemctl start nginx
 sudo systemctl status nginx --no-pager
 ss -tlnp | grep -E ':443|:80 '
-curl -sS -I https://app.glosix.ru/ | head -5
+curl -sS -I https://glosix.ru/ | head -5
+curl -sS -I https://app.glosix.ru/ | head -5   # 301 → glosix.ru
 ```
 
 ### Шаг 5. Cron (защита после смены IP)
@@ -87,7 +89,8 @@ cd /opt/aisearch && sudo bash scripts/ensure-nginx-glosix.sh
 
 | Команда | Ожидание |
 |---------|----------|
-| `curl -s http://127.0.0.1:18080/api/health -H 'Host: app.glosix.ru'` | JSON `status: ok` |
+| `curl -s http://127.0.0.1:18080/api/health -H 'Host: glosix.ru'` | JSON `status: ok` |
 | `systemctl is-active nginx` | `active` |
-| `curl -sI https://app.glosix.ru/` | `HTTP/2 200` |
+| `curl -sI https://glosix.ru/` | `HTTP/2 200` |
+| `curl -s https://api.glosix.ru/` | JSON `status: ok` |
 | `journalctl -u nginx -n 20` | нет `Cannot assign requested address` |

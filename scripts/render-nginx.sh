@@ -26,15 +26,36 @@ if [ ! -f nginx/nginx.prod.conf.template ]; then
   exit 1
 fi
 
-if command -v envsubst >/dev/null 2>&1; then
-  export APP_HOST API_HOST ADMIN_HOST
-  envsubst '${APP_HOST} ${API_HOST} ${ADMIN_HOST}' \
-    < nginx/nginx.prod.conf.template > nginx/nginx.prod.conf
-else
-  sed -e "s/\${APP_HOST}/${APP_HOST}/g" \
-      -e "s/\${API_HOST}/${API_HOST}/g" \
-      -e "s/\${ADMIN_HOST}/${ADMIN_HOST}/g" \
-      nginx/nginx.prod.conf.template > nginx/nginx.prod.conf
+APP_SERVER_NAMES="${APP_HOST}"
+if [ -n "${APP_HOST_ALIASES:-}" ]; then
+  APP_SERVER_NAMES="${APP_SERVER_NAMES} ${APP_HOST_ALIASES}"
 fi
 
-echo "nginx/nginx.prod.conf updated (${APP_HOST}, ${API_HOST}, ${ADMIN_HOST})"
+_render_main() {
+  if command -v envsubst >/dev/null 2>&1; then
+    export APP_SERVER_NAMES API_HOST ADMIN_HOST
+    envsubst '${APP_SERVER_NAMES} ${API_HOST} ${ADMIN_HOST}' \
+      < nginx/nginx.prod.conf.template
+  else
+    sed -e "s/\${APP_SERVER_NAMES}/${APP_SERVER_NAMES}/g" \
+        -e "s/\${API_HOST}/${API_HOST}/g" \
+        -e "s/\${ADMIN_HOST}/${ADMIN_HOST}/g" \
+        nginx/nginx.prod.conf.template
+  fi
+}
+
+_render_main > nginx/nginx.prod.conf
+
+if [ -n "${LEGACY_APP_HOST:-}" ]; then
+  cat >> nginx/nginx.prod.conf <<EOF
+
+server {
+    listen 80;
+    server_name ${LEGACY_APP_HOST};
+
+    return 301 https://${APP_HOST}\$request_uri;
+}
+EOF
+fi
+
+echo "nginx/nginx.prod.conf updated (${APP_SERVER_NAMES}, ${API_HOST}, ${ADMIN_HOST})"

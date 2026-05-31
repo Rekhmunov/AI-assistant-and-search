@@ -2,13 +2,19 @@
 #   cp hosting.config.example hosting.config && nano hosting.config
 #   bash scripts/configure-hosting.sh
 
-# Базовый домен (без app/api/admin)
-DOMAIN=example.ru
+# Базовый домен (без api/admin)
+DOMAIN=glosix.ru
 
-# Поддомены (обычно app.DOMAIN, api.DOMAIN, admin.DOMAIN)
-APP_HOST=app.example.ru
-API_HOST=api.example.ru
-ADMIN_HOST=admin.example.ru
+# Основной сайт / миниапп (MAX). Можно apex или app.DOMAIN.
+APP_HOST=glosix.ru
+# Доп. имена через пробел (www и т.п.)
+APP_HOST_ALIASES=www.glosix.ru
+# Старый поддомен — редирект на APP_HOST (оставьте пустым, если не нужен)
+LEGACY_APP_HOST=app.glosix.ru
+
+# API и админка
+API_HOST=api.glosix.ru
+ADMIN_HOST=admin.glosix.ru
 
 # Порт внутреннего Docker-nginx (ISPmanager проксирует сюда)
 PROXY_PORT=8080

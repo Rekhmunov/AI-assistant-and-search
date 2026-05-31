@@ -13,7 +13,7 @@ if [ -f hosting.config ]; then
   source hosting.config
 fi
 
-APP_HOST="${APP_HOST:-app.glosix.ru}"
+APP_HOST="${APP_HOST:-glosix.ru}"
 API_HOST="${API_HOST:-api.glosix.ru}"
 
 echo "==> Docker containers"
@@ -34,8 +34,10 @@ curl -sf "https://${APP_HOST}/api/health" | head -c 500 || echo "FAIL"
 echo ""
 
 echo ""
-echo "==> Public API /health"
-curl -sf "https://${API_HOST}/health" || echo "FAIL"
+echo "==> Public API root and /health"
+curl -sf "https://${API_HOST}/" | head -c 500 || echo "FAIL (root /)"
+echo ""
+curl -sf "https://${API_HOST}/health" | head -c 500 || echo "FAIL (/health)"
 echo ""
 
 echo ""

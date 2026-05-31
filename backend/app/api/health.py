@@ -80,7 +80,7 @@ async def api_health_page_cache():
 
 @router.get("/health")
 async def api_health(db: Annotated[AsyncSession, Depends(get_db)]):
-    """Проверка API и БД (для curl https://app.glosix.ru/api/health)."""
+    """Проверка API и БД (для curl https://glosix.ru/api/health)."""
     await db.execute(text("SELECT 1"))
 
     result = await db.execute(

@@ -30,7 +30,10 @@ else
   echo "WARN: нет docker-compose.prod.yml в $ROOT"
 fi
 
-echo "==> 3/5 Vhost app/api/admin (актуальный IP + порт $PROXY_PORT)"
+echo "==> 3/5 Vhost glosix.ru + app redirect + api/admin (порт $PROXY_PORT)"
+if [ -x "$ROOT/scripts/fix-nginx-glosix-root.sh" ]; then
+  bash "$ROOT/scripts/fix-nginx-glosix-root.sh" || true
+fi
 if [ -x "$ROOT/scripts/fix-nginx-app-glosix.sh" ]; then
   bash "$ROOT/scripts/fix-nginx-app-glosix.sh" || true
   bash "$ROOT/scripts/fix-nginx-api-glosix.sh" || true

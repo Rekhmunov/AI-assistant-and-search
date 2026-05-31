@@ -15,7 +15,7 @@ cd "$ROOT"
 COMPOSE="docker compose -f docker-compose.prod.yml"
 PROXY_PORT="${PROXY_PORT:-18080}"
 API_HOST_CHECK="${API_HOST:-api.glosix.ru}"
-APP_HOST_CHECK="${APP_HOST:-app.glosix.ru}"
+APP_HOST_CHECK="${APP_HOST:-glosix.ru}"
 ADMIN_HOST_CHECK="${ADMIN_HOST:-admin.glosix.ru}"
 
 if [ -f hosting.config ]; then

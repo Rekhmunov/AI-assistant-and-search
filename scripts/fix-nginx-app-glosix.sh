@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
-# Replace app.glosix.ru nginx vhost with Docker reverse proxy (ISPmanager).
+# Redirect app.glosix.ru -> glosix.ru (ISPmanager). Старые ссылки MAX и закладки.
 set -euo pipefail
 
 CONF="/etc/nginx/vhosts/www-root/app.glosix.ru.conf"
 BACKUP="${CONF}.bak.$(date +%s)"
+TARGET="${REDIRECT_TO:-https://glosix.ru}"
 
 if [ ! -f "$CONF" ]; then
   echo "Not found: $CONF"
@@ -17,13 +18,13 @@ if [ -z "$CRTACA" ] || [ -z "$KEY" ]; then
   exit 1
 fi
 
-PROXY_PORT="${PROXY_PORT:-18080}"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 LISTEN_IP="$("$ROOT/scripts/nginx-listen-ip.sh")"
 
 cp "$CONF" "$BACKUP"
-echo "listen IP: $LISTEN_IP (proxy -> 127.0.0.1:${PROXY_PORT})"
+echo "listen IP: $LISTEN_IP"
 echo "Backup: $BACKUP"
+echo "Redirect: app.glosix.ru -> ${TARGET}"
 echo "SSL: $CRTACA"
 
 cat > "$CONF" << NGINX
@@ -52,22 +53,11 @@ server {
         include /etc/nginx/vhosts-resources/app.glosix.ru/*.conf;
         access_log /var/www/httpd-logs/app.glosix.ru.access.log;
         error_log /var/www/httpd-logs/app.glosix.ru.error.log notice;
-        gzip on;
-        gzip_comp_level 5;
-        gzip_disable "msie6";
-        gzip_types text/plain text/css application/json application/x-javascript text/xml application/xml application/xml+rss text/javascript application/javascript image/svg+xml;
-        location / {
-                proxy_pass http://127.0.0.1:${PROXY_PORT};
-                proxy_http_version 1.1;
-                proxy_set_header Host \$host;
-                proxy_set_header X-Real-IP \$remote_addr;
-                proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-                proxy_set_header X-Forwarded-Proto \$scheme;
-        }
+        return 301 ${TARGET}\$request_uri;
         listen ${LISTEN_IP}:443 ssl;
 }
 NGINX
 
 nginx -t
 systemctl reload nginx
-echo "Done. Test: curl -s https://app.glosix.ru/ | head -5"
+echo "Done. Test: curl -sI https://app.glosix.ru/ | grep -i location"

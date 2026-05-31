@@ -8,7 +8,7 @@ resolver 127.0.0.11 valid=10s ipv6=off;
 
 server {
     listen 80;
-    server_name ${APP_HOST};
+    server_name ${APP_SERVER_NAMES};
 
     location /api/ {
         set $backend_upstream backend:8000;

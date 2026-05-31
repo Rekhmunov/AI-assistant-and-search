@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Проверка, что app.glosix.ru отдаёт frontend с меню вложений.
+# Проверка, что glosix.ru отдаёт frontend с меню вложений.
 # Usage: bash scripts/verify-prod-frontend.sh [APP_URL]
 
 set -euo pipefail
-APP_URL="${1:-https://app.glosix.ru}"
+APP_URL="${1:-https://glosix.ru}"
 HTML=$(curl -sfL "$APP_URL/")
 JS=$(echo "$HTML" | grep -oE '/assets/index-[^"[:space:]]+\.js' | head -1)
 BUILD=$(echo "$HTML" | grep -oE 'data-build="[^"]+"' | head -1 || true)

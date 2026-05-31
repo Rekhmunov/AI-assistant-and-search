@@ -1,6 +1,8 @@
 import { t } from "../i18n";
 
-export const GLOSIX_PUBLIC_URL = "https://app.glosix.ru";
+export const GLOSIX_PUBLIC_URL =
+  import.meta.env.VITE_PUBLIC_URL?.trim() ||
+  (typeof window !== "undefined" ? window.location.origin : "https://glosix.ru");
 
 export function isProPlan(plan: string | null | undefined): boolean {
   return plan === "pro";

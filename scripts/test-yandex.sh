@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Проверка Yandex Search + GPT на сервере или локально.
 # Usage: ./scripts/test-yandex.sh [BASE_URL]
-# Example: ./scripts/test-yandex.sh https://app.glosix.ru
+# Example: ./scripts/test-yandex.sh https://glosix.ru
 
 set -euo pipefail
 BASE="${1:-http://127.0.0.1:8080}"

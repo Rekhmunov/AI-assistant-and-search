@@ -72,15 +72,17 @@ make check
 
 | Запись | Тип | Значение |
 |--------|-----|----------|
-| `app` | A | IP VPS |
+| `@` | A | IP VPS |
+| `www` | A | IP VPS |
 | `api` | A | IP VPS |
 | `admin` | A | IP VPS |
+| `app` | A | IP VPS (редирект на apex, опционально) |
 
 ---
 
 ## ISPmanager
 
-Для **app**, **api**, **admin**:
+Для **glosix.ru**, **api**, **admin**:
 
 1. Создать WWW-домен.
 2. Выпустить SSL (Let's Encrypt).
@@ -94,7 +96,7 @@ Upstream: `http://127.0.0.1:8080` (или `PROXY_PORT` из `hosting.config`).
 
 | Параметр | Значение |
 |----------|----------|
-| URL миниаппа | `https://app.ваш-домен.ru` |
+| URL миниаппа | `https://glosix.ru` (или `https://app.ваш-домен.ru`) |
 | `BOT_TOKEN` | в `.env` |
 | `SKIP_INIT_DATA_VALIDATION` | `false` |
 
@@ -127,8 +129,8 @@ Cron бэкап (раз в сутки):
 - [ ] `make up` — контейнеры healthy
 - [ ] `make check` — без FAIL
 - [ ] HTTPS на всех трёх поддоменах
-- [ ] `curl https://api.домен/health` → `{"status":"ok"}`
+- [ ] `curl https://api.домен/` и `/health` → ok
 - [ ] URL миниаппа в кабинете MAX
 - [ ] Firewall: открыты только 22, 80, 443
 
-Подробности: [DEPLOY.md](./DEPLOY.md)
+Подробно: [DEPLOY.md](./DEPLOY.md) · перенос на apex: [DOMAIN_MIGRATION.md](./DOMAIN_MIGRATION.md)

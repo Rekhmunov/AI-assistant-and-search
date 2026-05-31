@@ -327,7 +327,7 @@ async def bind_email(
     user: Annotated[User, Depends(get_current_user)],
     limiter: Annotated[RateLimiter, Depends(get_rate_limiter)],
 ):
-    """Добавить email и пароль к аккаунту MAX (вход с сайта app.glosix.ru)."""
+    """Добавить email и пароль к аккаунту MAX (вход с сайта glosix.ru)."""
     if user.email:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email уже привязан")
 

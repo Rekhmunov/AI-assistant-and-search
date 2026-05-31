@@ -49,4 +49,4 @@ GIGACHAT_VERIFY_SSL_CERTS=false
 ## Проверка
 
 - Админка → «Проверить GigaChat»
-- Или: `curl -s https://app.glosix.ru/api/health/gigachat` (с вашим хостом)
+- Или: `curl -s https://glosix.ru/api/health/gigachat` (с вашим хостом)

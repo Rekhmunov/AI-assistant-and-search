@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Починка/проверка внешнего nginx (ISPmanager) для app/api/admin.glosix.ru.
+# Починка/проверка внешнего nginx (ISPmanager) для glosix.ru / app / api / admin.
 # Безопасно запускать вручную и из cron (@reboot).
 set -euo pipefail
 

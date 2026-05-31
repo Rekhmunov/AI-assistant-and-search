@@ -54,6 +54,15 @@ def create_app() -> FastAPI:
     async def health():
         return {"status": "ok"}
 
+    @app.get("/")
+    async def api_root():
+        return {
+            "service": settings.app_name,
+            "status": "ok",
+            "health": "/health",
+            "api": "/api",
+        }
+
     return app
 
 

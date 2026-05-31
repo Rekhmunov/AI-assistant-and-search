@@ -19,19 +19,19 @@
 
 ## ISPmanager
 
-- [ ] Сайты: app / api / admin
+- [ ] Сайты: glosix.ru, api, admin (+ app → редирект)
 - [ ] SSL Let's Encrypt на каждый
 - [ ] Proxy → `127.0.0.1:8080` (`hosting/ispmanager-proxy.conf`)
 - [ ] На **api**: `proxy_buffering off`, timeout 300s
 
 ## MAX
 
-- [ ] Миниапп URL = `https://app.ваш-домен`
-- [ ] `curl https://api.ваш-домен/health` → ok
+- [ ] Миниапп URL = `https://glosix.ru` (или `https://app.ваш-домен`)
+- [ ] `curl https://api.ваш-домен/` и `/health` → ok
 
 ## После запуска
 
 - [ ] Cron: `scripts/backup-db.sh`
 - [ ] (Опционально) `systemctl enable` → `systemd/aisearch.service`
 
-Подробно: [docs/HOSTING.md](docs/HOSTING.md)
+Подробно: [docs/HOSTING.md](docs/HOSTING.md) · [docs/DOMAIN_MIGRATION.md](docs/DOMAIN_MIGRATION.md)

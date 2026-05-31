@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Сбор диагностики при пустом экране app.glosix.ru
+# Сбор диагностики при пустом экране glosix.ru
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -7,7 +7,7 @@ cd "$ROOT"
 
 COMPOSE="docker compose -f docker-compose.prod.yml"
 PROXY_PORT="${PROXY_PORT:-18080}"
-APP_HOST="${APP_HOST:-app.glosix.ru}"
+APP_HOST="${APP_HOST:-glosix.ru}"
 
 if [ -f hosting.config ]; then
   # shellcheck disable=SC1091
