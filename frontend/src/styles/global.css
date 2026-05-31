@@ -274,6 +274,11 @@ body:has(.page-thread) {
     padding: 0;
   }
 
+  .page-thread .thread-conversation {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
   .thread-mobile-header {
     position: sticky;
     top: 0;
@@ -2741,7 +2746,7 @@ body:has(.page-thread) {
   left: 0;
   right: 0;
   max-width: none;
-  padding: 0 12px;
+  padding: 0 16px;
   bottom: calc(28px + env(safe-area-inset-bottom));
 }
 
