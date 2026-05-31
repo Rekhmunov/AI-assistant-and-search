@@ -3,6 +3,7 @@ import { AnswerTable } from "../components/AnswerTable";
 import { SourceChipsRow } from "../components/SourceChipsRow";
 import type { Source } from "../api/client";
 import { formatMarkdownText } from "./formatMarkdownText";
+import { parseAnswerMarkdownBlocks } from "./parseAnswerMarkdownBlocks";
 import { parseParagraphCitations } from "./paragraphCitations";
 import { splitTextWithMarkdownTables } from "./parseMarkdownTables";
 
@@ -55,29 +56,81 @@ function renderTextParagraph(paragraph: string, sources: Source[], keyPrefix: st
   }
 
   return (
-    <div className="answer-paragraph">
+    <p className="answer-paragraph">
       {body}
       {indices.length > 0 && (
         <SourceChipsRow indices={indices} sources={sources} className="source-chips-row" />
       )}
-    </div>
+    </p>
   );
 }
 
-function renderPlainTextFragment(text: string, sources: Source[], keyPrefix: string): ReactNode | null {
-  const formatted = formatMarkdownText(text);
-  if (!formatted) return null;
+function renderListItem(item: string, sources: Source[], keyPrefix: string): ReactNode {
+  const { text, indices } = parseParagraphCitations(item);
+  const body = renderInlineText(text, keyPrefix);
 
-  const paragraphs = formatted.split(/\n\n+/).filter((p) => p.trim());
-  if (!paragraphs.length) return null;
+  if (!body.length && indices.length === 0) {
+    return null;
+  }
+
+  return (
+    <li className="answer-list-item">
+      <span className="answer-list-item-body">
+        {body}
+        {indices.length > 0 && (
+          <SourceChipsRow indices={indices} sources={sources} className="source-chips-row" />
+        )}
+      </span>
+    </li>
+  );
+}
+
+function renderMarkdownBlock(
+  block: ReturnType<typeof parseAnswerMarkdownBlocks>[number],
+  sources: Source[],
+  keyPrefix: string,
+): ReactNode | null {
+  if (block.type === "heading") {
+    const { text, indices } = parseParagraphCitations(block.text);
+    const body = renderInlineText(text, `${keyPrefix}-h`);
+    if (!body.length && indices.length === 0) return null;
+    return (
+      <h2 className="answer-heading">
+        {body}
+        {indices.length > 0 && (
+          <SourceChipsRow indices={indices} sources={sources} className="source-chips-row" />
+        )}
+      </h2>
+    );
+  }
+
+  if (block.type === "ul" || block.type === "ol") {
+    const Tag = block.type === "ol" ? "ol" : "ul";
+    const items = block.items
+      .map((item, index) => renderListItem(item, sources, `${keyPrefix}-li-${index}`))
+      .filter(Boolean);
+    if (!items.length) return null;
+    return (
+      <Tag className={`answer-list answer-list--${block.type}`}>
+        {items}
+      </Tag>
+    );
+  }
+
+  return renderTextParagraph(block.text, sources, keyPrefix);
+}
+
+function renderPlainTextFragment(text: string, sources: Source[], keyPrefix: string): ReactNode | null {
+  const blocks = parseAnswerMarkdownBlocks(text);
+  if (!blocks.length) return null;
 
   return (
     <div className="answer-text-part">
-      {paragraphs.map((paragraph, index) => (
-        <div key={`${keyPrefix}-para-${index}`}>
-          {renderTextParagraph(paragraph, sources, `${keyPrefix}-p-${index}`)}
-        </div>
-      ))}
+      {blocks.map((block, index) => {
+        const node = renderMarkdownBlock(block, sources, `${keyPrefix}-b-${index}`);
+        if (!node) return null;
+        return <div key={`${keyPrefix}-block-${index}`}>{node}</div>;
+      })}
     </div>
   );
 }

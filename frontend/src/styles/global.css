@@ -1035,12 +1035,72 @@ body:has(.page-thread) {
 }
 
 .thread-query {
+  position: relative;
   margin: 8px 0 20px;
   padding: 12px 14px;
   border-radius: 12px;
   background: var(--surface);
   border: 1px solid var(--border-subtle);
   box-shadow: var(--shadow-sm);
+}
+
+.thread-query--mobile {
+  padding: 0;
+}
+
+.thread-query-trigger {
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: 12px 14px;
+  border: none;
+  border-radius: 12px;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+.thread-query--mobile .thread-query-text {
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.thread-query--menu-open .thread-query-trigger {
+  padding-bottom: 46px;
+}
+
+.thread-query-menu {
+  position: absolute;
+  left: 10px;
+  bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 999px;
+  background: var(--surface);
+  border: 1px solid var(--border-subtle);
+  box-shadow: var(--shadow-md, 0 4px 14px rgba(0, 0, 0, 0.08));
+  animation: thread-query-menu-in 0.15s ease-out;
+}
+
+.thread-query-copy-btn {
+  width: 34px;
+  height: 34px;
+}
+
+@keyframes thread-query-menu-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .thread-query-text {
@@ -1251,7 +1311,6 @@ body:has(.page-thread) {
 }
 
 .answer-section .answer-text {
-  white-space: pre-wrap;
   display: flex;
   flex-direction: column;
   gap: 0.85em;
@@ -1838,11 +1897,81 @@ body:has(.page-thread) {
 .answer-text-part {
   display: flex;
   flex-direction: column;
-  gap: 0.85em;
+  gap: 0.65em;
+}
+
+.answer-heading {
+  margin: 1.1em 0 0.35em;
+  padding: 0;
+  font-size: inherit;
+  font-weight: 600;
+  line-height: 1.45;
+  color: var(--text);
+  letter-spacing: -0.01em;
+}
+
+.answer-text-part > div:first-child .answer-heading,
+.answer-text > div:first-child .answer-text-part > div:first-child .answer-heading {
+  margin-top: 0;
+}
+
+.answer-heading:not(:first-child) {
+  padding-top: 0.65em;
 }
 
 .answer-paragraph {
   margin: 0;
+  line-height: 1.65;
+  white-space: pre-wrap;
+}
+
+.answer-list {
+  margin: 0.15em 0 0.5em;
+  padding: 0;
+  list-style: none;
+}
+
+.answer-list-item {
+  position: relative;
+  margin: 0 0 0.65em;
+  padding: 0 0 0 1.35em;
+  line-height: 1.6;
+}
+
+.answer-list-item:last-child {
+  margin-bottom: 0;
+}
+
+.answer-list-item-body {
+  display: inline;
+}
+
+.answer-list--ul .answer-list-item::before {
+  content: "•";
+  position: absolute;
+  left: 0.15em;
+  top: 0;
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.answer-list--ol {
+  counter-reset: answer-ol;
+}
+
+.answer-list--ol .answer-list-item {
+  counter-increment: answer-ol;
+}
+
+.answer-list--ol .answer-list-item::before {
+  content: counter(answer-ol) ".";
+  position: absolute;
+  left: 0;
+  top: 0;
+  min-width: 1.1em;
+  color: var(--muted);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
 }
 
 @media (prefers-color-scheme: dark) {

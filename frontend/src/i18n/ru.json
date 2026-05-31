@@ -72,6 +72,7 @@
   "composingAnswer": "Формируем ответ...",
   "sourcesCount": "{n} источников",
   "copyAnswer": "Копировать",
+  "copyQuery": "Копировать вопрос",
   "copied": "Скопировано",
   "copyAttribution": "Ответ сгенерирован с помощью Glosix: {url}",
   "share": "Поделиться",

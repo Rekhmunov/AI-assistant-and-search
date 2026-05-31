@@ -7,6 +7,7 @@ import { AnswerErrorBoundary } from "../components/AnswerErrorBoundary";
 import { AnswerFooter } from "../components/AnswerFooter";
 import { SearchComposer, type ComposerAttachment } from "../components/SearchComposer";
 import { SearchStatusLine, type SearchPhase } from "../components/SearchStatusLine";
+import { ThreadQuery } from "../components/ThreadQuery";
 import { TurnImageGallery } from "../components/TurnImageGallery";
 import { t } from "../i18n";
 import { findLastIndex } from "../lib/arrayUtils";
@@ -319,9 +320,7 @@ export function Thread() {
 
           return (
             <article key={turn.key} id={`turn-${turn.key}`} className="thread-turn">
-              <div className="thread-query">
-                <p className="thread-query-text">{turn.query}</p>
-              </div>
+              <ThreadQuery query={turn.query} />
 
               {images.length > 0 && <TurnImageGallery images={images} />}
 
