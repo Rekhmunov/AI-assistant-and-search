@@ -4,8 +4,10 @@ import { SourceChipsRow } from "../components/SourceChipsRow";
 import type { Source } from "../api/client";
 import { formatMarkdownText } from "./formatMarkdownText";
 import { parseAnswerMarkdownBlocks } from "./parseAnswerMarkdownBlocks";
-import { parseParagraphCitations } from "./paragraphCitations";
+import { mergeCitationIndices, parseParagraphCitations } from "./paragraphCitations";
 import { splitTextWithMarkdownTables } from "./parseMarkdownTables";
+
+const BLOCK_CHIPS_CLASS = "source-chips-row source-chips-row--block";
 
 function renderInlineText(text: string, keyPrefix: string): ReactNode[] {
   const formatted = formatMarkdownText(text);
@@ -47,6 +49,17 @@ function renderInlineText(text: string, keyPrefix: string): ReactNode[] {
   return nodes;
 }
 
+function renderBlockSources(indices: number[], sources: Source[]): ReactNode {
+  if (!indices.length) return null;
+  return (
+    <SourceChipsRow
+      indices={indices}
+      sources={sources}
+      className={BLOCK_CHIPS_CLASS}
+    />
+  );
+}
+
 function renderTextParagraph(paragraph: string, sources: Source[], keyPrefix: string): ReactNode {
   const { text, indices } = parseParagraphCitations(paragraph);
   const body = renderInlineText(text, keyPrefix);
@@ -57,32 +70,17 @@ function renderTextParagraph(paragraph: string, sources: Source[], keyPrefix: st
 
   return (
     <p className="answer-paragraph">
-      {body}
-      {indices.length > 0 && (
-        <SourceChipsRow indices={indices} sources={sources} className="source-chips-row" />
-      )}
+      <span className="answer-paragraph-body">{body}</span>
+      {renderBlockSources(indices, sources)}
     </p>
   );
 }
 
-function renderListItem(item: string, sources: Source[], keyPrefix: string): ReactNode {
-  const { text, indices } = parseParagraphCitations(item);
+function renderListItemBody(item: string, keyPrefix: string): ReactNode | null {
+  const { text } = parseParagraphCitations(item);
   const body = renderInlineText(text, keyPrefix);
-
-  if (!body.length && indices.length === 0) {
-    return null;
-  }
-
-  return (
-    <li className="answer-list-item">
-      <span className="answer-list-item-body">
-        {body}
-        {indices.length > 0 && (
-          <SourceChipsRow indices={indices} sources={sources} className="source-chips-row" />
-        )}
-      </span>
-    </li>
-  );
+  if (!body.length) return null;
+  return <span className="answer-list-item-body">{body}</span>;
 }
 
 function renderMarkdownBlock(
@@ -96,24 +94,36 @@ function renderMarkdownBlock(
     if (!body.length && indices.length === 0) return null;
     return (
       <h2 className="answer-heading">
-        {body}
-        {indices.length > 0 && (
-          <SourceChipsRow indices={indices} sources={sources} className="source-chips-row" />
-        )}
+        <span className="answer-heading-body">{body}</span>
+        {renderBlockSources(indices, sources)}
       </h2>
     );
   }
 
   if (block.type === "ul" || block.type === "ol") {
     const Tag = block.type === "ol" ? "ol" : "ul";
+    const itemIndices: number[][] = [];
     const items = block.items
-      .map((item, index) => renderListItem(item, sources, `${keyPrefix}-li-${index}`))
+      .map((item, index) => {
+        const parsed = parseParagraphCitations(item);
+        itemIndices.push(parsed.indices);
+        const body = renderListItemBody(item, `${keyPrefix}-li-${index}`);
+        if (!body) return null;
+        return (
+          <li key={`${keyPrefix}-li-${index}`} className="answer-list-item">
+            {body}
+          </li>
+        );
+      })
       .filter(Boolean);
     if (!items.length) return null;
+
+    const indices = mergeCitationIndices(...itemIndices);
     return (
-      <Tag className={`answer-list answer-list--${block.type}`}>
-        {items}
-      </Tag>
+      <div className="answer-list-block">
+        <Tag className={`answer-list answer-list--${block.type}`}>{items}</Tag>
+        {renderBlockSources(indices, sources)}
+      </div>
     );
   }
 

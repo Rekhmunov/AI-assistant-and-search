@@ -12,6 +12,17 @@ export type ParagraphWithCitations = {
   indices: number[];
 };
 
+/** Объединяет индексы источников без дубликатов, сохраняя порядок. */
+export function mergeCitationIndices(...lists: number[][]): number[] {
+  const out: number[] = [];
+  for (const list of lists) {
+    for (const n of list) {
+      if (!out.includes(n)) out.push(n);
+    }
+  }
+  return out;
+}
+
 /** Убирает [N] из текста и возвращает индексы источников для чипов. */
 export function parseParagraphCitations(paragraph: string): ParagraphWithCitations {
   const indices: number[] = [];

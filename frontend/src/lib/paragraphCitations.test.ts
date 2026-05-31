@@ -8,3 +8,9 @@ describe("parseParagraphCitations", () => {
     expect(result.indices).toEqual([1, 2]);
   });
 });
+
+describe("mergeCitationIndices", () => {
+  it("merges without duplicates preserving order", () => {
+    expect(mergeCitationIndices([1, 2], [2, 3], [1])).toEqual([1, 2, 3]);
+  });
+});

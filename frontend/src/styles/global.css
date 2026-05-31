@@ -1999,11 +1999,29 @@ body:has(.page-thread) {
   vertical-align: baseline;
 }
 
+.source-chips-row--block {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  margin: 0.5em 0 0;
+  width: 100%;
+}
+
+.answer-list-block {
+  margin: 0.15em 0 0.5em;
+}
+
+.answer-paragraph-body,
+.answer-heading-body {
+  display: inline;
+}
+
 .source-chip {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 2px 7px 2px 5px;
+  padding: 2px 8px;
   border-radius: 999px;
   background: rgba(0, 0, 0, 0.045);
   color: #8a8a85;
@@ -2012,6 +2030,10 @@ body:has(.page-thread) {
   text-decoration: none;
   border: none;
   transition: background 0.15s ease, color 0.15s ease;
+}
+
+.source-chips-row--block .source-chip {
+  padding: 3px 9px;
 }
 
 .source-chip:hover {
