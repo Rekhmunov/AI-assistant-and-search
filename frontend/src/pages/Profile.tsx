@@ -2,7 +2,9 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { devActivatePro, deleteAccount, fetchMe, fetchSession } from "../api/client";
 import { AuthGate } from "../components/AuthGate";
+import { MobilePageHeader } from "../components/MobilePageHeader";
 import { ProfileAccountSection } from "../components/ProfileAccountSection";
+import { useDesktopLayout } from "../hooks/useDesktopLayout";
 import { isMaxWebApp } from "../lib/maxApp";
 import { t } from "../i18n";
 import { useAuthStore } from "../store/authStore";
@@ -22,6 +24,7 @@ export function Profile() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const inMax = isMaxWebApp();
+  const isDesktop = useDesktopLayout();
 
   const { data: user } = useQuery({
     queryKey: ["me"],
@@ -78,9 +81,13 @@ export function Profile() {
 
   return (
     <div className="page page-profile">
-      <header className="profile-page-header">
-        <h1 className="profile-page-title">{t("profile")}</h1>
-      </header>
+      {isDesktop ? (
+        <header className="profile-page-header">
+          <h1 className="mobile-page-title">{t("profile")}</h1>
+        </header>
+      ) : (
+        <MobilePageHeader variant="profile" title={t("profile")} />
+      )}
 
       <div className="profile-hero">
         <div className="profile-avatar" aria-hidden>

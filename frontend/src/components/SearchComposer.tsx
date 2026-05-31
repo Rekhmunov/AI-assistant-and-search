@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { FileUploadError, uploadFile, fetchMe } from "../api/client";
 import { ComposerAttachMenu } from "./ComposerAttachMenu";
+import { NewChatIcon } from "./MobileNavIcons";
 import {
   ACCEPT_FILE_INPUT,
   ACCEPT_IMAGE_INPUT,
@@ -512,22 +513,6 @@ function AttachmentChip({
         </button>
       )}
     </div>
-  );
-}
-
-function NewChatIcon() {
-  return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden>
-      <path
-        d="M12 20h9M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4 12.5-12.5z"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <path d="M15 6l3 3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-      <path d="M18 3v3h-3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
   );
 }
 

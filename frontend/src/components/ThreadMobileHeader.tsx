@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import { ThreadTabsBar, type ThreadTab } from "./ThreadTabsBar";
 import { t } from "../i18n";
+import { ProfileIcon } from "./MobileNavIcons";
 
 type Props = {
   onBack: () => void;
@@ -56,20 +57,6 @@ function BackIcon() {
         strokeWidth="2"
         strokeLinecap="round"
         strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
-function ProfileIcon() {
-  return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden>
-      <circle cx="12" cy="8" r="3.5" stroke="currentColor" strokeWidth="1.8" />
-      <path
-        d="M5 20c0-3.5 3.1-6 7-6s7 2.5 7 6"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
       />
     </svg>
   );

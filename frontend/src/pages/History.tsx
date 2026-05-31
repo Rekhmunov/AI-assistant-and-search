@@ -2,7 +2,9 @@ import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { fetchThreads } from "../api/client";
 import { AuthGate, HistoryGateIcon } from "../components/AuthGate";
+import { MobilePageHeader } from "../components/MobilePageHeader";
 import { ThreadHistoryMenu } from "../components/ThreadHistoryMenu";
+import { useDesktopLayout } from "../hooks/useDesktopLayout";
 import { isMaxWebApp } from "../lib/maxApp";
 import { t } from "../i18n";
 import { useAuthStore } from "../store/authStore";
@@ -20,6 +22,7 @@ function dayLabel(date: Date): string {
 export function History() {
   const navigate = useNavigate();
   const token = useAuthStore((s) => s.token);
+  const isDesktop = useDesktopLayout();
 
   const { data: threads = [], isLoading } = useQuery({
     queryKey: ["threads"],
@@ -52,7 +55,13 @@ export function History() {
 
   return (
     <div className="page page-history">
-      <h1>{t("history")}</h1>
+      {isDesktop ? (
+        <header className="profile-page-header">
+          <h1 className="mobile-page-title">{t("history")}</h1>
+        </header>
+      ) : (
+        <MobilePageHeader variant="history" title={t("history")} />
+      )}
       {isLoading && <p className="muted-text">{t("pageLoading")}</p>}
       {!isLoading && threads.length === 0 && <p className="muted-text">{t("historyEmpty")}</p>}
       {[...groups.entries()].map(([label, items]) => (

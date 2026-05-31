@@ -181,6 +181,29 @@ body:has(.page-thread) {
     display: none;
   }
 
+  .app-shell:has(.page-profile),
+  .app-shell:has(.page-history) {
+    padding-bottom: 0;
+  }
+
+  .app-shell:has(.page-profile) .bottom-nav,
+  .app-shell:has(.page-history) .bottom-nav {
+    display: none;
+  }
+
+  .page-profile,
+  .page-history {
+    padding-top: 0;
+  }
+
+  .mobile-page-header {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    flex-shrink: 0;
+    margin: 0 -16px 20px;
+  }
+
   .page-home--mobile {
     display: flex;
     flex-direction: column;
@@ -313,11 +336,17 @@ body:has(.page-thread) {
   margin-bottom: 20px;
 }
 
-.profile-page-title {
+.mobile-page-title {
   margin: 0;
   font-size: 1.5rem;
   font-weight: 600;
   letter-spacing: -0.02em;
+}
+
+.mobile-page-header .mobile-page-title {
+  justify-self: center;
+  text-align: center;
+  min-width: 0;
 }
 
 .profile-hero {
