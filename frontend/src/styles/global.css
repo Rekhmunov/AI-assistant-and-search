@@ -267,7 +267,7 @@ body:has(.page-thread) {
     min-height: 0;
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
-    padding-bottom: calc(28px + 64px + env(safe-area-inset-bottom));
+    padding-bottom: calc(28px + 88px + env(safe-area-inset-bottom));
   }
 
   .page-profile--mobile > .profile-mobile-scroll {
@@ -288,7 +288,7 @@ body:has(.page-thread) {
     min-height: 0;
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
-    padding-bottom: calc(28px + 64px + env(safe-area-inset-bottom));
+    padding-bottom: calc(28px + 88px + env(safe-area-inset-bottom));
   }
 
   .page-history--mobile .history-list {
@@ -2771,7 +2771,7 @@ body:has(.page-thread) {
   align-items: center;
   justify-content: center;
   width: 48px;
-  min-height: 48px;
+  min-height: 60px;
   height: auto;
   padding: 0;
   border: 1px solid var(--border);
@@ -2829,9 +2829,7 @@ body:has(.page-thread) {
 .mobile-new-thread-bar .composer-new-chat {
   pointer-events: auto;
   align-self: auto;
-  width: 48px;
-  height: 48px;
-  min-height: 48px;
+  height: 60px;
 }
 
 .page-thread .thread-conversation {
