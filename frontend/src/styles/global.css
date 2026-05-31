@@ -1541,6 +1541,26 @@ body:has(.page-thread) {
   display: none !important;
 }
 
+@media (max-width: 899px) {
+  .thread-conversation--mobile-tabs {
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    padding-bottom: 0;
+  }
+
+  .thread-conversation--mobile-tabs .thread-panel--answer,
+  .thread-conversation--mobile-tabs .thread-panel--images {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+    padding-bottom: calc(28px + 88px + env(safe-area-inset-bottom));
+  }
+}
+
 .thread-images-tab-status {
   margin: 0;
   padding: 24px 0;
@@ -1725,13 +1745,31 @@ body:has(.page-thread) {
   padding: 24px 16px;
 }
 
+.image-lightbox-close {
+  position: fixed;
+  top: calc(12px + env(safe-area-inset-top, 0px));
+  right: calc(12px + env(safe-area-inset-right, 0px));
+  z-index: 1002;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: none;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 1.4rem;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
+}
+
 .image-lightbox {
   position: relative;
-  max-width: min(920px, 96vw);
+  width: min(920px, 96vw);
   max-height: 90vh;
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
   gap: 12px;
 }
 
@@ -1739,13 +1777,15 @@ body:has(.page-thread) {
   display: flex;
   align-items: center;
   justify-content: center;
-  max-width: 100%;
+  width: 100%;
+  flex: 1 1 auto;
+  min-height: 0;
   touch-action: pan-y pinch-zoom;
 }
 
 .image-lightbox-stage img {
   max-width: 100%;
-  max-height: calc(90vh - 72px);
+  max-height: calc(90vh - 96px);
   border-radius: 12px;
   object-fit: contain;
   background: #111;
@@ -1782,30 +1822,17 @@ body:has(.page-thread) {
 }
 
 .image-lightbox-source {
-  position: absolute;
-  top: -12px;
-  right: -12px;
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  border: none;
-  background: var(--surface);
-  color: var(--text);
-  font-size: 1.4rem;
-  line-height: 1;
-  cursor: pointer;
-  box-shadow: var(--shadow-sm);
-}
-
-.image-lightbox-source {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
+  flex-shrink: 0;
   color: #fff;
   font-size: 0.9rem;
   text-decoration: none;
   opacity: 0.92;
   max-width: min(920px, 96vw);
+  margin-top: 4px;
 }
 
 .image-lightbox-source span {

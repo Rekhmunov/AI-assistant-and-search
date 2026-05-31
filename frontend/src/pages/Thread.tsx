@@ -81,9 +81,54 @@ export function Thread() {
   const activeThreadIdRef = useRef<string | null>(id ?? null);
   const scrollTurnKeyRef = useRef<string | null>(null);
   const conversationRef = useRef<HTMLDivElement>(null);
+  const answerPanelRef = useRef<HTMLDivElement>(null);
+  const imagesPanelRef = useRef<HTMLDivElement>(null);
   const answerResetPendingRef = useRef(false);
   const [showScrollDown, setShowScrollDown] = useState(false);
   const isDesktop = useDesktopLayout();
+
+  const getAnswerScrollEl = useCallback(() => {
+    return (isDesktop ? conversationRef.current : answerPanelRef.current) ?? null;
+  }, [isDesktop]);
+
+  const scrollAnswerToLastTurn = useCallback(
+    (behavior: ScrollBehavior = "auto") => {
+      const lastTurn = turns[turns.length - 1];
+      if (!lastTurn) return;
+      const turnEl = document.getElementById(`turn-${lastTurn.key}`);
+      if (turnEl) {
+        turnEl.scrollIntoView({ block: "start", behavior });
+        return;
+      }
+      const el = getAnswerScrollEl();
+      if (el) el.scrollTo({ top: el.scrollHeight, behavior });
+    },
+    [turns, getAnswerScrollEl],
+  );
+
+  const handleTabChange = useCallback(
+    (tab: ThreadTab) => {
+      if (tab === activeTab) return;
+      setActiveTab(tab);
+
+      if (isDesktop) return;
+
+      requestAnimationFrame(() => {
+        if (tab === "images") {
+          const el = imagesPanelRef.current;
+          if (!el) return;
+          el.scrollTop = 0;
+          requestAnimationFrame(() => {
+            el.scrollTop = 0;
+          });
+        } else {
+          scrollAnswerToLastTurn("auto");
+          requestAnimationFrame(() => scrollAnswerToLastTurn("auto"));
+        }
+      });
+    },
+    [activeTab, isDesktop, scrollAnswerToLastTurn],
+  );
 
   const { data: thread } = useQuery({
     queryKey: ["thread", id ?? threadId],
@@ -127,21 +172,21 @@ export function Thread() {
   }, [thread, syncTurnsFromThread]);
 
   const updateScrollDownVisible = useCallback(() => {
-    const el = conversationRef.current;
+    const el = getAnswerScrollEl();
     if (!el || turns.length === 0 || activeTab !== "answer") {
       setShowScrollDown(false);
       return;
     }
     const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
     setShowScrollDown(distanceFromBottom > 100);
-  }, [turns.length, activeTab]);
+  }, [turns.length, activeTab, getAnswerScrollEl]);
 
   useEffect(() => {
     updateScrollDownVisible();
   }, [turns, updateScrollDownVisible, activeTab]);
 
   useEffect(() => {
-    const el = conversationRef.current;
+    const el = getAnswerScrollEl();
     if (!el) return;
     el.addEventListener("scroll", updateScrollDownVisible, { passive: true });
     const ro = new ResizeObserver(() => updateScrollDownVisible());
@@ -150,13 +195,13 @@ export function Thread() {
       el.removeEventListener("scroll", updateScrollDownVisible);
       ro.disconnect();
     };
-  }, [updateScrollDownVisible]);
+  }, [updateScrollDownVisible, getAnswerScrollEl]);
 
   const scrollConversationToBottom = useCallback(() => {
-    const el = conversationRef.current;
+    const el = getAnswerScrollEl();
     if (!el) return;
     el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
-  }, []);
+  }, [getAnswerScrollEl]);
 
   /** Прокрутка только при новом вопросе — ответ читаем с начала, без ухода вниз при стриме. */
   useEffect(() => {
@@ -317,7 +362,7 @@ export function Thread() {
   /** Мобилка: вкладка «Изображения» — новые фото сверху, сбрасываем scroll ответа. */
   useEffect(() => {
     if (isDesktop || activeTab !== "images") return;
-    const el = conversationRef.current;
+    const el = imagesPanelRef.current;
     if (!el) return;
     const scrollToTop = () => {
       el.scrollTop = 0;
@@ -332,7 +377,7 @@ export function Thread() {
         <ThreadMobileHeader
           onBack={() => navigate(fromHistory ? "/history" : "/")}
           activeTab={activeTab}
-          onTabChange={setActiveTab}
+          onTabChange={handleTabChange}
           showImagesTab={showImagesTab}
           totalImages={totalImages}
         />
@@ -341,14 +386,21 @@ export function Thread() {
       {isDesktop && turns.length > 0 && (
         <ThreadTabsBar
           activeTab={activeTab}
-          onTabChange={setActiveTab}
+          onTabChange={handleTabChange}
           showImagesTab={showImagesTab}
           totalImages={totalImages}
         />
       )}
 
-      <div className="thread-conversation" ref={conversationRef}>
-        <div className="thread-panel thread-panel--answer" hidden={activeTab !== "answer"}>
+      <div
+        className={`thread-conversation${isDesktop ? "" : " thread-conversation--mobile-tabs"}`}
+        ref={conversationRef}
+      >
+        <div
+          className="thread-panel thread-panel--answer"
+          ref={answerPanelRef}
+          hidden={activeTab !== "answer"}
+        >
           {turns.map((turn, index) => {
             const isActive = turn.streaming;
             const sources = turn.sources ?? [];
@@ -417,7 +469,11 @@ export function Thread() {
           })}
         </div>
 
-        <div className="thread-panel thread-panel--images" hidden={activeTab !== "images"}>
+        <div
+          className="thread-panel thread-panel--images"
+          ref={imagesPanelRef}
+          hidden={activeTab !== "images"}
+        >
           <ThreadImagesTab groups={imageGroups} loading={imagesLoading} />
         </div>
       </div>

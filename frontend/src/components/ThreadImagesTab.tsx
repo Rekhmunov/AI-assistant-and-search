@@ -159,7 +159,7 @@ export function ThreadImagesTab({ groups, loading = false }: Props) {
   let flatIndex = 0;
 
   return (
-    <div className="thread-images-tab">
+    <div className="thread-images-tab" id="thread-images-top">
       {showLoading && (
         <p className="thread-images-tab-status">{t("imagesLoading")}</p>
       )}
@@ -221,6 +221,14 @@ export function ThreadImagesTab({ groups, loading = false }: Props) {
           role="presentation"
           onClick={() => setLightboxIndex(null)}
         >
+          <button
+            type="button"
+            className="image-lightbox-close"
+            onClick={() => setLightboxIndex(null)}
+            aria-label={t("close")}
+          >
+            ×
+          </button>
           <div
             className="image-lightbox"
             role="dialog"
@@ -228,15 +236,6 @@ export function ThreadImagesTab({ groups, loading = false }: Props) {
             aria-label={lightbox.title || t("turnTabImages")}
             onClick={(e) => e.stopPropagation()}
           >
-            <button
-              type="button"
-              className="image-lightbox-close"
-              onClick={() => setLightboxIndex(null)}
-              aria-label={t("close")}
-            >
-              ×
-            </button>
-
             {canPrev && (
               <button
                 type="button"
