@@ -2503,9 +2503,9 @@ body:has(.page-thread) {
 .thread-tabs-segment {
   display: inline-flex;
   align-items: center;
-  gap: 2px;
+  gap: 8px;
   height: 40px;
-  padding: 2px;
+  padding: 2px 12px;
   border: 1px solid var(--border);
   border-radius: 12px;
   background: var(--surface);
@@ -2517,8 +2517,8 @@ body:has(.page-thread) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 36px;
-  width: 36px;
+  min-width: 40px;
+  width: 40px;
   height: 36px;
   padding: 0;
   border: none;
