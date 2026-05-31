@@ -9,12 +9,18 @@ import { isMaxWebApp } from "../lib/maxApp";
 import { t } from "../i18n";
 import { useAuthStore } from "../store/authStore";
 
-function getInitials(name: string): string {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  if (parts.length >= 2) {
-    return `${parts[0][0] ?? ""}${parts[1][0] ?? ""}`.toUpperCase();
-  }
-  return (parts[0]?.slice(0, 2) ?? "?").toUpperCase();
+type ProfileTier = "pro" | "guest" | "free";
+
+function getProfileTier(plan: string | undefined, isGuest: boolean): ProfileTier {
+  if (plan === "pro") return "pro";
+  if (isGuest) return "guest";
+  return "free";
+}
+
+function getProfileTierLabel(tier: ProfileTier): string {
+  if (tier === "pro") return "PRO";
+  if (tier === "guest") return "GUEST";
+  return "FREE";
 }
 
 export function Profile() {
@@ -56,6 +62,8 @@ export function Profile() {
 
   const name = [user?.first_name, user?.last_name].filter(Boolean).join(" ") || t("profileDefaultName");
   const isPro = user?.plan === "pro";
+  const profileTier = getProfileTier(user?.plan, Boolean(session?.is_guest));
+  const profileTierLabel = getProfileTierLabel(profileTier);
   const usageRatio = searchesLimit > 0 ? Math.min(1, searchesToday / searchesLimit) : 0;
   const usagePercent = Math.round(usageRatio * 100);
 
@@ -90,17 +98,11 @@ export function Profile() {
       )}
 
       <div className="profile-hero">
-        <div className="profile-avatar" aria-hidden>
-          {getInitials(name)}
+        <div className={`profile-avatar profile-avatar--${profileTier}`} aria-label={profileTierLabel}>
+          {profileTierLabel}
         </div>
         <div className="profile-hero-meta">
           <div className="profile-name">{name}</div>
-          <div className="profile-badges">
-            <span className={`profile-plan-badge${isPro ? " profile-plan-badge--pro" : ""}`}>
-              {isPro ? "Pro" : "Free"}
-            </span>
-            {session?.is_guest && <span className="profile-guest-badge">{t("profileGuestBadge")}</span>}
-          </div>
         </div>
       </div>
 
