@@ -34,9 +34,10 @@ curl -sf "https://${APP_HOST}/api/health" | head -c 500 || echo "FAIL"
 echo ""
 
 echo ""
-echo "==> Public API root and /health"
-curl -sf "https://${API_HOST}/" | head -c 500 || echo "FAIL (root /)"
+echo "==> Public API root (expect 404)"
+curl -sI "https://${API_HOST}/" | head -3 || echo "FAIL"
 echo ""
+echo "==> Public API /health"
 curl -sf "https://${API_HOST}/health" | head -c 500 || echo "FAIL (/health)"
 echo ""
 

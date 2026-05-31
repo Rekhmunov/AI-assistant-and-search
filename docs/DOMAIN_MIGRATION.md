@@ -79,8 +79,8 @@ curl -s https://api.glosix.ru/health                   # {"status":"ok"}
 bash scripts/verify-deploy.sh
 ```
 
-## api.glosix.ru и «Not Found»
+## api.glosix.ru
 
-Раньше `GET https://api.glosix.ru/` попадал на backend `/` без маршрута → FastAPI 404.
+`GET https://api.glosix.ru/` → **404** (пустая корневая страница, без JSON).
 
-Сейчас backend отдаёт JSON на `/`; health — `/health` и `/api/health`.
+Рабочие пути: `/health`, `/api/health`, `/api/*`.
