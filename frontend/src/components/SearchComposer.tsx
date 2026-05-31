@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useRef, useState, type Dispatch, type SetStateAction } from "react";
+import { FormEvent, useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { FileUploadError, uploadFile, fetchMe } from "../api/client";
@@ -78,7 +78,9 @@ export function SearchComposer({
   const [uploadSuggestPro, setUploadSuggestPro] = useState(false);
   const [uploading, setUploading] = useState<UploadingItem[]>([]);
   const [inputFocused, setInputFocused] = useState(false);
+  const [attachMenuOpen, setAttachMenuOpen] = useState(false);
   const blurTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const attachMenuOpenRef = useRef(false);
 
   const { data: me } = useQuery({
     queryKey: ["me"],
@@ -215,12 +217,26 @@ export function SearchComposer({
   };
 
   const handleInputBlur = () => {
+    if (attachMenuOpenRef.current) return;
     if (blurTimerRef.current) clearTimeout(blurTimerRef.current);
     blurTimerRef.current = setTimeout(() => {
+      if (attachMenuOpenRef.current) return;
       setInputFocused(false);
       blurTimerRef.current = null;
     }, 200);
   };
+
+  const handleAttachMenuOpenChange = useCallback((open: boolean) => {
+    attachMenuOpenRef.current = open;
+    setAttachMenuOpen(open);
+    if (open) {
+      if (blurTimerRef.current) {
+        clearTimeout(blurTimerRef.current);
+        blurTimerRef.current = null;
+      }
+      setInputFocused(true);
+    }
+  }, []);
 
   useEffect(
     () => () => {
@@ -246,7 +262,7 @@ export function SearchComposer({
 
   const isMobileFocusLayout =
     (layoutMode === "threadMobile" || layoutMode === "homeMobile") && !isDesktop;
-  const showComposerToolbar = isMobileFocusLayout && inputFocused;
+  const showComposerToolbar = isMobileFocusLayout && (inputFocused || attachMenuOpen);
   const showAttachInToolbar = showComposerToolbar;
   const showSendInToolbar = showComposerToolbar;
   const showInlineMic = isMobileFocusLayout && !inputFocused;
@@ -254,7 +270,7 @@ export function SearchComposer({
 
   return (
     <div
-      className={`composer-wrap${docked ? " composer-wrap--docked" : " composer-wrap--inline"}${isMobileFocusLayout ? " composer-wrap--thread-mobile" : ""}${inputFocused && isMobileFocusLayout ? " composer-wrap--focused" : ""}`}
+      className={`composer-wrap${docked ? " composer-wrap--docked" : " composer-wrap--inline"}${isMobileFocusLayout ? " composer-wrap--thread-mobile" : ""}${(inputFocused || attachMenuOpen) && isMobileFocusLayout ? " composer-wrap--focused" : ""}`}
     >
       {(uploadError || voice.error) && (
         <div className="composer-error-wrap">
@@ -268,7 +284,7 @@ export function SearchComposer({
       )}
       <div className={`composer-outer-row${isMobileFocusLayout ? " composer-outer-row--thread-mobile" : ""}`}>
       <form
-        className={`search-composer${hasAttachment ? " search-composer--with-attachment" : ""}${isMobileFocusLayout ? " search-composer--thread-mobile" : ""}${inputFocused && isMobileFocusLayout ? " search-composer--focused" : ""}`}
+        className={`search-composer${hasAttachment ? " search-composer--with-attachment" : ""}${isMobileFocusLayout ? " search-composer--thread-mobile" : ""}${(inputFocused || attachMenuOpen) && isMobileFocusLayout ? " search-composer--focused" : ""}`}
         onSubmit={handleSubmit}
       >
         {hasAttachment && (
@@ -406,6 +422,7 @@ export function SearchComposer({
                 onPickCamera={() => openPicker(cameraRef)}
                 onPickFiles={() => openPicker(allFilesRef)}
                 keepFocusOnPress={isMobileFocusLayout}
+                onOpenChange={handleAttachMenuOpenChange}
               />
             )}
             <div className="composer-toolbar-actions">

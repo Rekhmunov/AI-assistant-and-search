@@ -10,6 +10,7 @@ type Props = {
   directPick?: boolean;
   /** Не снимать фокус с textarea при тапе (mobile toolbar) */
   keepFocusOnPress?: boolean;
+  onOpenChange?: (open: boolean) => void;
   onDirectPick?: () => void;
   /** Мобильная / миниапп: подменю */
   onPickGallery?: () => void;
@@ -21,6 +22,7 @@ export function ComposerAttachMenu({
   disabled,
   directPick = false,
   keepFocusOnPress = false,
+  onOpenChange,
   onDirectPick,
   onPickGallery,
   onPickCamera,
@@ -57,6 +59,10 @@ export function ComposerAttachMenu({
       window.removeEventListener("scroll", positionMenu, true);
     };
   }, [open, positionMenu]);
+
+  useEffect(() => {
+    onOpenChange?.(open);
+  }, [open, onOpenChange]);
 
   useEffect(() => {
     if (!open) return;

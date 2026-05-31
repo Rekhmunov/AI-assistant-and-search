@@ -221,9 +221,10 @@ body:has(.page-thread) {
   }
 
   .home-mobile-brand .glosix-wordmark {
-    font-size: 2.75rem;
+    font-size: 5.5rem;
     font-weight: 600;
     letter-spacing: -0.03em;
+    line-height: 1.05;
   }
 
   .home-mobile-composer-wrap {
