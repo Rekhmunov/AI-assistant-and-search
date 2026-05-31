@@ -267,7 +267,7 @@ body:has(.page-thread) {
     min-height: 0;
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
-    padding-bottom: calc(28px + 72px + env(safe-area-inset-bottom));
+    padding-bottom: calc(28px + 64px + env(safe-area-inset-bottom));
   }
 
   .page-profile--mobile > .profile-mobile-scroll {
@@ -288,7 +288,7 @@ body:has(.page-thread) {
     min-height: 0;
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
-    padding-bottom: calc(28px + 72px + env(safe-area-inset-bottom));
+    padding-bottom: calc(28px + 64px + env(safe-area-inset-bottom));
   }
 
   .page-history--mobile .history-list {
@@ -2644,6 +2644,14 @@ body:has(.page-thread) {
   flex-shrink: 0;
 }
 
+.thread-header-icon-spacer {
+  width: var(--mobile-header-btn-size);
+  height: var(--mobile-header-btn-size);
+  flex-shrink: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
 .thread-header-icon-btn:hover {
   background: var(--surface-hover);
   border-color: var(--border-subtle);
@@ -2821,13 +2829,9 @@ body:has(.page-thread) {
 .mobile-new-thread-bar .composer-new-chat {
   pointer-events: auto;
   align-self: auto;
-}
-
-.composer-new-chat--fab {
-  width: 56px;
-  height: 56px;
-  min-height: 56px;
-  border-radius: 12px;
+  width: 48px;
+  height: 48px;
+  min-height: 48px;
 }
 
 .page-thread .thread-conversation {

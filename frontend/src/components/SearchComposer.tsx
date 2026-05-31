@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { FileUploadError, uploadFile, fetchMe } from "../api/client";
 import { ComposerAttachMenu } from "./ComposerAttachMenu";
-import { NewChatIcon } from "./MobileNavIcons";
+import { MobileNewThreadButton } from "./MobileNewThreadButton";
 import {
   ACCEPT_FILE_INPUT,
   ACCEPT_IMAGE_INPUT,
@@ -455,15 +455,7 @@ export function SearchComposer({
       </form>
 
       {isMobileFocusLayout && layoutMode === "threadMobile" && !inputFocused && onNewChat && (
-        <button
-          type="button"
-          className="composer-new-chat"
-          onClick={onNewChat}
-          aria-label={t("newChat")}
-          title={t("newChat")}
-        >
-          <NewChatIcon />
-        </button>
+        <MobileNewThreadButton onClick={onNewChat} />
       )}
       </div>
     </div>
