@@ -4,6 +4,7 @@ import type { Source } from "../api/client";
 import { useBodyScrollLock } from "../hooks/useBodyScrollLock";
 import { sourceDomainLabel, faviconUrl } from "../lib/sourceDomainLabel";
 import { t } from "../i18n";
+import { SourceLink } from "./SourceLink";
 
 type Props = {
   open: boolean;
@@ -51,10 +52,8 @@ export function SourcesPanel({ open, query, sources, onClose }: Props) {
         <ul className="sources-panel-list">
           {sources.map((source) => (
             <li key={source.index}>
-              <a
+              <SourceLink
                 href={source.url}
-                target="_blank"
-                rel="noopener noreferrer"
                 className="sources-panel-item"
                 id={`source-${source.index}`}
               >
@@ -76,7 +75,7 @@ export function SourcesPanel({ open, query, sources, onClose }: Props) {
                 {source.snippet?.trim() && (
                   <p className="sources-panel-snippet">{source.snippet.trim()}</p>
                 )}
-              </a>
+              </SourceLink>
             </li>
           ))}
         </ul>

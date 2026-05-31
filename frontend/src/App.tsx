@@ -8,6 +8,7 @@ import { History } from "./pages/History";
 import { Home } from "./pages/Home";
 import { LoginPage } from "./pages/Login";
 import { Profile } from "./pages/Profile";
+import { SourceViewPage } from "./pages/SourceViewPage";
 import { Thread } from "./pages/Thread";
 
 const queryClient = new QueryClient();
@@ -29,6 +30,7 @@ function AppRoutes() {
             <Route path="/thread/:id" element={<Thread />} />
             <Route path="/history" element={<History />} />
             <Route path="/profile" element={<Profile />} />
+            <Route path="/source-view" element={<SourceViewPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         ) : (

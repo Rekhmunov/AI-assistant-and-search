@@ -2,6 +2,8 @@ import { useState } from "react";
 import type { Source } from "../api/client";
 import { t } from "../i18n";
 
+import { SourceLink } from "./SourceLink";
+
 export function SourcesCollapsible({ sources }: { sources: Source[] }) {
   const [open, setOpen] = useState(false);
   if (!sources.length) return null;
@@ -28,10 +30,10 @@ export function SourcesCollapsible({ sources }: { sources: Source[] }) {
         <ul className="sources-compact-list">
           {sources.map((s) => (
             <li key={s.index}>
-              <a href={s.url} target="_blank" rel="noreferrer" className="sources-compact-item">
+              <SourceLink href={s.url} className="sources-compact-item">
                 <span className="sources-compact-domain">[{s.index}] {s.domain}</span>
                 <span className="sources-compact-title">{s.title}</span>
-              </a>
+              </SourceLink>
             </li>
           ))}
         </ul>

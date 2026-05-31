@@ -1,10 +1,12 @@
 import type { Source } from "../api/client";
 
+import { SourceLink } from "./SourceLink";
+
 export function SourceCard({ source }: { source: Source }) {
   return (
-    <a className="source-card" href={source.url} target="_blank" rel="noreferrer">
+    <SourceLink className="source-card" href={source.url}>
       <strong>{source.domain}</strong>
       <span>{source.title}</span>
-    </a>
+    </SourceLink>
   );
 }

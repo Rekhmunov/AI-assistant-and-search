@@ -69,6 +69,86 @@ body:has(.page-thread) {
   padding-bottom: 0;
 }
 
+.app-shell:has(.source-view-page) {
+  height: 100dvh;
+  max-height: 100dvh;
+  min-height: 0;
+  overflow: hidden;
+  padding-bottom: 0;
+}
+
+.app-shell:has(.source-view-page) .bottom-nav {
+  display: none;
+}
+
+.source-view-page {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  min-height: 100dvh;
+  max-height: 100dvh;
+  overflow: hidden;
+}
+
+.source-view-header {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  padding-top: calc(10px + env(safe-area-inset-top));
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--surface);
+}
+
+.source-view-back {
+  flex-shrink: 0;
+  margin: 0;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+
+.source-view-host {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.875rem;
+  color: var(--muted);
+}
+
+.source-view-open-external {
+  flex-shrink: 0;
+  margin: 0;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--accent);
+  font: inherit;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.source-view-frame {
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+  border: none;
+  background: #fff;
+}
+
 .app-shell:has(.page-home) {
   padding-bottom: calc(var(--bottom-nav-height) + 20px + env(safe-area-inset-bottom));
 }
@@ -2065,12 +2145,29 @@ body:has(.page-thread) {
 }
 
 .source-chips-row--block {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px;
-  margin: 0.5em 0 0;
-  width: 100%;
+  display: inline-flex;
+  flex-wrap: nowrap;
+  align-items: baseline;
+  gap: 0.25em;
+  margin: 0 0 0 0.35em;
+  width: auto;
+  max-width: 100%;
+  vertical-align: baseline;
+}
+
+.source-chips-row--block .source-chip {
+  padding: 0;
+  background: transparent;
+  border-radius: 0;
+  font-size: 0.75rem;
+  line-height: inherit;
+  white-space: nowrap;
+}
+
+.source-chips-row--block .source-chip:hover {
+  background: transparent;
+  color: #6f6f6a;
+  text-decoration: underline;
 }
 
 .answer-list-block {
@@ -2095,10 +2192,6 @@ body:has(.page-thread) {
   text-decoration: none;
   border: none;
   transition: background 0.15s ease, color 0.15s ease;
-}
-
-.source-chips-row--block .source-chip {
-  padding: 3px 9px;
 }
 
 .source-chip:hover {

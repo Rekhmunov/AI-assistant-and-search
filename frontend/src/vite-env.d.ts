@@ -52,6 +52,14 @@ interface WebAppInitDataUnsafe {
   start_param?: string;
 }
 
+interface WebAppBackButton {
+  show: () => void;
+  hide: () => void;
+  isVisible: boolean;
+  onClick: (callback: () => void) => void;
+  offClick: (callback: () => void) => void;
+}
+
 interface WebAppBridge {
   initData: string;
   initDataUnsafe: WebAppInitDataUnsafe;
@@ -59,6 +67,9 @@ interface WebAppBridge {
   close: () => void;
   platform?: string;
   version?: string;
+  openLink?: (url: string) => void;
+  openMaxLink?: (url: string) => void;
+  BackButton?: WebAppBackButton;
 }
 
 interface Window {

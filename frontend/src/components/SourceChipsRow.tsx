@@ -1,4 +1,5 @@
 import type { Source } from "../api/client";
+import { SourceLink } from "./SourceLink";
 import { faviconUrl } from "../lib/sourceDomainLabel";
 import { groupSourcesForChips } from "../lib/sourceChipGroups";
 
@@ -17,11 +18,9 @@ export function SourceChipsRow({ indices, sources, className, showFavicon = fals
   return (
     <div className={className ?? "source-chips-row"}>
       {groups.map((group) => (
-        <a
+        <SourceLink
           key={`${group.label}-${group.url}`}
           href={group.url}
-          target="_blank"
-          rel="noopener noreferrer"
           className="source-chip"
           title={group.url}
         >
@@ -42,7 +41,7 @@ export function SourceChipsRow({ indices, sources, className, showFavicon = fals
               <span className="source-chip-extra"> +{group.extraCount}</span>
             )}
           </span>
-        </a>
+        </SourceLink>
       ))}
     </div>
   );
