@@ -7,6 +7,8 @@ type Props = {
   onTabChange: (tab: ThreadTab) => void;
   showImagesTab: boolean;
   totalImages: number;
+  /** Компактный pill в шапке mobile-треда */
+  variant?: "bar" | "segment";
 };
 
 export function ThreadTabsBar({
@@ -14,7 +16,49 @@ export function ThreadTabsBar({
   onTabChange,
   showImagesTab,
   totalImages,
+  variant = "bar",
 }: Props) {
+  if (variant === "segment") {
+    return (
+      <div
+        className="thread-tabs-segment"
+        role="tablist"
+        aria-label={t("turnContentTabs")}
+      >
+        <button
+          type="button"
+          role="tab"
+          id="thread-tab-answer"
+          aria-selected={activeTab === "answer"}
+          aria-controls="thread-panel-answer"
+          className={`thread-tabs-segment-btn${activeTab === "answer" ? " thread-tabs-segment-btn--active" : ""}`}
+          onClick={() => onTabChange("answer")}
+          title={t("turnTabAnswer")}
+        >
+          <AnswerTabIcon />
+        </button>
+
+        {showImagesTab && (
+          <button
+            type="button"
+            role="tab"
+            id="thread-tab-images"
+            aria-selected={activeTab === "images"}
+            aria-controls="thread-panel-images"
+            className={`thread-tabs-segment-btn${activeTab === "images" ? " thread-tabs-segment-btn--active" : ""}`}
+            onClick={() => onTabChange("images")}
+            title={t("turnTabImages")}
+          >
+            <ImagesTabIcon />
+            {totalImages > 0 && (
+              <span className="thread-tabs-segment-badge">{totalImages}</span>
+            )}
+          </button>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="thread-tabs-bar" role="tablist" aria-label={t("turnContentTabs")}>
       <button

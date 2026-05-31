@@ -8,6 +8,7 @@ import { AnswerFooter } from "../components/AnswerFooter";
 import { SearchComposer, type ComposerAttachment } from "../components/SearchComposer";
 import { SearchStatusLine, type SearchPhase } from "../components/SearchStatusLine";
 import { ThreadImagesTab } from "../components/ThreadImagesTab";
+import { ThreadMobileHeader } from "../components/ThreadMobileHeader";
 import { ThreadQuery } from "../components/ThreadQuery";
 import { ThreadTabsBar, type ThreadTab } from "../components/ThreadTabsBar";
 import { t } from "../i18n";
@@ -316,20 +317,16 @@ export function Thread() {
   return (
     <div className="page page-thread">
       {!isDesktop && (
-        <div className="thread-top">
-          <button
-            type="button"
-            className="icon-btn icon-btn-back"
-            onClick={() => navigate(fromHistory ? "/history" : "/")}
-            aria-label={t("back")}
-            title={t("back")}
-          >
-            <BackIcon />
-          </button>
-        </div>
+        <ThreadMobileHeader
+          onBack={() => navigate(fromHistory ? "/history" : "/")}
+          activeTab={activeTab}
+          onTabChange={setActiveTab}
+          showImagesTab={showImagesTab}
+          totalImages={totalImages}
+        />
       )}
 
-      {turns.length > 0 && (
+      {isDesktop && turns.length > 0 && (
         <ThreadTabsBar
           activeTab={activeTab}
           onTabChange={setActiveTab}
@@ -435,22 +432,10 @@ export function Thread() {
         attachments={attachments}
         onAttachmentsChange={setAttachments}
         requireTextWithAttachments={turns.length === 0}
+        layoutMode={isDesktop ? "default" : "threadMobile"}
+        onNewChat={isDesktop ? undefined : () => navigate("/")}
       />
     </div>
-  );
-}
-
-function BackIcon() {
-  return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden>
-      <path
-        d="M15 6l-6 6 6 6"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
   );
 }
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseParagraphCitations } from "./paragraphCitations";
+import { mergeCitationIndices, parseParagraphCitations } from "./paragraphCitations";
 
 describe("parseParagraphCitations", () => {
   it("extracts source indices and removes markers from text", () => {

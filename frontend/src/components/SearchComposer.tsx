@@ -42,6 +42,9 @@ interface Props {
   docked?: boolean;
   animatedPlaceholder?: boolean;
   placeholderPhrases?: string[];
+  /** Mobile layout внутри треда (Perplexity-style) */
+  layoutMode?: "default" | "threadMobile";
+  onNewChat?: () => void;
 }
 
 type UploadingItem = {
@@ -63,6 +66,8 @@ export function SearchComposer({
   animatedPlaceholder = false,
   placeholderPhrases = [],
   requireTextWithAttachments = false,
+  layoutMode = "default",
+  onNewChat,
 }: Props) {
   const token = useAuthStore((s) => s.token);
   const isDesktop = useDesktopLayout();
@@ -210,8 +215,17 @@ export function SearchComposer({
       ? " "
       : staticPlaceholder;
 
+  const isThreadMobile = layoutMode === "threadMobile" && !isDesktop;
+  const showComposerToolbar = isThreadMobile && inputFocused;
+  const showAttachInToolbar = showComposerToolbar;
+  const showSendInToolbar = showComposerToolbar;
+  const showInlineMic = isThreadMobile && !inputFocused;
+  const showDefaultRow = !isThreadMobile;
+
   return (
-    <div className={`composer-wrap${docked ? " composer-wrap--docked" : " composer-wrap--inline"}`}>
+    <div
+      className={`composer-wrap${docked ? " composer-wrap--docked" : " composer-wrap--inline"}${isThreadMobile ? " composer-wrap--thread-mobile" : ""}${inputFocused && isThreadMobile ? " composer-wrap--focused" : ""}`}
+    >
       {(uploadError || voice.error) && (
         <div className="composer-error-wrap">
           <p className="composer-error">{uploadError || voice.error}</p>
@@ -222,8 +236,9 @@ export function SearchComposer({
           )}
         </div>
       )}
+      <div className={`composer-outer-row${isThreadMobile ? " composer-outer-row--thread-mobile" : ""}`}>
       <form
-        className={`search-composer${hasAttachment ? " search-composer--with-attachment" : ""}`}
+        className={`search-composer${hasAttachment ? " search-composer--with-attachment" : ""}${isThreadMobile ? " search-composer--thread-mobile" : ""}${inputFocused && isThreadMobile ? " search-composer--focused" : ""}`}
         onSubmit={handleSubmit}
       >
         {hasAttachment && (
@@ -249,15 +264,17 @@ export function SearchComposer({
           </div>
         )}
 
-        <div className="composer-row">
-          <ComposerAttachMenu
-            disabled={disabled || isBusy || atLimit}
-            directPick={isDesktop}
-            onDirectPick={() => openPicker(allFilesRef)}
-            onPickGallery={() => openPicker(photoRef)}
-            onPickCamera={() => openPicker(cameraRef)}
-            onPickFiles={() => openPicker(allFilesRef)}
-          />
+        <div className={`composer-row${showComposerToolbar ? " composer-row--text-only" : ""}`}>
+          {showDefaultRow && (
+            <ComposerAttachMenu
+              disabled={disabled || isBusy || atLimit}
+              directPick={isDesktop}
+              onDirectPick={() => openPicker(allFilesRef)}
+              onPickGallery={() => openPicker(photoRef)}
+              onPickCamera={() => openPicker(cameraRef)}
+              onPickFiles={() => openPicker(allFilesRef)}
+            />
+          )}
           <input
             ref={allFilesRef}
             type="file"
@@ -315,21 +332,82 @@ export function SearchComposer({
               }}
             />
           </div>
-          <button
-            type="button"
-            className={`composer-icon${voice.state === "recording" ? " recording" : ""}`}
-            aria-label={t("voiceInput")}
-            aria-pressed={voice.state === "recording"}
-            disabled={disabled || voice.state === "transcribing"}
-            onClick={voice.toggle}
-          >
-            <MicIcon recording={voice.state === "recording"} />
-          </button>
-          <button type="submit" className="composer-send" disabled={!canSend} aria-label={t("send")}>
-            <SendIcon />
-          </button>
+          {showInlineMic && (
+            <button
+              type="button"
+              className={`composer-icon${voice.state === "recording" ? " recording" : ""}`}
+              aria-label={t("voiceInput")}
+              aria-pressed={voice.state === "recording"}
+              disabled={disabled || voice.state === "transcribing"}
+              onClick={voice.toggle}
+            >
+              <MicIcon recording={voice.state === "recording"} />
+            </button>
+          )}
+          {showDefaultRow && (
+            <>
+              <button
+                type="button"
+                className={`composer-icon${voice.state === "recording" ? " recording" : ""}`}
+                aria-label={t("voiceInput")}
+                aria-pressed={voice.state === "recording"}
+                disabled={disabled || voice.state === "transcribing"}
+                onClick={voice.toggle}
+              >
+                <MicIcon recording={voice.state === "recording"} />
+              </button>
+              <button type="submit" className="composer-send" disabled={!canSend} aria-label={t("send")}>
+                <SendIcon />
+              </button>
+            </>
+          )}
         </div>
+
+        {showComposerToolbar && (
+          <div className="composer-toolbar">
+            {showAttachInToolbar && (
+              <ComposerAttachMenu
+                disabled={disabled || isBusy || atLimit}
+                directPick={isDesktop}
+                onDirectPick={() => openPicker(allFilesRef)}
+                onPickGallery={() => openPicker(photoRef)}
+                onPickCamera={() => openPicker(cameraRef)}
+                onPickFiles={() => openPicker(allFilesRef)}
+              />
+            )}
+            <div className="composer-toolbar-actions">
+              <button
+                type="button"
+                className={`composer-icon${voice.state === "recording" ? " recording" : ""}`}
+                aria-label={t("voiceInput")}
+                aria-pressed={voice.state === "recording"}
+                disabled={disabled || voice.state === "transcribing"}
+                onClick={voice.toggle}
+              >
+                <MicIcon recording={voice.state === "recording"} />
+              </button>
+              {showSendInToolbar && (
+                <button type="submit" className="composer-send" disabled={!canSend} aria-label={t("send")}>
+                  <SendIcon />
+                </button>
+              )}
+            </div>
+          </div>
+        )}
       </form>
+
+      {isThreadMobile && !inputFocused && onNewChat && (
+        <button
+          type="button"
+          className="composer-new-chat"
+          onClick={onNewChat}
+          aria-label={t("newChat")}
+          title={t("newChat")}
+        >
+          <NewChatIcon />
+        </button>
+      )}
+      </div>
     </div>
   );
 }
@@ -370,6 +448,22 @@ function AttachmentChip({
         </button>
       )}
     </div>
+  );
+}
+
+function NewChatIcon() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        d="M12 20h9M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4 12.5-12.5z"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path d="M15 6l3 3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      <path d="M18 3v3h-3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
   );
 }
 
