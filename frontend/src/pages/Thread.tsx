@@ -8,7 +8,7 @@ import { AnswerFooter } from "../components/AnswerFooter";
 import { SearchComposer, type ComposerAttachment } from "../components/SearchComposer";
 import { SearchStatusLine, type SearchPhase } from "../components/SearchStatusLine";
 import { ThreadQuery } from "../components/ThreadQuery";
-import { TurnImageGallery } from "../components/TurnImageGallery";
+import { TurnContentTabs } from "../components/TurnContentTabs";
 import { t } from "../i18n";
 import { findLastIndex } from "../lib/arrayUtils";
 import { mergeThreadTurns, messagesToTurns, resolveAssistantMessageId, type ThreadTurn } from "../lib/threadTurns";
@@ -17,7 +17,7 @@ import { useAuthStore } from "../store/authStore";
 
 function updateLastStreamingTurn(
   turns: ThreadTurn[],
-  patch: Partial<Pick<ThreadTurn, "answer" | "sources" | "images" | "followUps">>,
+  patch: Partial<Pick<ThreadTurn, "answer" | "sources" | "images" | "followUps" | "needsSearch">>,
   appendAnswer?: string,
 ): ThreadTurn[] {
   const idx = findLastIndex(turns, (turn) => turn.streaming);
@@ -178,6 +178,7 @@ export function Thread() {
           sources: [],
           images: [],
           followUps: [],
+          needsSearch: true,
           streaming: true,
         },
       ]);
@@ -191,6 +192,9 @@ export function Thread() {
         onRoute: (route) => {
           setNeedsSearch(route.needs_search);
           setSearchPhase(route.needs_search ? "searching" : "answering");
+          setTurns((prev) =>
+            updateLastStreamingTurn(prev, { needsSearch: route.needs_search }),
+          );
         },
         onSources: (list) => {
           setSearchPhase("answering");
@@ -318,59 +322,73 @@ export function Thread() {
             !streaming &&
             !isActive;
 
+          const showImagesTab =
+            turn.needsSearch ?? (sources.length > 0 || images.length > 0);
+          const imagesLoading =
+            isActive && streaming && showImagesTab && images.length === 0;
+          const showTurnContent =
+            showStatus || showAnswer || showImagesTab || showFollowUps;
+
           return (
             <article key={turn.key} id={`turn-${turn.key}`} className="thread-turn">
               <ThreadQuery query={turn.query} />
 
-              {images.length > 0 && <TurnImageGallery images={images} />}
-
-              {showStatus && (
-                <SearchStatusLine phase={searchPhase} needsSearch={needsSearch} />
-              )}
-
-              {showAnswer && (
-                <section className="answer-section">
-                  <AnswerErrorBoundary>
-                    <AnswerBody
-                      text={turn.answer}
-                      sources={sources}
-                      isStreaming={isActive && streaming}
-                      onTypingChange={
-                        index === turns.length - 1 ? handleAnswerTypingChange : undefined
-                      }
-                    />
-                  </AnswerErrorBoundary>
-                  {turn.answer.trim() && (
-                    <AnswerFooter
-                      answer={turn.answer}
-                      title={turn.query}
-                      sources={sources}
-                      messageId={resolveAssistantMessageId(turn)}
-                      token={token}
-                      userFeedback={turn.userFeedback}
-                    />
+              {showTurnContent && (
+                <TurnContentTabs
+                  query={turn.query}
+                  images={images}
+                  showImagesTab={showImagesTab}
+                  imagesLoading={imagesLoading}
+                >
+                  {showStatus && (
+                    <SearchStatusLine phase={searchPhase} needsSearch={needsSearch} />
                   )}
-                </section>
-              )}
 
-              {showFollowUps && (
-                <section className="followups-section">
-                  <h3 className="followups-heading">{t("followUps")}</h3>
-                  <ul className="followups-list">
-                    {turn.followUps.slice(0, 3).map((q) => (
-                      <li key={q}>
-                        <button
-                          type="button"
-                          className="followup-item"
-                          disabled={streaming}
-                          onClick={() => runSearch(q, threadId, [])}
-                        >
-                          {q}
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                </section>
+                  {showAnswer && (
+                    <section className="answer-section">
+                      <AnswerErrorBoundary>
+                        <AnswerBody
+                          text={turn.answer}
+                          sources={sources}
+                          isStreaming={isActive && streaming}
+                          onTypingChange={
+                            index === turns.length - 1 ? handleAnswerTypingChange : undefined
+                          }
+                        />
+                      </AnswerErrorBoundary>
+                      {turn.answer.trim() && (
+                        <AnswerFooter
+                          answer={turn.answer}
+                          title={turn.query}
+                          sources={sources}
+                          messageId={resolveAssistantMessageId(turn)}
+                          token={token}
+                          userFeedback={turn.userFeedback}
+                        />
+                      )}
+                    </section>
+                  )}
+
+                  {showFollowUps && (
+                    <section className="followups-section">
+                      <h3 className="followups-heading">{t("followUps")}</h3>
+                      <ul className="followups-list">
+                        {turn.followUps.slice(0, 3).map((q) => (
+                          <li key={q}>
+                            <button
+                              type="button"
+                              className="followup-item"
+                              disabled={streaming}
+                              onClick={() => runSearch(q, threadId, [])}
+                            >
+                              {q}
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    </section>
+                  )}
+                </TurnContentTabs>
               )}
             </article>
           );

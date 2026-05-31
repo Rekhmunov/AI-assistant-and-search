@@ -128,16 +128,12 @@ def resolve_entity_image_query(
     """
     Собирает запрос для Yandex Image Search.
 
-    Для follow-up в треде (местоимения, «товары бренда») берём search_queries
-    из QueryRewriter — он уже разрешает контекст треда для веб-поиска.
+    Приоритет — search_queries из QueryRewriter (контекст треда и тема запроса),
+    локальная эвристика — fallback.
     """
-    local = build_entity_image_query(user_query, llm_query)
-    if not is_continuation or not query_needs_thread_context(user_query, local):
-        return local
-
+    _ = is_continuation
     for candidate in search_queries or []:
         rewritten = (candidate or "").strip()
         if len(rewritten) >= 2:
             return rewritten[:120]
-
-    return local
+    return build_entity_image_query(user_query, llm_query)

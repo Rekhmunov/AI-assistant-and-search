@@ -36,7 +36,7 @@ from app.services.query_url_memory import (
 )
 from app.services.entity_image import entity_images_to_json
 from app.services.message_images_column import messages_have_images_column
-from app.services.entity_image_routing import resolve_entity_image_query, wants_entity_images
+from app.services.entity_image_routing import resolve_entity_image_query
 from app.services.yandex_image_search import YandexImageSearchService
 from app.services.providers.factory import resolve_runtime_providers
 import redis.asyncio as redis
@@ -325,15 +325,16 @@ class SearchFlowService:
 
                 settings = get_settings()
                 image_intent = rewrite.intent if rewrite.intent in _VALID_INTENTS else route.intent
-                show_entity_images = (
+                _skip_image_intents = frozenset({"howto", "edit_prior", "vision_image"})
+                run_image_search = (
                     settings.entity_images_enabled
                     and settings.yandex_configured
                     and not has_attachments
                     and not vision_only_answer
-                    and wants_entity_images(user_text, intent=str(image_intent))
+                    and str(image_intent) not in _skip_image_intents
                 )
                 image_task: asyncio.Task | None = None
-                if show_entity_images:
+                if run_image_search:
                     image_query = resolve_entity_image_query(
                         user_text,
                         llm_query,

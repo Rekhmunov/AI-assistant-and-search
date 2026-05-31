@@ -22,14 +22,18 @@ function isBlockStarter(line: string): boolean {
   );
 }
 
+function normalizeHeadingText(text: string): string {
+  return text.replace(/^\d+[.)]\s+/, "").trim();
+}
+
 function parseHeading(line: string): string | null {
   const trimmed = line.trim();
   const hash = trimmed.match(HEADING_RE);
-  if (hash) return hash[1].trim();
+  if (hash) return normalizeHeadingText(hash[1]);
   const bold = trimmed.match(BOLD_ONLY_RE);
-  if (bold) return bold[1].trim();
+  if (bold) return normalizeHeadingText(bold[1]);
   const under = trimmed.match(UNDERONLY_RE);
-  if (under) return under[1].trim();
+  if (under) return normalizeHeadingText(under[1]);
   return null;
 }
 
@@ -56,18 +60,39 @@ export function parseAnswerMarkdownBlocks(text: string): AnswerMarkdownBlock[] {
     const trimmed = lines[i].trim();
     const ulMatch = trimmed.match(UL_RE);
     const olMatch = trimmed.match(OL_RE);
-    if (ulMatch || olMatch) {
-      const ordered = Boolean(olMatch);
+
+    if (olMatch) {
+      const nextTrimmed = i + 1 < lines.length ? lines[i + 1].trim() : "";
+      if (!OL_RE.test(nextTrimmed)) {
+        blocks.push({ type: "heading", text: normalizeHeadingText(olMatch[1]) });
+        i += 1;
+        continue;
+      }
+      const items: string[] = [];
+      while (i < lines.length) {
+        const line = lines[i].trim();
+        if (!line) break;
+        const om = line.match(OL_RE);
+        if (om) {
+          items.push(om[1].trim());
+          i += 1;
+        } else {
+          break;
+        }
+      }
+      if (items.length) {
+        blocks.push({ type: "ol", items });
+      }
+      continue;
+    }
+
+    if (ulMatch) {
       const items: string[] = [];
       while (i < lines.length) {
         const line = lines[i].trim();
         if (!line) break;
         const um = line.match(UL_RE);
-        const om = line.match(OL_RE);
-        if (ordered && om) {
-          items.push(om[1].trim());
-          i += 1;
-        } else if (!ordered && um) {
+        if (um) {
           items.push(um[1].trim());
           i += 1;
         } else {
@@ -75,7 +100,7 @@ export function parseAnswerMarkdownBlocks(text: string): AnswerMarkdownBlock[] {
         }
       }
       if (items.length) {
-        blocks.push({ type: ordered ? "ol" : "ul", items });
+        blocks.push({ type: "ul", items });
       }
       continue;
     }

@@ -9,6 +9,7 @@ export type ThreadTurn = {
   sources: Source[];
   images: EntityImage[];
   followUps: string[];
+  needsSearch?: boolean;
   userFeedback?: MessageFeedback | null;
   streaming?: boolean;
 };
@@ -44,6 +45,7 @@ export function messagesToTurns(messages: Message[]): ThreadTurn[] {
         sources: m.sources ?? [],
         images: m.images ?? [],
         followUps: (m.follow_up_questions ?? []).slice(0, 3),
+        needsSearch: (m.sources?.length ?? 0) > 0 || (m.images?.length ?? 0) > 0,
         userFeedback: m.user_feedback ?? null,
       });
       pendingUser = null;

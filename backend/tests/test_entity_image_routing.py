@@ -56,11 +56,20 @@ def test_resolve_entity_image_query_uses_rewriter_on_follow_up():
     assert q == "Gefu kitchen products brand"
 
 
-def test_resolve_entity_image_query_keeps_explicit_entity():
+def test_resolve_entity_image_query_prefers_rewriter():
+    q = resolve_entity_image_query(
+        "Курс доллара",
+        "",
+        search_queries=["курс доллара USD ЦБ"],
+        is_continuation=False,
+    )
+    assert q == "курс доллара USD ЦБ"
+
+
+def test_resolve_entity_image_query_fallback_local():
     q = resolve_entity_image_query(
         "Покажи фото Рима",
         "",
-        search_queries=["Gefu company history"],
-        is_continuation=True,
+        search_queries=None,
     )
     assert q == "Рима"
