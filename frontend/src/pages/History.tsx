@@ -1,12 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { fetchThreads, searchThreads } from "../api/client";
 import { AuthGate, HistoryGateIcon } from "../components/AuthGate";
+import { MobileNewThreadButton } from "../components/MobileNewThreadButton";
 import { MobilePageHeader } from "../components/MobilePageHeader";
-import { SearchComposer, type ComposerAttachment } from "../components/SearchComposer";
 import { ThreadHistoryMenu } from "../components/ThreadHistoryMenu";
-import { getHomePlaceholderPhrases } from "../constants/homePlaceholders";
 import { useDesktopLayout } from "../hooks/useDesktopLayout";
 import { isMaxWebApp } from "../lib/maxApp";
 import { t } from "../i18n";
@@ -26,12 +25,9 @@ export function History() {
   const navigate = useNavigate();
   const token = useAuthStore((s) => s.token);
   const isDesktop = useDesktopLayout();
-  const [query, setQuery] = useState("");
-  const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
   const [historySearchOpen, setHistorySearchOpen] = useState(false);
   const [historySearchQuery, setHistorySearchQuery] = useState("");
   const [debouncedHistorySearch, setDebouncedHistorySearch] = useState("");
-  const placeholderPhrases = useMemo(() => getHomePlaceholderPhrases(), []);
 
   const { data: threads = [], isLoading } = useQuery({
     queryKey: ["threads"],
@@ -53,7 +49,6 @@ export function History() {
   });
 
   const inMax = isMaxWebApp();
-  const hasDraft = Boolean(query.trim() || attachments.length > 0);
   const isFiltering = historySearchOpen && debouncedHistorySearch.length > 0;
   const visibleThreads = isFiltering ? searchResults : threads;
 
@@ -65,18 +60,6 @@ export function History() {
       }
       return !open;
     });
-  };
-
-  const startSearch = (payload: { query: string; attachmentIds: string[] }) => {
-    if (!payload.query.trim() && payload.attachmentIds.length > 0) {
-      return;
-    }
-    const params = new URLSearchParams();
-    params.set("q", payload.query);
-    if (payload.attachmentIds.length) {
-      params.set("files", payload.attachmentIds.join(","));
-    }
-    navigate(`/thread?${params.toString()}`);
   };
 
   if (!token) {
@@ -167,18 +150,9 @@ export function History() {
       </div>
 
       {!isDesktop && (
-        <SearchComposer
-          value={query}
-          onChange={setQuery}
-          onSubmit={startSearch}
-          attachments={attachments}
-          onAttachmentsChange={setAttachments}
-          layoutMode="threadMobile"
-          onNewChat={() => navigate("/")}
-          animatedPlaceholder={!hasDraft}
-          placeholderPhrases={placeholderPhrases}
-          requireTextWithAttachments
-        />
+        <div className="history-new-thread-bar">
+          <MobileNewThreadButton onClick={() => navigate("/")} />
+        </div>
       )}
     </div>
   );

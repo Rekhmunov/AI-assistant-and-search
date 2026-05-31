@@ -249,7 +249,7 @@ body:has(.page-thread) {
   }
 
   .page-profile > :not(.thread-mobile-header),
-  .page-history > :not(.thread-mobile-header):not(.composer-wrap) {
+  .page-history > :not(.thread-mobile-header):not(.history-new-thread-bar) {
     padding-left: 16px;
     padding-right: 16px;
   }
@@ -267,7 +267,7 @@ body:has(.page-thread) {
     min-height: 0;
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
-    padding-bottom: calc(28px + 88px + env(safe-area-inset-bottom));
+    padding-bottom: calc(28px + 56px + env(safe-area-inset-bottom));
   }
 
   .page-thread.page {
@@ -2646,7 +2646,7 @@ body:has(.page-thread) {
 
 .composer-outer-row--thread-mobile {
   display: flex;
-  align-items: stretch;
+  align-items: center;
   gap: 8px;
   width: 100%;
 }
@@ -2693,21 +2693,25 @@ body:has(.page-thread) {
 
 .composer-new-chat {
   flex: 0 0 auto;
-  align-self: stretch;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   width: 48px;
+  height: 48px;
   min-height: 48px;
-  height: auto;
   padding: 0;
   border: 1px solid var(--border);
-  border-radius: 22px;
+  border-radius: 50%;
   background: var(--surface);
   color: var(--text);
   box-shadow: var(--shadow-sm);
   cursor: pointer;
   transition: background 0.15s, border-color 0.15s;
+}
+
+.composer-new-chat svg {
+  display: block;
+  flex-shrink: 0;
 }
 
 .composer-new-chat:hover {
@@ -2734,12 +2738,20 @@ body:has(.page-thread) {
   bottom: calc(28px + env(safe-area-inset-bottom));
 }
 
-.page-history .composer-wrap--docked.composer-wrap--thread-mobile {
+.history-new-thread-bar {
+  position: fixed;
   left: 0;
   right: 0;
-  max-width: none;
-  padding: 0 12px;
   bottom: calc(28px + env(safe-area-inset-bottom));
+  display: flex;
+  justify-content: flex-end;
+  padding: 0 12px;
+  z-index: 90;
+  pointer-events: none;
+}
+
+.history-new-thread-bar .composer-new-chat {
+  pointer-events: auto;
 }
 
 .page-thread .thread-conversation {
