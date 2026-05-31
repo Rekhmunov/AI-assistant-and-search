@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { fetchThread, streamSearch } from "../api/client";
 import { AnswerBody } from "../components/AnswerBody";
@@ -7,10 +7,16 @@ import { AnswerErrorBoundary } from "../components/AnswerErrorBoundary";
 import { AnswerFooter } from "../components/AnswerFooter";
 import { SearchComposer, type ComposerAttachment } from "../components/SearchComposer";
 import { SearchStatusLine, type SearchPhase } from "../components/SearchStatusLine";
-import { TurnContentTabs } from "../components/TurnContentTabs";
+import { ThreadImagesTab } from "../components/ThreadImagesTab";
 import { ThreadQuery } from "../components/ThreadQuery";
+import { ThreadTabsBar, type ThreadTab } from "../components/ThreadTabsBar";
 import { t } from "../i18n";
 import { findLastIndex } from "../lib/arrayUtils";
+import {
+  buildThreadImageGroups,
+  countThreadImages,
+  threadHasSearchTurns,
+} from "../lib/threadImageGroups";
 import { mergeThreadTurns, messagesToTurns, resolveAssistantMessageId, type ThreadTurn } from "../lib/threadTurns";
 import { useDesktopLayout } from "../hooks/useDesktopLayout";
 import { useAuthStore } from "../store/authStore";
@@ -67,6 +73,7 @@ export function Thread() {
   const [needsSearch, setNeedsSearch] = useState(true);
   const [searchPhase, setSearchPhase] = useState<SearchPhase>("idle");
   const [composerQuery, setComposerQuery] = useState("");
+  const [activeTab, setActiveTab] = useState<ThreadTab>("answer");
   const started = useRef(false);
   const streamingRef = useRef(false);
   const isRevealingRef = useRef(false);
@@ -120,17 +127,17 @@ export function Thread() {
 
   const updateScrollDownVisible = useCallback(() => {
     const el = conversationRef.current;
-    if (!el || turns.length === 0) {
+    if (!el || turns.length === 0 || activeTab !== "answer") {
       setShowScrollDown(false);
       return;
     }
     const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
     setShowScrollDown(distanceFromBottom > 100);
-  }, [turns.length]);
+  }, [turns.length, activeTab]);
 
   useEffect(() => {
     updateScrollDownVisible();
-  }, [turns, updateScrollDownVisible]);
+  }, [turns, updateScrollDownVisible, activeTab]);
 
   useEffect(() => {
     const el = conversationRef.current;
@@ -152,18 +159,20 @@ export function Thread() {
 
   /** Прокрутка только при новом вопросе — ответ читаем с начала, без ухода вниз при стриме. */
   useEffect(() => {
+    if (activeTab !== "answer") return;
     const active = turns.find((t) => t.streaming);
     if (!active || scrollTurnKeyRef.current === active.key) return;
     scrollTurnKeyRef.current = active.key;
     const el = document.getElementById(`turn-${active.key}`);
     el?.scrollIntoView({ block: "start", behavior: "smooth" });
-  }, [turns.length]);
+  }, [turns.length, activeTab, turns]);
 
   const runSearch = useCallback(
     async (text: string, existingThreadId: string | null, attachmentIds: string[]) => {
       if (!text.trim() && !attachmentIds.length) return;
       if (streamingRef.current) return;
 
+      setActiveTab("answer");
       const pendingKey = `stream-${Date.now()}`;
       streamingRef.current = true;
       setStreaming(true);
@@ -293,6 +302,17 @@ export function Thread() {
     (turn) => !turn.streaming && turn.answer.trim(),
   );
 
+  const showImagesTab = threadHasSearchTurns(turns);
+  const totalImages = countThreadImages(turns);
+  const imageGroups = useMemo(() => buildThreadImageGroups(turns), [turns]);
+  const lastTurn = turns[turns.length - 1];
+  const imagesLoading = Boolean(
+    streaming &&
+      lastTurn?.streaming &&
+      lastTurn.needsSearch &&
+      (lastTurn.images?.length ?? 0) === 0,
+  );
+
   return (
     <div className="page page-thread">
       {!isDesktop && (
@@ -309,94 +329,89 @@ export function Thread() {
         </div>
       )}
 
+      {turns.length > 0 && (
+        <ThreadTabsBar
+          activeTab={activeTab}
+          onTabChange={setActiveTab}
+          showImagesTab={showImagesTab}
+          totalImages={totalImages}
+        />
+      )}
+
       <div className="thread-conversation" ref={conversationRef}>
-        {turns.map((turn, index) => {
-          const isActive = turn.streaming;
-          const images = turn.images ?? [];
-          const sources = turn.sources ?? [];
-          const showStatus = isActive && streaming && !turn.answer.trim();
-          const showAnswer = Boolean(turn.answer.trim()) || isActive;
-          const showFollowUps =
-            index === lastCompletedIndex &&
-            turn.followUps.length > 0 &&
-            !streaming &&
-            !isActive;
+        {activeTab === "images" ? (
+          <ThreadImagesTab groups={imageGroups} loading={imagesLoading} />
+        ) : (
+          turns.map((turn, index) => {
+            const isActive = turn.streaming;
+            const sources = turn.sources ?? [];
+            const showStatus = isActive && streaming && !turn.answer.trim();
+            const showAnswer = Boolean(turn.answer.trim()) || isActive;
+            const showFollowUps =
+              index === lastCompletedIndex &&
+              turn.followUps.length > 0 &&
+              !streaming &&
+              !isActive;
 
-          const showImagesTab =
-            turn.needsSearch ?? (sources.length > 0 || images.length > 0);
-          const imagesLoading =
-            isActive && streaming && showImagesTab && images.length === 0;
-          const showTurnContent =
-            showStatus || showAnswer || showImagesTab || showFollowUps;
-
-          return (
-            <article key={turn.key} id={`turn-${turn.key}`} className="thread-turn">
-              {showTurnContent ? (
-                <TurnContentTabs
-                  query={turn.query}
-                  images={images}
-                  showImagesTab={showImagesTab}
-                  imagesLoading={imagesLoading}
-                  pinTabs={index === turns.length - 1}
-                >
-                  {showStatus && (
-                    <SearchStatusLine phase={searchPhase} needsSearch={needsSearch} />
-                  )}
-
-                  {showAnswer && (
-                    <section className="answer-section">
-                      <AnswerErrorBoundary>
-                        <AnswerBody
-                          text={turn.answer}
-                          sources={sources}
-                          isStreaming={isActive && streaming}
-                          onTypingChange={
-                            index === turns.length - 1 ? handleAnswerTypingChange : undefined
-                          }
-                        />
-                      </AnswerErrorBoundary>
-                      {turn.answer.trim() && (
-                        <AnswerFooter
-                          answer={turn.answer}
-                          title={turn.query}
-                          sources={sources}
-                          messageId={resolveAssistantMessageId(turn)}
-                          token={token}
-                          userFeedback={turn.userFeedback}
-                        />
-                      )}
-                    </section>
-                  )}
-
-                  {showFollowUps && (
-                    <section className="followups-section">
-                      <h3 className="followups-heading">{t("followUps")}</h3>
-                      <ul className="followups-list">
-                        {turn.followUps.slice(0, 3).map((q) => (
-                          <li key={q}>
-                            <button
-                              type="button"
-                              className="followup-item"
-                              disabled={streaming}
-                              onClick={() => runSearch(q, threadId, [])}
-                            >
-                              {q}
-                            </button>
-                          </li>
-                        ))}
-                      </ul>
-                    </section>
-                  )}
-                </TurnContentTabs>
-              ) : (
+            return (
+              <article key={turn.key} id={`turn-${turn.key}`} className="thread-turn">
                 <ThreadQuery query={turn.query} />
-              )}
-            </article>
-          );
-        })}
+
+                {showStatus && (
+                  <SearchStatusLine phase={searchPhase} needsSearch={needsSearch} />
+                )}
+
+                {showAnswer && (
+                  <section className="answer-section">
+                    <AnswerErrorBoundary>
+                      <AnswerBody
+                        text={turn.answer}
+                        sources={sources}
+                        isStreaming={isActive && streaming}
+                        onTypingChange={
+                          index === turns.length - 1 ? handleAnswerTypingChange : undefined
+                        }
+                      />
+                    </AnswerErrorBoundary>
+                    {turn.answer.trim() && (
+                      <AnswerFooter
+                        answer={turn.answer}
+                        title={turn.query}
+                        sources={sources}
+                        messageId={resolveAssistantMessageId(turn)}
+                        token={token}
+                        userFeedback={turn.userFeedback}
+                      />
+                    )}
+                  </section>
+                )}
+
+                {showFollowUps && (
+                  <section className="followups-section">
+                    <h3 className="followups-heading">{t("followUps")}</h3>
+                    <ul className="followups-list">
+                      {turn.followUps.slice(0, 3).map((q) => (
+                        <li key={q}>
+                          <button
+                            type="button"
+                            className="followup-item"
+                            disabled={streaming}
+                            onClick={() => runSearch(q, threadId, [])}
+                          >
+                            {q}
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </section>
+                )}
+              </article>
+            );
+          })
+        )}
       </div>
 
-      {showScrollDown && (
+      {showScrollDown && activeTab === "answer" && (
         <button
           type="button"
           className="thread-scroll-down"

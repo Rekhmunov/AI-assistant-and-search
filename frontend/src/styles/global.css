@@ -1111,39 +1111,20 @@ body:has(.page-thread) {
   color: var(--text);
 }
 
-.turn-content {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
 
-.turn-content-tabs {
+.thread-tabs-bar {
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 2px;
-  margin: 0 0 12px;
-  padding: 6px 0 0;
+  padding: 6px 12px 0;
+  background: var(--bg);
   border-bottom: 1px solid var(--border-subtle);
-}
-
-.turn-content-tabs--sticky {
-  position: sticky;
-  top: 0;
   z-index: 8;
-  margin-top: 0;
-  padding-top: 4px;
-  background: color-mix(in srgb, var(--bg) 94%, transparent);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  box-shadow: 0 1px 0 var(--border-subtle);
 }
 
-.turn-content .thread-query {
-  margin-top: 0;
-}
-
-.turn-content-tab {
+.thread-tab {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -1160,16 +1141,16 @@ body:has(.page-thread) {
   transition: color 0.15s, border-color 0.15s;
 }
 
-.turn-content-tab:hover {
+.thread-tab:hover {
   color: var(--text);
 }
 
-.turn-content-tab--active {
+.thread-tab--active {
   color: var(--text);
   border-bottom-color: var(--text);
 }
 
-.turn-content-tab-badge {
+.thread-tab-badge {
   min-width: 1.25rem;
   padding: 0 5px;
   border-radius: 999px;
@@ -1181,23 +1162,32 @@ body:has(.page-thread) {
   text-align: center;
 }
 
-.turn-content-panel[hidden] {
-  display: none !important;
+.thread-images-tab {
+  padding: 4px 0 16px;
 }
 
-.turn-images-tab-heading {
-  margin: 0 0 14px;
-  font-size: 0.9375rem;
-  line-height: 1.45;
-  color: var(--muted);
-}
-
-.turn-images-tab-status {
+.thread-images-tab-status {
   margin: 0;
   padding: 24px 0;
   text-align: center;
   color: var(--muted);
   font-size: 0.9375rem;
+}
+
+.thread-images-group {
+  margin-bottom: 24px;
+}
+
+.thread-images-group:last-child {
+  margin-bottom: 0;
+}
+
+.thread-images-group-title {
+  margin: 0 0 12px;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  line-height: 1.45;
+  color: var(--text);
 }
 
 .turn-images-grid {
@@ -2982,8 +2972,9 @@ body:has(.page-thread) {
     padding-bottom: calc(var(--composer-nav-gap) + 88px);
   }
 
+  .page-thread .thread-tabs-bar,
+  .page-thread .thread-conversation > .thread-images-tab,
   .page-thread .thread-turn > .thread-query,
-  .page-thread .thread-turn > .turn-content,
   .page-thread .thread-turn > .search-status,
   .page-thread .thread-turn > .answer-section,
   .page-thread .thread-turn > .followups-section {
