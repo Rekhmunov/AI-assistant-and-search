@@ -2276,8 +2276,8 @@ body:has(.page-thread) {
 .thread-tabs-segment {
   display: inline-flex;
   align-items: center;
-  gap: 2px;
-  padding: 3px;
+  gap: 4px;
+  padding: 4px 8px;
   border: 1px solid var(--border);
   border-radius: 999px;
   background: var(--surface);
@@ -2289,8 +2289,9 @@ body:has(.page-thread) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 40px;
-  height: 36px;
+  min-width: 52px;
+  width: 52px;
+  height: 40px;
   padding: 0;
   border: none;
   border-radius: 999px;
@@ -2327,8 +2328,14 @@ body:has(.page-thread) {
 
 .composer-outer-row--thread-mobile {
   display: flex;
-  align-items: flex-end;
+  align-items: stretch;
   gap: 8px;
+  width: 100%;
+}
+
+.composer-outer-row--thread-mobile .search-composer {
+  flex: 1;
+  min-width: 0;
 }
 
 .composer-wrap--thread-mobile.composer-wrap--focused .composer-outer-row--thread-mobile {
@@ -2368,14 +2375,16 @@ body:has(.page-thread) {
 
 .composer-new-chat {
   flex: 0 0 auto;
+  align-self: stretch;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 44px;
-  height: 44px;
+  width: 48px;
+  min-height: 48px;
+  height: auto;
   padding: 0;
   border: 1px solid var(--border);
-  border-radius: 14px;
+  border-radius: 22px;
   background: var(--surface);
   color: var(--text);
   box-shadow: var(--shadow-sm);
@@ -2399,12 +2408,20 @@ body:has(.page-thread) {
   bottom: calc(var(--composer-nav-gap) + env(safe-area-inset-bottom));
 }
 
+.page-thread .composer-wrap--docked.composer-wrap--thread-mobile {
+  left: 0;
+  right: 0;
+  max-width: none;
+  padding: 0 12px;
+  bottom: calc(16px + env(safe-area-inset-bottom));
+}
+
 .page-thread .thread-conversation {
-  padding-bottom: calc(var(--composer-nav-gap) + 88px + env(safe-area-inset-bottom));
+  padding-bottom: calc(16px + 88px + env(safe-area-inset-bottom));
 }
 
 .page-thread .thread-scroll-down {
-  bottom: calc(var(--composer-nav-gap) + 96px + env(safe-area-inset-bottom));
+  bottom: calc(16px + 96px + env(safe-area-inset-bottom));
 }
 
 .thread-scroll-down {
