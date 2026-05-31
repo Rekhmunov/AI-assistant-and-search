@@ -36,7 +36,7 @@ from app.services.query_url_memory import (
 )
 from app.services.entity_image import entity_images_to_json
 from app.services.message_images_column import messages_have_images_column
-from app.services.entity_image_routing import build_entity_image_query, wants_entity_images
+from app.services.entity_image_routing import resolve_entity_image_query, wants_entity_images
 from app.services.yandex_image_search import YandexImageSearchService
 from app.services.providers.factory import resolve_runtime_providers
 import redis.asyncio as redis
@@ -334,7 +334,12 @@ class SearchFlowService:
                 )
                 image_task: asyncio.Task | None = None
                 if show_entity_images:
-                    image_query = build_entity_image_query(user_text, llm_query)
+                    image_query = resolve_entity_image_query(
+                        user_text,
+                        llm_query,
+                        search_queries=queries,
+                        is_continuation=thread_ctx.is_continuation,
+                    )
                     image_svc = YandexImageSearchService(settings)
                     image_task = asyncio.create_task(
                         image_svc.search_validated(

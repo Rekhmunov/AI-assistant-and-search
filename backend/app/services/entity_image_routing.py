@@ -52,6 +52,28 @@ _SHOW_ENTITY_RE = re.compile(
     re.I,
 )
 
+# Местоимения и отсылки к прошлому сообщению («этот бренд», «его товары»).
+_DEICTIC_RE = re.compile(
+    r"(?:"
+    r"\bэт(?:от|ого|ой|ом|а|у|и)\b|"
+    r"\bэто\b|"
+    r"\bтак(?:ой|ая|ое|ие)\s+(?:бренд|фирм|компани)|"
+    r"\b(?:его|её|их)\s+(?:товар|продукт|ассортимент|каталог)|"
+    r"\bthis\s+(?:brand|company)\b|"
+    r"\bthe\s+brand\b"
+    r")",
+    re.I,
+)
+
+_VAGUE_ENTITY_RE = re.compile(
+    r"\b(?:бренд|фирм|компани|товар|продукт|ассортимент|каталог)\b",
+    re.I,
+)
+
+_NAMED_ENTITY_RE = re.compile(
+    r"\b(?:[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*|[A-Z]{2,})\b",
+)
+
 
 def wants_entity_images(query: str, *, intent: str = "factual_current") -> bool:
     q = (query or "").strip()
@@ -77,3 +99,45 @@ def build_entity_image_query(user_query: str, llm_query: str = "") -> str:
         return stripped[:120]
     fallback = (llm_query or q).strip()
     return fallback[:120] if fallback else q[:120]
+
+
+def _looks_like_named_entity(text: str) -> bool:
+    return bool(_NAMED_ENTITY_RE.search(text or ""))
+
+
+def query_needs_thread_context(user_query: str, local_query: str) -> bool:
+    """True, если image query из одного текущего сообщения не содержит конкретной сущности."""
+    user = (user_query or "").strip()
+    local = (local_query or "").strip()
+    if not local:
+        return True
+    if _DEICTIC_RE.search(user):
+        return True
+    if _VAGUE_ENTITY_RE.search(local) and not _looks_like_named_entity(local):
+        return True
+    return False
+
+
+def resolve_entity_image_query(
+    user_query: str,
+    llm_query: str = "",
+    *,
+    search_queries: list[str] | None = None,
+    is_continuation: bool = False,
+) -> str:
+    """
+    Собирает запрос для Yandex Image Search.
+
+    Для follow-up в треде (местоимения, «товары бренда») берём search_queries
+    из QueryRewriter — он уже разрешает контекст треда для веб-поиска.
+    """
+    local = build_entity_image_query(user_query, llm_query)
+    if not is_continuation or not query_needs_thread_context(user_query, local):
+        return local
+
+    for candidate in search_queries or []:
+        rewritten = (candidate or "").strip()
+        if len(rewritten) >= 2:
+            return rewritten[:120]
+
+    return local
