@@ -314,6 +314,18 @@ export function Thread() {
       (lastTurn.images?.length ?? 0) === 0,
   );
 
+  /** Мобилка: вкладка «Изображения» — новые фото сверху, сбрасываем scroll ответа. */
+  useEffect(() => {
+    if (isDesktop || activeTab !== "images") return;
+    const el = conversationRef.current;
+    if (!el) return;
+    const scrollToTop = () => {
+      el.scrollTop = 0;
+    };
+    scrollToTop();
+    requestAnimationFrame(scrollToTop);
+  }, [activeTab, isDesktop, imageGroups.length, imagesLoading]);
+
   return (
     <div className="page page-thread">
       {!isDesktop && (
