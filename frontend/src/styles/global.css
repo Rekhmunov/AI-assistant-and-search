@@ -116,47 +116,61 @@ body:has(.page-thread) {
     position: sticky;
     top: 0;
     z-index: 100;
+    flex-shrink: 0;
   }
 
-  .home-mobile-bottom {
-    position: fixed;
-    left: 0;
-    right: 0;
-    bottom: calc(16px + env(safe-area-inset-bottom));
-    z-index: 90;
-    padding: 0 12px;
-    background: linear-gradient(to top, var(--bg) 72%, transparent);
+  .home-mobile-main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+
+  .home-mobile-brand-wrap {
+    flex: 1;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    padding: 0 16px 18px;
   }
 
   .home-mobile-brand {
     display: block;
-    margin: 0 0 14px;
+    margin: 0;
     text-align: center;
   }
 
   .home-mobile-brand .glosix-wordmark {
-    font-size: 1.75rem;
+    font-size: 2.75rem;
     font-weight: 600;
-    letter-spacing: -0.02em;
+    letter-spacing: -0.03em;
   }
 
-  .home-mobile-bottom .composer-wrap--inline {
+  .home-mobile-composer-wrap {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    padding: 0 12px calc(28px + env(safe-area-inset-bottom));
+  }
+
+  .home-mobile-composer-wrap .composer-wrap--inline {
     position: static;
     max-width: none;
     margin: 0;
     padding: 0;
   }
 
-  .home-mobile-bottom .composer-outer-row--thread-mobile {
+  .home-mobile-composer-wrap .composer-outer-row--thread-mobile {
     width: 100%;
   }
 
-  .home-mobile-bottom .composer-outer-row--thread-mobile .search-composer {
+  .home-mobile-composer-wrap .composer-outer-row--thread-mobile .search-composer {
     flex: 1;
     min-width: 0;
   }
 
-  .home-mobile-bottom .search-composer {
+  .home-mobile-composer-wrap .search-composer {
     width: 100%;
   }
 }
@@ -2482,15 +2496,15 @@ body:has(.page-thread) {
   right: 0;
   max-width: none;
   padding: 0 12px;
-  bottom: calc(16px + env(safe-area-inset-bottom));
+  bottom: calc(28px + env(safe-area-inset-bottom));
 }
 
 .page-thread .thread-conversation {
-  padding-bottom: calc(16px + 88px + env(safe-area-inset-bottom));
+  padding-bottom: calc(28px + 88px + env(safe-area-inset-bottom));
 }
 
 .page-thread .thread-scroll-down {
-  bottom: calc(16px + 96px + env(safe-area-inset-bottom));
+  bottom: calc(28px + 96px + env(safe-area-inset-bottom));
 }
 
 .thread-scroll-down {

@@ -43,20 +43,24 @@ export function Home() {
           requireTextWithAttachments
         />
       ) : (
-        <div className="home-mobile-bottom">
-          <GlosixBrand asLink={false} className="home-mobile-brand" />
-          <SearchComposer
-            value={query}
-            onChange={setQuery}
-            onSubmit={startSearch}
-            attachments={attachments}
-            onAttachmentsChange={setAttachments}
-            docked={false}
-            layoutMode="homeMobile"
-            animatedPlaceholder={!hasDraft}
-            placeholderPhrases={placeholderPhrases}
-            requireTextWithAttachments
-          />
+        <div className="home-mobile-main">
+          <div className="home-mobile-brand-wrap">
+            <GlosixBrand asLink={false} className="home-mobile-brand" />
+          </div>
+          <div className="home-mobile-composer-wrap">
+            <SearchComposer
+              value={query}
+              onChange={setQuery}
+              onSubmit={startSearch}
+              attachments={attachments}
+              onAttachmentsChange={setAttachments}
+              docked={false}
+              layoutMode="homeMobile"
+              animatedPlaceholder={!hasDraft}
+              placeholderPhrases={placeholderPhrases}
+              requireTextWithAttachments
+            />
+          </div>
         </div>
       )}
     </div>
