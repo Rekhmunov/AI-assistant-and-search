@@ -1,7 +1,7 @@
 import { Link } from "react-router-dom";
 import { ThreadTabsBar, type ThreadTab } from "./ThreadTabsBar";
 import { t } from "../i18n";
-import { ProfileIcon } from "./MobileNavIcons";
+import { BackIcon, ProfileIcon } from "./MobileNavIcons";
 
 type Props = {
   onBack: () => void;
@@ -45,19 +45,5 @@ export function ThreadMobileHeader({
 
       <div className="thread-mobile-header-side thread-mobile-header-side--right" aria-hidden />
     </header>
-  );
-}
-
-function BackIcon() {
-  return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden>
-      <path
-        d="M15 6l-6 6 6 6"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
   );
 }
