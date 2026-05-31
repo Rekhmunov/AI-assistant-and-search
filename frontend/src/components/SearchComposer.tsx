@@ -1,4 +1,4 @@
-import { FormEvent, useRef, useState, type Dispatch, type SetStateAction } from "react";
+import { FormEvent, useEffect, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { FileUploadError, uploadFile, fetchMe } from "../api/client";
@@ -78,6 +78,7 @@ export function SearchComposer({
   const [uploadSuggestPro, setUploadSuggestPro] = useState(false);
   const [uploading, setUploading] = useState<UploadingItem[]>([]);
   const [inputFocused, setInputFocused] = useState(false);
+  const blurTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const { data: me } = useQuery({
     queryKey: ["me"],
@@ -200,6 +201,34 @@ export function SearchComposer({
     if (ref.current) ref.current.value = "";
   };
 
+  /** Prevent textarea blur before toolbar tap registers (mobile focus layout). */
+  const keepComposerFocus = (e: React.PointerEvent) => {
+    e.preventDefault();
+  };
+
+  const handleInputFocus = () => {
+    if (blurTimerRef.current) {
+      clearTimeout(blurTimerRef.current);
+      blurTimerRef.current = null;
+    }
+    setInputFocused(true);
+  };
+
+  const handleInputBlur = () => {
+    if (blurTimerRef.current) clearTimeout(blurTimerRef.current);
+    blurTimerRef.current = setTimeout(() => {
+      setInputFocused(false);
+      blurTimerRef.current = null;
+    }, 200);
+  };
+
+  useEffect(
+    () => () => {
+      if (blurTimerRef.current) clearTimeout(blurTimerRef.current);
+    },
+    [],
+  );
+
   const canSend =
     (value.trim().length > 0 || (attachments.length > 0 && !requireTextWithAttachments)) &&
     !disabled &&
@@ -268,13 +297,14 @@ export function SearchComposer({
         <div className={`composer-row${showComposerToolbar ? " composer-row--text-only" : ""}`}>
           {showDefaultRow && (
             <ComposerAttachMenu
-              disabled={disabled || isBusy || atLimit}
-              directPick={isDesktop}
-              onDirectPick={() => openPicker(allFilesRef)}
-              onPickGallery={() => openPicker(photoRef)}
-              onPickCamera={() => openPicker(cameraRef)}
-              onPickFiles={() => openPicker(allFilesRef)}
-            />
+                disabled={disabled || isBusy || atLimit}
+                directPick={isDesktop}
+                onDirectPick={() => openPicker(allFilesRef)}
+                onPickGallery={() => openPicker(photoRef)}
+                onPickCamera={() => openPicker(cameraRef)}
+                onPickFiles={() => openPicker(allFilesRef)}
+                keepFocusOnPress={isMobileFocusLayout}
+              />
           )}
           <input
             ref={allFilesRef}
@@ -322,8 +352,8 @@ export function SearchComposer({
               value={value}
               placeholder={textareaPlaceholder}
               disabled={disabled}
-              onFocus={() => setInputFocused(true)}
-              onBlur={() => setInputFocused(false)}
+              onFocus={handleInputFocus}
+              onBlur={handleInputBlur}
               onChange={(e) => onChange(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) {
@@ -353,6 +383,7 @@ export function SearchComposer({
                 aria-label={t("voiceInput")}
                 aria-pressed={voice.state === "recording"}
                 disabled={disabled || voice.state === "transcribing"}
+                onPointerDown={keepComposerFocus}
                 onClick={voice.toggle}
               >
                 <MicIcon recording={voice.state === "recording"} />
@@ -374,6 +405,7 @@ export function SearchComposer({
                 onPickGallery={() => openPicker(photoRef)}
                 onPickCamera={() => openPicker(cameraRef)}
                 onPickFiles={() => openPicker(allFilesRef)}
+                keepFocusOnPress={isMobileFocusLayout}
               />
             )}
             <div className="composer-toolbar-actions">
@@ -383,12 +415,19 @@ export function SearchComposer({
                 aria-label={t("voiceInput")}
                 aria-pressed={voice.state === "recording"}
                 disabled={disabled || voice.state === "transcribing"}
+                onPointerDown={keepComposerFocus}
                 onClick={voice.toggle}
               >
                 <MicIcon recording={voice.state === "recording"} />
               </button>
               {showSendInToolbar && (
-                <button type="submit" className="composer-send" disabled={!canSend} aria-label={t("send")}>
+                <button
+                  type="submit"
+                  className="composer-send"
+                  disabled={!canSend}
+                  aria-label={t("send")}
+                  onPointerDown={keepComposerFocus}
+                >
                   <SendIcon />
                 </button>
               )}

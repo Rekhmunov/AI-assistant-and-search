@@ -8,6 +8,8 @@ type Props = {
   disabled?: boolean;
   /** Веб: сразу открыть системный выбор файлов */
   directPick?: boolean;
+  /** Не снимать фокус с textarea при тапе (mobile toolbar) */
+  keepFocusOnPress?: boolean;
   onDirectPick?: () => void;
   /** Мобильная / миниапп: подменю */
   onPickGallery?: () => void;
@@ -18,6 +20,7 @@ type Props = {
 export function ComposerAttachMenu({
   disabled,
   directPick = false,
+  keepFocusOnPress = false,
   onDirectPick,
   onPickGallery,
   onPickCamera,
@@ -139,6 +142,7 @@ export function ComposerAttachMenu({
         aria-haspopup={directPick ? undefined : "menu"}
         aria-controls={directPick ? undefined : DROPDOWN_ID}
         disabled={disabled}
+        onPointerDown={keepFocusOnPress ? (e) => e.preventDefault() : undefined}
         onClick={onAttachClick}
       >
         <PlusIcon />
