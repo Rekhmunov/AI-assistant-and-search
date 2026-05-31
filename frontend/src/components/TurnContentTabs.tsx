@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from "react";
 import type { EntityImage } from "../api/client";
 import { t } from "../i18n";
+import { ThreadQuery } from "./ThreadQuery";
 import { TurnImagesTab } from "./TurnImagesTab";
 
 export type TurnTab = "answer" | "images";
@@ -10,6 +11,8 @@ type Props = {
   images: EntityImage[];
   showImagesTab: boolean;
   imagesLoading?: boolean;
+  /** Липкие вкладки у активного turn вверху области прокрутки */
+  pinTabs?: boolean;
   children: ReactNode;
 };
 
@@ -18,13 +21,18 @@ export function TurnContentTabs({
   images,
   showImagesTab,
   imagesLoading = false,
+  pinTabs = false,
   children,
 }: Props) {
   const [activeTab, setActiveTab] = useState<TurnTab>("answer");
 
   return (
     <div className="turn-content">
-      <div className="turn-content-tabs" role="tablist" aria-label={t("turnContentTabs")}>
+      <div
+        className={`turn-content-tabs${pinTabs ? " turn-content-tabs--sticky" : ""}`}
+        role="tablist"
+        aria-label={t("turnContentTabs")}
+      >
         <button
           type="button"
           role="tab"
@@ -56,6 +64,8 @@ export function TurnContentTabs({
           </button>
         )}
       </div>
+
+      <ThreadQuery query={query} />
 
       <div className="turn-content-panels">
         <div

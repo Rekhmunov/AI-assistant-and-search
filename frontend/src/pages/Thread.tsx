@@ -7,8 +7,8 @@ import { AnswerErrorBoundary } from "../components/AnswerErrorBoundary";
 import { AnswerFooter } from "../components/AnswerFooter";
 import { SearchComposer, type ComposerAttachment } from "../components/SearchComposer";
 import { SearchStatusLine, type SearchPhase } from "../components/SearchStatusLine";
-import { ThreadQuery } from "../components/ThreadQuery";
 import { TurnContentTabs } from "../components/TurnContentTabs";
+import { ThreadQuery } from "../components/ThreadQuery";
 import { t } from "../i18n";
 import { findLastIndex } from "../lib/arrayUtils";
 import { mergeThreadTurns, messagesToTurns, resolveAssistantMessageId, type ThreadTurn } from "../lib/threadTurns";
@@ -331,14 +331,13 @@ export function Thread() {
 
           return (
             <article key={turn.key} id={`turn-${turn.key}`} className="thread-turn">
-              <ThreadQuery query={turn.query} />
-
-              {showTurnContent && (
+              {showTurnContent ? (
                 <TurnContentTabs
                   query={turn.query}
                   images={images}
                   showImagesTab={showImagesTab}
                   imagesLoading={imagesLoading}
+                  pinTabs={index === turns.length - 1}
                 >
                   {showStatus && (
                     <SearchStatusLine phase={searchPhase} needsSearch={needsSearch} />
@@ -389,6 +388,8 @@ export function Thread() {
                     </section>
                   )}
                 </TurnContentTabs>
+              ) : (
+                <ThreadQuery query={turn.query} />
               )}
             </article>
           );

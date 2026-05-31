@@ -1118,19 +1118,29 @@ body:has(.page-thread) {
 }
 
 .turn-content-tabs {
-  position: sticky;
-  top: 0;
-  z-index: 6;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 2px;
-  margin: 0 0 14px;
+  margin: 0 0 12px;
   padding: 6px 0 0;
-  background: color-mix(in srgb, var(--bg) 92%, transparent);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
   border-bottom: 1px solid var(--border-subtle);
+}
+
+.turn-content-tabs--sticky {
+  position: sticky;
+  top: 0;
+  z-index: 8;
+  margin-top: 0;
+  padding-top: 4px;
+  background: color-mix(in srgb, var(--bg) 94%, transparent);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  box-shadow: 0 1px 0 var(--border-subtle);
+}
+
+.turn-content .thread-query {
+  margin-top: 0;
 }
 
 .turn-content-tab {
