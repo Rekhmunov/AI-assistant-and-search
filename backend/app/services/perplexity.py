@@ -19,7 +19,6 @@ from app.services.prompts.store import PromptStore
 from app.services.search_query import is_meta_assistant_query
 from app.services.yandex_errors import YandexServiceError
 from app.services.yandex_gpt import (
-    _format_history,
     _query_has_document_block,
     _yield_text_paced,
 )
@@ -48,6 +47,32 @@ class PerplexitySearchEvent:
 
 def is_perplexity_provider(provider_id: str) -> bool:
     return provider_id == PERPLEXITY_PROVIDER_ID
+
+
+def normalize_chat_messages(messages: list[dict[str, str]]) -> list[dict[str, str]]:
+    """Perplexity: after optional system message(s), user/assistant must alternate."""
+    normalized: list[dict[str, str]] = []
+    for msg in messages:
+        role = msg.get("role")
+        content = (msg.get("content") or "").strip()
+        if role not in ("system", "user", "assistant") or not content:
+            continue
+        if role == "system":
+            normalized.append({"role": "system", "content": content})
+            continue
+        if normalized and normalized[-1]["role"] == role:
+            merged = f"{normalized[-1]['content']}\n\n{content}"
+            normalized[-1]["content"] = merged[:8000]
+        else:
+            normalized.append({"role": role, "content": content[:8000]})
+
+    first_non_system = next(
+        (i for i, msg in enumerate(normalized) if msg["role"] != "system"),
+        len(normalized),
+    )
+    if first_non_system < len(normalized) and normalized[first_non_system]["role"] == "assistant":
+        normalized.insert(first_non_system, {"role": "user", "content": "Продолжение диалога."})
+    return normalized
 
 
 class PerplexityProvider(PromptedLLMMixin, LLMProvider):
@@ -89,7 +114,21 @@ class PerplexityProvider(PromptedLLMMixin, LLMProvider):
             t = (text or "").strip()
             if t:
                 msgs.append({"role": r, "content": t[:4000]})
-        return msgs
+        return normalize_chat_messages(msgs)
+
+    def _build_user_turn(
+        self,
+        query: str,
+        *,
+        prior_sources_block: str = "",
+        max_chars: int = 6000,
+    ) -> str:
+        parts: list[str] = []
+        extra = prior_sources_block.strip()
+        if extra:
+            parts.append(extra[:3000])
+        parts.append((query or "").strip()[:4000])
+        return "\n\n".join(p for p in parts if p)[:max_chars]
 
     def _parse_stream_event(self, event: dict) -> tuple[str | None, list[SearchSource] | None, list[str]]:
         text: str | None = None
@@ -136,9 +175,13 @@ class PerplexityProvider(PromptedLLMMixin, LLMProvider):
         model_id = self._model_name(model)
         messages: list[dict[str, str]] = [{"role": "system", "content": _SYSTEM_SEARCH}]
         messages.extend(self._history_messages(history))
-        if prior_sources_block.strip():
-            messages.append({"role": "user", "content": prior_sources_block.strip()[:3000]})
-        messages.append({"role": "user", "content": query[:4000]})
+        messages.append(
+            {
+                "role": "user",
+                "content": self._build_user_turn(query, prior_sources_block=prior_sources_block),
+            }
+        )
+        messages = normalize_chat_messages(messages)
 
         payload: dict[str, Any] = {
             "model": model_id,
@@ -256,9 +299,13 @@ class PerplexityProvider(PromptedLLMMixin, LLMProvider):
 
         messages: list[dict[str, str]] = [{"role": "system", "content": system}]
         messages.extend(self._history_messages(history))
-        extra = prior_sources_block.strip()
-        user = f"{_format_history(history)}\n\n{extra}\n\nВопрос: {query}" if extra else query
-        messages.append({"role": "user", "content": user[:6000]})
+        messages.append(
+            {
+                "role": "user",
+                "content": self._build_user_turn(query, prior_sources_block=prior_sources_block),
+            }
+        )
+        messages = normalize_chat_messages(messages)
 
         payload = {
             "model": self._model_name(model),
