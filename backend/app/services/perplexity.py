@@ -88,8 +88,8 @@ class PerplexityProvider(PromptedLLMMixin, LLMProvider):
         return self.settings.perplexity_configured
 
     def _model_name(self, model: AnswerModel) -> str:
-        if model == "pro":
-            return self.settings.perplexity_model_pro
+        # Пока оцениваем качество только на sonar; sonar-pro не используем (answer_model игнорируется).
+        _ = model
         return self.settings.perplexity_model_lite
 
     def _chat_url(self) -> str:
@@ -190,8 +190,8 @@ class PerplexityProvider(PromptedLLMMixin, LLMProvider):
             "stream_mode": "full",
             "return_related_questions": self.settings.perplexity_return_related_questions,
             "language_preference": "ru",
-            "max_tokens": 4096 if model == "pro" else 2800,
-            "temperature": 0.3 if model == "pro" else 0.2,
+            "max_tokens": 2800,
+            "temperature": 0.2,
         }
         recency = (self.settings.perplexity_search_recency_filter or "").strip()
         if recency:

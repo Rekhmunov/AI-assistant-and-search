@@ -5,6 +5,7 @@
 ```bash
 PERPLEXITY_API_KEY=pplx-xxxxxxxx
 PERPLEXITY_MODEL_LITE=sonar
+# sonar-pro пока не используется — все вызовы идут в sonar
 PERPLEXITY_MODEL_PRO=sonar-pro
 ```
 

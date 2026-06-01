@@ -37,7 +37,7 @@ def test_create_perplexity_provider():
 def test_llm_model_label_perplexity():
     llm = create_llm_provider("perplexity", None, PromptStore(None, None))  # type: ignore[arg-type]
     assert llm_model_label(llm, "lite") == "sonar"
-    assert llm_model_label(llm, "pro") == "sonar-pro"
+    assert llm_model_label(llm, "pro") == "sonar"
 
 
 def test_is_perplexity_provider():
