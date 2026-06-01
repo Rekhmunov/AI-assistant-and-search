@@ -312,10 +312,15 @@ async def login_email(
     guest_session: Annotated[str | None, Cookie(alias=GUEST_COOKIE)] = None,
 ):
     email = body.email.strip().lower()
-    result = await db.execute(select(User).where(User.email == email, User.deleted_at.is_(None)))
+    result = await db.execute(select(User).where(User.email == email))
     user = result.scalar_one_or_none()
     if not user or not user.password_hash or not verify_password(body.password, user.password_hash):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Неверный email или пароль")
+    if user.deleted_at is not None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Вы попали в бан, обратитесь в поддержку",
+        )
 
     if user.plan == Plan.PRO and user.plan_expires_at and user.plan_expires_at < datetime.now(timezone.utc):
         user.plan = Plan.FREE
