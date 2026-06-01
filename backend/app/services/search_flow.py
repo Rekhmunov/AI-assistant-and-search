@@ -131,11 +131,16 @@ class SearchFlowService:
         allowed, used, limit = await limiter.check_search_limit(user_id_str, user.plan, user)
         if not allowed:
             if self._is_guest(user):
-                msg = (
-                    f"Гостевой поиск включает {limit} запросов в день. "
-                    "Зарегистрируйтесь для полного доступа."
+                yield sse_event(
+                    "error",
+                    {
+                        "code": "guest_rate_limit",
+                        "message": (
+                            f"Гостевой лимит: {limit} запросов в день. "
+                            "Зарегистрируйтесь для полного доступа."
+                        ),
+                    },
                 )
-                yield sse_event("error", {"code": "rate_limit", "message": msg})
             elif self._is_registered_free(user):
                 msg = (
                     "На сегодня лимиты бесплатного поиска исчерпаны. "

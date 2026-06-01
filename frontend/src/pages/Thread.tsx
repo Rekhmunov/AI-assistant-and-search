@@ -326,11 +326,19 @@ export function Thread() {
           setTurns((prev) =>
             prev.map((turn) => {
               if (!turn.streaming) return turn;
+              if (code === "guest_rate_limit" || (code === "rate_limit" && !token)) {
+                return {
+                  ...turn,
+                  answer: "",
+                  errorCode: "guest_rate_limit",
+                  streaming: false,
+                };
+              }
               if (code === "rate_limit" && session?.is_guest) {
                 return {
                   ...turn,
                   answer: "",
-                  errorCode: "rate_limit",
+                  errorCode: "guest_rate_limit",
                   streaming: false,
                 };
               }
@@ -429,7 +437,7 @@ export function Thread() {
             const isActive = turn.streaming;
             const sources = turn.sources ?? [];
             const showStatus = isActive && streaming && !turn.answer.trim() && !turn.errorCode;
-            const showGuestLimit = turn.errorCode === "rate_limit";
+            const showGuestLimit = turn.errorCode === "guest_rate_limit" || turn.errorCode === "rate_limit";
             const showFreeLimit = turn.errorCode === "free_rate_limit";
             const showAnswer = showGuestLimit || showFreeLimit || Boolean(turn.answer.trim()) || isActive;
             const showFollowUps =
