@@ -13,11 +13,10 @@ export function GuestLimitNotice({ limit }: Props) {
     <div className="guest-limit-notice" role="alert">
       <p className="guest-limit-notice-text">
         {t("guestSearchLimitIntro", { requests })}{" "}
-        {t("guestSearchLimitRegisterHint")}{" "}
         <Link to="/login" className="guest-limit-notice-link">
-          {t("register")}
+          {t("guestSearchLimitRegister")}
         </Link>
-        .
+        {t("guestSearchLimitSuffix")}
       </p>
     </div>
   );
