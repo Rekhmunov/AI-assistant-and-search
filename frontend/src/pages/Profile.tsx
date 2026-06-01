@@ -66,6 +66,9 @@ export function Profile() {
     enabled: !!token,
   });
 
+  const storeUser = useAuthStore((s) => s.user);
+  const profileUser = user ?? storeUser;
+
   const { data: appConfig } = useQuery({
     queryKey: ["appConfig"],
     queryFn: fetchAppConfig,
@@ -73,16 +76,18 @@ export function Profile() {
     refetchOnMount: "always",
   });
 
-  const searchesToday = session?.searches_today ?? user?.searches_today ?? 0;
-  const searchesLimit = session?.searches_limit ?? user?.searches_limit ?? 10;
-  const proPriceRub = appConfig?.pro_price_rub ?? user?.pro_price_rub ?? session?.pro_price_rub ?? 299;
+  const searchesToday = session?.searches_today ?? profileUser?.searches_today ?? 0;
+  const searchesLimit = session?.searches_limit ?? profileUser?.searches_limit ?? 10;
+  const proPriceRub = appConfig?.pro_price_rub ?? profileUser?.pro_price_rub ?? session?.pro_price_rub ?? 299;
   const proPurchaseDisabled = Boolean(appConfig?.pro_purchase_disabled);
 
   const refreshUserAfterPro = async () => {
     const updated = await fetchMe(token!);
     setUser(updated);
+    queryClient.setQueryData(["me"], updated);
     queryClient.invalidateQueries({ queryKey: ["me"] });
     queryClient.invalidateQueries({ queryKey: ["session"] });
+    return updated;
   };
 
   const runPaymentConfirm = async (options?: { retries?: number }) => {
@@ -94,9 +99,18 @@ export function Profile() {
     try {
       for (let attempt = 0; attempt < retries; attempt += 1) {
         const result = await confirmProPayment(token);
-        if (result.ok) {
+        if (result.ok && result.plan === "pro") {
           await refreshUserAfterPro();
           setPaymentModal({ open: true, kind: "success" });
+          return;
+        }
+        if (result.ok && result.plan !== "pro") {
+          setPaymentModal({
+            open: true,
+            kind: "error",
+            message: "Оплата найдена, но тариф не обновился. Обновите страницу или напишите в поддержку.",
+            canRetry: true,
+          });
           return;
         }
 
@@ -153,9 +167,9 @@ export function Profile() {
     );
   }
 
-  const name = [user?.first_name, user?.last_name].filter(Boolean).join(" ") || t("profileDefaultName");
-  const isPro = user?.plan === "pro";
-  const profileTier = getProfileTier(user?.plan, Boolean(session?.is_guest));
+  const name = [profileUser?.first_name, profileUser?.last_name].filter(Boolean).join(" ") || t("profileDefaultName");
+  const isPro = profileUser?.plan === "pro";
+  const profileTier = getProfileTier(profileUser?.plan, Boolean(session?.is_guest));
   const profileTierLabel = getProfileTierLabel(profileTier);
   const usageRatio = searchesLimit > 0 ? Math.min(1, searchesToday / searchesLimit) : 0;
   const usagePercent = Math.round(usageRatio * 100);
@@ -265,7 +279,7 @@ export function Profile() {
         </section>
       )}
 
-      {user && <ProfileAccountSection user={user} token={token} onUserUpdated={onUserUpdated} />}
+      {profileUser && <ProfileAccountSection user={profileUser} token={token} onUserUpdated={onUserUpdated} />}
 
       <section className="profile-card profile-settings-card">
         <div className="profile-settings-row">
@@ -275,7 +289,7 @@ export function Profile() {
       </section>
 
       <div className="profile-actions">
-        {user?.email && (
+        {profileUser?.email && (
           <button
             type="button"
             className="btn-secondary btn-block"
@@ -287,7 +301,7 @@ export function Profile() {
             {t("signOut")}
           </button>
         )}
-        {!user?.email && inMax && <p className="profile-hint profile-hint--center">{t("maxSignOutHint")}</p>}
+        {!profileUser?.email && inMax && <p className="profile-hint profile-hint--center">{t("maxSignOutHint")}</p>}
         <button type="button" className="btn-danger-ghost btn-block" onClick={onDelete}>
           {t("deleteAccount")}
         </button>

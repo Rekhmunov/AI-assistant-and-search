@@ -96,16 +96,25 @@ export function PaymentsPage() {
     setError("");
     setSyncingUserId(userId);
     try {
-      const result = await apiFetch<{ ok: boolean; message?: string; payment_id?: string; source?: string }>(
-        `/api/admin/users/${userId}/sync-pro-payment`,
-        { method: "POST" }
-      );
-      if (result.ok) {
+      const result = await apiFetch<{
+        ok: boolean;
+        plan?: string;
+        message?: string;
+        payment_id?: string;
+        source?: string;
+        already_active?: boolean;
+      }>(`/api/admin/users/${userId}/sync-pro-payment`, { method: "POST" });
+      if (result.ok && (result.plan === "pro" || result.already_active)) {
         setMsg(
           result.payment_id
             ? `Pro восстановлен для пользователя (платёж ${result.payment_id})`
             : "Pro уже активен у пользователя"
         );
+        await load(query);
+        return;
+      }
+      if (result.ok) {
+        setError("Синхронизация прошла, но тариф пользователя остался Free");
         await load(query);
         return;
       }

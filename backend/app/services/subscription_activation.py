@@ -32,9 +32,41 @@ async def activate_pro_for_user(
     settings = settings or get_settings()
     user.plan = Plan.PRO
     user.plan_expires_at = datetime.now(timezone.utc) + timedelta(days=settings.pro_duration_days)
+    await db.flush()
     if notify_max and user.max_user_id:
         bot = MaxBotService()
         await bot.send_message(user.max_user_id, "Подписка Pro активирована 🎉")
+
+
+async def _reload_user_plan(db: AsyncSession, user: User) -> None:
+    await db.flush()
+    await db.refresh(user, attribute_names=["plan", "plan_expires_at"])
+
+
+async def _activation_success(
+    db: AsyncSession,
+    user: User,
+    *,
+    payment_id: str,
+    source: str,
+) -> dict[str, Any] | None:
+    await _reload_user_plan(db, user)
+    if user.plan != Plan.PRO:
+        logger.error(
+            "Pro activation reported success but user %s plan=%s (payment %s, source=%s)",
+            user.id,
+            user.plan,
+            payment_id,
+            source,
+        )
+        return None
+    return {
+        "ok": True,
+        "plan": user.plan.value,
+        "payment_id": payment_id,
+        "source": source,
+        "plan_expires_at": user.plan_expires_at.isoformat() if user.plan_expires_at else None,
+    }
 
 
 async def activate_subscription_record(
@@ -193,10 +225,22 @@ async def activate_from_yookassa_payment(
         logger.error("YooKassa payment %s — user %s not found", payment_id, sub.user_id)
         return False
 
-    if user.plan == Plan.PRO and sub.status == SubscriptionStatus.ACTIVE:
+    target_user = expected_user if expected_user is not None else user
+    if target_user.id != user.id:
+        logger.error(
+            "Payment %s belongs to user %s, cannot activate for user %s",
+            payment_id,
+            user.id,
+            target_user.id,
+        )
+        return False
+
+    if target_user.plan == Plan.PRO and sub.status == SubscriptionStatus.ACTIVE:
         return True
 
-    return await activate_subscription_record(db, sub, user, settings=settings)
+    upgraded = await activate_subscription_record(db, sub, target_user, settings=settings)
+    await _reload_user_plan(db, target_user)
+    return upgraded and target_user.plan == Plan.PRO
 
 
 async def _try_activate_payment(
@@ -215,14 +259,7 @@ async def _try_activate_payment(
         settings=settings,
         expected_user=user,
     ):
-        await db.refresh(user)
-        return {
-            "ok": True,
-            "plan": user.plan.value,
-            "payment_id": payment_id,
-            "source": source,
-            "plan_expires_at": user.plan_expires_at.isoformat() if user.plan_expires_at else None,
-        }
+        return await _activation_success(db, user, payment_id=payment_id, source=source)
     return None
 
 
@@ -383,20 +420,20 @@ async def recover_pro_for_user(
         await activate_pro_for_user(db, user, settings=settings)
         if sub.activated_at is None:
             sub.activated_at = datetime.now(timezone.utc)
-        await db.refresh(user)
-        logger.info(
-            "Resynced Pro for user %s from active subscription %s (payment %s)",
-            user.id,
-            sub.id,
-            payment_id or "—",
+        activated = await _activation_success(
+            db,
+            user,
+            payment_id=payment_id or str(sub.id),
+            source="active_subscription_resync",
         )
-        return {
-            "ok": True,
-            "plan": user.plan.value,
-            "payment_id": payment_id or None,
-            "source": "active_subscription_resync",
-            "plan_expires_at": user.plan_expires_at.isoformat() if user.plan_expires_at else None,
-        }
+        if activated:
+            logger.info(
+                "Resynced Pro for user %s from active subscription %s (payment %s)",
+                user.id,
+                sub.id,
+                payment_id or "—",
+            )
+            return activated
 
     try:
         activated = await _scan_yookassa_for_user(db, user, settings=settings)

@@ -81,16 +81,25 @@ export function UserDetailPage() {
     if (!id) return;
     setMsg("");
     try {
-      const result = await apiFetch<{ ok: boolean; message?: string; source?: string; payment_id?: string }>(
-        `/api/admin/users/${id}/sync-pro-payment`,
-        { method: "POST" }
-      );
-      if (result.ok) {
+      const result = await apiFetch<{
+        ok: boolean;
+        plan?: string;
+        message?: string;
+        source?: string;
+        payment_id?: string;
+        already_active?: boolean;
+      }>(`/api/admin/users/${id}/sync-pro-payment`, { method: "POST" });
+      if (result.ok && (result.plan === "pro" || result.already_active)) {
         setMsg(
           result.payment_id
             ? `Pro восстановлен (платёж ${result.payment_id}${result.source ? `, ${result.source}` : ""})`
             : "Pro уже активен"
         );
+        load();
+        return;
+      }
+      if (result.ok) {
+        setMsg("Синхронизация прошла, но тариф остался Free — проверьте plan в базе");
         load();
         return;
       }

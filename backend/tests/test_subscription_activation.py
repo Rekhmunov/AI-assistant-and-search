@@ -13,6 +13,12 @@ from app.services.subscription_activation import (
 
 
 class TestSubscriptionActivation(unittest.IsolatedAsyncioTestCase):
+    def _mock_db(self):
+        db = MagicMock()
+        db.flush = AsyncMock()
+        db.refresh = AsyncMock()
+        return db
+
     async def test_activate_from_payment_by_subscription(self):
         user_id = uuid.uuid4()
         user = User(id=user_id, plan=Plan.FREE, email="a@b.c")
@@ -23,13 +29,12 @@ class TestSubscriptionActivation(unittest.IsolatedAsyncioTestCase):
             amount_rub=999,
         )
 
-        db = MagicMock()
+        db = self._mock_db()
         sub_result = MagicMock()
         sub_result.scalar_one_or_none.return_value = sub
         user_result = MagicMock()
         user_result.scalar_one_or_none.return_value = user
         db.execute = AsyncMock(side_effect=[sub_result, user_result])
-        db.flush = AsyncMock()
 
         ok = await activate_from_yookassa_payment(
             db,
@@ -45,14 +50,13 @@ class TestSubscriptionActivation(unittest.IsolatedAsyncioTestCase):
         user_id = uuid.uuid4()
         user = User(id=user_id, plan=Plan.FREE, email="a@b.c")
 
-        db = MagicMock()
+        db = self._mock_db()
         missing = MagicMock()
         missing.scalar_one_or_none.return_value = None
         user_result = MagicMock()
         user_result.scalar_one_or_none.return_value = user
         db.execute = AsyncMock(side_effect=[missing, user_result])
         db.add = MagicMock()
-        db.flush = AsyncMock()
 
         ok = await activate_from_yookassa_payment(
             db,
@@ -87,7 +91,7 @@ class TestSubscriptionActivation(unittest.IsolatedAsyncioTestCase):
             activated_at=datetime.now(timezone.utc),
         )
 
-        db = MagicMock()
+        db = self._mock_db()
         sub_result = MagicMock()
         sub_result.scalar_one_or_none.return_value = sub
         user_result = MagicMock()
@@ -122,9 +126,8 @@ class TestSubscriptionActivation(unittest.IsolatedAsyncioTestCase):
         user_result = MagicMock()
         user_result.scalar_one_or_none.return_value = user
 
-        db = MagicMock()
+        db = self._mock_db()
         db.execute = AsyncMock(side_effect=[all_subs_result, sub_result, user_result])
-        db.refresh = AsyncMock()
 
         with patch("app.services.subscription_activation.get_payment", new_callable=AsyncMock) as mock_get:
             mock_get.return_value = {"status": "succeeded", "id": "pay-active"}
@@ -235,9 +238,8 @@ class TestSubscriptionActivation(unittest.IsolatedAsyncioTestCase):
         user_result = MagicMock()
         user_result.scalar_one_or_none.return_value = user
 
-        db = MagicMock()
+        db = self._mock_db()
         db.execute = AsyncMock(side_effect=[all_subs_result, sub_result, user_result])
-        db.refresh = AsyncMock()
         mock_get_payment.return_value = {
             "status": "succeeded",
             "id": "pay-789",
