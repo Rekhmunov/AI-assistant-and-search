@@ -2,51 +2,15 @@ import type { ReactNode } from "react";
 import { AnswerTable } from "../components/AnswerTable";
 import { SourceChipsRow } from "../components/SourceChipsRow";
 import type { Source } from "../api/client";
-import { formatMarkdownText } from "./formatMarkdownText";
 import { parseAnswerMarkdownBlocks } from "./parseAnswerMarkdownBlocks";
 import { mergeCitationIndices, parseParagraphCitations } from "./paragraphCitations";
 import { splitTextWithMarkdownTables } from "./parseMarkdownTables";
+import { renderInlineContent } from "./renderInlineContent";
 
 const BLOCK_CHIPS_CLASS = "source-chips-row source-chips-row--block";
 
 function renderInlineText(text: string, keyPrefix: string): ReactNode[] {
-  const formatted = formatMarkdownText(text);
-  if (!formatted) return [];
-
-  const nodes: ReactNode[] = [];
-  const inlineRe = /`([^`\n]+)`/g;
-  let last = 0;
-  let match: RegExpExecArray | null;
-  let k = 0;
-
-  const pushPlain = (chunk: string) => {
-    if (!chunk) return;
-    nodes.push(
-      <span key={`${keyPrefix}-p-${k++}`}>{chunk.replace(/\[\d+\]/g, "")}</span>,
-    );
-  };
-
-  while ((match = inlineRe.exec(formatted)) !== null) {
-    if (match.index > last) {
-      pushPlain(formatted.slice(last, match.index));
-    }
-    nodes.push(
-      <code key={`${keyPrefix}-ic-${k++}`} className="answer-inline-code">
-        {match[1]}
-      </code>,
-    );
-    last = match.index + match[0].length;
-  }
-
-  if (last < formatted.length) {
-    pushPlain(formatted.slice(last));
-  }
-
-  if (nodes.length === 0 && formatted) {
-    pushPlain(formatted);
-  }
-
-  return nodes;
+  return renderInlineContent(text, keyPrefix);
 }
 
 function renderBlockSources(indices: number[], sources: Source[]): ReactNode {

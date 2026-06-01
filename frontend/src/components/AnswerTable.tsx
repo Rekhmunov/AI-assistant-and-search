@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import type { Source } from "../api/client";
 import { SourceChipsRow } from "./SourceChipsRow";
-import { formatMarkdownText } from "../lib/formatMarkdownText";
+import { renderInlineContent } from "../lib/renderInlineContent";
 import { parseParagraphCitations } from "../lib/paragraphCitations";
 
 type Props = {
@@ -12,15 +12,18 @@ type Props = {
 };
 
 function renderCell(text: string, sources: Source[], keyPrefix: string): ReactNode {
-  const plain = formatMarkdownText(text);
-  const { text: clean, indices } = parseParagraphCitations(plain);
-  const body = clean.replace(/\[\d+\]/g, "");
+  const { indices } = parseParagraphCitations(text);
+  const body = renderInlineContent(text, keyPrefix);
 
   return (
     <>
-      {body}
+      {body.length > 0 ? <span className="answer-paragraph-body">{body}</span> : null}
       {indices.length > 0 && (
-        <SourceChipsRow indices={indices} sources={sources} className="source-chips-row source-chips-row--block" />
+        <SourceChipsRow
+          indices={indices}
+          sources={sources}
+          className="source-chips-row source-chips-row--block"
+        />
       )}
     </>
   );

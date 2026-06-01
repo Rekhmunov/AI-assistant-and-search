@@ -1,6 +1,7 @@
 import type { MouseEvent, ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import { useDesktopLayout } from "../hooks/useDesktopLayout";
+import { isMaxWebApp } from "../lib/maxApp";
 import { buildSourceViewPath } from "../lib/sourceView";
 
 type Props = {
@@ -11,13 +12,14 @@ type Props = {
   id?: string;
 };
 
-/** External source link: in-app viewer on mobile, new tab on desktop. */
+/** External link: in-app viewer in MAX / mobile, new tab on desktop web. */
 export function SourceLink({ href, className, title, children, id }: Props) {
   const navigate = useNavigate();
   const isDesktop = useDesktopLayout();
+  const openInNewTab = isDesktop && !isMaxWebApp();
 
   const handleClick = (event: MouseEvent<HTMLAnchorElement>) => {
-    if (isDesktop) return;
+    if (openInNewTab) return;
     event.preventDefault();
     navigate(buildSourceViewPath(href));
   };
@@ -27,9 +29,9 @@ export function SourceLink({ href, className, title, children, id }: Props) {
       id={id}
       href={href}
       className={className}
-      title={title}
-      target={isDesktop ? "_blank" : undefined}
-      rel={isDesktop ? "noopener noreferrer" : undefined}
+      title={title ?? href}
+      target={openInNewTab ? "_blank" : undefined}
+      rel={openInNewTab ? "noopener noreferrer" : undefined}
       onClick={handleClick}
     >
       {children}
