@@ -1464,10 +1464,10 @@ pre.small {
 
 .payments-table th,
 .payments-table td {
-  padding: 12px 14px;
+  padding: 8px 10px;
   border-bottom: 1px solid var(--border-subtle);
   text-align: left;
-  vertical-align: top;
+  vertical-align: middle;
   word-break: break-word;
   overflow-wrap: anywhere;
 }
@@ -1492,7 +1492,7 @@ pre.small {
 }
 
 .payments-col-check {
-  width: 42px;
+  width: 36px;
   text-align: center;
 }
 
@@ -1502,10 +1502,16 @@ pre.small {
 }
 
 .payments-user-link {
-  display: block;
-  font-size: 0.875rem;
-  line-height: 1.45;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 0.8125rem;
+  line-height: 1.35;
   text-decoration: none;
+}
+
+.payments-user-line {
+  display: block;
 }
 
 .payments-user-link:hover {
@@ -1514,14 +1520,50 @@ pre.small {
 
 .payments-cell-id {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 0.8125rem;
+  font-size: 0.75rem;
 }
 
 .payments-cell-actions {
   display: flex;
-  flex-direction: column;
-  gap: 6px;
-  min-width: 132px;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+}
+
+.payments-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.payments-icon-btn:hover:not(:disabled) {
+  background: var(--surface-hover);
+  border-color: var(--border-strong, var(--border));
+}
+
+.payments-icon-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.payments-icon-btn--danger {
+  color: #b91c1c;
+  border-color: rgba(185, 28, 28, 0.35);
+}
+
+.payments-icon-btn--danger:hover:not(:disabled) {
+  background: #fef2f2;
 }
 
 .btn-danger-outline {
@@ -1533,32 +1575,26 @@ pre.small {
   background: #fef2f2;
 }
 
-.payments-table th:nth-child(2),
-.payments-table td:nth-child(2) {
-  width: 28%;
+.payments-col-user {
+  width: 26%;
 }
 
-.payments-table th:nth-child(3),
-.payments-table td:nth-child(3) {
-  width: 12%;
+.payments-col-status {
+  width: 11%;
 }
 
-.payments-table th:nth-child(4),
-.payments-table td:nth-child(4) {
-  width: 10%;
+.payments-col-amount {
+  width: 9%;
 }
 
-.payments-table th:nth-child(5),
-.payments-table td:nth-child(5) {
-  width: 24%;
+.payments-col-payment-id {
+  width: 26%;
 }
 
-.payments-table th:nth-child(6),
-.payments-table td:nth-child(6) {
-  width: 14%;
+.payments-col-created {
+  width: 16%;
 }
 
-.payments-table th:nth-child(7),
-.payments-table td:nth-child(7) {
-  width: 14%;
+.payments-col-actions {
+  width: 72px;
 }

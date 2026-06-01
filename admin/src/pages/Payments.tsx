@@ -22,11 +22,40 @@ function formatDate(iso: string): string {
   return new Date(iso).toLocaleString("ru-RU");
 }
 
-function contactLabel(sub: Sub): string {
-  if (sub.user_contact_label) return sub.user_contact_label;
-  const email = sub.user_email?.trim() || "не привязан";
-  const max = sub.user_max_user_id != null ? String(sub.user_max_user_id) : "не привязан";
-  return `email: ${email}, max: ${max}`;
+function userEmailLine(sub: Sub): string {
+  return sub.user_email?.trim() || sub.user_email_hint?.trim() || "не привязан";
+}
+
+function userMaxLine(sub: Sub): string {
+  return sub.user_max_user_id != null ? String(sub.user_max_user_id) : "не привязан";
+}
+
+function SyncProIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        d="M21 12a9 9 0 01-15 6.7M3 12a9 9 0 0115-6.7M3 4v4h4M21 20v-4h-4"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function TrashIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        d="M4 7h16M9 7V5a1 1 0 011-1h4a1 1 0 011 1v2M10 11v6M14 11v6M6 7l1 12a1 1 0 001 1h8a1 1 0 001-1l1-12"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
 }
 
 export function PaymentsPage() {
@@ -235,12 +264,12 @@ export function PaymentsPage() {
                     />
                   </th>
                 )}
-                <th>Пользователь</th>
-                <th>Статус</th>
-                <th>Сумма</th>
-                <th>Payment ID</th>
-                <th>Создан</th>
-                {canWrite && <th>Действия</th>}
+                <th className="payments-col-user">Пользователь</th>
+                <th className="payments-col-status">Статус</th>
+                <th className="payments-col-amount">Сумма</th>
+                <th className="payments-col-payment-id">Payment ID</th>
+                <th className="payments-col-created">Создан</th>
+                {canWrite && <th className="payments-col-actions">Действия</th>}
               </tr>
             </thead>
             <tbody>
@@ -256,32 +285,37 @@ export function PaymentsPage() {
                       />
                     </td>
                   )}
-                  <td>
+                  <td className="payments-col-user">
                     <Link to={`/users/${s.user_id}`} className="payments-user-link">
-                      {contactLabel(s)}
+                      <span className="payments-user-line">email: {userEmailLine(s)}</span>
+                      <span className="payments-user-line">max: {userMaxLine(s)}</span>
                     </Link>
                   </td>
-                  <td>{s.status_label || s.status}</td>
-                  <td>{s.amount_rub} ₽</td>
-                  <td className="payments-cell-id">{s.yookassa_payment_id || "—"}</td>
-                  <td>{formatDate(s.created_at)}</td>
+                  <td className="payments-col-status">{s.status_label || s.status}</td>
+                  <td className="payments-col-amount">{s.amount_rub} ₽</td>
+                  <td className="payments-col-payment-id payments-cell-id">{s.yookassa_payment_id || "—"}</td>
+                  <td className="payments-col-created">{formatDate(s.created_at)}</td>
                   {canWrite && (
-                    <td className="payments-cell-actions">
+                    <td className="payments-col-actions payments-cell-actions">
                       <button
                         type="button"
-                        className="btn-secondary btn-secondary--compact"
+                        className="payments-icon-btn"
                         disabled={syncingUserId === s.user_id}
+                        aria-label="Восстановить Pro"
+                        title="Восстановить Pro"
                         onClick={() => void syncProPayment(s.user_id)}
                       >
-                        {syncingUserId === s.user_id ? "…" : "Восстановить Pro"}
+                        {syncingUserId === s.user_id ? "…" : <SyncProIcon />}
                       </button>
                       <button
                         type="button"
-                        className="btn-secondary btn-secondary--compact btn-danger-outline"
+                        className="payments-icon-btn payments-icon-btn--danger"
                         disabled={deleting}
+                        aria-label="Удалить запись"
+                        title="Удалить запись"
                         onClick={() => void deleteSubscriptions([s.id])}
                       >
-                        Удалить
+                        <TrashIcon />
                       </button>
                     </td>
                   )}
