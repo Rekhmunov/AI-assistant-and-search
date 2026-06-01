@@ -25,6 +25,11 @@ export interface UserProfile {
   plan_expires_at: string | null;
   searches_today: number;
   searches_limit: number;
+  pro_price_rub?: number;
+}
+
+export interface AppPublicConfig {
+  pro_price_rub: number;
 }
 
 export interface ThreadListItem {
@@ -191,6 +196,12 @@ export async function fetchSession(token: string | null): Promise<SessionStatus>
     credentials: "include",
   });
   if (!res.ok) throw new Error("Failed to load session");
+  return res.json();
+}
+
+export async function fetchAppConfig(): Promise<AppPublicConfig> {
+  const res = await fetch(`${API_BASE}/api/config/public`, { credentials: "include" });
+  if (!res.ok) throw new Error("Failed to load app config");
   return res.json();
 }
 

@@ -4,20 +4,28 @@ from typing import Annotated
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user, get_db, get_rate_limiter
+from app.api.deps import get_current_user, get_db, get_rate_limiter, get_redis
+from app.core.config import get_settings
 from app.core.limiter import RateLimiter
 from app.models.user import User
 from app.schemas.user import UserProfile
+from app.services.app_settings import get_setting
+
+import redis.asyncio as redis
 
 router = APIRouter(prefix="/users", tags=["users"])
 
 
 @router.get("/me", response_model=UserProfile)
 async def get_me(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    redis_client: Annotated[redis.Redis, Depends(get_redis)],
     user: Annotated[User, Depends(get_current_user)],
     limiter: Annotated[RateLimiter, Depends(get_rate_limiter)],
 ):
+    settings = get_settings()
     used, limit = await limiter.usage_and_limit(user)
+    pro_price_rub = int(await get_setting("pro_price_rub", db, redis_client, settings))
     return UserProfile(
         id=user.id,
         email=user.email,
@@ -30,6 +38,7 @@ async def get_me(
         plan_expires_at=user.plan_expires_at,
         searches_today=used,
         searches_limit=limit,
+        pro_price_rub=pro_price_rub,
     )
 
 

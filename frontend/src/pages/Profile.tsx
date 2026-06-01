@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
-import { createProPayment, devActivatePro, deleteAccount, fetchMe, fetchSession } from "../api/client";
+import { createProPayment, devActivatePro, deleteAccount, fetchAppConfig, fetchMe, fetchSession } from "../api/client";
 import { AuthGate } from "../components/AuthGate";
 import { MobileNewThreadButton } from "../components/MobileNewThreadButton";
 import { MobilePageHeader } from "../components/MobilePageHeader";
@@ -45,9 +45,15 @@ export function Profile() {
     enabled: !!token,
   });
 
+  const { data: appConfig } = useQuery({
+    queryKey: ["appConfig"],
+    queryFn: fetchAppConfig,
+    staleTime: 30_000,
+  });
+
   const searchesToday = session?.searches_today ?? user?.searches_today ?? 0;
   const searchesLimit = session?.searches_limit ?? user?.searches_limit ?? 10;
-  const proPriceRub = session?.pro_price_rub ?? 299;
+  const proPriceRub = appConfig?.pro_price_rub ?? user?.pro_price_rub ?? session?.pro_price_rub ?? 299;
 
   if (!token) {
     return (

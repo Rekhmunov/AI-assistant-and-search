@@ -18,5 +18,6 @@ class UserProfile(BaseModel):
     plan_expires_at: datetime | None
     searches_today: int
     searches_limit: int
+    pro_price_rub: int = 299
 
     model_config = {"from_attributes": True}
