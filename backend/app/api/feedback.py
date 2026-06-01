@@ -5,11 +5,11 @@ from __future__ import annotations
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user, get_db
+from app.api.deps import GUEST_HEADER, SearchUserResult, get_db, get_search_user, set_guest_cookie
 from app.models.message import Message, MessageRole
 from app.models.message_feedback import FeedbackRating, MessageFeedback
 from app.models.thread import Thread
@@ -45,9 +45,15 @@ async def _message_for_user(
 async def submit_message_feedback(
     message_id: UUID,
     body: MessageFeedbackCreate,
+    response: Response,
     db: Annotated[AsyncSession, Depends(get_db)],
-    user: Annotated[User, Depends(get_current_user)],
+    actor: Annotated[SearchUserResult, Depends(get_search_user)],
 ):
+    user = actor.user
+    if actor.new_guest_key:
+        set_guest_cookie(response, actor.new_guest_key)
+        response.headers[GUEST_HEADER] = actor.new_guest_key
+
     msg = await _message_for_user(db, message_id, user)
     if not msg:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Сообщение не найдено")

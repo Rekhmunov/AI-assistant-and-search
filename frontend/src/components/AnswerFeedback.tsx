@@ -54,7 +54,7 @@ export function AnswerFeedback({ messageId, token, initialFeedback }: Props) {
   }, []);
 
   const submitUp = async () => {
-    if (!token || busy) return;
+    if (busy) return;
     setBusy(true);
     setError("");
     try {
@@ -69,7 +69,7 @@ export function AnswerFeedback({ messageId, token, initialFeedback }: Props) {
   };
 
   const submitDown = async (reason: FeedbackReasonCode, comment?: string) => {
-    if (!token || busy) return;
+    if (busy) return;
     setBusy(true);
     setError("");
     try {
@@ -118,7 +118,7 @@ export function AnswerFeedback({ messageId, token, initialFeedback }: Props) {
         type="button"
         className={`answer-icon-btn answer-feedback-btn${upActive ? " answer-feedback-btn--active" : ""}`}
         onClick={() => void submitUp()}
-        disabled={busy || !token}
+        disabled={busy}
         aria-label={t("feedbackThumbUp")}
         title={t("feedbackThumbUp")}
         aria-pressed={upActive}
@@ -129,7 +129,7 @@ export function AnswerFeedback({ messageId, token, initialFeedback }: Props) {
         type="button"
         className={`answer-icon-btn answer-feedback-btn${downActive ? " answer-feedback-btn--active" : ""}`}
         onClick={onDownClick}
-        disabled={busy || !token}
+        disabled={busy}
         aria-label={t("feedbackThumbDown")}
         title={t("feedbackThumbDown")}
         aria-pressed={downActive}

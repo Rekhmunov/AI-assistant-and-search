@@ -388,7 +388,7 @@ export interface SSEHandlers {
 }
 
 export async function submitMessageFeedback(
-  token: string,
+  token: string | null,
   messageId: string,
   body: {
     rating: "up" | "down";
@@ -412,6 +412,8 @@ export async function submitMessageFeedback(
     }
     throw new Error(msg);
   }
+  const guestKey = res.headers.get("X-Guest-Session");
+  if (guestKey) saveGuestSession(guestKey);
   return res.json();
 }
 
