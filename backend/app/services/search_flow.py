@@ -305,13 +305,51 @@ class SearchFlowService:
                     "search_planner_skipped": True,
                 }
                 search_q_sent = llm_query[:400]
+                settings = get_settings()
+                _skip_image_intents = frozenset({"howto", "edit_prior", "vision_image"})
+                run_image_search = (
+                    settings.entity_images_enabled
+                    and settings.yandex_configured
+                    and not has_attachments
+                    and not vision_only_answer
+                    and str(route.intent) not in _skip_image_intents
+                    and wants_entity_images(user_text, intent=str(route.intent))
+                )
+                image_task: asyncio.Task | None = None
+                if run_image_search:
+                    image_query = resolve_entity_image_query(
+                        user_text,
+                        llm_query,
+                        search_queries=None,
+                        is_continuation=thread_ctx.is_continuation,
+                        topic_type="general",
+                    )
+                    image_svc = YandexImageSearchService(settings)
+                    image_task = asyncio.create_task(
+                        image_svc.search_validated(
+                            image_query,
+                            limit=settings.entity_images_max,
+                            candidate_limit=settings.entity_images_candidate_limit,
+                            validate_timeout=settings.entity_images_validate_timeout_sec,
+                        )
+                    )
                 if isinstance(llm, PerplexityProvider):
+                    images_emitted = False
                     async for event in llm.stream_search_answer(
                         llm_query,
                         history,
                         model=route.answer_model,  # type: ignore[arg-type]
                         prior_sources_block=prior_sources_block,
                     ):
+                        if image_task is not None and not images_emitted and image_task.done():
+                            images_emitted = True
+                            try:
+                                imgs = entity_images_to_json(image_task.result())
+                                if imgs:
+                                    entity_images_json = imgs
+                                    yield sse_event("images", {"images": imgs})
+                            except Exception:
+                                logger.exception("Entity image search failed (non-fatal)")
                         if event.sources and not sources:
                             sources = event.sources
                             sources_json = sources_to_json(sources)
@@ -320,6 +358,21 @@ class SearchFlowService:
                         if event.text:
                             full_answer += event.text
                             yield sse_event("token", {"text": event.text})
+                    if image_task is not None and not images_emitted:
+                        try:
+                            raw = await asyncio.wait_for(
+                                image_task,
+                                timeout=settings.entity_images_total_timeout_sec,
+                            )
+                            imgs = entity_images_to_json(raw)
+                            if imgs:
+                                entity_images_json = imgs
+                                yield sse_event("images", {"images": imgs})
+                        except asyncio.TimeoutError:
+                            image_task.cancel()
+                            logger.info("Entity image search timed out")
+                        except Exception:
+                            logger.exception("Entity image search failed (non-fatal)")
                 retrieval_trace = {"ok": bool(sources), "provider": "perplexity"}
 
             elif route.needs_search:

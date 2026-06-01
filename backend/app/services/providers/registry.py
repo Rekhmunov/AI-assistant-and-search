@@ -68,6 +68,7 @@ def list_llm_providers(settings: Settings) -> list[ProviderInfo]:
             configured=settings.perplexity_configured,
             hint=(
                 "Встроенный веб-поиск Perplexity; Yandex Search и Search Planner не используются. "
+                "Галерея фото — через Yandex Image Search (нужны YANDEX_* ключи). "
                 "Lite=sonar, Pro=sonar-pro."
                 if settings.perplexity_configured
                 else "Нужен PERPLEXITY_API_KEY в .env (docs.perplexity.ai)"
