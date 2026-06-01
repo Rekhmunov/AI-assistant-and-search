@@ -127,7 +127,14 @@ class SearchFlowService:
 
         allowed, used, limit = await limiter.check_search_limit(user_id_str, user.plan, user)
         if not allowed:
-            yield sse_event("error", {"code": "rate_limit", "message": f"Лимит поисков: {limit}/день"})
+            if self._is_guest(user):
+                msg = (
+                    f"Гостевой поиск включает {limit} запросов в день. "
+                    "Зарегистрируйтесь для полного доступа."
+                )
+            else:
+                msg = f"Лимит поисков: {limit}/день"
+            yield sse_event("error", {"code": "rate_limit", "message": msg})
             return
 
         if llm_provider_id != PERPLEXITY_PROVIDER_ID:

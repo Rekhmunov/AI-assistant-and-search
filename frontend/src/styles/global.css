@@ -1290,6 +1290,30 @@ body:has(.page-thread) {
   text-decoration: underline;
 }
 
+.guest-limit-notice {
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+.guest-limit-notice-text {
+  margin: 0;
+  font-size: 0.95rem;
+  line-height: 1.5;
+  color: var(--text);
+}
+
+.guest-limit-notice-link {
+  font-weight: 600;
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.guest-limit-notice-link:hover {
+  text-decoration: underline;
+}
+
 .source-carousel {
   display: flex;
   gap: 8px;

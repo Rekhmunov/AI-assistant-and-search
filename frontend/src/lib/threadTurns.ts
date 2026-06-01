@@ -12,6 +12,7 @@ export type ThreadTurn = {
   needsSearch?: boolean;
   userFeedback?: MessageFeedback | null;
   streaming?: boolean;
+  errorCode?: string;
 };
 
 const UUID_RE =

@@ -1,10 +1,11 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { fetchThread, streamSearch } from "../api/client";
+import { fetchThread, fetchSession, streamSearch } from "../api/client";
 import { AnswerBody } from "../components/AnswerBody";
 import { AnswerErrorBoundary } from "../components/AnswerErrorBoundary";
 import { AnswerFooter } from "../components/AnswerFooter";
+import { GuestLimitNotice } from "../components/GuestLimitNotice";
 import { SearchComposer, type ComposerAttachment } from "../components/SearchComposer";
 import { SearchStatusLine, type SearchPhase } from "../components/SearchStatusLine";
 import { ThreadImagesTab } from "../components/ThreadImagesTab";
@@ -66,6 +67,12 @@ export function Thread() {
   const navigate = useNavigate();
   const token = useAuthStore((s) => s.token);
   const queryClient = useQueryClient();
+
+  const { data: session } = useQuery({
+    queryKey: ["session", token],
+    queryFn: () => fetchSession(token),
+  });
+  const guestSearchLimit = session?.searches_limit ?? 5;
 
   const [threadId, setThreadId] = useState<string | null>(id ?? null);
   const [turns, setTurns] = useState<ThreadTurn[]>([]);
@@ -318,6 +325,14 @@ export function Thread() {
           setTurns((prev) =>
             prev.map((turn) => {
               if (!turn.streaming) return turn;
+              if (code === "rate_limit" && session?.is_guest) {
+                return {
+                  ...turn,
+                  answer: "",
+                  errorCode: "rate_limit",
+                  streaming: false,
+                };
+              }
               const keepAnswer = turn.answer.trim().length > 0;
               return {
                 ...turn,
@@ -329,7 +344,7 @@ export function Thread() {
         },
       });
     },
-    [token, id, navigate, queryClient, threadId],
+    [token, id, navigate, queryClient, threadId, session?.is_guest],
   );
 
   useEffect(() => {
@@ -404,8 +419,9 @@ export function Thread() {
           {turns.map((turn, index) => {
             const isActive = turn.streaming;
             const sources = turn.sources ?? [];
-            const showStatus = isActive && streaming && !turn.answer.trim();
-            const showAnswer = Boolean(turn.answer.trim()) || isActive;
+            const showStatus = isActive && streaming && !turn.answer.trim() && turn.errorCode !== "rate_limit";
+            const showGuestLimit = turn.errorCode === "rate_limit";
+            const showAnswer = showGuestLimit || Boolean(turn.answer.trim()) || isActive;
             const showFollowUps =
               index === lastCompletedIndex &&
               turn.followUps.length > 0 &&
@@ -423,14 +439,18 @@ export function Thread() {
                 {showAnswer && (
                   <section className="answer-section">
                     <AnswerErrorBoundary>
-                      <AnswerBody
-                        text={turn.answer}
-                        sources={sources}
-                        isStreaming={isActive && streaming}
-                        onTypingChange={
-                          index === turns.length - 1 ? handleAnswerTypingChange : undefined
-                        }
-                      />
+                      {showGuestLimit ? (
+                        <GuestLimitNotice limit={guestSearchLimit} />
+                      ) : (
+                        <AnswerBody
+                          text={turn.answer}
+                          sources={sources}
+                          isStreaming={isActive && streaming}
+                          onTypingChange={
+                            index === turns.length - 1 ? handleAnswerTypingChange : undefined
+                          }
+                        />
+                      )}
                     </AnswerErrorBoundary>
                     {turn.answer.trim() && (
                       <AnswerFooter
