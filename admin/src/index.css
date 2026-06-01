@@ -459,6 +459,20 @@ label {
   flex-wrap: wrap;
 }
 
+.user-payment-recovery {
+  margin-bottom: 16px;
+}
+
+.user-payment-recovery .user-detail-section-title {
+  margin: 0 0 8px;
+  font-size: 1.05rem;
+}
+
+.btn-secondary--compact {
+  padding: 6px 10px;
+  font-size: 0.8125rem;
+}
+
 .status-list .ok {
   color: #15803d;
 }

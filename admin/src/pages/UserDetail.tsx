@@ -138,6 +138,20 @@ export function UserDetailPage() {
       </div>
 
       {msg && <p className="ok">{msg}</p>}
+
+      {can("payments:write") && user.plan !== "pro" && (
+        <div className="card user-payment-recovery">
+          <h2 className="user-detail-section-title">Оплата Pro</h2>
+          <p className="hint">
+            Если пользователь оплатил, но тариф Free — нажмите кнопку ниже. Система проверит pending-подписки и
+            успешные платежи в ЮKassa.
+          </p>
+          <button type="button" className="btn-primary" onClick={() => void syncProPayment()}>
+            Синхронизировать оплату ЮKassa
+          </button>
+        </div>
+      )}
+
       {can("users:write") && (
         <div className="card row-actions">
           <form onSubmit={grantPro} className="row">
@@ -149,11 +163,6 @@ export function UserDetailPage() {
               Выдать Pro
             </button>
           </form>
-          {can("payments:write") && (
-            <button type="button" className="btn-secondary" onClick={() => void syncProPayment()}>
-              Синхронизировать оплату ЮKassa
-            </button>
-          )}
           <button type="button" className="btn-secondary" onClick={toggleBan}>
             {user.deleted_at ? "Разбанить" : "Забанить"}
           </button>

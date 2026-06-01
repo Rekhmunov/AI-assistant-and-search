@@ -10,6 +10,7 @@ from app.core.admin_permissions import require_permission
 from app.models.subscription import Subscription
 from app.models.user import User
 from app.schemas.admin import SubscriptionOut
+from app.services.admin_labels import format_admin_user_label, subscription_status_label
 
 router = APIRouter(prefix="/payments", tags=["admin-payments"])
 
@@ -29,17 +30,18 @@ async def list_subscriptions(
     rows = result.all()
     out: list[SubscriptionOut] = []
     for sub, user in rows:
-        hint = user.username or f"max:{user.max_user_id}"
+        status_value = sub.status.value if hasattr(sub.status, "value") else str(sub.status)
         out.append(
             SubscriptionOut(
                 id=sub.id,
                 user_id=sub.user_id,
                 yookassa_payment_id=sub.yookassa_payment_id,
-                status=sub.status.value,
+                status=status_value,
+                status_label=subscription_status_label(status_value),
                 amount_rub=sub.amount_rub,
                 created_at=sub.created_at,
                 activated_at=sub.activated_at,
-                user_email_hint=hint,
+                user_email_hint=format_admin_user_label(user),
             )
         )
     return out

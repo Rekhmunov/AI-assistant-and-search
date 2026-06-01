@@ -254,6 +254,7 @@ export function Profile() {
           <button type="button" className="btn-primary btn-block" onClick={activatePro}>
             {t("upgradePro")}
           </button>
+          <p className="profile-pro-check-hint">{t("checkProPaymentHint")}</p>
           <button
             type="button"
             className="btn-secondary btn-block profile-pro-check-btn"

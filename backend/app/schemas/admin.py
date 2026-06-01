@@ -149,6 +149,7 @@ class SubscriptionOut(BaseModel):
     user_id: UUID
     yookassa_payment_id: str | None
     status: str
+    status_label: str
     amount_rub: int
     created_at: datetime
     activated_at: datetime | None
