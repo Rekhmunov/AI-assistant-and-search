@@ -110,8 +110,10 @@ async def update_settings(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail=(
                         "PERPLEXITY_API_KEY не загружен в backend. "
-                        "Добавьте ключ в /opt/aisearch/.env и выполните: "
-                        "docker compose -f docker-compose.prod.yml up -d --force-recreate backend worker"
+                        "Проверьте строку PERPLEXITY_API_KEY=pplx-... в /opt/aisearch/.env "
+                        "(без пробелов вокруг =), затем: "
+                        "docker compose -f docker-compose.prod.yml up -d --force-recreate backend worker. "
+                        "Диагностика: curl -s https://api.glosix.ru/health | jq .perplexity_configured"
                     ),
                 )
         await set_setting(key, value, db, redis, admin.id)

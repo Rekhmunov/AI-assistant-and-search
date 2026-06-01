@@ -75,8 +75,8 @@ $COMPOSE build --pull backend frontend admin worker
 echo "==> Start stack"
 $COMPOSE up -d --remove-orphans
 
-if grep -qE '^(ANTHROPIC_API_KEY|DEEPSEEK_API_KEY)=.+' .env 2>/dev/null; then
-  echo "==> ANTHROPIC/DEEPSEEK API key в .env — пересоздаём backend/worker (подхват ключа)"
+if grep -qE '^(ANTHROPIC_API_KEY|DEEPSEEK_API_KEY|GIGACHAT_CREDENTIALS|PERPLEXITY_API_KEY)=.+' .env 2>/dev/null; then
+  echo "==> API keys в .env — пересоздаём backend/worker (подхват ключей LLM)"
   $COMPOSE up -d --force-recreate backend worker
 fi
 

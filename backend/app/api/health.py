@@ -9,6 +9,7 @@ from app.core.config import get_settings
 from app.services.anthropic_probe import probe_anthropic
 from app.services.deepseek_probe import probe_deepseek
 from app.services.gigachat_probe import probe_gigachat
+from app.services.perplexity_probe import probe_perplexity
 from app.services.llm_runtime import fetch_llm_runtime_status
 from app.services.query_router import POLICY_VERSION
 from app.services.file_format import UNSUPPORTED_FORMAT_MESSAGE
@@ -147,6 +148,7 @@ async def api_health(db: Annotated[AsyncSession, Depends(get_db)]):
         "anthropic_configured": settings.anthropic_configured,
         "deepseek_configured": settings.deepseek_configured,
         "gigachat_configured": settings.gigachat_configured,
+        "perplexity_configured": settings.perplexity_configured,
         "llm_runtime": llm_runtime,
         "yandex_models": {
             "lite": settings.yandex_gpt_lite_model,
@@ -163,6 +165,10 @@ async def api_health(db: Annotated[AsyncSession, Depends(get_db)]):
         "gigachat_models": {
             "lite": settings.gigachat_model_lite,
             "pro": settings.gigachat_model_pro,
+        },
+        "perplexity_models": {
+            "lite": settings.perplexity_model_lite,
+            "pro": settings.perplexity_model_pro,
         },
         "db_columns": {c: c in cols for c in sorted(required)},
         "message_images_column": message_images_column,
@@ -224,3 +230,9 @@ async def api_health_deepseek():
 async def api_health_gigachat():
     """Тест GigaChat с GIGACHAT_CREDENTIALS из .env (OAuth, lite + pro)."""
     return await probe_gigachat()
+
+
+@router.get("/health/perplexity")
+async def api_health_perplexity():
+    """Тест Perplexity Sonar с PERPLEXITY_API_KEY из .env."""
+    return await probe_perplexity()

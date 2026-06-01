@@ -45,6 +45,9 @@ services:
       REDIS_URL: redis://redis:6379/0
       ENVIRONMENT: production
       DEBUG: "false"
+      PERPLEXITY_API_KEY: ${PERPLEXITY_API_KEY:-}
+      PERPLEXITY_MODEL_LITE: ${PERPLEXITY_MODEL_LITE:-sonar}
+      PERPLEXITY_MODEL_PRO: ${PERPLEXITY_MODEL_PRO:-sonar-pro}
     depends_on:
       postgres:
         condition: service_healthy
@@ -72,6 +75,9 @@ services:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-aisearch}
       REDIS_URL: redis://redis:6379/0
       ENVIRONMENT: production
+      PERPLEXITY_API_KEY: ${PERPLEXITY_API_KEY:-}
+      PERPLEXITY_MODEL_LITE: ${PERPLEXITY_MODEL_LITE:-sonar}
+      PERPLEXITY_MODEL_PRO: ${PERPLEXITY_MODEL_PRO:-sonar-pro}
     depends_on:
       - backend
       - redis

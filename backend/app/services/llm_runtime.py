@@ -27,6 +27,13 @@ def deepseek_key_suffix(settings: Settings | None = None) -> str | None:
     return key[-4:]
 
 
+def perplexity_key_suffix(settings: Settings | None = None) -> str | None:
+    key = (settings or get_settings()).perplexity_api_key.strip()
+    if len(key) < 8:
+        return None
+    return key[-4:]
+
+
 def build_llm_runtime_status(
     active_provider: str,
     settings: Settings | None = None,
@@ -79,6 +86,7 @@ def build_llm_runtime_status(
         "gigachat_credentials_loaded": gigachat_loaded,
         "gigachat_mock_active": gigachat_mock,
         "perplexity_api_key_loaded": perplexity_loaded,
+        "perplexity_key_suffix": perplexity_key_suffix(s),
         "perplexity_mock_active": perplexity_mock,
         "hint": hint,
     }

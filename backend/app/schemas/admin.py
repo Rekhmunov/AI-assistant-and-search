@@ -187,6 +187,7 @@ class LlmRuntimeOut(BaseModel):
     gigachat_credentials_loaded: bool = False
     gigachat_mock_active: bool = False
     perplexity_api_key_loaded: bool = False
+    perplexity_key_suffix: str | None = None
     perplexity_mock_active: bool = False
     hint: str | None = None
 
