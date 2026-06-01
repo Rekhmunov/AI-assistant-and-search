@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import uuid
+from datetime import datetime
 from typing import Any
 
 import httpx
@@ -149,3 +150,45 @@ async def get_payment(
     except ValueError as e:
         snippet = (resp.text or "")[:200]
         raise YooKassaError(f"Некорректный ответ YooKassa: {snippet}") from e
+
+
+async def list_payments(
+    *,
+    created_gte: datetime,
+    limit: int = 100,
+    settings: Settings | None = None,
+) -> list[dict[str, Any]]:
+    """List YooKassa payments (newest first) from a given date."""
+    settings = settings or get_settings()
+    shop_id = settings.yookassa_shop_id.strip()
+    secret = settings.yookassa_secret_key.strip()
+    if not shop_id or not secret:
+        raise YooKassaError("YOOKASSA_SHOP_ID или YOOKASSA_SECRET_KEY не заданы")
+
+    params = {
+        "created_at.gte": created_gte.strftime("%Y-%m-%dT%H:%M:%S.000Z"),
+        "limit": min(max(limit, 1), 100),
+    }
+    try:
+        async with httpx.AsyncClient(timeout=45.0) as client:
+            resp = await client.get(
+                YOOKASSA_API,
+                params=params,
+                auth=(shop_id, secret),
+            )
+    except httpx.HTTPError as e:
+        logger.exception("YooKassa list payments network error")
+        raise YooKassaError(f"Сеть: {e}") from e
+
+    if resp.status_code >= 400:
+        detail = (resp.text or "")[:400]
+        raise YooKassaError(f"HTTP {resp.status_code}: {detail}")
+
+    try:
+        data = resp.json()
+    except ValueError as e:
+        snippet = (resp.text or "")[:200]
+        raise YooKassaError(f"Некорректный ответ YooKassa: {snippet}") from e
+
+    items = data.get("items")
+    return items if isinstance(items, list) else []

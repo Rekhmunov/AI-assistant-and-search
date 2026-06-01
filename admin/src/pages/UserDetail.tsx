@@ -77,6 +77,29 @@ export function UserDetailPage() {
     load();
   };
 
+  const syncProPayment = async () => {
+    if (!id) return;
+    setMsg("");
+    try {
+      const result = await apiFetch<{ ok: boolean; message?: string; source?: string; payment_id?: string }>(
+        `/api/admin/users/${id}/sync-pro-payment`,
+        { method: "POST" }
+      );
+      if (result.ok) {
+        setMsg(
+          result.payment_id
+            ? `Pro восстановлен (платёж ${result.payment_id}${result.source ? `, ${result.source}` : ""})`
+            : "Pro уже активен"
+        );
+        load();
+        return;
+      }
+      setMsg(result.message || "Успешная оплата не найдена");
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Не удалось синхронизировать оплату");
+    }
+  };
+
   const toggleBan = async () => {
     if (!id || !user) return;
     await apiFetch(`/api/admin/users/${id}`, {
@@ -126,6 +149,11 @@ export function UserDetailPage() {
               Выдать Pro
             </button>
           </form>
+          {can("payments:write") && (
+            <button type="button" className="btn-secondary" onClick={() => void syncProPayment()}>
+              Синхронизировать оплату ЮKassa
+            </button>
+          )}
           <button type="button" className="btn-secondary" onClick={toggleBan}>
             {user.deleted_at ? "Разбанить" : "Забанить"}
           </button>

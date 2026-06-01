@@ -13,10 +13,7 @@ from app.core.database import async_session_factory
 from app.models.subscription import Subscription, SubscriptionStatus
 from app.models.user import Plan, User
 from app.services.app_settings import get_setting
-from app.services.subscription_activation import (
-    activate_from_yookassa_payment,
-    find_latest_pending_subscription,
-)
+from app.services.subscription_activation import activate_from_yookassa_payment, recover_pro_for_user
 from app.services.yookassa import YooKassaError, create_payment, get_payment
 
 import redis.asyncio as redis
@@ -147,56 +144,17 @@ async def confirm_pro_payment(
 ):
     """
     Подтвердить оплату после возврата с YooKassa (если webhook не успел).
-    Берёт последнюю pending-подписку пользователя и проверяет статус в YooKassa.
+    Проверяет все pending-подписки и при необходимости ищет платёж в ЮKassa по user_id.
     """
     settings = get_settings()
-    if user.plan == Plan.PRO:
-        return {"ok": True, "plan": "pro", "already_active": True}
-
     if not settings.yookassa_shop_id.strip() or not settings.yookassa_secret_key.strip():
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="YooKassa не настроена")
 
-    sub = await find_latest_pending_subscription(db, user.id)
-    if not sub or not sub.yookassa_payment_id:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Нет ожидающего платежа. Если оплата прошла — напишите в поддержку.",
-        )
-
-    try:
-        payment = await get_payment(sub.yookassa_payment_id, settings)
-    except YooKassaError as e:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"Не удалось проверить платёж: {e}",
-        ) from e
-
-    payment_status = payment.get("status")
-    if payment_status != "succeeded":
-        return {
-            "ok": False,
-            "status": payment_status,
-            "message": "Оплата ещё не подтверждена. Подождите минуту и обновите страницу.",
-        }
-
-    activated = await activate_from_yookassa_payment(
-        db,
-        payment_id=sub.yookassa_payment_id,
-        payment_object=payment,
-        settings=settings,
-    )
-    if not activated:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Не удалось активировать Pro",
-        )
-
-    await db.refresh(user)
-    return {
-        "ok": True,
-        "plan": user.plan.value,
-        "plan_expires_at": user.plan_expires_at.isoformat() if user.plan_expires_at else None,
-    }
+    result = await recover_pro_for_user(db, user, settings=settings)
+    if result.get("ok"):
+        await db.refresh(user)
+        return result
+    return result
 
 
 @router.post("/webhook")

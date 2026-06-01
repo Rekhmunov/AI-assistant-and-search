@@ -25,6 +25,7 @@ from app.schemas.admin import (
     UserAdminUpdate,
 )
 from app.services.admin_audit import log_admin_action
+from app.services.subscription_activation import recover_pro_for_user
 
 router = APIRouter(prefix="/users", tags=["admin-users"])
 logger = logging.getLogger(__name__)
@@ -285,6 +286,38 @@ async def user_thread_debug(
         deleted_by_user=thread.deleted_at is not None,
         turns=_messages_to_turns(list(thread.messages)),
     )
+
+
+@router.post("/{user_id}/sync-pro-payment")
+async def sync_pro_payment(
+    user_id: UUID,
+    request: Request,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    admin: Annotated[AdminUser, Depends(require_permission("payments:write"))],
+):
+    """Восстановить Pro по успешному платежу в ЮKassa (ручная синхронизация)."""
+    settings = get_settings()
+    if not settings.yookassa_shop_id.strip() or not settings.yookassa_secret_key.strip():
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="YooKassa не настроена")
+
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+    recovery = await recover_pro_for_user(db, user, settings=settings)
+    await log_admin_action(
+        db,
+        admin=admin,
+        action="user.sync_pro_payment",
+        resource_type="user",
+        resource_id=str(user_id),
+        details={"ok": recovery.get("ok"), "source": recovery.get("source"), "payment_id": recovery.get("payment_id")},
+        ip_address=request.client.host if request.client else None,
+    )
+    if recovery.get("ok"):
+        await db.refresh(user)
+    return recovery
 
 
 @router.post("/{user_id}/grant-pro")

@@ -14,6 +14,7 @@ import { AuthGate } from "../components/AuthGate";
 import { MobileNewThreadButton } from "../components/MobileNewThreadButton";
 import { MobilePageHeader } from "../components/MobilePageHeader";
 import { ProPurchaseBlockedModal } from "../components/ProPurchaseBlockedModal";
+import { ProPaymentStatusModal, type ProPaymentModalState } from "../components/ProPaymentStatusModal";
 import { ProfileAccountSection } from "../components/ProfileAccountSection";
 import { useDesktopLayout } from "../hooks/useDesktopLayout";
 import { isMaxWebApp } from "../lib/maxApp";
@@ -34,6 +35,12 @@ function getProfileTierLabel(tier: ProfileTier): string {
   return "FREE";
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, ms);
+  });
+}
+
 export function Profile() {
   const token = useAuthStore((s) => s.token);
   const setUser = useAuthStore((s) => s.setUser);
@@ -41,8 +48,9 @@ export function Profile() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const paymentConfirmStarted = useRef(false);
+  const confirmInFlight = useRef(false);
   const [proBlockedOpen, setProBlockedOpen] = useState(false);
+  const [paymentModal, setPaymentModal] = useState<ProPaymentModalState>({ open: false });
   const inMax = isMaxWebApp();
   const isDesktop = useDesktopLayout();
 
@@ -70,30 +78,67 @@ export function Profile() {
   const proPriceRub = appConfig?.pro_price_rub ?? user?.pro_price_rub ?? session?.pro_price_rub ?? 299;
   const proPurchaseDisabled = Boolean(appConfig?.pro_purchase_disabled);
 
-  useEffect(() => {
-    if (!token || paymentConfirmStarted.current) return;
-    const paymentResult = searchParams.get("payment");
-    if (paymentResult !== "success") return;
+  const refreshUserAfterPro = async () => {
+    const updated = await fetchMe(token!);
+    setUser(updated);
+    queryClient.invalidateQueries({ queryKey: ["me"] });
+    queryClient.invalidateQueries({ queryKey: ["session"] });
+  };
 
-    paymentConfirmStarted.current = true;
-    setSearchParams({}, { replace: true });
+  const runPaymentConfirm = async (options?: { retries?: number }) => {
+    if (!token || confirmInFlight.current) return;
+    confirmInFlight.current = true;
+    setPaymentModal({ open: true, kind: "loading" });
 
-    void (async () => {
-      try {
+    const retries = options?.retries ?? 3;
+    try {
+      for (let attempt = 0; attempt < retries; attempt += 1) {
         const result = await confirmProPayment(token);
         if (result.ok) {
-          const updated = await fetchMe(token);
-          setUser(updated);
-          queryClient.invalidateQueries({ queryKey: ["me"] });
-          queryClient.invalidateQueries({ queryKey: ["session"] });
-        } else if (result.message) {
-          alert(result.message);
+          await refreshUserAfterPro();
+          setPaymentModal({ open: true, kind: "success" });
+          return;
         }
-      } catch (err) {
-        alert(err instanceof Error ? err.message : "Не удалось активировать Pro");
+
+        const isPending =
+          result.status === "pending" ||
+          result.status === "waiting_for_capture" ||
+          Boolean(result.message?.includes("обрабатывается"));
+
+        if (isPending && attempt < retries - 1) {
+          await sleep(2000);
+          continue;
+        }
+
+        setPaymentModal({
+          open: true,
+          kind: isPending ? "pending" : "error",
+          message:
+            result.message ||
+            (isPending
+              ? "Оплата ещё обрабатывается. Подождите 1–2 минуты и нажмите «Проверить оплату»."
+              : "Успешная оплата не найдена."),
+          canRetry: true,
+        });
+        return;
       }
-    })();
-  }, [token, searchParams, setSearchParams, setUser, queryClient]);
+    } catch (err) {
+      setPaymentModal({
+        open: true,
+        kind: "error",
+        message: err instanceof Error ? err.message : "Не удалось активировать Pro",
+        canRetry: true,
+      });
+    } finally {
+      confirmInFlight.current = false;
+    }
+  };
+
+  useEffect(() => {
+    if (!token || searchParams.get("payment") !== "success") return;
+    setSearchParams({}, { replace: true });
+    void runPaymentConfirm({ retries: 4 });
+  }, [token, searchParams, setSearchParams]);
 
   if (!token) {
     return (
@@ -209,6 +254,13 @@ export function Profile() {
           <button type="button" className="btn-primary btn-block" onClick={activatePro}>
             {t("upgradePro")}
           </button>
+          <button
+            type="button"
+            className="btn-secondary btn-block profile-pro-check-btn"
+            onClick={() => void runPaymentConfirm()}
+          >
+            {t("checkProPayment")}
+          </button>
         </section>
       )}
 
@@ -248,6 +300,11 @@ export function Profile() {
       )}
 
       <ProPurchaseBlockedModal open={proBlockedOpen} onClose={() => setProBlockedOpen(false)} />
+      <ProPaymentStatusModal
+        state={paymentModal}
+        onClose={() => setPaymentModal({ open: false })}
+        onRetry={() => void runPaymentConfirm()}
+      />
     </div>
   );
 }

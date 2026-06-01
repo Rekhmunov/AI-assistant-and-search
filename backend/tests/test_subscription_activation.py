@@ -1,10 +1,10 @@
 import uuid
 import unittest
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from app.models.subscription import Subscription, SubscriptionStatus
 from app.models.user import Plan, User
-from app.services.subscription_activation import activate_from_yookassa_payment
+from app.services.subscription_activation import activate_from_yookassa_payment, recover_pro_for_user
 
 
 class TestSubscriptionActivation(unittest.IsolatedAsyncioTestCase):
@@ -61,6 +61,90 @@ class TestSubscriptionActivation(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(ok)
         db.add.assert_called_once()
         self.assertEqual(user.plan, Plan.PRO)
+
+    async def test_recover_skips_yookassa_when_already_pro(self):
+        user = User(id=uuid.uuid4(), plan=Plan.PRO, email="a@b.c")
+        db = MagicMock()
+        result = await recover_pro_for_user(db, user)
+        self.assertTrue(result["ok"])
+        self.assertTrue(result.get("already_active"))
+        db.execute.assert_not_called()
+
+    @patch("app.services.subscription_activation.list_payments", new_callable=AsyncMock)
+    @patch("app.services.subscription_activation.get_payment", new_callable=AsyncMock)
+    async def test_recover_from_yookassa_scan_when_pending_not_paid(self, mock_get_payment, mock_list_payments):
+        user_id = uuid.uuid4()
+        user = User(id=user_id, plan=Plan.FREE, email="paid@yandex.ru")
+        old_pending = Subscription(
+            user_id=user_id,
+            yookassa_payment_id="pay-new-unpaid",
+            status=SubscriptionStatus.PENDING,
+            amount_rub=99,
+        )
+
+        pending_result = MagicMock()
+        pending_result.scalars.return_value.all.return_value = [old_pending]
+        missing_sub = MagicMock()
+        missing_sub.scalar_one_or_none.return_value = None
+        user_result = MagicMock()
+        user_result.scalar_one_or_none.return_value = user
+        active_sub = MagicMock()
+        active_sub.scalar_one_or_none.return_value = old_pending
+
+        db = MagicMock()
+        db.execute = AsyncMock(
+            side_effect=[pending_result, missing_sub, user_result, active_sub]
+        )
+        db.add = MagicMock()
+        db.flush = AsyncMock()
+        db.refresh = AsyncMock()
+
+        mock_get_payment.return_value = {"status": "pending", "id": "pay-new-unpaid"}
+        mock_list_payments.return_value = [
+            {
+                "id": "pay-real-success",
+                "status": "succeeded",
+                "metadata": {"user_id": str(user_id)},
+                "amount": {"value": "99.00", "currency": "RUB"},
+            }
+        ]
+
+        result = await recover_pro_for_user(db, user)
+        self.assertTrue(result["ok"])
+        self.assertEqual(result.get("source"), "yookassa_scan")
+        self.assertEqual(result.get("payment_id"), "pay-real-success")
+        self.assertEqual(user.plan, Plan.PRO)
+
+    @patch("app.services.subscription_activation.get_payment", new_callable=AsyncMock)
+    async def test_recover_from_pending_subscription(self, mock_get_payment):
+        user_id = uuid.uuid4()
+        user = User(id=user_id, plan=Plan.FREE, email="a@b.c")
+        sub = Subscription(
+            user_id=user_id,
+            yookassa_payment_id="pay-789",
+            status=SubscriptionStatus.PENDING,
+            amount_rub=99,
+        )
+
+        pending_result = MagicMock()
+        pending_result.scalars.return_value.all.return_value = [sub]
+        sub_result = MagicMock()
+        sub_result.scalar_one_or_none.return_value = sub
+        user_result = MagicMock()
+        user_result.scalar_one_or_none.return_value = user
+
+        db = MagicMock()
+        db.execute = AsyncMock(side_effect=[pending_result, sub_result, user_result])
+        db.refresh = AsyncMock()
+        mock_get_payment.return_value = {"status": "succeeded", "id": "pay-789"}
+
+        with patch("app.services.subscription_activation.list_payments", new_callable=AsyncMock) as mock_list:
+            result = await recover_pro_for_user(db, user)
+            mock_list.assert_not_called()
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(result.get("source"), "pending_subscription")
+        self.assertEqual(sub.status, SubscriptionStatus.ACTIVE)
 
 
 if __name__ == "__main__":

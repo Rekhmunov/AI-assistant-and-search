@@ -319,7 +319,15 @@ export async function createProPayment(
 
 export async function confirmProPayment(
   token: string
-): Promise<{ ok: boolean; plan?: string; message?: string; already_active?: boolean }> {
+): Promise<{
+  ok: boolean;
+  plan?: string;
+  message?: string;
+  already_active?: boolean;
+  status?: string;
+  source?: string;
+  payment_id?: string;
+}> {
   const res = await fetch(`${API_BASE}/api/payments/confirm`, {
     method: "POST",
     headers: apiHeaders(token),

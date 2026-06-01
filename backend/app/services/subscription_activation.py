@@ -14,6 +14,7 @@ from app.core.config import Settings, get_settings
 from app.models.subscription import Subscription, SubscriptionStatus
 from app.models.user import Plan, User
 from app.services.bot import MaxBotService
+from app.services.yookassa import YooKassaError, get_payment, list_payments
 
 logger = logging.getLogger(__name__)
 
@@ -59,10 +60,10 @@ async def find_subscription_by_payment_id(
     return result.scalar_one_or_none()
 
 
-async def find_latest_pending_subscription(
+async def find_pending_subscriptions(
     db: AsyncSession,
     user_id: uuid.UUID,
-) -> Subscription | None:
+) -> list[Subscription]:
     result = await db.execute(
         select(Subscription)
         .where(
@@ -70,9 +71,16 @@ async def find_latest_pending_subscription(
             Subscription.status == SubscriptionStatus.PENDING,
         )
         .order_by(Subscription.created_at.desc())
-        .limit(1)
     )
-    return result.scalar_one_or_none()
+    return list(result.scalars().all())
+
+
+async def find_latest_pending_subscription(
+    db: AsyncSession,
+    user_id: uuid.UUID,
+) -> Subscription | None:
+    pending = await find_pending_subscriptions(db, user_id)
+    return pending[0] if pending else None
 
 
 async def activate_from_yookassa_payment(
@@ -133,3 +141,114 @@ async def activate_from_yookassa_payment(
         return True
 
     return await activate_subscription_record(db, sub, user, settings=settings)
+
+
+async def _try_activate_payment(
+    db: AsyncSession,
+    user: User,
+    payment_id: str,
+    payment_object: dict[str, Any],
+    *,
+    settings: Settings,
+    source: str,
+) -> dict[str, Any] | None:
+    if await activate_from_yookassa_payment(
+        db,
+        payment_id=payment_id,
+        payment_object=payment_object,
+        settings=settings,
+    ):
+        await db.refresh(user)
+        return {
+            "ok": True,
+            "plan": user.plan.value,
+            "payment_id": payment_id,
+            "source": source,
+            "plan_expires_at": user.plan_expires_at.isoformat() if user.plan_expires_at else None,
+        }
+    return None
+
+
+async def recover_pro_for_user(
+    db: AsyncSession,
+    user: User,
+    *,
+    settings: Settings | None = None,
+) -> dict[str, Any]:
+    """
+    Restore Pro after YooKassa payment:
+    1) check all pending subscriptions in DB
+    2) scan recent succeeded payments in YooKassa by metadata.user_id
+    """
+    settings = settings or get_settings()
+    if user.plan == Plan.PRO:
+        return {"ok": True, "plan": "pro", "already_active": True}
+
+    user_id_str = str(user.id)
+    pending = await find_pending_subscriptions(db, user.id)
+
+    for sub in pending:
+        payment_id = (sub.yookassa_payment_id or "").strip()
+        if not payment_id or payment_id.startswith("stub-"):
+            continue
+        try:
+            payment = await get_payment(payment_id, settings)
+        except YooKassaError:
+            logger.warning("Could not fetch YooKassa payment %s for user %s", payment_id, user.id)
+            continue
+        if payment.get("status") != "succeeded":
+            continue
+        activated = await _try_activate_payment(
+            db, user, payment_id, payment, settings=settings, source="pending_subscription"
+        )
+        if activated:
+            return activated
+
+    try:
+        created_gte = datetime.now(timezone.utc) - timedelta(days=90)
+        items = await list_payments(created_gte=created_gte, limit=100, settings=settings)
+    except YooKassaError as e:
+        logger.exception("YooKassa list payments failed for user %s", user.id)
+        return {
+            "ok": False,
+            "message": f"Не удалось проверить платежи в ЮKassa: {e}",
+        }
+
+    for payment in items:
+        if payment.get("status") != "succeeded":
+            continue
+        metadata = payment.get("metadata") or {}
+        if str(metadata.get("user_id")) != user_id_str:
+            continue
+        payment_id = str(payment.get("id") or "")
+        if not payment_id:
+            continue
+        activated = await _try_activate_payment(
+            db, user, payment_id, payment, settings=settings, source="yookassa_scan"
+        )
+        if activated:
+            logger.info("Recovered Pro for user %s via YooKassa scan, payment %s", user.id, payment_id)
+            return activated
+
+    if pending:
+        latest_id = (pending[0].yookassa_payment_id or "").strip()
+        if latest_id and not latest_id.startswith("stub-"):
+            try:
+                latest_payment = await get_payment(latest_id, settings)
+                latest_status = latest_payment.get("status")
+                if latest_status in ("pending", "waiting_for_capture"):
+                    return {
+                        "ok": False,
+                        "status": latest_status,
+                        "message": "Оплата ещё обрабатывается. Подождите 1–2 минуты и нажмите «Проверить оплату».",
+                    }
+            except YooKassaError:
+                pass
+
+    return {
+        "ok": False,
+        "message": (
+            "Успешная оплата не найдена. Если деньги списались — напишите в поддержку "
+            f"с email {user.email or 'аккаунта'}."
+        ),
+    }
