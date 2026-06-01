@@ -85,6 +85,9 @@ class Settings(BaseSettings):
 
     yookassa_shop_id: str = ""
     yookassa_secret_key: str = ""
+    # Чек 54-ФЗ: 1 = без НДС; tax_system_code — только если задан в кабинете ЮKassa
+    yookassa_vat_code: int = 1
+    yookassa_tax_system_code: int = 0
 
     cors_origins: str = "http://localhost:5173,http://localhost:5174"
     cookie_domain: str = ""

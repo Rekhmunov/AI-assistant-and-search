@@ -19,11 +19,43 @@ class YooKassaError(Exception):
     pass
 
 
+def build_receipt(
+    *,
+    customer_email: str,
+    amount_rub: int,
+    description: str,
+    vat_code: int = 1,
+    tax_system_code: int | None = None,
+) -> dict[str, Any]:
+    """Build fiscal receipt payload required by YooKassa (54-FZ)."""
+    email = customer_email.strip()
+    if not email or "@" not in email:
+        raise YooKassaError("Для чека нужен корректный email покупателя")
+
+    receipt: dict[str, Any] = {
+        "customer": {"email": email},
+        "items": [
+            {
+                "description": description[:128],
+                "quantity": "1.00",
+                "amount": {"value": f"{int(amount_rub)}.00", "currency": "RUB"},
+                "vat_code": int(vat_code),
+                "payment_mode": "full_payment",
+                "payment_subject": "service",
+            }
+        ],
+    }
+    if tax_system_code is not None:
+        receipt["tax_system_code"] = int(tax_system_code)
+    return receipt
+
+
 async def create_payment(
     *,
     amount_rub: int,
     description: str,
     return_url: str,
+    customer_email: str,
     metadata: dict[str, str] | None = None,
     settings: Settings | None = None,
 ) -> dict[str, Any]:
@@ -33,11 +65,22 @@ async def create_payment(
     if not shop_id or not secret:
         raise YooKassaError("YOOKASSA_SHOP_ID или YOOKASSA_SECRET_KEY не заданы")
 
+    tax_system_code: int | None = None
+    if settings.yookassa_tax_system_code:
+        tax_system_code = settings.yookassa_tax_system_code
+
     payload: dict[str, Any] = {
         "amount": {"value": f"{int(amount_rub)}.00", "currency": "RUB"},
         "capture": True,
         "confirmation": {"type": "redirect", "return_url": return_url},
         "description": description[:128],
+        "receipt": build_receipt(
+            customer_email=customer_email,
+            amount_rub=amount_rub,
+            description=description,
+            vat_code=settings.yookassa_vat_code,
+            tax_system_code=tax_system_code,
+        ),
     }
     if metadata:
         payload["metadata"] = metadata

@@ -51,6 +51,8 @@ services:
       PUBLIC_WEB_URL: ${PUBLIC_WEB_URL:-https://glosix.ru}
       YOOKASSA_SHOP_ID: ${YOOKASSA_SHOP_ID:-}
       YOOKASSA_SECRET_KEY: ${YOOKASSA_SECRET_KEY:-}
+      YOOKASSA_VAT_CODE: ${YOOKASSA_VAT_CODE:-1}
+      YOOKASSA_TAX_SYSTEM_CODE: ${YOOKASSA_TAX_SYSTEM_CODE:-0}
     depends_on:
       postgres:
         condition: service_healthy

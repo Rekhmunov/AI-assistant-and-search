@@ -25,6 +25,13 @@ async def create_pro_payment(
     settings = get_settings()
     return_url = f"{settings.public_web_url.rstrip('/')}/profile?payment=success"
 
+    customer_email = (user.email or "").strip()
+    if not customer_email:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Для оплаты Pro укажите email в профиле",
+        )
+
     if not settings.yookassa_shop_id.strip() or not settings.yookassa_secret_key.strip():
         payment_id = f"stub-{uuid.uuid4()}"
         sub = Subscription(
@@ -42,11 +49,13 @@ async def create_pro_payment(
             "dev_mode": True,
         }
 
+    payment_description = f"Glosix Pro — {settings.pro_duration_days} дней"
     try:
         result = await create_payment(
             amount_rub=settings.pro_price_rub,
-            description=f"Glosix Pro — {settings.pro_duration_days} дней",
+            description=payment_description,
             return_url=return_url,
+            customer_email=customer_email,
             metadata={"user_id": str(user.id)},
             settings=settings,
         )
