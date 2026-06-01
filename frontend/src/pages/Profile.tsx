@@ -281,13 +281,6 @@ export function Profile() {
 
       {profileUser && <ProfileAccountSection user={profileUser} token={token} onUserUpdated={onUserUpdated} />}
 
-      <section className="profile-card profile-settings-card">
-        <div className="profile-settings-row">
-          <span className="profile-settings-label">{t("language")}</span>
-          <span className="profile-settings-value">{t("profileLanguageValue")}</span>
-        </div>
-      </section>
-
       <div className="profile-actions">
         {profileUser?.email && (
           <button
