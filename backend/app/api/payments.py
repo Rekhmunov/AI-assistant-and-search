@@ -6,12 +6,15 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user, get_db
+from app.api.deps import get_current_user, get_db, get_redis
 from app.core.config import get_settings
 from app.models.subscription import Subscription, SubscriptionStatus
 from app.models.user import Plan, User
+from app.services.app_settings import get_setting
 from app.services.bot import MaxBotService
 from app.services.yookassa import YooKassaError, create_payment
+
+import redis.asyncio as redis
 
 router = APIRouter(prefix="/payments", tags=["payments"])
 
@@ -19,11 +22,18 @@ router = APIRouter(prefix="/payments", tags=["payments"])
 @router.post("/create")
 async def create_pro_payment(
     db: Annotated[AsyncSession, Depends(get_db)],
+    redis_client: Annotated[redis.Redis, Depends(get_redis)],
     user: Annotated[User, Depends(get_current_user)],
 ):
     """Create YooKassa payment for Pro subscription."""
     settings = get_settings()
     return_url = f"{settings.public_web_url.rstrip('/')}/profile?payment=success"
+    pro_price_rub = int(await get_setting("pro_price_rub", db, redis_client, settings))
+    if pro_price_rub < 1:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Некорректная цена Pro в настройках",
+        )
 
     customer_email = (user.email or "").strip()
     if not customer_email:
@@ -38,7 +48,7 @@ async def create_pro_payment(
             user_id=user.id,
             yookassa_payment_id=payment_id,
             status=SubscriptionStatus.PENDING,
-            amount_rub=settings.pro_price_rub,
+            amount_rub=pro_price_rub,
         )
         db.add(sub)
         await db.flush()
@@ -52,7 +62,7 @@ async def create_pro_payment(
     payment_description = f"Glosix Pro — {settings.pro_duration_days} дней"
     try:
         result = await create_payment(
-            amount_rub=settings.pro_price_rub,
+            amount_rub=pro_price_rub,
             description=payment_description,
             return_url=return_url,
             customer_email=customer_email,
@@ -69,7 +79,7 @@ async def create_pro_payment(
         user_id=user.id,
         yookassa_payment_id=result["payment_id"],
         status=SubscriptionStatus.PENDING,
-        amount_rub=settings.pro_price_rub,
+        amount_rub=pro_price_rub,
     )
     db.add(sub)
     await db.flush()

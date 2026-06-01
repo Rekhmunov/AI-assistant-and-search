@@ -155,6 +155,7 @@ async def session_status(
 
     settings = get_settings()
     guest_limit = int(await get_setting("guest_searches_per_day", db, redis_client, settings))
+    pro_price_rub = int(await get_setting("pro_price_rub", db, redis_client, settings))
     user = await _resolve_authenticated_user(db, creds, refresh_token)
     if user:
         used, limit = await _limits_for_user(user, limiter)
@@ -163,6 +164,7 @@ async def session_status(
             is_guest=False,
             searches_today=used,
             searches_limit=limit,
+            pro_price_rub=pro_price_rub,
             user=_user_profile(user, used, limit),
         )
 
@@ -175,6 +177,7 @@ async def session_status(
             is_guest=True,
             searches_today=used,
             searches_limit=limit,
+            pro_price_rub=pro_price_rub,
         )
 
     return SessionStatus(
@@ -182,6 +185,7 @@ async def session_status(
         is_guest=False,
         searches_today=0,
         searches_limit=guest_limit,
+        pro_price_rub=pro_price_rub,
     )
 
 

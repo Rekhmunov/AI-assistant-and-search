@@ -9,6 +9,7 @@ export interface SessionStatus {
   is_guest: boolean;
   searches_today: number;
   searches_limit: number;
+  pro_price_rub?: number;
   user?: UserProfile | null;
 }
 

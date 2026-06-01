@@ -112,6 +112,7 @@ export function SettingsPage() {
       guest_searches_per_day: Number(settings.guest_searches_per_day),
       free_searches_per_day: Number(settings.free_searches_per_day),
       pro_searches_per_day: Number(settings.pro_searches_per_day),
+      pro_price_rub: Number(settings.pro_price_rub),
       global_yandex_requests_per_day: Number(settings.global_yandex_requests_per_day),
       maintenance_mode: Boolean(settings.maintenance_mode),
       bot_welcome_text: String(settings.bot_welcome_text),
@@ -335,6 +336,17 @@ export function SettingsPage() {
                   onChange={(e) => setSettings({ ...settings, pro_searches_per_day: e.target.value })}
                   disabled={!can("settings:write")}
                 />
+              </label>
+              <label>
+                Цена Pro, ₽ / месяц
+                <input
+                  type="number"
+                  min={1}
+                  value={String(settings.pro_price_rub ?? "")}
+                  onChange={(e) => setSettings({ ...settings, pro_price_rub: e.target.value })}
+                  disabled={!can("settings:write")}
+                />
+                <span className="hint-inline">Сумма списания в ЮKassa и на странице профиля</span>
               </label>
               <label>
                 Yandex запросов / день (глобально)

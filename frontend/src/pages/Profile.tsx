@@ -47,6 +47,7 @@ export function Profile() {
 
   const searchesToday = session?.searches_today ?? user?.searches_today ?? 0;
   const searchesLimit = session?.searches_limit ?? user?.searches_limit ?? 10;
+  const proPriceRub = session?.pro_price_rub ?? 299;
 
   if (!token) {
     return (
@@ -148,7 +149,7 @@ export function Profile() {
         <section className="profile-card profile-pro-card">
           <div className="profile-pro-badge">Pro</div>
           <h2 className="profile-pro-title">{t("upgradePro")}</h2>
-          <p className="profile-pro-price">{t("proPrice")}</p>
+          <p className="profile-pro-price">{t("proPrice", { price: proPriceRub })}</p>
           <p className="profile-pro-benefits">{t("proBenefits")}</p>
           <button type="button" className="btn-primary btn-block" onClick={activatePro}>
             {t("upgradePro")}

@@ -109,6 +109,19 @@ async def update_settings(
                         "GIGACHAT_CREDENTIALS не загружен в backend — vision через GigaChat недоступен."
                     ),
                 )
+        if key == "pro_price_rub":
+            try:
+                price = int(value)
+            except (TypeError, ValueError):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Цена Pro должна быть целым числом рублей",
+                ) from None
+            if price < 1 or price > 1_000_000:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Цена Pro должна быть от 1 до 1 000 000 ₽",
+                )
         if key == "llm_provider" and str(value) == "gigachat":
             if not env.gigachat_configured:
                 raise HTTPException(

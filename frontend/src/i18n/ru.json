@@ -54,7 +54,7 @@
   "plan": "Тариф",
   "searchesToday": "Поисков сегодня",
   "upgradePro": "Перейти на Pro",
-  "proPrice": "299₽ / месяц",
+  "proPrice": "{price}₽ / месяц",
   "proBenefits": "Безлимитный поиск • Полная история • Приоритет",
   "language": "Язык",
   "deleteAccount": "Удалить аккаунт",
