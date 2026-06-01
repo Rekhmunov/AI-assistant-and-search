@@ -143,12 +143,12 @@ export function Profile() {
         {session?.is_guest && <p className="profile-hint">{t("guestLimitsHint")}</p>}
       </section>
 
-      {user && <ProfileAccountSection user={user} token={token} onUserUpdated={onUserUpdated} />}
-
       {!isPro && (
         <section className="profile-card profile-pro-card">
-          <div className="profile-pro-badge">Pro</div>
-          <h2 className="profile-pro-title">{t("upgradePro")}</h2>
+          <div className="profile-card-head">
+            <h2 className="profile-card-title">{t("upgradePro")}</h2>
+            <span className="profile-pro-badge">Pro</span>
+          </div>
           <p className="profile-pro-price">{t("proPrice", { price: proPriceRub })}</p>
           <p className="profile-pro-benefits">{t("proBenefits")}</p>
           <button type="button" className="btn-primary btn-block" onClick={activatePro}>
@@ -156,6 +156,8 @@ export function Profile() {
           </button>
         </section>
       )}
+
+      {user && <ProfileAccountSection user={user} token={token} onUserUpdated={onUserUpdated} />}
 
       <section className="profile-card profile-settings-card">
         <div className="profile-settings-row">
