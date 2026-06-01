@@ -154,21 +154,33 @@ async def get_payment(
 
 async def list_payments(
     *,
-    created_gte: datetime,
+    created_gte: datetime | None = None,
+    status: str | None = None,
+    metadata: dict[str, str] | None = None,
     limit: int = 100,
+    cursor: str | None = None,
     settings: Settings | None = None,
-) -> list[dict[str, Any]]:
-    """List YooKassa payments (newest first) from a given date."""
+) -> tuple[list[dict[str, Any]], str | None]:
+    """List YooKassa payments (newest first). Returns (items, next_cursor)."""
     settings = settings or get_settings()
     shop_id = settings.yookassa_shop_id.strip()
     secret = settings.yookassa_secret_key.strip()
     if not shop_id or not secret:
         raise YooKassaError("YOOKASSA_SHOP_ID или YOOKASSA_SECRET_KEY не заданы")
 
-    params = {
-        "created_at.gte": created_gte.strftime("%Y-%m-%dT%H:%M:%S.000Z"),
+    params: dict[str, Any] = {
         "limit": min(max(limit, 1), 100),
     }
+    if created_gte is not None:
+        params["created_at.gte"] = created_gte.strftime("%Y-%m-%dT%H:%M:%S.000Z")
+    if status:
+        params["status"] = status
+    if cursor:
+        params["cursor"] = cursor
+    if metadata:
+        for key, value in metadata.items():
+            params[f"metadata[{key}]"] = value
+
     try:
         async with httpx.AsyncClient(timeout=45.0) as client:
             resp = await client.get(
@@ -191,4 +203,32 @@ async def list_payments(
         raise YooKassaError(f"Некорректный ответ YooKassa: {snippet}") from e
 
     items = data.get("items")
-    return items if isinstance(items, list) else []
+    next_cursor = data.get("next_cursor")
+    return (items if isinstance(items, list) else [], str(next_cursor) if next_cursor else None)
+
+
+async def list_all_payments(
+    *,
+    created_gte: datetime | None = None,
+    status: str | None = None,
+    metadata: dict[str, str] | None = None,
+    limit: int = 100,
+    max_pages: int = 20,
+    settings: Settings | None = None,
+) -> list[dict[str, Any]]:
+    """Fetch paginated payment list from YooKassa."""
+    all_items: list[dict[str, Any]] = []
+    cursor: str | None = None
+    for _ in range(max_pages):
+        items, cursor = await list_payments(
+            created_gte=created_gte,
+            status=status,
+            metadata=metadata,
+            limit=limit,
+            cursor=cursor,
+            settings=settings,
+        )
+        all_items.extend(items)
+        if not cursor:
+            break
+    return all_items

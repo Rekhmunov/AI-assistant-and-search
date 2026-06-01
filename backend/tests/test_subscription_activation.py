@@ -1,10 +1,15 @@
 import uuid
 import unittest
+from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from app.models.subscription import Subscription, SubscriptionStatus
 from app.models.user import Plan, User
-from app.services.subscription_activation import activate_from_yookassa_payment, recover_pro_for_user
+from app.services.subscription_activation import (
+    activate_from_yookassa_payment,
+    payment_matches_user,
+    recover_pro_for_user,
+)
 
 
 class TestSubscriptionActivation(unittest.IsolatedAsyncioTestCase):
@@ -62,6 +67,15 @@ class TestSubscriptionActivation(unittest.IsolatedAsyncioTestCase):
         db.add.assert_called_once()
         self.assertEqual(user.plan, Plan.PRO)
 
+    async def test_payment_matches_user_by_receipt_email(self):
+        user = User(id=uuid.uuid4(), plan=Plan.FREE, email="Paid@Yandex.ru")
+        payment = {
+            "status": "succeeded",
+            "metadata": {},
+            "receipt": {"customer": {"email": "paid@yandex.ru"}},
+        }
+        self.assertTrue(payment_matches_user(payment, user))
+
     async def test_recover_skips_yookassa_when_already_pro(self):
         user = User(id=uuid.uuid4(), plan=Plan.PRO, email="a@b.c")
         db = MagicMock()
@@ -70,9 +84,9 @@ class TestSubscriptionActivation(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(result.get("already_active"))
         db.execute.assert_not_called()
 
-    @patch("app.services.subscription_activation.list_payments", new_callable=AsyncMock)
+    @patch("app.services.subscription_activation.list_all_payments", new_callable=AsyncMock)
     @patch("app.services.subscription_activation.get_payment", new_callable=AsyncMock)
-    async def test_recover_from_yookassa_scan_when_pending_not_paid(self, mock_get_payment, mock_list_payments):
+    async def test_recover_from_yookassa_scan_when_pending_not_paid(self, mock_get_payment, mock_list_all):
         user_id = uuid.uuid4()
         user = User(id=user_id, plan=Plan.FREE, email="paid@yandex.ru")
         old_pending = Subscription(
@@ -80,10 +94,11 @@ class TestSubscriptionActivation(unittest.IsolatedAsyncioTestCase):
             yookassa_payment_id="pay-new-unpaid",
             status=SubscriptionStatus.PENDING,
             amount_rub=99,
+            created_at=datetime.now(timezone.utc),
         )
 
-        pending_result = MagicMock()
-        pending_result.scalars.return_value.all.return_value = [old_pending]
+        all_subs_result = MagicMock()
+        all_subs_result.scalars.return_value.all.return_value = [old_pending]
         missing_sub = MagicMock()
         missing_sub.scalar_one_or_none.return_value = None
         user_result = MagicMock()
@@ -93,20 +108,23 @@ class TestSubscriptionActivation(unittest.IsolatedAsyncioTestCase):
 
         db = MagicMock()
         db.execute = AsyncMock(
-            side_effect=[pending_result, missing_sub, user_result, active_sub]
+            side_effect=[all_subs_result, missing_sub, user_result, active_sub]
         )
         db.add = MagicMock()
         db.flush = AsyncMock()
         db.refresh = AsyncMock()
 
         mock_get_payment.return_value = {"status": "pending", "id": "pay-new-unpaid"}
-        mock_list_payments.return_value = [
-            {
-                "id": "pay-real-success",
-                "status": "succeeded",
-                "metadata": {"user_id": str(user_id)},
-                "amount": {"value": "99.00", "currency": "RUB"},
-            }
+        mock_list_all.side_effect = [
+            [],
+            [
+                {
+                    "id": "pay-real-success",
+                    "status": "succeeded",
+                    "metadata": {"user_id": str(user_id)},
+                    "amount": {"value": "99.00", "currency": "RUB"},
+                }
+            ],
         ]
 
         result = await recover_pro_for_user(db, user)
@@ -114,6 +132,31 @@ class TestSubscriptionActivation(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.get("source"), "yookassa_scan")
         self.assertEqual(result.get("payment_id"), "pay-real-success")
         self.assertEqual(user.plan, Plan.PRO)
+
+    @patch("app.services.subscription_activation.list_all_payments", new_callable=AsyncMock)
+    @patch("app.services.subscription_activation.get_payment", new_callable=AsyncMock)
+    async def test_recover_does_not_show_processing_for_old_pending(self, mock_get_payment, mock_list_all):
+        user_id = uuid.uuid4()
+        user = User(id=user_id, plan=Plan.FREE, email="a@b.c")
+        old_pending = Subscription(
+            user_id=user_id,
+            yookassa_payment_id="pay-old-pending",
+            status=SubscriptionStatus.PENDING,
+            amount_rub=99,
+            created_at=datetime.now(timezone.utc) - timedelta(days=1),
+        )
+
+        all_subs_result = MagicMock()
+        all_subs_result.scalars.return_value.all.return_value = [old_pending]
+
+        db = MagicMock()
+        db.execute = AsyncMock(side_effect=[all_subs_result])
+        mock_get_payment.return_value = {"status": "pending", "id": "pay-old-pending"}
+        mock_list_all.side_effect = [[], []]
+
+        result = await recover_pro_for_user(db, user)
+        self.assertFalse(result["ok"])
+        self.assertNotIn("обрабатывается", result.get("message", ""))
 
     @patch("app.services.subscription_activation.get_payment", new_callable=AsyncMock)
     async def test_recover_from_pending_subscription(self, mock_get_payment):
@@ -124,26 +167,31 @@ class TestSubscriptionActivation(unittest.IsolatedAsyncioTestCase):
             yookassa_payment_id="pay-789",
             status=SubscriptionStatus.PENDING,
             amount_rub=99,
+            created_at=datetime.now(timezone.utc),
         )
 
-        pending_result = MagicMock()
-        pending_result.scalars.return_value.all.return_value = [sub]
+        all_subs_result = MagicMock()
+        all_subs_result.scalars.return_value.all.return_value = [sub]
         sub_result = MagicMock()
         sub_result.scalar_one_or_none.return_value = sub
         user_result = MagicMock()
         user_result.scalar_one_or_none.return_value = user
 
         db = MagicMock()
-        db.execute = AsyncMock(side_effect=[pending_result, sub_result, user_result])
+        db.execute = AsyncMock(side_effect=[all_subs_result, sub_result, user_result])
         db.refresh = AsyncMock()
-        mock_get_payment.return_value = {"status": "succeeded", "id": "pay-789"}
+        mock_get_payment.return_value = {
+            "status": "succeeded",
+            "id": "pay-789",
+            "metadata": {"user_id": str(user_id)},
+        }
 
-        with patch("app.services.subscription_activation.list_payments", new_callable=AsyncMock) as mock_list:
+        with patch("app.services.subscription_activation.list_all_payments", new_callable=AsyncMock) as mock_list:
             result = await recover_pro_for_user(db, user)
             mock_list.assert_not_called()
 
         self.assertTrue(result["ok"])
-        self.assertEqual(result.get("source"), "pending_subscription")
+        self.assertEqual(result.get("source"), "subscription_record")
         self.assertEqual(sub.status, SubscriptionStatus.ACTIVE)
 
 
