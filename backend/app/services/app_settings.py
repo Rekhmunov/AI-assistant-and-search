@@ -7,9 +7,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import Settings, get_settings
 from app.models.app_setting import AppSetting
 from app.services.prompts.catalog import PROMPT_CATALOG
-from app.services.prompts.defaults import DEFAULT_LLM_PROVIDER, DEFAULT_SEARCH_PROVIDER, PROMPT_DEFAULTS
+from app.services.prompts.defaults import (
+    DEFAULT_FREE_LLM_PROVIDER,
+    DEFAULT_LLM_PROVIDER,
+    DEFAULT_SEARCH_PROVIDER,
+    PROMPT_DEFAULTS,
+)
 from app.services.llm_runtime import fetch_llm_runtime_status
 from app.services.providers.registry import (
+    list_free_llm_providers,
     list_llm_providers,
     list_search_providers,
     list_vision_providers,
@@ -24,6 +30,7 @@ BASE_SETTING_KEYS: dict[str, type] = {
     "maintenance_mode": bool,
     "bot_welcome_text": str,
     "llm_provider": str,
+    "free_llm_provider": str,
     "search_provider": str,
     "vision_provider": str,
 }
@@ -73,6 +80,8 @@ def default_for_key(key: str, settings: Settings | None = None) -> Any:
         return PROMPT_DEFAULTS.get(prompt_id, "")
     if key == "llm_provider":
         return DEFAULT_LLM_PROVIDER
+    if key == "free_llm_provider":
+        return DEFAULT_FREE_LLM_PROVIDER
     if key == "search_provider":
         return DEFAULT_SEARCH_PROVIDER
     if key == "vision_provider":
@@ -192,6 +201,10 @@ async def list_settings_bundle(db: AsyncSession, redis_client: redis.Redis) -> d
         "llm_providers": [
             {"id": x.id, "label": x.label, "configured": x.configured, "hint": x.hint}
             for x in list_llm_providers(settings)
+        ],
+        "free_llm_providers": [
+            {"id": x.id, "label": x.label, "configured": x.configured, "hint": x.hint}
+            for x in list_free_llm_providers(settings)
         ],
         "search_providers": [
             {"id": x.id, "label": x.label, "configured": x.configured, "hint": x.hint}

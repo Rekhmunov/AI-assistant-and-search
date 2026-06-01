@@ -38,6 +38,7 @@ type SettingsBundle = {
   settings: Record<string, unknown>;
   llm_runtime?: LlmRuntime | null;
   llm_providers: ProviderOption[];
+  free_llm_providers?: ProviderOption[];
   search_providers: ProviderOption[];
   vision_providers?: ProviderOption[];
   prompts: PromptField[];
@@ -47,6 +48,7 @@ export function SettingsPage() {
   const { can } = useAuth();
   const [settings, setSettings] = useState<Record<string, unknown>>({});
   const [llmProviders, setLlmProviders] = useState<ProviderOption[]>([]);
+  const [freeLlmProviders, setFreeLlmProviders] = useState<ProviderOption[]>([]);
   const [searchProviders, setSearchProviders] = useState<ProviderOption[]>([]);
   const [visionProviders, setVisionProviders] = useState<ProviderOption[]>([]);
   const [prompts, setPrompts] = useState<PromptField[]>([]);
@@ -61,6 +63,7 @@ export function SettingsPage() {
       setSettings(r.settings);
       setLlmRuntime(r.llm_runtime ?? null);
       setLlmProviders(r.llm_providers);
+      setFreeLlmProviders(r.free_llm_providers ?? []);
       setSearchProviders(r.search_providers);
       setVisionProviders(r.vision_providers ?? []);
       setPrompts(r.prompts);
@@ -68,6 +71,7 @@ export function SettingsPage() {
   }, []);
 
   const llmProvider = String(settings.llm_provider ?? "yandex_gpt");
+  const freeLlmProvider = String(settings.free_llm_provider ?? "deepseek");
 
   useEffect(() => {
     setPromptsOpen(false);
@@ -112,6 +116,7 @@ export function SettingsPage() {
       maintenance_mode: Boolean(settings.maintenance_mode),
       bot_welcome_text: String(settings.bot_welcome_text),
       llm_provider: llmProvider,
+      free_llm_provider: freeLlmProvider,
       search_provider: searchProvider,
       vision_provider: visionProvider,
     };
@@ -126,6 +131,7 @@ export function SettingsPage() {
       setSettings(updated.settings ?? {});
       if (updated.llm_runtime) setLlmRuntime(updated.llm_runtime);
       if (updated.llm_providers?.length) setLlmProviders(updated.llm_providers);
+      if (updated.free_llm_providers?.length) setFreeLlmProviders(updated.free_llm_providers);
       if (updated.search_providers?.length) setSearchProviders(updated.search_providers);
       if (updated.vision_providers?.length) setVisionProviders(updated.vision_providers);
       if (updated.prompts?.length) setPrompts(updated.prompts);
@@ -160,7 +166,7 @@ export function SettingsPage() {
           {providersOpen && (
             <div id="settings-providers-panel" className="settings-section-panel">
               <label>
-                LLM (ответы и анализ)
+                LLM для Pro (ответы и анализ)
                 <select
                   value={llmProvider}
                   onChange={(e) => setSettings({ ...settings, llm_provider: e.target.value })}
@@ -178,6 +184,25 @@ export function SettingsPage() {
                     {llmProviders.find((p) => p.id === llmProvider)?.hint}
                   </span>
                 )}
+              </label>
+
+              <label>
+                LLM для Free (только lite)
+                <select
+                  value={freeLlmProvider}
+                  onChange={(e) => setSettings({ ...settings, free_llm_provider: e.target.value })}
+                  disabled={!can("settings:write")}
+                >
+                  {(freeLlmProviders.length ? freeLlmProviders : llmProviders.filter((p) => p.id === "deepseek" || p.id === "gigachat")).map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.label}
+                      {!p.configured ? " (не настроен)" : ""}
+                    </option>
+                  ))}
+                </select>
+                <span className="hint-inline">
+                  Free: лимит free_searches_per_day, только lite-модель, без vision по фото
+                </span>
               </label>
 
               <label>

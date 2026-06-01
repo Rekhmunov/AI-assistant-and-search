@@ -88,6 +88,7 @@ class Settings(BaseSettings):
 
     cors_origins: str = "http://localhost:5173,http://localhost:5174"
     cookie_domain: str = ""
+    public_web_url: str = "https://glosix.ru"
 
     guest_searches_per_day: int = 5
     free_searches_per_day: int = 10

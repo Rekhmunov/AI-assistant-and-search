@@ -196,6 +196,7 @@ class SettingsBundleOut(BaseModel):
     settings: dict[str, Any]
     llm_runtime: LlmRuntimeOut | None = None
     llm_providers: list[ProviderOptionOut]
+    free_llm_providers: list[ProviderOptionOut] = []
     search_providers: list[ProviderOptionOut]
     vision_providers: list[ProviderOptionOut] = []
     prompts: list[PromptFieldOut]

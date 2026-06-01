@@ -265,11 +265,33 @@ export async function deleteThread(token: string, id: string): Promise<void> {
 }
 
 export async function devActivatePro(token: string): Promise<void> {
-  await fetch(`${API_BASE}/api/payments/dev-activate`, {
+  const res = await fetch(`${API_BASE}/api/payments/dev-activate`, {
     method: "POST",
     headers: apiHeaders(token),
     credentials: "include",
   });
+  if (!res.ok) throw new Error("Не удалось активировать Pro");
+}
+
+export async function createProPayment(
+  token: string
+): Promise<{ confirmation_url: string; dev_mode?: boolean }> {
+  const res = await fetch(`${API_BASE}/api/payments/create`, {
+    method: "POST",
+    headers: apiHeaders(token),
+    credentials: "include",
+  });
+  if (!res.ok) {
+    let msg = "Не удалось создать платёж";
+    try {
+      const body = await res.json();
+      msg = (body as { detail?: string }).detail || msg;
+    } catch {
+      /* ignore */
+    }
+    throw new Error(msg);
+  }
+  return res.json();
 }
 
 export async function deleteAccount(token: string): Promise<void> {

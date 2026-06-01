@@ -143,6 +143,16 @@ def vision_capability_answer_addon() -> str:
     )
 
 
+def free_vision_pro_addon() -> str:
+    return (
+        "\n\nВажно: пользователь прикрепил фото, но на тарифе Free распознавание и генерация "
+        "изображений недоступны — эта функция только в тарифе Pro. "
+        "Ответь по тексту запроса и доступному OCR из файла (если есть). "
+        "В конце ответа одним коротким абзацем сообщи, что анализ и распознавание изображений "
+        "доступны в тарифе Pro, и предложи оформить подписку."
+    )
+
+
 def direct_system_addons(query: str) -> str:
     from app.services.search_query import is_vision_capability_question
 

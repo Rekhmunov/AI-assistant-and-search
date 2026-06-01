@@ -17,9 +17,9 @@ from app.core.config import get_settings
 from app.core.limiter import RateLimiter
 from app.models.message import Message, MessageRole
 from app.models.thread import Thread
-from app.models.user import User
+from app.models.user import Plan, User
 from app.services.llm_provider import SearchSource
-from app.services.answer_guard import image_display_answer_addon, is_template_evasion
+from app.services.answer_guard import free_vision_pro_addon, image_display_answer_addon, is_template_evasion
 from app.services.query_router import QueryRouter
 from app.services.query_rewriter import QueryRewriter
 from app.services.facts.pipeline import FactPipeline
@@ -92,6 +92,9 @@ class SearchFlowService:
     def _is_guest(self, user: User) -> bool:
         return bool(user.guest_key) and not user.email
 
+    def _is_registered_free(self, user: User) -> bool:
+        return user.plan == Plan.FREE and not self._is_guest(user)
+
     async def stream_search(
         self,
         db: AsyncSession,
@@ -111,7 +114,7 @@ class SearchFlowService:
         user_uuid = user.id
 
         llm, search, _prompt_store, llm_provider_id, search_provider_id = await resolve_runtime_providers(
-            db, redis_client
+            db, redis_client, user=user
         )
         # Проверяем колонку debug_trace до долгого пайплайна — rollback здесь не ломает finalize.
         await _messages_have_debug_trace(db)
@@ -132,9 +135,16 @@ class SearchFlowService:
                     f"Гостевой поиск включает {limit} запросов в день. "
                     "Зарегистрируйтесь для полного доступа."
                 )
+                yield sse_event("error", {"code": "rate_limit", "message": msg})
+            elif self._is_registered_free(user):
+                msg = (
+                    "На сегодня лимиты бесплатного поиска исчерпаны. "
+                    "Оформите Pro для продолжения."
+                )
+                yield sse_event("error", {"code": "free_rate_limit", "message": msg})
             else:
                 msg = f"Лимит поисков: {limit}/день"
-            yield sse_event("error", {"code": "rate_limit", "message": msg})
+                yield sse_event("error", {"code": "rate_limit", "message": msg})
             return
 
         if llm_provider_id != PERPLEXITY_PROVIDER_ID:
@@ -170,6 +180,9 @@ class SearchFlowService:
         display_content = bundle.display_query
         has_attachments = bool(attachment_ids)
         needs_vision = bundle.needs_vision
+        free_vision_blocked = user.plan == Plan.FREE and needs_vision
+        if free_vision_blocked:
+            needs_vision = False
         hybrid_vision_search = needs_vision and wants_web_search_with_vision(user_text)
         vision_only_answer = needs_vision and not hybrid_vision_search
         image_display_request = not has_attachments and is_image_display_request(user_text)
@@ -245,6 +258,9 @@ class SearchFlowService:
         elif image_display_request:
             route.needs_search = True
             route.reason = "image_display_text"
+
+        if user.plan != Plan.PRO:
+            route.answer_model = "lite"
 
         user_msg = Message(thread_id=thread.id, role=MessageRole.USER, content=display_content)
         db.add(user_msg)
@@ -557,6 +573,8 @@ class SearchFlowService:
             if llm_provider_id != PERPLEXITY_PROVIDER_ID:
                 full_answer = ""
             answer_hint = hint_clarify
+            if free_vision_blocked:
+                answer_hint = f"{answer_hint or ''}{free_vision_pro_addon()}"
             if image_display_request:
                 answer_hint = f"{answer_hint or ''}{image_display_answer_addon()}"
             if vision_only_answer:

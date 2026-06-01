@@ -11,37 +11,66 @@ from app.core.config import get_settings
 from app.models.subscription import Subscription, SubscriptionStatus
 from app.models.user import Plan, User
 from app.services.bot import MaxBotService
+from app.services.yookassa import YooKassaError, create_payment
 
 router = APIRouter(prefix="/payments", tags=["payments"])
 
 
 @router.post("/create")
-async def create_payment(
+async def create_pro_payment(
     db: Annotated[AsyncSession, Depends(get_db)],
     user: Annotated[User, Depends(get_current_user)],
 ):
-    """Create YooKassa payment. Returns confirmation URL (stub when keys missing)."""
+    """Create YooKassa payment for Pro subscription."""
     settings = get_settings()
-    payment_id = f"stub-{uuid.uuid4()}"
+    return_url = f"{settings.public_web_url.rstrip('/')}/profile?payment=success"
+
+    if not settings.yookassa_shop_id.strip() or not settings.yookassa_secret_key.strip():
+        payment_id = f"stub-{uuid.uuid4()}"
+        sub = Subscription(
+            user_id=user.id,
+            yookassa_payment_id=payment_id,
+            status=SubscriptionStatus.PENDING,
+            amount_rub=settings.pro_price_rub,
+        )
+        db.add(sub)
+        await db.flush()
+        await db.commit()
+        return {
+            "payment_id": payment_id,
+            "confirmation_url": f"{return_url}&dev=1",
+            "dev_mode": True,
+        }
+
+    try:
+        result = await create_payment(
+            amount_rub=settings.pro_price_rub,
+            description=f"Glosix Pro — {settings.pro_duration_days} дней",
+            return_url=return_url,
+            metadata={"user_id": str(user.id)},
+            settings=settings,
+        )
+    except YooKassaError as e:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Не удалось создать платёж: {e}",
+        ) from e
 
     sub = Subscription(
         user_id=user.id,
-        yookassa_payment_id=payment_id,
+        yookassa_payment_id=result["payment_id"],
         status=SubscriptionStatus.PENDING,
         amount_rub=settings.pro_price_rub,
     )
     db.add(sub)
     await db.flush()
+    await db.commit()
 
-    if not settings.yookassa_shop_id:
-        return {
-            "payment_id": payment_id,
-            "confirmation_url": f"/profile?payment={payment_id}&dev=1",
-            "dev_mode": True,
-        }
-
-    # TODO: integrate yookassa SDK
-    raise HTTPException(status_code=501, detail="YooKassa integration pending")
+    return {
+        "payment_id": result["payment_id"],
+        "confirmation_url": result["confirmation_url"],
+        "dev_mode": False,
+    }
 
 
 @router.post("/webhook")
@@ -71,9 +100,11 @@ async def yookassa_webhook(request: Request, db: Annotated[AsyncSession, Depends
     user.plan = Plan.PRO
     user.plan_expires_at = datetime.now(timezone.utc) + timedelta(days=settings.pro_duration_days)
 
-    bot = MaxBotService()
-    await bot.send_message(user.max_user_id, "Подписка Pro активирована 🎉")
+    if user.max_user_id:
+        bot = MaxBotService()
+        await bot.send_message(user.max_user_id, "Подписка Pro активирована 🎉")
 
+    await db.commit()
     return {"ok": True}
 
 
@@ -88,4 +119,5 @@ async def dev_activate_pro(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not available")
     user.plan = Plan.PRO
     user.plan_expires_at = datetime.now(timezone.utc) + timedelta(days=settings.pro_duration_days)
+    await db.commit()
     return {"ok": True, "plan": "pro"}

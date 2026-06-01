@@ -91,8 +91,28 @@ def list_search_providers(settings: Settings) -> list[ProviderInfo]:
 
 
 VALID_LLM_IDS = frozenset({"yandex_gpt", "anthropic_claude", "deepseek", "gigachat", "perplexity"})
+VALID_FREE_LLM_IDS = frozenset({"deepseek", "gigachat"})
 VALID_SEARCH_IDS = frozenset({"yandex_search"})
 VALID_VISION_IDS = frozenset({"anthropic_claude", "gigachat"})
+
+
+def list_free_llm_providers(settings: Settings) -> list[ProviderInfo]:
+    """Провайдеры для Free-аккаунтов: только DeepSeek и GigaChat (lite в коде)."""
+    all_llm = {p.id: p for p in list_llm_providers(settings)}
+    out: list[ProviderInfo] = []
+    for pid in ("deepseek", "gigachat"):
+        p = all_llm.get(pid)
+        if p:
+            out.append(
+                ProviderInfo(
+                    id=p.id,
+                    label=p.label,
+                    kind="llm",
+                    configured=p.configured,
+                    hint="Free: только lite-модель и лимит free_searches_per_day",
+                )
+            )
+    return out
 
 
 def list_vision_providers(settings: Settings) -> list[ProviderInfo]:

@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
-import { devActivatePro, deleteAccount, fetchMe, fetchSession } from "../api/client";
+import { createProPayment, devActivatePro, deleteAccount, fetchMe, fetchSession } from "../api/client";
 import { AuthGate } from "../components/AuthGate";
 import { MobileNewThreadButton } from "../components/MobileNewThreadButton";
 import { MobilePageHeader } from "../components/MobilePageHeader";
@@ -69,10 +69,20 @@ export function Profile() {
   const usagePercent = Math.round(usageRatio * 100);
 
   const activatePro = async () => {
-    await devActivatePro(token);
-    const updated = await fetchMe(token);
-    setUser(updated);
-    queryClient.invalidateQueries({ queryKey: ["me"] });
+    try {
+      const payment = await createProPayment(token!);
+      if (payment.dev_mode) {
+        await devActivatePro(token!);
+        const updated = await fetchMe(token!);
+        setUser(updated);
+        queryClient.invalidateQueries({ queryKey: ["me"] });
+        queryClient.invalidateQueries({ queryKey: ["session"] });
+        return;
+      }
+      window.location.href = payment.confirmation_url;
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Ошибка оплаты");
+    }
   };
 
   const onDelete = async () => {

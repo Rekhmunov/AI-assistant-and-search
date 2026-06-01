@@ -125,5 +125,6 @@ for _answer_overrides in PROVIDER_ANSWER_PROMPTS.values():
     PROMPT_DEFAULTS.update(_answer_overrides)
 
 DEFAULT_LLM_PROVIDER = "yandex_gpt"
+DEFAULT_FREE_LLM_PROVIDER = "deepseek"
 DEFAULT_SEARCH_PROVIDER = "yandex_search"
 DEFAULT_VISION_PROVIDER = "gigachat"

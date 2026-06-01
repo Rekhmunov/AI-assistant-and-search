@@ -5,6 +5,7 @@ import { fetchThread, fetchSession, streamSearch } from "../api/client";
 import { AnswerBody } from "../components/AnswerBody";
 import { AnswerErrorBoundary } from "../components/AnswerErrorBoundary";
 import { AnswerFooter } from "../components/AnswerFooter";
+import { FreeLimitNotice } from "../components/FreeLimitNotice";
 import { GuestLimitNotice } from "../components/GuestLimitNotice";
 import { SearchComposer, type ComposerAttachment } from "../components/SearchComposer";
 import { SearchStatusLine, type SearchPhase } from "../components/SearchStatusLine";
@@ -333,6 +334,14 @@ export function Thread() {
                   streaming: false,
                 };
               }
+              if (code === "free_rate_limit") {
+                return {
+                  ...turn,
+                  answer: "",
+                  errorCode: "free_rate_limit",
+                  streaming: false,
+                };
+              }
               const keepAnswer = turn.answer.trim().length > 0;
               return {
                 ...turn,
@@ -419,9 +428,10 @@ export function Thread() {
           {turns.map((turn, index) => {
             const isActive = turn.streaming;
             const sources = turn.sources ?? [];
-            const showStatus = isActive && streaming && !turn.answer.trim() && turn.errorCode !== "rate_limit";
+            const showStatus = isActive && streaming && !turn.answer.trim() && !turn.errorCode;
             const showGuestLimit = turn.errorCode === "rate_limit";
-            const showAnswer = showGuestLimit || Boolean(turn.answer.trim()) || isActive;
+            const showFreeLimit = turn.errorCode === "free_rate_limit";
+            const showAnswer = showGuestLimit || showFreeLimit || Boolean(turn.answer.trim()) || isActive;
             const showFollowUps =
               index === lastCompletedIndex &&
               turn.followUps.length > 0 &&
@@ -441,6 +451,8 @@ export function Thread() {
                     <AnswerErrorBoundary>
                       {showGuestLimit ? (
                         <GuestLimitNotice limit={guestSearchLimit} />
+                      ) : showFreeLimit ? (
+                        <FreeLimitNotice />
                       ) : (
                         <AnswerBody
                           text={turn.answer}

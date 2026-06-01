@@ -14,7 +14,7 @@ from app.services.anthropic_probe import probe_anthropic
 from app.services.deepseek_probe import probe_deepseek
 from app.services.gigachat_probe import probe_gigachat
 from app.services.perplexity_probe import probe_perplexity
-from app.services.providers.registry import VALID_LLM_IDS, VALID_SEARCH_IDS, VALID_VISION_IDS
+from app.services.providers.registry import VALID_FREE_LLM_IDS, VALID_LLM_IDS, VALID_SEARCH_IDS, VALID_VISION_IDS
 
 router = APIRouter(prefix="/settings", tags=["admin-settings"])
 
@@ -55,6 +55,20 @@ async def update_settings(
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Unknown setting: {key}")
         if key == "llm_provider" and str(value) not in VALID_LLM_IDS:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unknown LLM provider")
+        if key == "free_llm_provider" and str(value) not in VALID_FREE_LLM_IDS:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unknown Free LLM provider")
+        if key == "free_llm_provider" and str(value) == "deepseek":
+            if not env.deepseek_configured:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="DEEPSEEK_API_KEY не загружен — Free-провайдер DeepSeek недоступен.",
+                )
+        if key == "free_llm_provider" and str(value) == "gigachat":
+            if not env.gigachat_configured:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="GIGACHAT_CREDENTIALS не загружен — Free-провайдер GigaChat недоступен.",
+                )
         if key == "llm_provider" and str(value) == "anthropic_claude":
             if not env.anthropic_configured:
                 raise HTTPException(
