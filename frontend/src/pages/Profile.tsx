@@ -17,6 +17,7 @@ import { ProPurchaseBlockedModal } from "../components/ProPurchaseBlockedModal";
 import { ProPaymentStatusModal, type ProPaymentModalState } from "../components/ProPaymentStatusModal";
 import { ProfileAccountSection } from "../components/ProfileAccountSection";
 import { useDesktopLayout } from "../hooks/useDesktopLayout";
+import { useSignOut } from "../hooks/useSignOut";
 import { isMaxWebApp } from "../lib/maxApp";
 import { t } from "../i18n";
 import { useAuthStore } from "../store/authStore";
@@ -44,7 +45,7 @@ function sleep(ms: number): Promise<void> {
 export function Profile() {
   const token = useAuthStore((s) => s.token);
   const setUser = useAuthStore((s) => s.setUser);
-  const clear = useAuthStore((s) => s.clear);
+  const signOut = useSignOut();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -203,8 +204,7 @@ export function Profile() {
   const onDelete = async () => {
     if (!confirm(t("deleteAccountConfirm"))) return;
     await deleteAccount(token);
-    clear();
-    navigate("/");
+    await signOut();
   };
 
   const onUserUpdated = (updated: typeof user) => {
@@ -286,10 +286,7 @@ export function Profile() {
           <button
             type="button"
             className="btn-secondary btn-block"
-            onClick={() => {
-              clear();
-              navigate(inMax ? "/" : "/login");
-            }}
+            onClick={() => void signOut()}
           >
             {t("signOut")}
           </button>

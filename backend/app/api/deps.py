@@ -95,6 +95,20 @@ def clear_guest_cookie(response: Response) -> None:
     response.delete_cookie(**kwargs)
 
 
+def clear_refresh_cookie(response: Response) -> None:
+    settings = get_settings()
+    kwargs: dict = {
+        "key": "refresh_token",
+        "path": "/",
+        "httponly": True,
+        "secure": not settings.debug,
+        "samesite": "none" if not settings.debug else "lax",
+    }
+    if settings.cookie_domain:
+        kwargs["domain"] = settings.cookie_domain
+    response.delete_cookie(**kwargs)
+
+
 async def _user_from_access_token(db: AsyncSession, token: str) -> User | None:
     settings = get_settings()
     payload = decode_token(token, "access", settings)

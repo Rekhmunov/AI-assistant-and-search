@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { bindMax, completeBindMax, fetchMe, loginWithInitData } from "../api/client";
+import { bindMax, completeBindMax, fetchMe, loginWithInitData, logoutSession } from "../api/client";
 import {
   getMaxInitData,
   getMaxStartParam,
@@ -50,6 +50,11 @@ export function useAuthBootstrap() {
             }
             return;
           } catch {
+            try {
+              await logoutSession();
+            } catch {
+              /* ignore */
+            }
             clear();
           }
         }

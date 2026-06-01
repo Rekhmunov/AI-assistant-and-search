@@ -200,6 +200,14 @@ export async function fetchSession(token: string | null): Promise<SessionStatus>
   return res.json();
 }
 
+export async function logoutSession(): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/auth/logout`, {
+    method: "POST",
+    credentials: "include",
+  });
+  if (!res.ok) throw new Error(await parseAuthError(res));
+}
+
 export async function fetchAppConfig(): Promise<AppPublicConfig> {
   const res = await fetch(`${API_BASE}/api/config/public?_=${Date.now()}`, {
     credentials: "include",

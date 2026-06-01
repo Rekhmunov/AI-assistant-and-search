@@ -12,6 +12,7 @@ from app.api.deps import (
     GUEST_COOKIE,
     GUEST_HEADER,
     clear_guest_cookie,
+    clear_refresh_cookie,
     get_current_user,
     get_db,
     get_rate_limiter,
@@ -417,6 +418,14 @@ async def bind_max_complete(
     access, _ = _set_auth_cookies(response, str(user.id))
     used, limit = await _limits_for_user(user, limiter)
     return AuthResponse(access_token=access, user=_user_profile(user, used, limit))
+
+
+@router.post("/logout")
+async def logout(response: Response):
+    """Clear server session cookies so the client can continue as a guest."""
+    clear_refresh_cookie(response)
+    clear_guest_cookie(response)
+    return {"ok": True}
 
 
 @router.post("/refresh", response_model=TokenResponse)

@@ -21,7 +21,10 @@ export const useAuthStore = create<AuthState>()(
         set({ token, user });
       },
       setUser: (user) => set({ user }),
-      clear: () => set({ token: null, user: null }),
+      clear: () => {
+        clearGuestSession();
+        set({ token: null, user: null });
+      },
     }),
     { name: "glosix-auth" }
   )
