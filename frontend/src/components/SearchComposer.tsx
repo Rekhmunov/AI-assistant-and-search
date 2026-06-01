@@ -250,7 +250,9 @@ export function SearchComposer({
     (value.trim().length > 0 || (attachments.length > 0 && !requireTextWithAttachments)) &&
     !disabled &&
     !isBusy;
+  const hasComposerText = value.trim().length > 0;
   const hasAttachment = totalCount > 0;
+  const composerExpanded = inputFocused || attachMenuOpen || hasComposerText;
   const showTypingOverlay =
     animatedPlaceholder && !value.trim() && !disabled && !inputFocused;
   const typingPlaceholder = useTypingPlaceholder(showTypingOverlay, placeholderPhrases);
@@ -263,15 +265,15 @@ export function SearchComposer({
 
   const isMobileFocusLayout =
     (layoutMode === "threadMobile" || layoutMode === "homeMobile") && !isDesktop;
-  const showComposerToolbar = isMobileFocusLayout && (inputFocused || attachMenuOpen);
+  const showComposerToolbar = isMobileFocusLayout && composerExpanded;
   const showAttachInToolbar = showComposerToolbar;
   const showSendInToolbar = showComposerToolbar;
-  const showInlineMic = isMobileFocusLayout && !inputFocused;
+  const showInlineMic = isMobileFocusLayout && !composerExpanded;
   const showDefaultRow = !isMobileFocusLayout;
 
   return (
     <div
-      className={`composer-wrap${docked ? " composer-wrap--docked" : " composer-wrap--inline"}${isMobileFocusLayout ? " composer-wrap--thread-mobile" : ""}${(inputFocused || attachMenuOpen) && isMobileFocusLayout ? " composer-wrap--focused" : ""}`}
+      className={`composer-wrap${docked ? " composer-wrap--docked" : " composer-wrap--inline"}${isMobileFocusLayout ? " composer-wrap--thread-mobile" : ""}${composerExpanded && isMobileFocusLayout ? " composer-wrap--focused" : ""}`}
     >
       {(uploadError || voice.error) && (
         <div className="composer-error-wrap">
@@ -285,7 +287,7 @@ export function SearchComposer({
       )}
       <div className={`composer-outer-row${isMobileFocusLayout ? " composer-outer-row--thread-mobile" : ""}`}>
       <form
-        className={`search-composer${hasAttachment ? " search-composer--with-attachment" : ""}${isMobileFocusLayout ? " search-composer--thread-mobile" : ""}${(inputFocused || attachMenuOpen) && isMobileFocusLayout ? " search-composer--focused" : ""}`}
+        className={`search-composer${hasAttachment ? " search-composer--with-attachment" : ""}${isMobileFocusLayout ? " search-composer--thread-mobile" : ""}${composerExpanded && isMobileFocusLayout ? " search-composer--focused" : ""}`}
         onSubmit={handleSubmit}
       >
         {hasAttachment && (
@@ -454,7 +456,7 @@ export function SearchComposer({
         )}
       </form>
 
-      {isMobileFocusLayout && layoutMode === "threadMobile" && !inputFocused && onNewChat && (
+      {isMobileFocusLayout && layoutMode === "threadMobile" && !composerExpanded && onNewChat && (
         <MobileNewThreadButton onClick={onNewChat} />
       )}
       </div>
