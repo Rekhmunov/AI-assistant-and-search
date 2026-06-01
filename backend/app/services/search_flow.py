@@ -39,6 +39,7 @@ from app.services.entity_image import entity_images_to_json
 from app.services.message_images_column import messages_have_images_column
 from app.services.entity_image_routing import resolve_entity_image_query
 from app.services.yandex_image_search import YandexImageSearchService
+from app.services.perplexity import PERPLEXITY_PROVIDER_ID, PerplexityProvider
 from app.services.providers.factory import resolve_runtime_providers
 import redis.asyncio as redis
 
@@ -129,10 +130,11 @@ class SearchFlowService:
             yield sse_event("error", {"code": "rate_limit", "message": f"Лимит поисков: {limit}/день"})
             return
 
-        if not await limiter.check_global_yandex_limit():
-            await limiter.release_search(user_id_str)
-            yield sse_event("error", {"code": "global_limit", "message": "Сервис временно перегружен"})
-            return
+        if llm_provider_id != PERPLEXITY_PROVIDER_ID:
+            if not await limiter.check_global_yandex_limit():
+                await limiter.release_search(user_id_str)
+                yield sse_event("error", {"code": "global_limit", "message": "Сервис временно перегружен"})
+                return
 
         try:
             bundle = await resolve_attachment_bundle(
@@ -272,6 +274,7 @@ class SearchFlowService:
         fact_slots: list[str] = []
         grounding_mode: str = "strict"
         page_cache_trace: dict | None = None
+        full_answer = ""
 
         try:
             if hybrid_vision_search:
@@ -295,7 +298,31 @@ class SearchFlowService:
                     yield sse_event("error", {"code": "vision_unavailable", "message": str(e)})
                     return
 
-            if route.needs_search:
+            if route.needs_search and llm_provider_id == PERPLEXITY_PROVIDER_ID:
+                rewrite_trace = {
+                    "provider": "perplexity",
+                    "yandex_search_skipped": True,
+                    "search_planner_skipped": True,
+                }
+                search_q_sent = llm_query[:400]
+                if isinstance(llm, PerplexityProvider):
+                    async for event in llm.stream_search_answer(
+                        llm_query,
+                        history,
+                        model=route.answer_model,  # type: ignore[arg-type]
+                        prior_sources_block=prior_sources_block,
+                    ):
+                        if event.sources and not sources:
+                            sources = event.sources
+                            sources_json = sources_to_json(sources)
+                            if sources_json:
+                                yield sse_event("sources", {"sources": sources_json})
+                        if event.text:
+                            full_answer += event.text
+                            yield sse_event("token", {"text": event.text})
+                retrieval_trace = {"ok": bool(sources), "provider": "perplexity"}
+
+            elif route.needs_search:
                 rewrite, (bootstrap_sources, query_url_trace) = await asyncio.gather(
                     rewriter.rewrite(llm_query, thread_ctx),
                     lookup_bootstrap_sources(db, llm_query, llm_query),
@@ -459,7 +486,8 @@ class SearchFlowService:
             except Exception:
                 logger.exception("GPT messages preview failed (non-fatal)")
 
-            full_answer = ""
+            if llm_provider_id != PERPLEXITY_PROVIDER_ID:
+                full_answer = ""
             answer_hint = hint_clarify
             if image_display_request:
                 answer_hint = f"{answer_hint or ''}{image_display_answer_addon()}"
@@ -482,7 +510,7 @@ class SearchFlowService:
                     await limiter.release_search(user_id_str)
                     yield sse_event("error", {"code": "vision_unavailable", "message": str(e)})
                     return
-            elif route.needs_search:
+            elif route.needs_search and llm_provider_id != PERPLEXITY_PROVIDER_ID:
                 weak_retrieval = bool(retrieval_trace and not retrieval_trace.get("ok"))
                 grounding_mode = adjust_grounding_for_retrieval(
                     grounding_mode,  # type: ignore[arg-type]

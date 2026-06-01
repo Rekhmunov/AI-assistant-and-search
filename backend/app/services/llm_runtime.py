@@ -35,9 +35,11 @@ def build_llm_runtime_status(
     anthropic_loaded = s.anthropic_configured
     deepseek_loaded = s.deepseek_configured
     gigachat_loaded = s.gigachat_configured
+    perplexity_loaded = s.perplexity_configured
     anthropic_mock = active_provider == "anthropic_claude" and not anthropic_loaded
     deepseek_mock = active_provider == "deepseek" and not deepseek_loaded
     gigachat_mock = active_provider == "gigachat" and not gigachat_loaded
+    perplexity_mock = active_provider == "perplexity" and not perplexity_loaded
     hint: str | None = None
     if anthropic_mock:
         hint = (
@@ -56,7 +58,12 @@ def build_llm_runtime_status(
             "В админке выбран GigaChat, но GIGACHAT_CREDENTIALS не виден backend-контейнеру. "
             "Проверьте /opt/aisearch/.env (scope GIGACHAT_API_PERS) и пересоздайте backend/worker."
         )
-    elif active_provider == "yandex_gpt" and (anthropic_loaded or deepseek_loaded or gigachat_loaded):
+    elif perplexity_mock:
+        hint = (
+            "В админке выбран Perplexity, но PERPLEXITY_API_KEY не виден backend-контейнеру. "
+            "Проверьте /opt/aisearch/.env и пересоздайте backend/worker."
+        )
+    elif active_provider == "yandex_gpt" and (anthropic_loaded or deepseek_loaded or gigachat_loaded or perplexity_loaded):
         hint = (
             "В .env есть ключ альтернативного LLM, но в БД активен Yandex GPT — "
             "смените LLM в админке и нажмите «Сохранить»."
@@ -71,6 +78,8 @@ def build_llm_runtime_status(
         "deepseek_mock_active": deepseek_mock,
         "gigachat_credentials_loaded": gigachat_loaded,
         "gigachat_mock_active": gigachat_mock,
+        "perplexity_api_key_loaded": perplexity_loaded,
+        "perplexity_mock_active": perplexity_mock,
         "hint": hint,
     }
 

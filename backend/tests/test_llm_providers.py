@@ -3,6 +3,7 @@
 from app.services.anthropic_claude import AnthropicClaudeProvider
 from app.services.deepseek import DeepSeekProvider
 from app.services.gigachat import GigaChatProvider
+from app.services.perplexity import PerplexityProvider
 from app.services.providers.factory import create_llm_provider, llm_model_label
 from app.services.prompts.store import PromptStore
 from app.services.yandex_gpt import YandexGPTProvider
@@ -26,6 +27,11 @@ def test_create_deepseek():
 def test_create_gigachat():
     llm = create_llm_provider("gigachat", None, PromptStore(None, None))  # type: ignore[arg-type]
     assert isinstance(llm, GigaChatProvider)
+
+
+def test_create_perplexity():
+    llm = create_llm_provider("perplexity", None, PromptStore(None, None))  # type: ignore[arg-type]
+    assert isinstance(llm, PerplexityProvider)
 
 
 def test_llm_model_label_yandex():

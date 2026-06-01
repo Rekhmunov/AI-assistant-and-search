@@ -61,6 +61,18 @@ def list_llm_providers(settings: Settings) -> list[ProviderInfo]:
                 else "Нужен GIGACHAT_CREDENTIALS (authorization key из кабинета Сбера)"
             ),
         ),
+        ProviderInfo(
+            id="perplexity",
+            label="Perplexity Sonar",
+            kind="llm",
+            configured=settings.perplexity_configured,
+            hint=(
+                "Встроенный веб-поиск Perplexity; Yandex Search и Search Planner не используются. "
+                "Lite=sonar, Pro=sonar-pro."
+                if settings.perplexity_configured
+                else "Нужен PERPLEXITY_API_KEY в .env (docs.perplexity.ai)"
+            ),
+        ),
     ]
 
 
@@ -77,7 +89,7 @@ def list_search_providers(settings: Settings) -> list[ProviderInfo]:
     ]
 
 
-VALID_LLM_IDS = frozenset({"yandex_gpt", "anthropic_claude", "deepseek", "gigachat"})
+VALID_LLM_IDS = frozenset({"yandex_gpt", "anthropic_claude", "deepseek", "gigachat", "perplexity"})
 VALID_SEARCH_IDS = frozenset({"yandex_search"})
 VALID_VISION_IDS = frozenset({"anthropic_claude", "gigachat"})
 

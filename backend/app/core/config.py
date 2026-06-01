@@ -74,6 +74,15 @@ class Settings(BaseSettings):
     gigachat_verify_ssl_certs: bool = True
     gigachat_ca_bundle_file: str = ""
 
+    perplexity_api_key: str = ""
+    # Sonar API: sonar = Lite (быстрый), sonar-pro = Pro (сложные запросы)
+    perplexity_model_lite: str = "sonar"
+    perplexity_model_pro: str = "sonar-pro"
+    perplexity_base_url: str = "https://api.perplexity.ai"
+    perplexity_http_proxy: str = ""
+    perplexity_search_recency_filter: str = ""
+    perplexity_return_related_questions: bool = True
+
     yookassa_shop_id: str = ""
     yookassa_secret_key: str = ""
 
@@ -115,6 +124,10 @@ class Settings(BaseSettings):
     @property
     def gigachat_configured(self) -> bool:
         return bool(self.gigachat_credentials.strip())
+
+    @property
+    def perplexity_configured(self) -> bool:
+        return bool(self.perplexity_api_key.strip())
 
     def yandex_model_uri(self, model: str) -> str:
         folder = self.yandex_folder_id

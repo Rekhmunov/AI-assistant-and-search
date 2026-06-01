@@ -13,6 +13,7 @@ from app.services.app_settings import SETTING_KEYS, list_settings, list_settings
 from app.services.anthropic_probe import probe_anthropic
 from app.services.deepseek_probe import probe_deepseek
 from app.services.gigachat_probe import probe_gigachat
+from app.services.perplexity_probe import probe_perplexity
 from app.services.providers.registry import VALID_LLM_IDS, VALID_SEARCH_IDS, VALID_VISION_IDS
 
 router = APIRouter(prefix="/settings", tags=["admin-settings"])
@@ -103,6 +104,16 @@ async def update_settings(
                         "Добавьте ключ в /opt/aisearch/.env и пересоздайте backend/worker."
                     ),
                 )
+        if key == "llm_provider" and str(value) == "perplexity":
+            if not env.perplexity_configured:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=(
+                        "PERPLEXITY_API_KEY не загружен в backend. "
+                        "Добавьте ключ в /opt/aisearch/.env и выполните: "
+                        "docker compose -f docker-compose.prod.yml up -d --force-recreate backend worker"
+                    ),
+                )
         await set_setting(key, value, db, redis, admin.id)
         updated[key] = value
 
@@ -143,3 +154,11 @@ async def probe_gigachat_api(
 ):
     """Тестовый запрос к GigaChat (OAuth, lite + pro) с credentials из .env."""
     return await probe_gigachat()
+
+
+@router.post("/probe-perplexity")
+async def probe_perplexity_api(
+    _admin=Depends(require_permission("settings:read")),
+):
+    """Тестовый запрос к Perplexity Sonar (disable_search) с ключом из .env."""
+    return await probe_perplexity()
