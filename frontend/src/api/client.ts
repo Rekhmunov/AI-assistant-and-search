@@ -316,6 +316,28 @@ export async function createProPayment(
   return res.json();
 }
 
+export async function confirmProPayment(
+  token: string
+): Promise<{ ok: boolean; plan?: string; message?: string; already_active?: boolean }> {
+  const res = await fetch(`${API_BASE}/api/payments/confirm`, {
+    method: "POST",
+    headers: apiHeaders(token),
+    credentials: "include",
+  });
+  if (!res.ok) {
+    let msg = "Не удалось подтвердить оплату";
+    try {
+      const body = await res.json();
+      const detail = (body as { detail?: unknown }).detail;
+      if (typeof detail === "string") msg = detail;
+    } catch {
+      /* ignore */
+    }
+    throw new Error(msg);
+  }
+  return res.json();
+}
+
 export async function deleteAccount(token: string): Promise<void> {
   await fetch(`${API_BASE}/api/users/me`, {
     method: "DELETE",

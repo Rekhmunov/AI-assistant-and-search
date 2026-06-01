@@ -1,6 +1,15 @@
+import { useEffect, useRef } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useNavigate } from "react-router-dom";
-import { createProPayment, devActivatePro, deleteAccount, fetchAppConfig, fetchMe, fetchSession } from "../api/client";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import {
+  confirmProPayment,
+  createProPayment,
+  devActivatePro,
+  deleteAccount,
+  fetchAppConfig,
+  fetchMe,
+  fetchSession,
+} from "../api/client";
 import { AuthGate } from "../components/AuthGate";
 import { MobileNewThreadButton } from "../components/MobileNewThreadButton";
 import { MobilePageHeader } from "../components/MobilePageHeader";
@@ -30,6 +39,8 @@ export function Profile() {
   const clear = useAuthStore((s) => s.clear);
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const paymentConfirmStarted = useRef(false);
   const inMax = isMaxWebApp();
   const isDesktop = useDesktopLayout();
 
@@ -55,6 +66,31 @@ export function Profile() {
   const searchesToday = session?.searches_today ?? user?.searches_today ?? 0;
   const searchesLimit = session?.searches_limit ?? user?.searches_limit ?? 10;
   const proPriceRub = appConfig?.pro_price_rub ?? user?.pro_price_rub ?? session?.pro_price_rub ?? 299;
+
+  useEffect(() => {
+    if (!token || paymentConfirmStarted.current) return;
+    const paymentResult = searchParams.get("payment");
+    if (paymentResult !== "success") return;
+
+    paymentConfirmStarted.current = true;
+    setSearchParams({}, { replace: true });
+
+    void (async () => {
+      try {
+        const result = await confirmProPayment(token);
+        if (result.ok) {
+          const updated = await fetchMe(token);
+          setUser(updated);
+          queryClient.invalidateQueries({ queryKey: ["me"] });
+          queryClient.invalidateQueries({ queryKey: ["session"] });
+        } else if (result.message) {
+          alert(result.message);
+        }
+      } catch (err) {
+        alert(err instanceof Error ? err.message : "Не удалось активировать Pro");
+      }
+    })();
+  }, [token, searchParams, setSearchParams, setUser, queryClient]);
 
   if (!token) {
     return (

@@ -120,3 +120,32 @@ async def create_payment(
         "confirmation_url": str(url),
         "status": data.get("status"),
     }
+
+
+async def get_payment(
+    payment_id: str,
+    settings: Settings | None = None,
+) -> dict[str, Any]:
+    settings = settings or get_settings()
+    shop_id = settings.yookassa_shop_id.strip()
+    secret = settings.yookassa_secret_key.strip()
+    if not shop_id or not secret:
+        raise YooKassaError("YOOKASSA_SHOP_ID или YOOKASSA_SECRET_KEY не заданы")
+
+    url = f"{YOOKASSA_API}/{payment_id}"
+    try:
+        async with httpx.AsyncClient(timeout=45.0) as client:
+            resp = await client.get(url, auth=(shop_id, secret))
+    except httpx.HTTPError as e:
+        logger.exception("YooKassa get payment network error")
+        raise YooKassaError(f"Сеть: {e}") from e
+
+    if resp.status_code >= 400:
+        detail = (resp.text or "")[:400]
+        raise YooKassaError(f"HTTP {resp.status_code}: {detail}")
+
+    try:
+        return resp.json()
+    except ValueError as e:
+        snippet = (resp.text or "")[:200]
+        raise YooKassaError(f"Некорректный ответ YooKassa: {snippet}") from e

@@ -4,7 +4,6 @@ from datetime import datetime, timedelta, timezone
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -14,8 +13,11 @@ from app.core.database import async_session_factory
 from app.models.subscription import Subscription, SubscriptionStatus
 from app.models.user import Plan, User
 from app.services.app_settings import get_setting
-from app.services.bot import MaxBotService
-from app.services.yookassa import YooKassaError, create_payment
+from app.services.subscription_activation import (
+    activate_from_yookassa_payment,
+    find_latest_pending_subscription,
+)
+from app.services.yookassa import YooKassaError, create_payment, get_payment
 
 import redis.asyncio as redis
 
@@ -121,7 +123,7 @@ async def create_pro_payment(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=(
                 "Платёж в ЮKassa создан, но не сохранился в базе. "
-                "Напишите в поддержку с email аккаунта."
+                "После оплаты откройте профиль — тариф активируется автоматически."
             ),
         ) from e
 
@@ -132,36 +134,92 @@ async def create_pro_payment(
     }
 
 
+@router.post("/confirm")
+async def confirm_pro_payment(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+):
+    """
+    Подтвердить оплату после возврата с YooKassa (если webhook не успел).
+    Берёт последнюю pending-подписку пользователя и проверяет статус в YooKassa.
+    """
+    settings = get_settings()
+    if user.plan == Plan.PRO:
+        return {"ok": True, "plan": "pro", "already_active": True}
+
+    if not settings.yookassa_shop_id.strip() or not settings.yookassa_secret_key.strip():
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="YooKassa не настроена")
+
+    sub = await find_latest_pending_subscription(db, user.id)
+    if not sub or not sub.yookassa_payment_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Нет ожидающего платежа. Если оплата прошла — напишите в поддержку.",
+        )
+
+    try:
+        payment = await get_payment(sub.yookassa_payment_id, settings)
+    except YooKassaError as e:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Не удалось проверить платёж: {e}",
+        ) from e
+
+    payment_status = payment.get("status")
+    if payment_status != "succeeded":
+        return {
+            "ok": False,
+            "status": payment_status,
+            "message": "Оплата ещё не подтверждена. Подождите минуту и обновите страницу.",
+        }
+
+    activated = await activate_from_yookassa_payment(
+        db,
+        payment_id=sub.yookassa_payment_id,
+        payment_object=payment,
+        settings=settings,
+    )
+    if not activated:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Не удалось активировать Pro",
+        )
+
+    await db.refresh(user)
+    return {
+        "ok": True,
+        "plan": user.plan.value,
+        "plan_expires_at": user.plan_expires_at.isoformat() if user.plan_expires_at else None,
+    }
+
+
 @router.post("/webhook")
 async def yookassa_webhook(request: Request, db: Annotated[AsyncSession, Depends(get_db)]):
     """Handle YooKassa payment notifications."""
     settings = get_settings()
-    body: dict[str, Any] = await request.json()
+    try:
+        body: dict[str, Any] = await request.json()
+    except Exception:
+        logger.warning("YooKassa webhook: invalid JSON")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid JSON") from None
+
     event = body.get("event")
-    obj = body.get("object", {})
+    obj = body.get("object") or {}
     payment_id = obj.get("id")
+
+    logger.info("YooKassa webhook event=%s payment_id=%s", event, payment_id)
 
     if event != "payment.succeeded" or not payment_id:
         return {"ok": True}
 
-    result = await db.execute(
-        select(Subscription).where(Subscription.yookassa_payment_id == payment_id)
+    activated = await activate_from_yookassa_payment(
+        db,
+        payment_id=str(payment_id),
+        payment_object=obj,
+        settings=settings,
     )
-    sub = result.scalar_one_or_none()
-    if not sub or sub.status == SubscriptionStatus.ACTIVE:
-        return {"ok": True}
-
-    sub.status = SubscriptionStatus.ACTIVE
-    sub.activated_at = datetime.now(timezone.utc)
-
-    user_result = await db.execute(select(User).where(User.id == sub.user_id))
-    user = user_result.scalar_one()
-    user.plan = Plan.PRO
-    user.plan_expires_at = datetime.now(timezone.utc) + timedelta(days=settings.pro_duration_days)
-
-    if user.max_user_id:
-        bot = MaxBotService()
-        await bot.send_message(user.max_user_id, "Подписка Pro активирована 🎉")
+    if not activated:
+        logger.error("YooKassa webhook: activation failed for payment %s", payment_id)
 
     return {"ok": True}
 
