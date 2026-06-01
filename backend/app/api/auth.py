@@ -19,6 +19,7 @@ from app.api.deps import (
     guest_by_key,
 )
 from app.core.config import get_settings
+from app.services.app_settings import get_setting
 
 _session_security = HTTPBearer(auto_error=False)
 from app.core.limiter import RateLimiter
@@ -144,6 +145,7 @@ async def _attach_max_identity(db: AsyncSession, user: User, user_data: dict) ->
 async def session_status(
     db: Annotated[AsyncSession, Depends(get_db)],
     limiter: Annotated[RateLimiter, Depends(get_rate_limiter)],
+    redis_client: Annotated[redis.Redis, Depends(get_redis)],
     creds: Annotated[HTTPAuthorizationCredentials | None, Depends(_session_security)],
     refresh_token: Annotated[str | None, Cookie(alias="refresh_token")] = None,
     guest_session: Annotated[str | None, Cookie(alias=GUEST_COOKIE)] = None,
@@ -152,6 +154,7 @@ async def session_status(
     from app.api.deps import _resolve_authenticated_user
 
     settings = get_settings()
+    guest_limit = int(await get_setting("guest_searches_per_day", db, redis_client, settings))
     user = await _resolve_authenticated_user(db, creds, refresh_token)
     if user:
         used, limit = await _limits_for_user(user, limiter)
@@ -178,7 +181,7 @@ async def session_status(
         authenticated=False,
         is_guest=False,
         searches_today=0,
-        searches_limit=settings.guest_searches_per_day,
+        searches_limit=guest_limit,
     )
 
 

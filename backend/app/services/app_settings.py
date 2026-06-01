@@ -17,6 +17,7 @@ from app.services.providers.registry import (
 from app.services.prompts.defaults import DEFAULT_VISION_PROVIDER
 
 BASE_SETTING_KEYS: dict[str, type] = {
+    "guest_searches_per_day": int,
     "free_searches_per_day": int,
     "pro_searches_per_day": int,
     "global_yandex_requests_per_day": int,
@@ -33,6 +34,7 @@ SETTING_KEYS: dict[str, type] = {
 }
 
 ENV_DEFAULTS: dict[str, str] = {
+    "guest_searches_per_day": "guest_searches_per_day",
     "free_searches_per_day": "free_searches_per_day",
     "pro_searches_per_day": "pro_searches_per_day",
     "global_yandex_requests_per_day": "global_yandex_requests_per_day",

@@ -105,6 +105,7 @@ export function SettingsPage() {
     e.preventDefault();
     setMsg("");
     const payload: Record<string, unknown> = {
+      guest_searches_per_day: Number(settings.guest_searches_per_day),
       free_searches_per_day: Number(settings.free_searches_per_day),
       pro_searches_per_day: Number(settings.pro_searches_per_day),
       global_yandex_requests_per_day: Number(settings.global_yandex_requests_per_day),
@@ -282,6 +283,16 @@ export function SettingsPage() {
           </button>
           {limitsOpen && (
             <div id="settings-limits-panel" className="settings-section-panel">
+              <label>
+                Гостевых поисков / день
+                <input
+                  type="number"
+                  value={String(settings.guest_searches_per_day ?? "")}
+                  onChange={(e) => setSettings({ ...settings, guest_searches_per_day: e.target.value })}
+                  disabled={!can("settings:write")}
+                />
+                <span className="hint-inline">Анонимные пользователи без регистрации</span>
+              </label>
               <label>
                 Free поисков / день
                 <input
