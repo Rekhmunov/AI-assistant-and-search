@@ -1721,3 +1721,154 @@ pre.small {
 .payments-col-actions {
   width: 72px;
 }
+
+/* ——— Broadcasts page ——— */
+
+.broadcasts-section {
+  padding: 16px 18px;
+  margin-bottom: 16px;
+}
+
+.broadcasts-section-title {
+  margin: 0 0 8px;
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+
+.broadcasts-section-hint {
+  margin: 0 0 14px;
+}
+
+.broadcasts-webhook-hint {
+  margin: 0 0 14px;
+  word-break: break-all;
+}
+
+.broadcasts-webhook-hint code {
+  font-size: 0.8125rem;
+}
+
+.broadcasts-welcome-form,
+.broadcasts-compose {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.broadcasts-field {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.broadcasts-field--wide {
+  width: 100%;
+}
+
+.broadcasts-field-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.broadcasts-field textarea,
+.broadcasts-field select {
+  margin: 0;
+  width: 100%;
+  max-width: 100%;
+}
+
+.broadcasts-field select {
+  max-width: 240px;
+}
+
+.broadcasts-char-count {
+  margin: 0;
+}
+
+.broadcasts-welcome-media {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.broadcasts-media-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+
+.broadcasts-file-btn {
+  margin: 0;
+  cursor: pointer;
+}
+
+.broadcasts-media-name {
+  font-size: 0.875rem;
+  color: var(--text);
+}
+
+.broadcasts-rules-list {
+  margin: 0;
+  padding-left: 1.2rem;
+  color: var(--text);
+  line-height: 1.55;
+}
+
+.broadcasts-rules-list li + li {
+  margin-top: 8px;
+}
+
+.broadcasts-recipients {
+  margin: 0;
+}
+
+.broadcasts-preview-error {
+  color: #b91c1c;
+}
+
+.broadcasts-history {
+  margin-top: 4px;
+}
+
+.broadcasts-history-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.broadcasts-history-item {
+  padding: 14px 16px;
+  margin-bottom: 10px;
+}
+
+.broadcasts-history-text {
+  margin: 0 0 8px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.broadcasts-history-meta {
+  margin: 0;
+}
+
+.broadcasts-history-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.broadcasts-empty {
+  text-align: center;
+  padding: 24px 16px;
+}

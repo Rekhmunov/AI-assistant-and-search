@@ -31,6 +31,9 @@ BASE_SETTING_KEYS: dict[str, type] = {
     "maintenance_mode": bool,
     "pro_purchase_disabled": bool,
     "bot_welcome_text": str,
+    "bot_welcome_media_type": str,
+    "bot_welcome_media_token": str,
+    "bot_welcome_media_filename": str,
     "llm_provider": str,
     "free_llm_provider": str,
     "search_provider": str,
@@ -50,7 +53,10 @@ ENV_DEFAULTS: dict[str, str] = {
     "global_yandex_requests_per_day": "global_yandex_requests_per_day",
     "maintenance_mode": "false",
     "pro_purchase_disabled": "false",
-    "bot_welcome_text": "Привет! Нажмите кнопку ниже, чтобы открыть AI Search.",
+    "bot_welcome_text": "Привет! Нажмите кнопку ниже, чтобы открыть Glosix.",
+    "bot_welcome_media_type": "none",
+    "bot_welcome_media_token": "",
+    "bot_welcome_media_filename": "",
 }
 
 
@@ -99,6 +105,10 @@ def default_for_key(key: str, settings: Settings | None = None) -> Any:
         return False
     if key == "bot_welcome_text":
         return ENV_DEFAULTS["bot_welcome_text"]
+    if key == "bot_welcome_media_type":
+        return ENV_DEFAULTS["bot_welcome_media_type"]
+    if key in {"bot_welcome_media_token", "bot_welcome_media_filename"}:
+        return ""
     return ""
 
 

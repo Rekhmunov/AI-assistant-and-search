@@ -116,7 +116,6 @@ export function SettingsPage() {
       global_yandex_requests_per_day: Number(settings.global_yandex_requests_per_day),
       maintenance_mode: Boolean(settings.maintenance_mode),
       pro_purchase_disabled: Boolean(settings.pro_purchase_disabled),
-      bot_welcome_text: String(settings.bot_welcome_text),
       llm_provider: llmProvider,
       free_llm_provider: freeLlmProvider,
       search_provider: searchProvider,
@@ -382,15 +381,6 @@ export function SettingsPage() {
                 <span className="hint-inline">
                   Кнопка «Перейти на Pro» покажет сообщение; оплата через ЮKassa заблокирована
                 </span>
-              </label>
-              <label>
-                Текст приветствия бота
-                <textarea
-                  rows={3}
-                  value={String(settings.bot_welcome_text ?? "")}
-                  onChange={(e) => setSettings({ ...settings, bot_welcome_text: e.target.value })}
-                  disabled={!can("settings:write")}
-                />
               </label>
             </div>
           )}

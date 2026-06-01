@@ -115,6 +115,28 @@ class AudiencePreview(BaseModel):
     recipient_count: int
 
 
+class BotWelcomeOut(BaseModel):
+    text: str
+    media_type: str
+    media_token: str | None = None
+    media_filename: str | None = None
+    webhook_url: str
+    max_text_length: int = 4000
+
+
+class BotWelcomeUpdate(BaseModel):
+    text: str = Field(..., min_length=1, max_length=4000)
+    media_type: str = Field(default="none", pattern="^(none|image|video)$")
+    media_token: str | None = None
+    media_filename: str | None = None
+
+
+class BotWelcomeMediaOut(BaseModel):
+    media_type: str
+    media_token: str
+    media_filename: str
+
+
 class UserAdminOut(BaseModel):
     id: UUID
     max_user_id: int | None = None

@@ -11,6 +11,7 @@ from app.services.bot import MaxBotService
 from celery_app import celery
 
 BATCH_SIZE = 50
+SEND_DELAY_SEC = 0.12  # ~8 msg/s — безопаснее лимита MAX (~30 rps)
 
 
 @celery.task(name="send_broadcast")
@@ -30,7 +31,7 @@ async def _send_broadcast_async(broadcast_id: str) -> None:
         if not broadcast:
             return
 
-        q = select(User).where(User.deleted_at.is_(None))
+        q = select(User).where(User.deleted_at.is_(None), User.max_user_id.isnot(None))
         if broadcast.audience == BroadcastAudience.FREE:
             q = q.where(User.plan == Plan.FREE)
         elif broadcast.audience == BroadcastAudience.PRO:
@@ -42,21 +43,27 @@ async def _send_broadcast_async(broadcast_id: str) -> None:
         sent = 0
         failed = 0
         for user in users:
-            ok = await bot.send_message(user.max_user_id, broadcast.text)
+            result = await bot.send_message(user.max_user_id, broadcast.text)
+            if not result.ok and result.retry_after_sec:
+                await asyncio.sleep(result.retry_after_sec)
+                result = await bot.send_message(user.max_user_id, broadcast.text)
+
             log = BroadcastLog(
                 broadcast_id=broadcast.id,
                 user_id=user.id,
-                status=BroadcastLogStatus.SENT if ok else BroadcastLogStatus.FAILED,
-                error=None if ok else "send failed",
+                status=BroadcastLogStatus.SENT if result.ok else BroadcastLogStatus.FAILED,
+                error=None if result.ok else (result.error or "send failed"),
             )
             db.add(log)
-            if ok:
+            if result.ok:
                 sent += 1
             else:
                 failed += 1
+
             if (sent + failed) % BATCH_SIZE == 0:
                 await db.commit()
-                await asyncio.sleep(1)
+
+            await asyncio.sleep(SEND_DELAY_SEC)
 
         broadcast.sent_count = sent
         broadcast.failed_count = failed

@@ -35,3 +35,24 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
   }
   return res.json() as Promise<T>;
 }
+
+export async function apiUpload<T>(path: string, formData: FormData): Promise<T> {
+  const res = await fetch(`${API}${path}`, {
+    method: "POST",
+    credentials: "include",
+    body: formData,
+  });
+
+  if (!res.ok) {
+    let detail = res.statusText;
+    try {
+      const body = await res.json();
+      detail = body.detail || JSON.stringify(body);
+    } catch {
+      /* ignore */
+    }
+    throw new ApiError(String(detail), res.status);
+  }
+
+  return res.json() as Promise<T>;
+}
