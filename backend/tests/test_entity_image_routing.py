@@ -2,6 +2,7 @@
 
 from app.services.entity_image_routing import (
     build_entity_image_query,
+    enrich_visual_image_query,
     query_needs_thread_context,
     resolve_entity_image_query,
     wants_entity_images,
@@ -20,6 +21,10 @@ def test_wants_entity_images_negative():
     assert not wants_entity_images("Курс доллара сегодня")
     assert not wants_entity_images("Привет", intent="chitchat")
     assert not wants_entity_images("Напиши функцию на Python", intent="howto")
+    assert not wants_entity_images(
+        "Как настроить Telegram Bot API",
+        topic_type="product_tech",
+    )
 
 
 def test_image_display_request():
@@ -39,6 +44,12 @@ def test_build_entity_image_query():
     assert build_entity_image_query("что такое квантовый компьютер") == "квантовый компьютер"
 
 
+def test_enrich_visual_place_query():
+    q = enrich_visual_image_query("Иваново", topic_type="place")
+    assert "Иваново" in q
+    assert "фото" in q.lower()
+
+
 def test_query_needs_thread_context():
     assert query_needs_thread_context("Покажи товары этого бренда?", "товары этого бренда")
     assert query_needs_thread_context("Покажи его товары", "его товары")
@@ -52,18 +63,36 @@ def test_resolve_entity_image_query_uses_rewriter_on_follow_up():
         "",
         search_queries=["Gefu kitchen products brand"],
         is_continuation=True,
+        topic_type="general",
     )
-    assert q == "Gefu kitchen products brand"
+    assert "Gefu" in q
+    assert "фото" in q.lower()
 
 
-def test_resolve_entity_image_query_prefers_rewriter():
+def test_resolve_entity_image_query_ignores_technical_rewriter():
+    q = resolve_entity_image_query(
+        "Расскажи про Иваново",
+        "",
+        search_queries=["Иваново город история достопримечательности"],
+        is_continuation=False,
+        topic_type="place",
+    )
+    assert "Иваново" in q
+    assert "истори" not in q.lower()
+    assert "достопримечательност" not in q.lower()
+    assert "фото" in q.lower()
+
+
+def test_resolve_entity_image_query_not_fx_rewriter():
     q = resolve_entity_image_query(
         "Курс доллара",
         "",
         search_queries=["курс доллара USD ЦБ"],
         is_continuation=False,
+        topic_type="numeric",
     )
-    assert q == "курс доллара USD ЦБ"
+    assert "USD" not in q
+    assert "ЦБ" not in q
 
 
 def test_resolve_entity_image_query_fallback_local():
@@ -71,5 +100,7 @@ def test_resolve_entity_image_query_fallback_local():
         "Покажи фото Рима",
         "",
         search_queries=None,
+        topic_type="place",
     )
-    assert q == "Рима"
+    assert "Рим" in q
+    assert "фото" in q.lower()

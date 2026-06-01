@@ -45,14 +45,14 @@ _IMAGE_QUERY_PREFIX_RE = re.compile(
 
 _NO_IMAGE_INTENTS = frozenset({"howto", "edit_prior", "chitchat", "document", "vision_image"})
 
-# «Покажи питбуля», «покажи мне Рим» — без слова «фото»
+_NO_IMAGE_TOPIC_TYPES = frozenset({"product_tech", "numeric", "program"})
+
 _SHOW_ENTITY_RE = re.compile(
     r"покаж(?:и|ите)\s+(?:мне\s+)?"
     r"(?!как\b|шаг|пример|код|макрос|функци|формул|sql|excel|эксель)",
     re.I,
 )
 
-# Местоимения и отсылки к прошлому сообщению («этот бренд», «его товары»).
 _DEICTIC_RE = re.compile(
     r"(?:"
     r"\bэт(?:от|ого|ой|ом|а|у|и)\b|"
@@ -74,12 +74,31 @@ _NAMED_ENTITY_RE = re.compile(
     r"\b(?:[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*|[A-Z]{2,})\b",
 )
 
+# Слова из web-search planner — не для Yandex Image Search
+_IMAGE_QUERY_NOISE_RE = re.compile(
+    r"(?:"
+    r"\bapi\b|\bsdk\b|документац|developer|developers|"
+    r"инструкц|настройк|webhook|endpoint|"
+    r"официальн|котировк|цб\b|usd\b|eur\b|"
+    r"telegram\s+bot|kubernetes|docker\b|"
+    r"истори(?:я|и)\b|достопримечательност"
+    r")",
+    re.I,
+)
 
-def wants_entity_images(query: str, *, intent: str = "factual_current") -> bool:
+
+def wants_entity_images(
+    query: str,
+    *,
+    intent: str = "factual_current",
+    topic_type: str = "general",
+) -> bool:
     q = (query or "").strip()
     if not q or len(q) > 500:
         return False
     if intent in _NO_IMAGE_INTENTS:
+        return False
+    if topic_type in _NO_IMAGE_TOPIC_TYPES:
         return False
     if _EXCLUDE_IMAGE_RE.search(q):
         return False
@@ -118,22 +137,59 @@ def query_needs_thread_context(user_query: str, local_query: str) -> bool:
     return False
 
 
+def _strip_image_query_noise(text: str) -> str:
+    cleaned = _IMAGE_QUERY_NOISE_RE.sub(" ", text or "")
+    return re.sub(r"\s+", " ", cleaned).strip(" ,.")
+
+
+def _is_visual_friendly_rewriter_query(text: str) -> bool:
+    q = (text or "").strip()
+    if len(q) < 2:
+        return False
+    if _IMAGE_QUERY_NOISE_RE.search(q):
+        return False
+    return True
+
+
+def enrich_visual_image_query(local_query: str, *, topic_type: str = "general") -> str:
+    """Добавляет визуальный контекст для Image Search (не web search)."""
+    base = _strip_image_query_noise(local_query).strip()
+    if not base:
+        return base
+    lower = base.lower()
+    if "фото" in lower or "photo" in lower or "images" in lower:
+        return base[:120]
+    if topic_type == "place":
+        return f"{base} город фото"[:120]
+    if topic_type == "general" and len(base.split()) <= 5:
+        return f"{base} фото"[:120]
+    return base[:120]
+
+
 def resolve_entity_image_query(
     user_query: str,
     llm_query: str = "",
     *,
     search_queries: list[str] | None = None,
     is_continuation: bool = False,
+    topic_type: str = "general",
 ) -> str:
     """
-    Собирает запрос для Yandex Image Search.
+    Запрос для Yandex Image Search.
 
-    Приоритет — search_queries из QueryRewriter (контекст треда и тема запроса),
-    локальная эвристика — fallback.
+    search_queries от Search Planner — для веб-текста, не подставляем их напрямую
+    (иначе «Иваново история» или «Bot API docs» дают технические/текстовые картинки).
+    Rewriter используем только при местоименной отсылке в треде, если запрос визуальный.
     """
-    _ = is_continuation
-    for candidate in search_queries or []:
-        rewritten = (candidate or "").strip()
-        if len(rewritten) >= 2:
-            return rewritten[:120]
-    return build_entity_image_query(user_query, llm_query)
+    local = build_entity_image_query(user_query, llm_query)
+
+    if topic_type in _NO_IMAGE_TOPIC_TYPES:
+        return enrich_visual_image_query(local, topic_type="general")
+
+    if is_continuation and query_needs_thread_context(user_query, local):
+        for candidate in search_queries or []:
+            rewritten = (candidate or "").strip()
+            if _is_visual_friendly_rewriter_query(rewritten):
+                return enrich_visual_image_query(rewritten, topic_type=topic_type)
+
+    return enrich_visual_image_query(local, topic_type=topic_type)

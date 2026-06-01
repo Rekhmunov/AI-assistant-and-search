@@ -37,7 +37,7 @@ from app.services.query_url_memory import (
 )
 from app.services.entity_image import entity_images_to_json
 from app.services.message_images_column import messages_have_images_column
-from app.services.entity_image_routing import resolve_entity_image_query
+from app.services.entity_image_routing import resolve_entity_image_query, wants_entity_images
 from app.services.yandex_image_search import YandexImageSearchService
 from app.services.perplexity import PERPLEXITY_PROVIDER_ID, PerplexityProvider
 from app.services.providers.factory import resolve_runtime_providers
@@ -363,6 +363,12 @@ class SearchFlowService:
                     and not has_attachments
                     and not vision_only_answer
                     and str(image_intent) not in _skip_image_intents
+                    and rewrite.topic_type not in ("product_tech", "numeric", "program")
+                    and wants_entity_images(
+                        user_text,
+                        intent=str(image_intent),
+                        topic_type=rewrite.topic_type,
+                    )
                 )
                 image_task: asyncio.Task | None = None
                 if run_image_search:
@@ -371,6 +377,7 @@ class SearchFlowService:
                         llm_query,
                         search_queries=queries,
                         is_continuation=thread_ctx.is_continuation,
+                        topic_type=rewrite.topic_type,
                     )
                     image_svc = YandexImageSearchService(settings)
                     image_task = asyncio.create_task(
