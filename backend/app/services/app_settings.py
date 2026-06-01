@@ -29,6 +29,7 @@ BASE_SETTING_KEYS: dict[str, type] = {
     "pro_price_rub": int,
     "global_yandex_requests_per_day": int,
     "maintenance_mode": bool,
+    "pro_purchase_disabled": bool,
     "bot_welcome_text": str,
     "llm_provider": str,
     "free_llm_provider": str,
@@ -48,6 +49,7 @@ ENV_DEFAULTS: dict[str, str] = {
     "pro_price_rub": "pro_price_rub",
     "global_yandex_requests_per_day": "global_yandex_requests_per_day",
     "maintenance_mode": "false",
+    "pro_purchase_disabled": "false",
     "bot_welcome_text": "Привет! Нажмите кнопку ниже, чтобы открыть AI Search.",
 }
 
@@ -92,6 +94,8 @@ def default_for_key(key: str, settings: Settings | None = None) -> Any:
     if env_attr and hasattr(settings, env_attr):
         return getattr(settings, env_attr)
     if key == "maintenance_mode":
+        return False
+    if key == "pro_purchase_disabled":
         return False
     if key == "bot_welcome_text":
         return ENV_DEFAULTS["bot_welcome_text"]

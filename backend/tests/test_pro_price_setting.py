@@ -15,3 +15,12 @@ def test_pro_price_default_from_env():
 def test_pro_price_default_is_299():
     settings = Settings()
     assert default_for_key("pro_price_rub", settings) == 299
+
+
+def test_pro_purchase_disabled_in_setting_keys():
+    assert "pro_purchase_disabled" in SETTING_KEYS
+    assert SETTING_KEYS["pro_purchase_disabled"] is bool
+
+
+def test_pro_purchase_disabled_default_false():
+    assert default_for_key("pro_purchase_disabled") is False

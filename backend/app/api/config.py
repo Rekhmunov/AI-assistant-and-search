@@ -22,4 +22,5 @@ async def public_config(
     response.headers["Cache-Control"] = "no-store"
     settings = get_settings()
     pro_price_rub = int(await get_setting("pro_price_rub", db, redis_client, settings))
-    return {"pro_price_rub": pro_price_rub}
+    pro_purchase_disabled = bool(await get_setting("pro_purchase_disabled", db, redis_client, settings))
+    return {"pro_price_rub": pro_price_rub, "pro_purchase_disabled": pro_purchase_disabled}

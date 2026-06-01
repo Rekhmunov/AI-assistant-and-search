@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
@@ -13,6 +13,7 @@ import {
 import { AuthGate } from "../components/AuthGate";
 import { MobileNewThreadButton } from "../components/MobileNewThreadButton";
 import { MobilePageHeader } from "../components/MobilePageHeader";
+import { ProPurchaseBlockedModal } from "../components/ProPurchaseBlockedModal";
 import { ProfileAccountSection } from "../components/ProfileAccountSection";
 import { useDesktopLayout } from "../hooks/useDesktopLayout";
 import { isMaxWebApp } from "../lib/maxApp";
@@ -41,6 +42,7 @@ export function Profile() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const paymentConfirmStarted = useRef(false);
+  const [proBlockedOpen, setProBlockedOpen] = useState(false);
   const inMax = isMaxWebApp();
   const isDesktop = useDesktopLayout();
 
@@ -66,6 +68,7 @@ export function Profile() {
   const searchesToday = session?.searches_today ?? user?.searches_today ?? 0;
   const searchesLimit = session?.searches_limit ?? user?.searches_limit ?? 10;
   const proPriceRub = appConfig?.pro_price_rub ?? user?.pro_price_rub ?? session?.pro_price_rub ?? 299;
+  const proPurchaseDisabled = Boolean(appConfig?.pro_purchase_disabled);
 
   useEffect(() => {
     if (!token || paymentConfirmStarted.current) return;
@@ -113,6 +116,10 @@ export function Profile() {
   const usagePercent = Math.round(usageRatio * 100);
 
   const activatePro = async () => {
+    if (proPurchaseDisabled) {
+      setProBlockedOpen(true);
+      return;
+    }
     try {
       const payment = await createProPayment(token!);
       if (payment.dev_mode) {
@@ -125,7 +132,12 @@ export function Profile() {
       }
       window.location.href = payment.confirmation_url;
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Ошибка оплаты");
+      const message = err instanceof Error ? err.message : "Ошибка оплаты";
+      if (message.includes("временно недоступна") || message.includes("недоступна")) {
+        setProBlockedOpen(true);
+        return;
+      }
+      alert(message);
     }
   };
 
@@ -234,6 +246,8 @@ export function Profile() {
           <MobileNewThreadButton onClick={() => navigate("/")} />
         </div>
       )}
+
+      <ProPurchaseBlockedModal open={proBlockedOpen} onClose={() => setProBlockedOpen(false)} />
     </div>
   );
 }

@@ -54,6 +54,8 @@
   "plan": "Тариф",
   "searchesToday": "Поисков сегодня",
   "upgradePro": "Перейти на Pro",
+  "proPurchaseBlockedTitle": "Покупка Pro временно недоступна",
+  "proPurchaseBlockedHint": "Мы настраиваем оплату. Пожалуйста, попробуйте позже — ваш тариф Free пока работает как обычно.",
   "proPrice": "{price}₽ / месяц",
   "proBenefits": "Безлимитный поиск • Полная история • Приоритет",
   "language": "Язык",

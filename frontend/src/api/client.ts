@@ -30,6 +30,7 @@ export interface UserProfile {
 
 export interface AppPublicConfig {
   pro_price_rub: number;
+  pro_purchase_disabled?: boolean;
 }
 
 export interface ThreadListItem {

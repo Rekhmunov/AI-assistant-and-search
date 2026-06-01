@@ -115,6 +115,7 @@ export function SettingsPage() {
       pro_price_rub: Number(settings.pro_price_rub),
       global_yandex_requests_per_day: Number(settings.global_yandex_requests_per_day),
       maintenance_mode: Boolean(settings.maintenance_mode),
+      pro_purchase_disabled: Boolean(settings.pro_purchase_disabled),
       bot_welcome_text: String(settings.bot_welcome_text),
       llm_provider: llmProvider,
       free_llm_provider: freeLlmProvider,
@@ -367,6 +368,20 @@ export function SettingsPage() {
                   disabled={!can("settings:write")}
                 />
                 Режим обслуживания (блокирует поиск)
+              </label>
+              <label className="checkbox">
+                <input
+                  type="checkbox"
+                  checked={Boolean(settings.pro_purchase_disabled)}
+                  onChange={(e) =>
+                    setSettings({ ...settings, pro_purchase_disabled: e.target.checked })
+                  }
+                  disabled={!can("settings:write")}
+                />
+                Запрет покупки подписки Pro
+                <span className="hint-inline">
+                  Кнопка «Перейти на Pro» покажет сообщение; оплата через ЮKassa заблокирована
+                </span>
               </label>
               <label>
                 Текст приветствия бота
