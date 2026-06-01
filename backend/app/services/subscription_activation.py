@@ -44,13 +44,15 @@ async def activate_subscription_record(
     *,
     settings: Settings | None = None,
 ) -> bool:
-    """Mark subscription active and upgrade user. Returns False if already active."""
-    if sub.status == SubscriptionStatus.ACTIVE:
-        return False
-    sub.status = SubscriptionStatus.ACTIVE
-    sub.activated_at = datetime.now(timezone.utc)
-    await activate_pro_for_user(db, user, settings=settings)
-    return True
+    """Mark subscription active and upgrade user plan to Pro."""
+    if sub.status != SubscriptionStatus.ACTIVE:
+        sub.status = SubscriptionStatus.ACTIVE
+        sub.activated_at = datetime.now(timezone.utc)
+
+    if user.plan != Plan.PRO:
+        await activate_pro_for_user(db, user, settings=settings)
+
+    return user.plan == Plan.PRO
 
 
 async def find_subscription_by_payment_id(
@@ -371,6 +373,30 @@ async def recover_pro_for_user(
         )
         if activated:
             return activated
+
+    active_subs = [sub for sub in subscriptions if sub.status == SubscriptionStatus.ACTIVE]
+    for sub in active_subs:
+        payment_id = (sub.yookassa_payment_id or "").strip()
+        payment = payments_by_id.get(payment_id) if payment_id else None
+        if payment is not None and payment.get("status") not in (None, "succeeded"):
+            continue
+        await activate_pro_for_user(db, user, settings=settings)
+        if sub.activated_at is None:
+            sub.activated_at = datetime.now(timezone.utc)
+        await db.refresh(user)
+        logger.info(
+            "Resynced Pro for user %s from active subscription %s (payment %s)",
+            user.id,
+            sub.id,
+            payment_id or "—",
+        )
+        return {
+            "ok": True,
+            "plan": user.plan.value,
+            "payment_id": payment_id or None,
+            "source": "active_subscription_resync",
+            "plan_expires_at": user.plan_expires_at.isoformat() if user.plan_expires_at else None,
+        }
 
     try:
         activated = await _scan_yookassa_for_user(db, user, settings=settings)
