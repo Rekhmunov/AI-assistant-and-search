@@ -23,6 +23,21 @@ class TestAdminLabels(unittest.TestCase):
         user = DummyUser(email="test@yandex.ru", max_user_id=None, username="oksana")
         self.assertEqual(format_admin_user_label(user), "test@yandex.ru")
 
+    def test_format_user_contacts_shows_email_and_max(self):
+        user = DummyUser(email="test@yandex.ru", max_user_id=13294341)
+        from app.services.admin_labels import format_admin_user_contacts
+
+        self.assertEqual(
+            format_admin_user_contacts(user),
+            "email: test@yandex.ru, max: 13294341",
+        )
+
+    def test_format_user_contacts_shows_unlinked(self):
+        from app.services.admin_labels import format_admin_user_contacts
+
+        user = DummyUser(email=None, max_user_id=None)
+        self.assertEqual(format_admin_user_contacts(user), "email: не привязан, max: не привязан")
+
 
 if __name__ == "__main__":
     unittest.main()

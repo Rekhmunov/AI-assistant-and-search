@@ -31,3 +31,9 @@ def format_admin_user_label(user: User) -> str:
             name = f"{name} {user.last_name}"
         return name
     return str(user.id)
+
+
+def format_admin_user_contacts(user: User) -> str:
+    email_part = user.email.strip() if user.email else "не привязан"
+    max_part = str(user.max_user_id) if user.max_user_id is not None else "не привязан"
+    return f"email: {email_part}, max: {max_part}"

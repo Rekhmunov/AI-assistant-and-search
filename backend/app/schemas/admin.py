@@ -154,8 +154,15 @@ class SubscriptionOut(BaseModel):
     created_at: datetime
     activated_at: datetime | None
     user_email_hint: str | None = None
+    user_email: str | None = None
+    user_max_user_id: int | None = None
+    user_contact_label: str | None = None
 
     model_config = {"from_attributes": True}
+
+
+class BulkDeleteSubscriptionsRequest(BaseModel):
+    ids: list[UUID] = Field(min_length=1, max_length=200)
 
 
 class ProviderOptionOut(BaseModel):
