@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_db, get_redis
@@ -14,10 +14,12 @@ router = APIRouter(prefix="/config", tags=["config"])
 
 @router.get("/public")
 async def public_config(
+    response: Response,
     db: Annotated[AsyncSession, Depends(get_db)],
     redis_client: Annotated[redis.Redis, Depends(get_redis)],
 ):
     """Public app settings for frontend (price, limits display)."""
+    response.headers["Cache-Control"] = "no-store"
     settings = get_settings()
     pro_price_rub = int(await get_setting("pro_price_rub", db, redis_client, settings))
     return {"pro_price_rub": pro_price_rub}

@@ -48,7 +48,8 @@ export function Profile() {
   const { data: appConfig } = useQuery({
     queryKey: ["appConfig"],
     queryFn: fetchAppConfig,
-    staleTime: 30_000,
+    staleTime: 0,
+    refetchOnMount: "always",
   });
 
   const searchesToday = session?.searches_today ?? user?.searches_today ?? 0;

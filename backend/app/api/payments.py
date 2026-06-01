@@ -4,12 +4,13 @@ from datetime import datetime, timedelta, timezone
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from sqlalchemy import select, text
+from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_db, get_redis
 from app.core.config import get_settings
+from app.core.database import async_session_factory
 from app.models.subscription import Subscription, SubscriptionStatus
 from app.models.user import Plan, User
 from app.services.app_settings import get_setting
@@ -24,34 +25,34 @@ router = APIRouter(prefix="/payments", tags=["payments"])
 
 
 async def _save_pending_subscription(
-    db: AsyncSession,
     *,
     user_id: uuid.UUID,
     payment_id: str,
     amount_rub: int,
 ) -> None:
-    """Persist subscription after external payment API call."""
-    await db.execute(text("SELECT 1"))
-    sub = Subscription(
-        user_id=user_id,
-        yookassa_payment_id=payment_id,
-        status=SubscriptionStatus.PENDING,
-        amount_rub=amount_rub,
-    )
-    db.add(sub)
-    await db.flush()
+    """Persist subscription in a fresh DB session (after external YooKassa call)."""
+    async with async_session_factory() as db:
+        sub = Subscription(
+            user_id=user_id,
+            yookassa_payment_id=payment_id,
+            status=SubscriptionStatus.PENDING,
+            amount_rub=amount_rub,
+        )
+        db.add(sub)
+        await db.commit()
 
 
 @router.post("/create")
 async def create_pro_payment(
-    db: Annotated[AsyncSession, Depends(get_db)],
     redis_client: Annotated[redis.Redis, Depends(get_redis)],
     user: Annotated[User, Depends(get_current_user)],
 ):
     """Create YooKassa payment for Pro subscription."""
     settings = get_settings()
     return_url = f"{settings.public_web_url.rstrip('/')}/profile?payment=success"
-    pro_price_rub = int(await get_setting("pro_price_rub", db, redis_client, settings))
+
+    async with async_session_factory() as db:
+        pro_price_rub = int(await get_setting("pro_price_rub", db, redis_client, settings))
     if pro_price_rub < 1:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -74,7 +75,6 @@ async def create_pro_payment(
         payment_id = f"stub-{uuid.uuid4()}"
         try:
             await _save_pending_subscription(
-                db,
                 user_id=user.id,
                 payment_id=payment_id,
                 amount_rub=pro_price_rub,
@@ -108,7 +108,6 @@ async def create_pro_payment(
 
     try:
         await _save_pending_subscription(
-            db,
             user_id=user.id,
             payment_id=result["payment_id"],
             amount_rub=pro_price_rub,

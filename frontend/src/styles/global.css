@@ -773,6 +773,18 @@ body:has(.page-thread) {
   margin-top: 0;
 }
 
+.page-profile:not(.page-profile--mobile) .profile-pro-card .btn-primary.btn-block,
+.page-profile:not(.page-profile--mobile) .profile-bind-block .btn-primary.btn-block {
+  width: auto;
+  min-width: 180px;
+  max-width: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding-left: 24px;
+  padding-right: 24px;
+}
+
 .profile-settings-row {
   display: flex;
   align-items: center;

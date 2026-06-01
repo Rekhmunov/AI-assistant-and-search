@@ -200,7 +200,10 @@ export async function fetchSession(token: string | null): Promise<SessionStatus>
 }
 
 export async function fetchAppConfig(): Promise<AppPublicConfig> {
-  const res = await fetch(`${API_BASE}/api/config/public`, { credentials: "include" });
+  const res = await fetch(`${API_BASE}/api/config/public?_=${Date.now()}`, {
+    credentials: "include",
+    cache: "no-store",
+  });
   if (!res.ok) throw new Error("Failed to load app config");
   return res.json();
 }
