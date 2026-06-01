@@ -259,3 +259,10 @@ class AuditLogOut(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class AuditLogPage(BaseModel):
+    items: list[AuditLogOut]
+    total: int
+    page: int
+    page_size: int
