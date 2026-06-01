@@ -81,15 +81,46 @@ class GroundingModesTests(unittest.TestCase):
         self.assertEqual(mode, "strict")
 
     def test_prefers_official_docs_for_hybrid(self):
-        self.assertTrue(prefers_official_docs("hybrid"))
-        self.assertTrue(prefers_official_docs("synthesis", intent="howto"))
+        self.assertTrue(prefers_official_docs("hybrid", intent="compare_analyze"))
+        self.assertTrue(prefers_official_docs("hybrid", intent="howto"))
+
+    def test_should_prefer_official_docs_not_for_city(self):
+        from app.services.search_query import should_prefer_official_docs
+
+        self.assertFalse(
+            should_prefer_official_docs(
+                user_query="расскажи про Иваново",
+                search_queries=["Иваново город"],
+                intent="factual_current",
+            )
+        )
+
+    def test_should_prefer_official_docs_for_product(self):
+        from app.services.search_query import should_prefer_official_docs
+
+        self.assertTrue(
+            should_prefer_official_docs(
+                user_query="можно ли сделать напоминания через бота в Telegram",
+                search_queries=["Telegram Bot API reminders"],
+                intent="factual_current",
+            )
+        )
 
     def test_enhance_search_query_official_docs(self):
         q = enhance_search_query(
             "Telegram Bot API reminders",
             prefer_official_docs=True,
+            for_howto=True,
         )
         self.assertIn("документац", q.lower())
+
+    def test_enhance_search_query_city_unchanged(self):
+        q = enhance_search_query(
+            "расскажи про Иваново",
+            prefer_official_docs=False,
+        )
+        self.assertNotIn("api", q.lower())
+        self.assertIn("Иваново", q)
 
     def test_howto_is_synthesis(self):
         mode = resolve_grounding_mode(

@@ -252,7 +252,40 @@ def enhance_search_query(
             base = f"{base} официальная документация"
         return base[:400]
 
-    if prefer_official_docs and "документац" not in lower and "documentation" not in lower:
-        return f"{text} официальная документация API"[:400]
-
     return text[:400]
+
+
+def should_prefer_official_docs(
+    *,
+    user_query: str,
+    search_queries: list[str] | None = None,
+    intent: str = "",
+) -> bool:
+    """Официальная документация — только для IT/продуктов, не для городов и общих тем."""
+    if intent == "howto":
+        return True
+    blob = " ".join([user_query, *(search_queries or [])]).lower()
+    markers = (
+        " api",
+        "api ",
+        "sdk",
+        "документац",
+        "developer",
+        "интеграц",
+        "webhook",
+        "oauth",
+        "graphql",
+        "endpoint",
+        "мини-прилож",
+        "мини прилож",
+        "платформ",
+        "telegram",
+        "whatsapp",
+        "vk ",
+        "бот ",
+        " bot",
+        "мессенджер",
+        "yandex cloud",
+        "яндекс облако",
+    )
+    return any(m in blob for m in markers)

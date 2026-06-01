@@ -27,7 +27,11 @@ from app.services.facts.verify import verify_answer_against_facts
 from app.services.search_debug import build_debug_trace, build_gpt_messages_preview
 from app.services.facts.slots import STRICT_NUMERIC_SLOTS, resolve_fact_slots
 from app.services.facts.grounding import adjust_grounding_for_retrieval
-from app.services.search_query import enhance_search_query, normalize_user_query
+from app.services.search_query import (
+    enhance_search_query,
+    normalize_user_query,
+    should_prefer_official_docs,
+)
 from app.services.thread_context import build_thread_context, format_sources_for_prompt
 from app.services.yandex_errors import YandexServiceError
 from app.services.query_url_memory import (
@@ -352,11 +356,17 @@ class SearchFlowService:
                         )
                     )
 
+                prefer_official = should_prefer_official_docs(
+                    user_query=llm_query,
+                    search_queries=queries,
+                    intent=rewrite.intent if rewrite else route.intent,
+                )
+
                 def _enhance(q: str) -> str:
                     return enhance_search_query(
                         q,
                         for_howto=howto,
-                        prefer_official_docs=grounding_mode in ("hybrid", "synthesis"),
+                        prefer_official_docs=prefer_official,
                     )
 
                 extra_boot, extra_trace = await lookup_bootstrap_sources(
@@ -387,7 +397,7 @@ class SearchFlowService:
                         howto=howto,
                         answer_model=route.answer_model,
                         bootstrap_sources=bootstrap_sources or None,
-                        prefer_official_docs=grounding_mode in ("hybrid", "synthesis"),
+                        prefer_official_docs=prefer_official,
                     )
                 )
                 pipeline_result = None

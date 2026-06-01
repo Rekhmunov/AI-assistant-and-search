@@ -148,4 +148,7 @@ def should_verify_answer_numbers(
 
 
 def prefers_official_docs(grounding: GroundingMode, *, intent: str = "") -> bool:
-    return grounding in ("hybrid", "synthesis") or intent in ("howto", "compare_analyze")
+    """Устаревший хелпер; для пайплайна используй search_query.should_prefer_official_docs."""
+    if intent == "howto":
+        return True
+    return grounding == "hybrid" and intent in ("compare_analyze",)
