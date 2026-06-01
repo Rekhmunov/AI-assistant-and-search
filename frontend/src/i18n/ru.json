@@ -66,7 +66,7 @@
   "proPaymentConfirmRetry": "Проверить оплату",
   "checkProPayment": "Проверить оплату",
   "checkProPaymentHint": "Уже оплатили, но тариф не обновился? Нажмите кнопку ниже — мы проверим платёж в ЮKassa.",
-  "proPrice": "{price}₽ / месяц",
+  "proPrice": "{price} ₽ в месяц",
   "proBenefits": "Безлимитный поиск • Полная история • Приоритет",
   "language": "Язык",
   "deleteAccount": "Удалить аккаунт",
