@@ -28,7 +28,7 @@ from app.services.search_debug import build_debug_trace, build_gpt_messages_prev
 from app.services.facts.slots import STRICT_NUMERIC_SLOTS, resolve_fact_slots
 from app.services.facts.grounding import adjust_grounding_for_retrieval
 from app.services.search_query import normalize_user_query
-from app.services.thread_context import build_thread_context, format_sources_for_prompt
+from app.services.thread_context import build_thread_context, format_sources_for_prompt, llm_history_for_turn
 from app.services.yandex_errors import YandexServiceError
 from app.services.query_url_memory import (
     QueryUrlMemoryTrace,
@@ -258,6 +258,7 @@ class SearchFlowService:
         )
 
         history = thread_ctx.history
+        llm_history = llm_history_for_turn(history, has_attachments=has_attachments)
         prior_sources_block = format_sources_for_prompt(thread_ctx.last_assistant_sources)
 
         sources: list[SearchSource] = []
@@ -282,7 +283,7 @@ class SearchFlowService:
                     summary = await summarize_vision_for_search(
                         llm_query,
                         bundle.vision_images,
-                        history,
+                        llm_history,
                         db=db,
                         redis_client=redis_client,
                         prior_sources_block=prior_sources_block,
@@ -337,7 +338,7 @@ class SearchFlowService:
                     images_emitted = False
                     async for event in llm.stream_search_answer(
                         llm_query,
-                        history,
+                        llm_history,
                         model=route.answer_model,  # type: ignore[arg-type]
                         prior_sources_block=prior_sources_block,
                     ):
@@ -536,7 +537,7 @@ class SearchFlowService:
                     llm,
                     llm_query=llm_query,
                     sources=sources,
-                    history=history,
+                    history=llm_history,
                     prior_sources_block=prior_sources_block,
                     needs_search=route.needs_search,
                     model=route.answer_model,
@@ -556,7 +557,7 @@ class SearchFlowService:
                     async for chunk in stream_vision_answer(
                         llm_query,
                         bundle.vision_images,
-                        history,
+                        llm_history,
                         model=route.answer_model,
                         prior_sources_block=prior_sources_block,
                         prompt_store=_prompt_store,
@@ -583,7 +584,7 @@ class SearchFlowService:
                 async for chunk in llm.stream_answer(
                     llm_query,
                     sources,
-                    history,
+                    llm_history,
                     model=route.answer_model,
                     prior_sources_block=prior_sources_block,
                     hint_clarify=answer_hint,
@@ -613,7 +614,7 @@ class SearchFlowService:
                         async for chunk in llm.stream_answer(
                             llm_query,
                             sources,
-                            history,
+                            llm_history,
                             model=route.answer_model,
                             prior_sources_block=prior_sources_block,
                             hint_clarify=answer_hint,
@@ -634,7 +635,7 @@ class SearchFlowService:
                     async for chunk in llm.stream_answer(
                         llm_query,
                         sources,
-                        history,
+                        llm_history,
                         model=route.answer_model,
                         prior_sources_block=prior_sources_block,
                         hint_clarify=answer_hint,
@@ -648,7 +649,7 @@ class SearchFlowService:
             else:
                 async for chunk in llm.stream_answer_direct(
                     llm_query,
-                    history,
+                    llm_history,
                     model=route.answer_model,
                     prior_sources_block=prior_sources_block,
                 ):

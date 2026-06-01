@@ -56,3 +56,14 @@ def format_history_compact(history: list[tuple[str, str]], max_turns: int = 4, m
         label = "Пользователь" if role == "user" else "Ассистент"
         parts.append(f"{label}: {text[:max_chars]}")
     return "\n".join(parts)
+
+
+def llm_history_for_turn(
+    history: list[tuple[str, str]],
+    *,
+    has_attachments: bool,
+) -> list[tuple[str, str]]:
+    """Новое вложение — анализируем только текущие файлы, без прошлых описаний фото."""
+    if has_attachments:
+        return []
+    return history
