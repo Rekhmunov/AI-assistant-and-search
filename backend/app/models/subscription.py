@@ -2,8 +2,9 @@ import enum
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, Enum, ForeignKey, String, func
+from sqlalchemy import DateTime, ForeignKey, String, func
 from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import ENUM
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -23,7 +24,13 @@ class Subscription(Base):
     user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"))
     yookassa_payment_id: Mapped[str | None] = mapped_column(String(128), unique=True, nullable=True)
     status: Mapped[SubscriptionStatus] = mapped_column(
-        Enum(SubscriptionStatus, name="subscription_status_enum"), default=SubscriptionStatus.PENDING
+        ENUM(
+            SubscriptionStatus,
+            name="subscription_status_enum",
+            create_type=False,
+            values_callable=lambda enum_cls: [member.value for member in enum_cls],
+        ),
+        default=SubscriptionStatus.PENDING,
     )
     amount_rub: Mapped[int] = mapped_column(default=299)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

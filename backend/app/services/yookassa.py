@@ -104,7 +104,12 @@ async def create_payment(
         logger.warning("YooKassa create payment HTTP %s: %s", resp.status_code, detail)
         raise YooKassaError(f"HTTP {resp.status_code}: {detail}")
 
-    data = resp.json()
+    try:
+        data = resp.json()
+    except ValueError as e:
+        snippet = (resp.text or "")[:200]
+        raise YooKassaError(f"Некорректный ответ YooKassa: {snippet}") from e
+
     confirmation = data.get("confirmation") or {}
     url = confirmation.get("confirmation_url")
     payment_id = data.get("id")

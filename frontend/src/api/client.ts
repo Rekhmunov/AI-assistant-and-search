@@ -286,7 +286,14 @@ export async function createProPayment(
     let msg = "Не удалось создать платёж";
     try {
       const body = await res.json();
-      msg = (body as { detail?: string }).detail || msg;
+      const detail = (body as { detail?: unknown }).detail;
+      if (typeof detail === "string") {
+        msg = detail;
+      } else if (Array.isArray(detail)) {
+        msg = detail
+          .map((item) => (typeof item === "object" && item && "msg" in item ? String((item as { msg?: string }).msg) : String(item)))
+          .join("; ");
+      }
     } catch {
       /* ignore */
     }

@@ -45,6 +45,14 @@ def create_app() -> FastAPI:
 
     @app.exception_handler(Exception)
     async def unhandled_exception(request: Request, exc: Exception):
+        from starlette.exceptions import HTTPException as StarletteHTTPException
+
+        if isinstance(exc, StarletteHTTPException):
+            detail = exc.detail
+            if not isinstance(detail, str):
+                detail = str(detail)
+            return JSONResponse(status_code=exc.status_code, content={"detail": detail})
+
         import logging
 
         logging.getLogger(__name__).exception("Unhandled error on %s", request.url.path)

@@ -42,4 +42,5 @@ class SessionStatus(BaseModel):
     is_guest: bool = False
     searches_today: int = 0
     searches_limit: int = 5
+    pro_price_rub: int = 299
     user: UserProfile | None = None
