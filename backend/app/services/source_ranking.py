@@ -75,6 +75,32 @@ _LOW_QUALITY_HINTS = (
     "joomla",
 )
 
+_OFFICIAL_DOCS_HINTS = (
+    "developer.",
+    "developers.",
+    "/docs/",
+    "documentation",
+    "api-reference",
+    "api reference",
+    "dev.",
+    "help.",
+    "support.",
+    "официальн",
+    "инструкц",
+    "getting started",
+    "quickstart",
+)
+
+_UNOFFICIAL_HINTS = (
+    "forum",
+    "reddit",
+    "stackoverflow",
+    "habr.com",
+    "vc.ru",
+    "medium.com",
+    "blog/",
+)
+
 
 def _domain_score(domain: str) -> int:
     d = domain.lower().replace("www.", "")
@@ -84,9 +110,22 @@ def _domain_score(domain: str) -> int:
     return 50
 
 
-def _url_bonus(url: str, title: str, *, howto: bool, weather: bool, currency: bool) -> int:
+def _url_bonus(
+    url: str,
+    title: str,
+    *,
+    howto: bool,
+    weather: bool,
+    currency: bool,
+    prefer_official_docs: bool = False,
+) -> int:
     combined = f"{url} {title}".lower()
     bonus = 0
+    if prefer_official_docs:
+        if any(h in combined for h in _OFFICIAL_DOCS_HINTS):
+            bonus -= 12
+        if any(h in combined for h in _UNOFFICIAL_HINTS):
+            bonus += 8
     if howto:
         if any(h in combined for h in _HOWTO_URL_HINTS):
             bonus -= 8
@@ -140,6 +179,7 @@ def rank_sources(
     howto: bool = False,
     weather: bool = False,
     currency: bool = False,
+    prefer_official_docs: bool = False,
 ) -> list[SearchSource]:
     if not sources:
         return sources
@@ -147,7 +187,12 @@ def rank_sources(
     def sort_key(s: SearchSource) -> tuple[int, int]:
         domain = urlparse(s.url).netloc.replace("www.", "") if s.url else s.domain
         base = _domain_score(domain) + _url_bonus(
-            s.url, s.title, howto=howto, weather=weather, currency=currency
+            s.url,
+            s.title,
+            howto=howto,
+            weather=weather,
+            currency=currency,
+            prefer_official_docs=prefer_official_docs,
         )
         if weather:
             base += _weather_snippet_bonus(s.snippet or "")

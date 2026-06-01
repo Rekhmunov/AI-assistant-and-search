@@ -24,6 +24,22 @@ _HYBRID_QUERY_RE = re.compile(
     re.I,
 )
 
+_SOLUTION_QUERY_RE = re.compile(
+    r"(?:"
+    r"можем\s+ли|можно\s+ли|возможно\s+ли|реально\s+ли|получится\s+ли|"
+    r"как\s+(?:сделать|реализовать|настроить|внедрить|интегрировать|организовать|"
+    r"работает|устроен|устроено|подключить|создать|запустить)|"
+    r"что\s+нужно\s+(?:для|чтобы)|"
+    r"что\s+требуется|"
+    r"имеет\s+смысл|стоит\s+ли|"
+    r"агент|напоминан|интеграц|мини[\s-]?апп|мини[\s-]?прилож|"
+    r"платформ|сервис|продукт|"
+    r"архитектур|"
+    r"feasibility|how\s+to\s+implement|can\s+we\s+"
+    r")",
+    re.I,
+)
+
 
 def normalize_grounding(raw: object) -> GroundingMode | None:
     if raw is None:
@@ -40,9 +56,18 @@ def is_hybrid_heuristic_query(query: str) -> bool:
         return False
     if _HYBRID_QUERY_RE.search(q):
         return True
+    if _SOLUTION_QUERY_RE.search(q):
+        return True
     if "```" in q:
         return True
     return False
+
+
+def is_solution_or_feasibility_query(query: str) -> bool:
+    q = (query or "").strip()
+    if not q:
+        return False
+    return bool(_SOLUTION_QUERY_RE.search(q))
 
 
 def resolve_grounding_mode(
@@ -55,7 +80,7 @@ def resolve_grounding_mode(
     """
     strict — цифры/даты только из источников [n].
     synthesis — план/how-to из материалов [n], без выдуманных метрик.
-    hybrid — знания модели + поиск; [n] только на факты из сети.
+    hybrid — знания модели + поиск; [n] на факты из сети, решение — всегда.
     """
     slots = fact_slots or []
     if any(s in STRICT_NUMERIC_SLOTS for s in slots):
@@ -65,18 +90,34 @@ def resolve_grounding_mode(
 
     from_rewriter = normalize_grounding(rewriter_grounding)
     if from_rewriter == "strict":
-        return "strict"
-    if from_rewriter == "synthesis":
+        if any(s in STRICT_NUMERIC_SLOTS for s in slots):
+            return "strict"
+    elif from_rewriter == "synthesis":
         return "synthesis"
-    if from_rewriter == "hybrid":
+    elif from_rewriter == "hybrid":
         return "hybrid"
 
     if intent in ("compare_analyze", "document"):
         return "hybrid"
-    if is_hybrid_heuristic_query(query):
+    if is_hybrid_heuristic_query(query) or is_solution_or_feasibility_query(query):
         return "hybrid"
 
-    return "strict"
+    return "hybrid"
+
+
+def adjust_grounding_for_retrieval(
+    grounding: GroundingMode,
+    *,
+    weak_retrieval: bool,
+    fact_slots: list[str] | None = None,
+) -> GroundingMode:
+    """Слабая выдача: не ужесточать — переключить на hybrid (кроме строгих слотов)."""
+    slots = fact_slots or []
+    if any(s in STRICT_NUMERIC_SLOTS for s in slots):
+        return grounding
+    if weak_retrieval and grounding == "strict":
+        return "hybrid"
+    return grounding
 
 
 def effective_grounding_for_prompt(
@@ -104,3 +145,7 @@ def should_verify_answer_numbers(
     if any(s in SYNTHESIS_SLOTS for s in slots):
         return False
     return True
+
+
+def prefers_official_docs(grounding: GroundingMode, *, intent: str = "") -> bool:
+    return grounding in ("hybrid", "synthesis") or intent in ("howto", "compare_analyze")

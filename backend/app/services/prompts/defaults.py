@@ -39,14 +39,15 @@ REWRITER_USER = """Ты — модуль анализа вопроса пере�
 6. needs_clarification=true только если без параметра (город, дата, компания) факт недостижим; один короткий вопрос. Не подставляй город по умолчанию.
 7. how-to: intent=howto, grounding=synthesis, в search_queries — «официальная документация» / «инструкция».
 8. grounding — как отвечать после поиска:
-   - strict — курс валют, погода, финансы, актуальные цифры/даты: только факты из источников [n]
-   - hybrid — код, IT, «напиши/сгенерируй», посты, объяснения: знания модели + поиск; [n] только на факты из сети
+   - strict — только курс валют, погода, финансы (слоты fx_rate / weather_now / company_financial): цифры и даты только из [n]
+   - hybrid — по умолчанию для «можно ли», продуктов, платформ, IT, архитектуры, объяснений: знания модели + [n] на факты из сети; всегда дай решение по сути
    - synthesis — программы, похудение, пошаговые планы: структура из [n], без выдуманных метрик
-   Примеры: «курс USD» → strict; «напиши функцию на Go» → hybrid; «курс похудения на 4 недели» → synthesis + course_program
-9. Если needs_clarification=false — минимум один search_queries.
+   Примеры: «курс USD» → strict; «можно ли напоминания в мессенджере» → hybrid; «напиши функцию на Go» → hybrid; «курс похудения на 4 недели» → synthesis + course_program
+9. Для любого названного продукта, сервиса или платформы в search_queries добавь «официальная документация» / «developer docs» / «API».
+10. Если needs_clarification=false — минимум один search_queries.
 
 Ответь ТОЛЬКО JSON:
-{{"intent": "factual_current", "fact_slots": [], "grounding": "strict", "search_queries": ["..."], "needs_clarification": false, "clarification_question": null, "reason": "..."}}"""
+{{"intent": "factual_current", "fact_slots": [], "grounding": "hybrid", "search_queries": ["..."], "needs_clarification": false, "clarification_question": null, "reason": "..."}}"""
 
 EXTRACT_SYSTEM = (
     "Ты извлекаешь факты из источников для ответа на вопрос пользователя. "

@@ -3,13 +3,17 @@
 import unittest
 
 from app.services.facts.grounding import (
+    adjust_grounding_for_retrieval,
     is_hybrid_heuristic_query,
+    is_solution_or_feasibility_query,
     normalize_grounding,
+    prefers_official_docs,
     resolve_grounding_mode,
     should_verify_answer_numbers,
 )
 from app.services.answer_guard import search_answer_addon
 from app.services.query_rewriter import _parse_rewrite_json
+from app.services.search_query import enhance_search_query
 
 
 class GroundingModesTests(unittest.TestCase):
@@ -41,6 +45,51 @@ class GroundingModesTests(unittest.TestCase):
         self.assertEqual(mode, "hybrid")
         self.assertFalse(should_verify_answer_numbers(mode, []))
         self.assertIn("hybrid", search_answer_addon(grounding=mode).lower())
+
+    def test_feasibility_query_is_hybrid(self):
+        q = "Можем ли мы сделать напоминания через агента в мессенджере?"
+        self.assertTrue(is_solution_or_feasibility_query(q))
+        mode = resolve_grounding_mode(
+            fact_slots=[],
+            intent="factual_current",
+            query=q,
+        )
+        self.assertEqual(mode, "hybrid")
+
+    def test_general_topic_defaults_hybrid(self):
+        mode = resolve_grounding_mode(
+            fact_slots=[],
+            intent="factual_current",
+            query="что такое kubernetes",
+        )
+        self.assertEqual(mode, "hybrid")
+
+    def test_weak_retrieval_upgrades_strict_to_hybrid(self):
+        mode = adjust_grounding_for_retrieval(
+            "strict",
+            weak_retrieval=True,
+            fact_slots=[],
+        )
+        self.assertEqual(mode, "hybrid")
+
+    def test_weak_retrieval_keeps_numeric_strict(self):
+        mode = adjust_grounding_for_retrieval(
+            "strict",
+            weak_retrieval=True,
+            fact_slots=["fx_rate"],
+        )
+        self.assertEqual(mode, "strict")
+
+    def test_prefers_official_docs_for_hybrid(self):
+        self.assertTrue(prefers_official_docs("hybrid"))
+        self.assertTrue(prefers_official_docs("synthesis", intent="howto"))
+
+    def test_enhance_search_query_official_docs(self):
+        q = enhance_search_query(
+            "Telegram Bot API reminders",
+            prefer_official_docs=True,
+        )
+        self.assertIn("документац", q.lower())
 
     def test_howto_is_synthesis(self):
         mode = resolve_grounding_mode(

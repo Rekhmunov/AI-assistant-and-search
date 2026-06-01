@@ -25,7 +25,8 @@ from app.services.query_rewriter import QueryRewriter
 from app.services.facts.pipeline import FactPipeline
 from app.services.facts.verify import verify_answer_against_facts
 from app.services.search_debug import build_debug_trace, build_gpt_messages_preview
-from app.services.facts.slots import resolve_fact_slots
+from app.services.facts.slots import STRICT_NUMERIC_SLOTS, resolve_fact_slots
+from app.services.facts.grounding import adjust_grounding_for_retrieval
 from app.services.search_query import enhance_search_query, normalize_user_query
 from app.services.thread_context import build_thread_context, format_sources_for_prompt
 from app.services.yandex_errors import YandexServiceError
@@ -352,7 +353,11 @@ class SearchFlowService:
                     )
 
                 def _enhance(q: str) -> str:
-                    return enhance_search_query(q, for_howto=howto)
+                    return enhance_search_query(
+                        q,
+                        for_howto=howto,
+                        prefer_official_docs=grounding_mode in ("hybrid", "synthesis"),
+                    )
 
                 extra_boot, extra_trace = await lookup_bootstrap_sources(
                     db,
@@ -382,6 +387,7 @@ class SearchFlowService:
                         howto=howto,
                         answer_model=route.answer_model,
                         bootstrap_sources=bootstrap_sources or None,
+                        prefer_official_docs=grounding_mode in ("hybrid", "synthesis"),
                     )
                 )
                 pipeline_result = None
@@ -478,7 +484,12 @@ class SearchFlowService:
                     return
             elif route.needs_search:
                 weak_retrieval = bool(retrieval_trace and not retrieval_trace.get("ok"))
-                use_strict_facts = weak_retrieval and grounding_mode == "strict"
+                grounding_mode = adjust_grounding_for_retrieval(
+                    grounding_mode,  # type: ignore[arg-type]
+                    weak_retrieval=weak_retrieval,
+                    fact_slots=fact_slots,
+                )
+                use_strict_facts = False
 
                 full_answer = ""
                 async for chunk in llm.stream_answer(
@@ -529,6 +540,9 @@ class SearchFlowService:
                     logger.info("Answer template/refusal detected, regenerating")
                     yield sse_event("reset_answer", {})
                     full_answer = ""
+                    regen_grounding = grounding_mode
+                    if not any(s in STRICT_NUMERIC_SLOTS for s in fact_slots):
+                        regen_grounding = "hybrid"
                     async for chunk in llm.stream_answer(
                         llm_query,
                         sources,
@@ -536,10 +550,10 @@ class SearchFlowService:
                         model=route.answer_model,
                         prior_sources_block=prior_sources_block,
                         hint_clarify=answer_hint,
-                        strict_facts=(grounding_mode == "strict"),
+                        strict_facts=False,
                         fact_pack=fact_pack,
                         intent_howto=howto,
-                        grounding_mode=grounding_mode,
+                        grounding_mode=regen_grounding,
                     ):
                         full_answer += chunk
                         yield sse_event("token", {"text": chunk})

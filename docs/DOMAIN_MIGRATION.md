@@ -74,8 +74,9 @@ sudo bash scripts/fix-nginx-admin-glosix.sh     # admin (если нужно)
 ```bash
 curl -s https://glosix.ru/api/health
 curl -sI https://app.glosix.ru/ | grep -i location   # → glosix.ru
-curl -s https://api.glosix.ru/                         # {"status":"ok",...}
+curl -sI https://api.glosix.ru/ | head -3              # HTTP 404
 curl -s https://api.glosix.ru/health                   # {"status":"ok"}
+curl -s https://api.glosix.ru/api/health | head -c 80  # полная проверка API
 bash scripts/verify-deploy.sh
 ```
 

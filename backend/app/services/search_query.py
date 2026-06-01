@@ -228,24 +228,31 @@ def enhance_search_query(
     query: str,
     *,
     for_howto: bool | None = None,
+    prefer_official_docs: bool = False,
 ) -> str:
     """
     Улучшает запрос для Yandex Search: исправляет опечатки, добавляет контекст для how-to.
     """
     text = normalize_user_query(query)
     howto = for_howto if for_howto is not None else is_howto_query(text)
+    lower = text.lower()
 
     if howto and is_yandex_product_query(text):
-        # Дублируем ключевые термины для выдачи официальной документации
         extras = []
-        if "cloud" not in text.lower() and "облак" not in text.lower():
+        if "cloud" not in lower and "облак" not in lower:
             extras.append("Yandex Cloud API")
-        if "документац" not in text.lower():
+        if "документац" not in lower:
             extras.append("официальная документация")
         if extras:
             return f"{text} {' '.join(extras)}"[:400]
 
     if howto:
-        return f"{text} инструкция настройка"[:400]
+        base = f"{text} инструкция настройка"
+        if prefer_official_docs and "документац" not in lower:
+            base = f"{base} официальная документация"
+        return base[:400]
+
+    if prefer_official_docs and "документац" not in lower and "documentation" not in lower:
+        return f"{text} официальная документация API"[:400]
 
     return text[:400]

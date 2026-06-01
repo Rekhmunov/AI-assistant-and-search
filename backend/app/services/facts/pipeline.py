@@ -66,6 +66,7 @@ class FactPipeline:
         rank_flags: dict[str, bool],
         howto: bool,
         answer_model: str,
+        prefer_official_docs: bool = False,
     ) -> tuple[str, list[SearchSource], RetrievalAssessment]:
         search_q = enhance_fn(base_q)
         raw = await self.search.search(search_q)
@@ -74,6 +75,7 @@ class FactPipeline:
             howto=howto or answer_model == "pro",
             weather=rank_flags["weather"],
             currency=rank_flags["currency"],
+            prefer_official_docs=prefer_official_docs,
         )
         assessment = assess_retrieval(ranked, llm_query, fact_slots=slots)
         return search_q, ranked, assessment
@@ -88,6 +90,7 @@ class FactPipeline:
         howto: bool = False,
         answer_model: str = "lite",
         bootstrap_sources: list[SearchSource] | None = None,
+        prefer_official_docs: bool = False,
     ) -> FactPipelineResult:
         settings = get_settings()
         slots = resolve_fact_slots(fact_slots)
@@ -119,6 +122,7 @@ class FactPipeline:
                 rank_flags=rank_flags,
                 howto=howto,
                 answer_model=answer_model,
+                prefer_official_docs=prefer_official_docs,
             )
             last_q = search_q
             batches.append(ranked)
@@ -145,6 +149,7 @@ class FactPipeline:
                             rank_flags=rank_flags,
                             howto=howto,
                             answer_model=answer_model,
+                            prefer_official_docs=prefer_official_docs,
                         )
                         for q in queries[1:]
                     ]
