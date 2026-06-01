@@ -27,11 +27,7 @@ from app.services.facts.verify import verify_answer_against_facts
 from app.services.search_debug import build_debug_trace, build_gpt_messages_preview
 from app.services.facts.slots import STRICT_NUMERIC_SLOTS, resolve_fact_slots
 from app.services.facts.grounding import adjust_grounding_for_retrieval
-from app.services.search_query import (
-    enhance_search_query,
-    normalize_user_query,
-    should_prefer_official_docs,
-)
+from app.services.search_query import normalize_user_query
 from app.services.thread_context import build_thread_context, format_sources_for_prompt
 from app.services.yandex_errors import YandexServiceError
 from app.services.query_url_memory import (
@@ -305,7 +301,7 @@ class SearchFlowService:
                     lookup_bootstrap_sources(db, llm_query, llm_query),
                 )
                 fact_slots = resolve_fact_slots(rewrite.fact_slots)
-                grounding_mode = rewrite.grounding or "strict"
+                grounding_mode = rewrite.grounding or "hybrid"
                 rewrite_trace = {
                     "search_queries": rewrite.search_queries,
                     "needs_clarification": rewrite.needs_clarification,
@@ -313,6 +309,9 @@ class SearchFlowService:
                     "intent": rewrite.intent,
                     "fact_slots": fact_slots,
                     "grounding": grounding_mode,
+                    "topic_type": rewrite.topic_type,
+                    "needs_second_search": rewrite.needs_second_search,
+                    "prefer_official_docs": rewrite.prefer_official_docs,
                     "reason": rewrite.reason,
                 }
                 if rewrite.intent in _VALID_INTENTS:
@@ -323,7 +322,7 @@ class SearchFlowService:
                 if rewrite.needs_clarification and rewrite.clarification_question:
                     hint_clarify = rewrite.clarification_question
 
-                queries = list(rewrite.search_queries or [route.search_query])
+                queries = list(rewrite.search_queries or [normalize_user_query(route.search_query)])
                 howto = rewrite.intent == "howto"
                 if howto or "course_program" in fact_slots:
                     route.answer_model = "pro"
@@ -356,18 +355,8 @@ class SearchFlowService:
                         )
                     )
 
-                prefer_official = should_prefer_official_docs(
-                    user_query=llm_query,
-                    search_queries=queries,
-                    intent=rewrite.intent if rewrite else route.intent,
-                )
-
                 def _enhance(q: str) -> str:
-                    return enhance_search_query(
-                        q,
-                        for_howto=howto,
-                        prefer_official_docs=prefer_official,
-                    )
+                    return normalize_user_query(q)[:400]
 
                 extra_boot, extra_trace = await lookup_bootstrap_sources(
                     db,
@@ -397,7 +386,8 @@ class SearchFlowService:
                         howto=howto,
                         answer_model=route.answer_model,
                         bootstrap_sources=bootstrap_sources or None,
-                        prefer_official_docs=prefer_official,
+                        prefer_official_docs=rewrite.prefer_official_docs,
+                        needs_second_search=rewrite.needs_second_search,
                     )
                 )
                 pipeline_result = None

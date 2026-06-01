@@ -7,7 +7,6 @@ from typing import Literal
 from app.core.config import Settings, get_settings
 from app.models.user import Plan
 from app.services.search_query import (
-    enhance_search_query,
     is_chitchat_query,
     is_howto_query,
     is_meta_assistant_query,
@@ -163,13 +162,9 @@ def _build_search_route(
 ) -> RouteDecision:
     normalized = normalize_user_query(query)
     intent = _detect_intent(normalized, ctx, has_attachments)
-    search_q = enhance_search_query(
-        normalized,
-        for_howto=intent == "howto",
-    )
     return RouteDecision(
         needs_search=True,
-        search_query=search_q,
+        search_query=normalized[:400],
         answer_model="pro",
         reason=reason,
         intent=intent,

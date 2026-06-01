@@ -91,6 +91,7 @@ class FactPipeline:
         answer_model: str = "lite",
         bootstrap_sources: list[SearchSource] | None = None,
         prefer_official_docs: bool = False,
+        needs_second_search: bool = False,
     ) -> FactPipelineResult:
         settings = get_settings()
         slots = resolve_fact_slots(fact_slots)
@@ -138,7 +139,8 @@ class FactPipeline:
                 }
             )
 
-            if not retrieval_ok and len(queries) > 1 and settings.search_parallel_extra_queries:
+            run_extra = len(queries) > 1 and (needs_second_search or not retrieval_ok)
+            if run_extra and settings.search_parallel_extra_queries:
                 extra = await asyncio.gather(
                     *[
                         self._search_batch(
@@ -170,7 +172,7 @@ class FactPipeline:
                         retrieval_ok = True
                     if not last_q:
                         last_q = sq
-            elif not retrieval_ok and len(queries) > 1:
+            elif run_extra:
                 for base_q in queries[1:]:
                     search_q, ranked, assessment = await self._search_batch(
                         base_q,
@@ -180,6 +182,7 @@ class FactPipeline:
                         rank_flags=rank_flags,
                         howto=howto,
                         answer_model=answer_model,
+                        prefer_official_docs=prefer_official_docs,
                     )
                     last_q = search_q
                     batches.append(ranked)

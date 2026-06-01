@@ -1,8 +1,9 @@
-"""Переписывание запроса для Yandex Search с учётом истории треда."""
+"""Search Planner v2: Lite LLM планирует поиск до Yandex Search."""
 
 import json
 import logging
 from dataclasses import dataclass, field
+from typing import Literal
 
 from app.services.facts.slots import normalize_fact_slots
 from app.services.facts.grounding import GroundingMode, normalize_grounding, resolve_grounding_mode
@@ -14,6 +15,12 @@ from app.services.yandex_gpt import YandexGPTProvider
 
 logger = logging.getLogger(__name__)
 
+TopicType = Literal["general", "place", "product_tech", "numeric", "program"]
+
+_VALID_TOPIC_TYPES: frozenset[str] = frozenset(
+    {"general", "place", "product_tech", "numeric", "program"}
+)
+
 
 @dataclass
 class RewriteResult:
@@ -24,6 +31,48 @@ class RewriteResult:
     reason: str
     fact_slots: list[str] = field(default_factory=list)
     grounding: GroundingMode | None = None
+    topic_type: TopicType = "general"
+    needs_second_search: bool = False
+    prefer_official_docs: bool = False
+
+
+def normalize_topic_type(raw: object) -> TopicType:
+    t = str(raw or "general").strip().lower()[:32]
+    if t in _VALID_TOPIC_TYPES:
+        return t  # type: ignore[return-value]
+    return "general"
+
+
+def infer_prefer_official_docs(
+    *,
+    topic_type: TopicType,
+    intent: str,
+    fact_slots: list[str],
+    explicit: bool | None,
+) -> bool:
+    if explicit is not None:
+        return explicit
+    if topic_type == "product_tech":
+        return True
+    if intent == "howto" and topic_type in ("product_tech", "general"):
+        return topic_type == "product_tech"
+    return False
+
+
+def infer_needs_second_search(
+    *,
+    intent: str,
+    topic_type: TopicType,
+    explicit: bool | None,
+    query_count: int,
+) -> bool:
+    if explicit is not None:
+        return explicit
+    if intent in ("compare_analyze",):
+        return True
+    if topic_type == "program" and query_count > 1:
+        return True
+    return False
 
 
 def _parse_rewrite_json(text: str, fallback_query: str) -> RewriteResult | None:
@@ -63,6 +112,25 @@ def _parse_rewrite_json(text: str, fallback_query: str) -> RewriteResult | None:
     reason = str(data.get("reason") or "rewriter")[:64]
     fact_slots = normalize_fact_slots(data.get("fact_slots"))
     grounding = normalize_grounding(data.get("grounding"))
+    topic_type = normalize_topic_type(data.get("topic_type"))
+
+    prefer_raw = data.get("prefer_official_docs")
+    prefer_explicit = bool(prefer_raw) if prefer_raw is not None else None
+    prefer_official_docs = infer_prefer_official_docs(
+        topic_type=topic_type,
+        intent=intent,
+        fact_slots=fact_slots,
+        explicit=prefer_explicit,
+    )
+
+    second_raw = data.get("needs_second_search")
+    second_explicit = bool(second_raw) if second_raw is not None else None
+    needs_second_search = infer_needs_second_search(
+        intent=intent,
+        topic_type=topic_type,
+        explicit=second_explicit,
+        query_count=len(queries),
+    )
 
     return RewriteResult(
         search_queries=queries[:3],
@@ -72,6 +140,9 @@ def _parse_rewrite_json(text: str, fallback_query: str) -> RewriteResult | None:
         reason=reason,
         fact_slots=fact_slots,
         grounding=grounding,
+        topic_type=topic_type,
+        needs_second_search=needs_second_search,
+        prefer_official_docs=prefer_official_docs,
     )
 
 
@@ -107,7 +178,7 @@ class QueryRewriter:
                     {"role": "user", "text": user_prompt},
                 ],
                 model="lite",
-                max_tokens=450,
+                max_tokens=550,
                 temperature=0.1,
             )
             parsed = _parse_rewrite_json(raw, fallback)
@@ -123,20 +194,25 @@ class QueryRewriter:
         except Exception:
             logger.exception("Query rewrite failed")
 
-        fallback_result = RewriteResult(
-            search_queries=[fallback],
+        return self._fallback_result(query)
+
+    def _fallback_result(self, query: str) -> RewriteResult:
+        return RewriteResult(
+            search_queries=[query[:400]],
             needs_clarification=False,
             clarification_question=None,
             intent="factual_current",
             reason="rewriter_fallback",
             fact_slots=[],
+            topic_type="general",
+            needs_second_search=False,
+            prefer_official_docs=False,
             grounding=resolve_grounding_mode(
                 fact_slots=[],
                 intent="factual_current",
                 query=query,
             ),
         )
-        return fallback_result
 
     def _ensure_queries(self, query: str, result: RewriteResult) -> RewriteResult:
         if result.search_queries:
@@ -149,4 +225,7 @@ class QueryRewriter:
             reason=result.reason,
             fact_slots=result.fact_slots,
             grounding=result.grounding,
+            topic_type=result.topic_type,
+            needs_second_search=result.needs_second_search,
+            prefer_official_docs=result.prefer_official_docs,
         )
