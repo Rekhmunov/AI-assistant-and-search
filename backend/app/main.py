@@ -43,6 +43,22 @@ def create_app() -> FastAPI:
         expose_headers=["X-Guest-Session"],
     )
 
+    @app.middleware("http")
+    async def log_voice_requests(request: Request, call_next):
+        import logging
+
+        path = request.url.path
+        if path.startswith("/api/voice"):
+            logging.getLogger("app.voice").info(
+                "voice HTTP %s %s cl=%s origin=%s referer=%s",
+                request.method,
+                path,
+                request.headers.get("content-length"),
+                request.headers.get("origin"),
+                (request.headers.get("referer") or "")[:120],
+            )
+        return await call_next(request)
+
     app.include_router(api_router)
 
     @app.exception_handler(Exception)

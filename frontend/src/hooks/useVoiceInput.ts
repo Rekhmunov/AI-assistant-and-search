@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from "react";
-import { transcribeVoice } from "../api/client";
+import { reportVoiceClient, transcribeVoice } from "../api/client";
 import { t } from "../i18n";
 import { getMaxPlatform, isIosLikeDevice, isMaxWebApp } from "../lib/maxApp";
 import { isMaxWavCaptureSupported, MaxWavRecorder } from "../lib/maxWavRecorder";
@@ -200,17 +200,44 @@ export function useVoiceInput(onText: (text: string) => void, token: string | nu
   const uploadRecording = useCallback(
     async (blob: Blob, mimeHint?: string) => {
     setState("transcribing");
+      const elapsed = Date.now() - startedAtRef.current;
+      void reportVoiceClient({
+        event: "upload_start",
+        bytes: blob.size,
+        platform: getMaxPlatform(),
+        max_webapp: isMaxWebApp(),
+        mime: mimeHint || blob.type,
+        elapsed_ms: elapsed,
+      });
       try {
         const res = await transcribeVoice(token, blob, mimeHint);
         const text = res.text.trim();
         if (!text) {
+          void reportVoiceClient({
+            event: "empty_text",
+            bytes: blob.size,
+            platform: getMaxPlatform(),
+            max_webapp: isMaxWebApp(),
+            mime: mimeHint || blob.type,
+            elapsed_ms: elapsed,
+          });
           setError(t("voiceNoSpeech"));
         } else {
           onText(text);
           setError(null);
         }
       } catch (e) {
-        setError(e instanceof Error ? e.message : t("voiceRecognizeFailed"));
+        const message = e instanceof Error ? e.message : t("voiceRecognizeFailed");
+        void reportVoiceClient({
+          event: "upload_error",
+          bytes: blob.size,
+          platform: getMaxPlatform(),
+          max_webapp: isMaxWebApp(),
+          mime: mimeHint || blob.type,
+          elapsed_ms: elapsed,
+          error: message,
+        });
+        setError(message);
       } finally {
         releaseMic();
         recordingRef.current = false;
@@ -238,6 +265,14 @@ export function useVoiceInput(onText: (text: string) => void, token: string | nu
         const elapsed = Date.now() - startedAtRef.current;
         recordingRef.current = false;
         if (blob.size === 0 || elapsed < 200) {
+          void reportVoiceClient({
+            event: "empty_wav",
+            bytes: blob.size,
+            platform: getMaxPlatform(),
+            max_webapp: true,
+            mime: "audio/wav",
+            elapsed_ms: elapsed,
+          });
           setError(t("voiceNoSpeech"));
           setState("idle");
           return;
@@ -386,14 +421,15 @@ export function useVoiceInput(onText: (text: string) => void, token: string | nu
           const elapsed = Date.now() - startedAtRef.current;
           if (blob.size === 0 || elapsed < 200) {
             recordingRef.current = false;
-            if (import.meta.env.DEV) {
-              console.warn("voice: empty recording", {
-                bytes: blob.size,
-                elapsed,
-                mime: resolvedMime,
-                chunks: chunks.length,
-              });
-            }
+            void reportVoiceClient({
+              event: "empty_blob",
+              bytes: blob.size,
+              platform: getMaxPlatform(),
+              max_webapp: isMaxWebApp(),
+              mime: resolvedMime,
+              elapsed_ms: elapsed,
+              error: `chunks=${chunks.length}`,
+            });
             setError(t("voiceNoSpeech"));
             setState("idle");
             return;

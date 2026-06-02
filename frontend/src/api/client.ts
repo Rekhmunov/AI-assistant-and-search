@@ -481,6 +481,33 @@ export async function uploadFile(token: string, file: File): Promise<UploadedFil
   return res.json();
 }
 
+export type VoiceClientReportPayload = {
+  event: string;
+  bytes?: number;
+  platform?: string;
+  max_webapp?: boolean;
+  mime?: string;
+  elapsed_ms?: number;
+  error?: string;
+};
+
+/** Лог на сервере, если /transcribe не вызывается (пустой blob, сеть). */
+export async function reportVoiceClient(payload: VoiceClientReportPayload): Promise<void> {
+  try {
+    await fetch(`${API_BASE}/api/voice/report`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...getGuestSessionHeader() },
+      credentials: "include",
+      body: JSON.stringify({
+        api_base: API_BASE || "(same-origin)",
+        ...payload,
+      }),
+    });
+  } catch {
+    /* ignore */
+  }
+}
+
 export async function transcribeVoice(
   token: string | null,
   blob: Blob,
@@ -532,6 +559,11 @@ export async function transcribeVoice(
       if (detail) msg = detail;
     } catch {
       /* ignore */
+    }
+    if (res.status === 401) {
+      msg = "Сессия недоступна. Закройте миниапп и откройте снова из бота";
+    } else if (res.status === 0 || res.type === "opaque") {
+      msg = "Нет связи с API. Проверьте интернет";
     }
     throw new Error(msg);
   }

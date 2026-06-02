@@ -5,12 +5,11 @@ from __future__ import annotations
 import logging
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
-from pydantic import BaseModel
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
+from pydantic import BaseModel, Field
 
-from app.api.deps import get_current_user
+from app.api.deps import SearchUserResult, get_search_user
 from app.core.config import get_settings
-from app.models.user import User
 from app.services.yandex_stt import SpeechTranscriptionError, resolve_audio_content_type, transcribe_audio
 
 logger = logging.getLogger(__name__)
@@ -24,12 +23,41 @@ class VoiceTranscribeOut(BaseModel):
     text: str
 
 
+class VoiceClientReport(BaseModel):
+    event: str = Field(..., max_length=64)
+    bytes: int = Field(0, ge=0, le=MAX_VOICE_BYTES)
+    platform: str = Field("", max_length=32)
+    max_webapp: bool = False
+    mime: str = Field("", max_length=64)
+    elapsed_ms: int = Field(0, ge=0, le=600_000)
+    api_base: str = Field("", max_length=256)
+    error: str = Field("", max_length=200)
+
+
+@router.post("/report")
+async def voice_client_report(body: VoiceClientReport, request: Request):
+    """Диагностика из MAX WebView (запрос до /transcribe или вместо него)."""
+    logger.info(
+        "voice client report event=%s bytes=%s platform=%s max=%s mime=%s elapsed_ms=%s api_base=%s error=%s ip=%s",
+        body.event,
+        body.bytes,
+        body.platform,
+        body.max_webapp,
+        body.mime,
+        body.elapsed_ms,
+        body.api_base[:80],
+        body.error[:120],
+        request.client.host if request.client else None,
+    )
+    return {"ok": True}
+
+
 @router.post("/transcribe", response_model=VoiceTranscribeOut)
 async def transcribe_voice(
     file: Annotated[UploadFile, File(...)],
-    user: Annotated[User, Depends(get_current_user)],
+    search_user: Annotated[SearchUserResult, Depends(get_search_user)],
 ):
-    _ = user
+    user = search_user.user
     raw = await file.read()
     if len(raw) > MAX_VOICE_BYTES:
         raise HTTPException(
@@ -42,8 +70,9 @@ async def transcribe_voice(
     settings = get_settings()
     resolved_type = resolve_audio_content_type(file.content_type, file.filename)
     logger.info(
-        "voice transcribe user=%s bytes=%s type=%s filename=%s",
+        "voice transcribe user=%s guest=%s bytes=%s type=%s filename=%s",
         user.id,
+        bool(user.guest_key),
         len(raw),
         resolved_type,
         file.filename,
