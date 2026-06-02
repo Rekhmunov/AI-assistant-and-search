@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { useBodyScrollLock } from "../hooks/useBodyScrollLock";
 import type { EntityImage } from "../api/client";
 import { isGeneratedImageUrl } from "../lib/generatedImageUrl";
 import { preloadEntityImages } from "../lib/preloadEntityImages";
@@ -72,6 +74,8 @@ export function ThreadImagesTab({ groups, loading = false }: Props) {
   const lightbox = lightboxIndex !== null ? flatImages[lightboxIndex] ?? null : null;
   const canPrev = lightboxIndex !== null && lightboxIndex > 0;
   const canNext = lightboxIndex !== null && lightboxIndex < flatImages.length - 1;
+
+  useBodyScrollLock(lightbox !== null);
 
   const goPrev = useCallback(() => {
     setLightboxIndex((idx) => (idx !== null && idx > 0 ? idx - 1 : idx));
@@ -222,69 +226,88 @@ export function ThreadImagesTab({ groups, loading = false }: Props) {
         </section>
       ))}
 
-      {lightbox && lightboxIndex !== null && (
-        <div
-          className="image-lightbox-overlay"
-          role="presentation"
-          onClick={() => setLightboxIndex(null)}
-        >
-          <button
-            type="button"
-            className="image-lightbox-close"
-            onClick={() => setLightboxIndex(null)}
-            aria-label={t("close")}
-          >
-            ×
-          </button>
+      {lightbox &&
+        lightboxIndex !== null &&
+        createPortal(
           <div
-            className="image-lightbox"
-            role="dialog"
-            aria-modal="true"
-            aria-label={lightbox.title || t("turnTabImages")}
-            onClick={(e) => e.stopPropagation()}
+            className="image-lightbox-overlay"
+            role="presentation"
+            onClick={() => setLightboxIndex(null)}
           >
-            {canPrev && (
-              <button
-                type="button"
-                className="image-lightbox-nav image-lightbox-nav--prev"
-                onClick={goPrev}
-                aria-label={t("imageLightboxPrev")}
-              >
-                ‹
-              </button>
-            )}
-            {canNext && (
-              <button
-                type="button"
-                className="image-lightbox-nav image-lightbox-nav--next"
-                onClick={goNext}
-                aria-label={t("imageLightboxNext")}
-              >
-                ›
-              </button>
-            )}
-
-            <div
-              className="image-lightbox-stage"
-              onTouchStart={onTouchStart}
-              onTouchEnd={onTouchEnd}
+            <button
+              type="button"
+              className="image-lightbox-close"
+              onClick={(e) => {
+                e.stopPropagation();
+                setLightboxIndex(null);
+              }}
+              aria-label={t("close")}
             >
-              <img
-                key={lightbox.url}
-                src={lightbox.url}
-                alt={lightbox.title}
-                referrerPolicy="no-referrer"
-                decoding="sync"
-                draggable={false}
-              />
-            </div>
+              <LightboxCloseIcon />
+            </button>
+            <div
+              className="image-lightbox"
+              role="dialog"
+              aria-modal="true"
+              aria-label={lightbox.title || t("turnTabImages")}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {canPrev && (
+                <button
+                  type="button"
+                  className="image-lightbox-nav image-lightbox-nav--prev"
+                  onClick={goPrev}
+                  aria-label={t("imageLightboxPrev")}
+                >
+                  ‹
+                </button>
+              )}
+              {canNext && (
+                <button
+                  type="button"
+                  className="image-lightbox-nav image-lightbox-nav--next"
+                  onClick={goNext}
+                  aria-label={t("imageLightboxNext")}
+                >
+                  ›
+                </button>
+              )}
 
-            {lightbox.pageUrl && (
-              <SourceLink href={lightbox.pageUrl} className="image-lightbox-source" />
-            )}
-          </div>
-        </div>
-      )}
+              <div
+                className="image-lightbox-stage"
+                onTouchStart={onTouchStart}
+                onTouchEnd={onTouchEnd}
+              >
+                <img
+                  key={lightbox.url}
+                  src={lightbox.url}
+                  alt={lightbox.title}
+                  referrerPolicy="no-referrer"
+                  decoding="sync"
+                  draggable={false}
+                />
+              </div>
+
+              {lightbox.pageUrl && (
+                <SourceLink href={lightbox.pageUrl} className="image-lightbox-source" />
+              )}
+            </div>
+          </div>,
+          document.body,
+        )}
     </div>
+  );
+}
+
+function LightboxCloseIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        d="M6 6l12 12M18 6L6 18"
+        stroke="currentColor"
+        strokeWidth="2.2"
+        strokeLinecap="round"
+      />
+    </svg>
   );
 }

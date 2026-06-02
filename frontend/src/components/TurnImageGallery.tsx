@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { EntityImage } from "../api/client";
+import { ImageLightboxOverlay } from "./ImageLightboxOverlay";
 
 type Props = {
   images: EntityImage[];
@@ -79,15 +80,6 @@ export function TurnImageGallery({ images }: Props) {
     setStart((s) => Math.min(maxStart, s + 1));
   }, [maxStart]);
 
-  useEffect(() => {
-    if (!lightbox) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setLightbox(null);
-    };
-    globalThis.addEventListener("keydown", onKey);
-    return () => globalThis.removeEventListener("keydown", onKey);
-  }, [lightbox]);
-
   if (!readyImages.length) return null;
 
   return (
@@ -143,39 +135,12 @@ export function TurnImageGallery({ images }: Props) {
       </div>
 
       {lightbox && (
-        <div
-          className="image-lightbox-overlay"
-          role="presentation"
-          onClick={() => setLightbox(null)}
-        >
-          <div
-            className="image-lightbox"
-            role="dialog"
-            aria-modal="true"
-            aria-label={lightbox.title || "Фото"}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <button
-              type="button"
-              className="image-lightbox-close"
-              onClick={() => setLightbox(null)}
-              aria-label="Закрыть"
-            >
-              ×
-            </button>
-            <img src={lightbox.url} alt={lightbox.title} referrerPolicy="no-referrer" decoding="sync" />
-            {lightbox.pageUrl && lightbox.pageUrl !== lightbox.url && (
-              <a
-                className="image-lightbox-source"
-                href={lightbox.pageUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                Источник
-              </a>
-            )}
-          </div>
-        </div>
+        <ImageLightboxOverlay
+          url={lightbox.url}
+          title={lightbox.title || "Фото"}
+          pageUrl={lightbox.pageUrl}
+          onClose={() => setLightbox(null)}
+        />
       )}
     </>
   );

@@ -1965,29 +1965,34 @@ body:has(.page-thread) {
 .image-lightbox-overlay {
   position: fixed;
   inset: 0;
-  z-index: 1000;
+  z-index: 1200;
   background: rgba(0, 0, 0, 0.72);
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 24px 16px;
+  padding: calc(52px + env(safe-area-inset-top, 0px)) 16px 24px;
+  touch-action: manipulation;
 }
 
 .image-lightbox-close {
   position: fixed;
   top: calc(12px + env(safe-area-inset-top, 0px));
   right: calc(12px + env(safe-area-inset-right, 0px));
-  z-index: 1002;
-  width: 36px;
-  height: 36px;
+  z-index: 1202;
+  width: 44px;
+  height: 44px;
   border-radius: 50%;
   border: none;
-  background: var(--surface);
-  color: var(--text);
-  font-size: 1.4rem;
-  line-height: 1;
+  background: rgba(255, 255, 255, 0.96);
+  color: #1a1a1a;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
   cursor: pointer;
-  box-shadow: var(--shadow-sm);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.35);
+  -webkit-tap-highlight-color: transparent;
+  pointer-events: auto;
 }
 
 .image-lightbox {
