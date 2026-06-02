@@ -14,8 +14,10 @@ import { ThreadImagesTab } from "../components/ThreadImagesTab";
 import { ThreadMobileHeader } from "../components/ThreadMobileHeader";
 import { ThreadQuery } from "../components/ThreadQuery";
 import { ThreadTabsBar, type ThreadTab } from "../components/ThreadTabsBar";
+import { TurnImageGallery } from "../components/TurnImageGallery";
 import { t } from "../i18n";
 import { findLastIndex } from "../lib/arrayUtils";
+import { wantsImageGeneration } from "../lib/imageGenRouting";
 import {
   buildThreadImageGroups,
   countThreadImages,
@@ -27,7 +29,9 @@ import { useAuthStore } from "../store/authStore";
 
 function updateLastStreamingTurn(
   turns: ThreadTurn[],
-  patch: Partial<Pick<ThreadTurn, "answer" | "sources" | "images" | "followUps" | "needsSearch">>,
+  patch: Partial<
+    Pick<ThreadTurn, "answer" | "sources" | "images" | "followUps" | "needsSearch" | "isImageGen">
+  >,
   appendAnswer?: string,
 ): ThreadTurn[] {
   const idx = findLastIndex(turns, (turn) => turn.streaming);
@@ -94,6 +98,7 @@ export function Thread() {
   const answerPanelRef = useRef<HTMLDivElement>(null);
   const imagesPanelRef = useRef<HTMLDivElement>(null);
   const answerResetPendingRef = useRef(false);
+  const imageGenActiveRef = useRef(false);
   const [showScrollDown, setShowScrollDown] = useState(false);
   const isDesktop = useDesktopLayout();
 
@@ -230,11 +235,13 @@ export function Thread() {
 
       setActiveTab("answer");
       const pendingKey = `stream-${Date.now()}`;
+      const imageGenQuery = !attachmentIds.length && wantsImageGeneration(text);
+      imageGenActiveRef.current = imageGenQuery;
       streamingRef.current = true;
       setStreaming(true);
-      setNeedsSearch(true);
-      setSearchPhase("routing");
-      setImageGenStatus(null);
+      setNeedsSearch(!imageGenQuery);
+      setSearchPhase(imageGenQuery ? "image_generating" : "routing");
+      setImageGenStatus(imageGenQuery ? t("imageGenWorking") : null);
       setTurns((prev) => [
         ...prev,
         {
@@ -244,7 +251,8 @@ export function Thread() {
           sources: [],
           images: [],
           followUps: [],
-          needsSearch: true,
+          needsSearch: !imageGenQuery,
+          isImageGen: imageGenQuery,
           streaming: true,
         },
       ]);
@@ -258,14 +266,19 @@ export function Thread() {
         onRoute: (route) => {
           const isImageGen =
             route.intent === "image_generate" || route.reason === "image_generation";
+          imageGenActiveRef.current = isImageGen;
           setNeedsSearch(route.needs_search);
           if (isImageGen) {
             setSearchPhase("image_generating");
+            setImageGenStatus(t("imageGenWorking"));
           } else {
             setSearchPhase(route.needs_search ? "searching" : "answering");
           }
           setTurns((prev) =>
-            updateLastStreamingTurn(prev, { needsSearch: route.needs_search }),
+            updateLastStreamingTurn(prev, {
+              needsSearch: route.needs_search,
+              isImageGen,
+            }),
           );
         },
         onImageGenStart: (status) => {
@@ -281,11 +294,20 @@ export function Thread() {
           setTurns((prev) => updateLastStreamingTurn(prev, { sources: list ?? [] }));
         },
         onImages: (list) => {
+          if (imageGenActiveRef.current) {
+            setSearchPhase("idle");
+            setImageGenStatus(null);
+          }
           setTurns((prev) => updateLastStreamingTurn(prev, { images: list ?? [] }));
         },
         onToken: (chunk) => {
-          setImageGenStatus(null);
-          setSearchPhase("answering");
+          if (imageGenActiveRef.current) {
+            setSearchPhase("image_generating");
+            setImageGenStatus(t("imageGenComposing"));
+          } else {
+            setImageGenStatus(null);
+            setSearchPhase("answering");
+          }
           setTurns((prev) => {
             const idx = findLastIndex(prev, (turn) => turn.streaming);
             if (idx < 0) return prev;
@@ -310,6 +332,7 @@ export function Thread() {
         },
         onDone: (done) => {
           streamingRef.current = false;
+          imageGenActiveRef.current = false;
           setStreaming(false);
           setSearchPhase("idle");
           setImageGenStatus(null);
@@ -333,6 +356,7 @@ export function Thread() {
         },
         onError: (msg, code) => {
           streamingRef.current = false;
+          imageGenActiveRef.current = false;
           setStreaming(false);
           setSearchPhase("idle");
           setImageGenStatus(null);
@@ -472,7 +496,14 @@ export function Thread() {
           {turns.map((turn, index) => {
             const isActive = turn.streaming;
             const sources = turn.sources ?? [];
-            const showStatus = isActive && streaming && !turn.answer.trim() && !turn.errorCode;
+            const isImageGenTurn = turn.isImageGen === true;
+            const showStatus =
+              isActive &&
+              streaming &&
+              !turn.errorCode &&
+              (isImageGenTurn
+                ? (turn.images?.length ?? 0) === 0
+                : !turn.answer.trim());
             const showGuestLimit = turn.errorCode === "guest_rate_limit" || turn.errorCode === "rate_limit";
             const showFreeLimit = turn.errorCode === "free_rate_limit";
             const showImageGenPro = turn.errorCode === "free_image_gen_pro";
@@ -481,6 +512,7 @@ export function Thread() {
               showFreeLimit ||
               showImageGenPro ||
               Boolean(turn.answer.trim()) ||
+              (turn.images?.length ?? 0) > 0 ||
               isActive;
             const showFollowUps =
               index === lastCompletedIndex &&
@@ -494,9 +526,9 @@ export function Thread() {
 
                 {showStatus && (
                   <SearchStatusLine
-                    phase={searchPhase}
+                    phase={isImageGenTurn ? "image_generating" : searchPhase}
                     needsSearch={needsSearch}
-                    customStatus={searchPhase === "image_generating" ? imageGenStatus : null}
+                    customStatus={isImageGenTurn ? imageGenStatus : null}
                   />
                 )}
 
@@ -513,13 +545,16 @@ export function Thread() {
                         <AnswerBody
                           text={turn.answer}
                           sources={sources}
-                          isStreaming={isActive && streaming}
+                          isStreaming={isActive && streaming && !isImageGenTurn}
                           onTypingChange={
                             index === turns.length - 1 ? handleAnswerTypingChange : undefined
                           }
                         />
                       )}
                     </AnswerErrorBoundary>
+                    {(turn.images?.length ?? 0) > 0 && (
+                      <TurnImageGallery images={turn.images} />
+                    )}
                     {turn.answer.trim() && (
                       <AnswerFooter
                         answer={turn.answer}

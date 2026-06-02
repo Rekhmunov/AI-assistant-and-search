@@ -10,6 +10,8 @@ export type ThreadTurn = {
   images: EntityImage[];
   followUps: string[];
   needsSearch?: boolean;
+  /** Генерация изображения (GigaChat text2image), не веб-поиск */
+  isImageGen?: boolean;
   userFeedback?: MessageFeedback | null;
   streaming?: boolean;
   errorCode?: string;
