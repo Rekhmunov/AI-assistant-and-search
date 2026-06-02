@@ -74,11 +74,16 @@ def create_access_token(subject: str, settings: Settings | None = None) -> str:
     )
 
 
-def create_refresh_token(subject: str, settings: Settings | None = None) -> str:
+def create_refresh_token(
+    subject: str,
+    settings: Settings | None = None,
+    *,
+    refresh_gen: int = 0,
+) -> str:
     settings = settings or get_settings()
     expire = datetime.now(timezone.utc) + timedelta(days=settings.refresh_token_expire_days)
     return jwt.encode(
-        {"sub": subject, "exp": expire, "type": "refresh"},
+        {"sub": subject, "exp": expire, "type": "refresh", "gen": int(refresh_gen)},
         settings.jwt_secret,
         algorithm=settings.jwt_algorithm,
     )

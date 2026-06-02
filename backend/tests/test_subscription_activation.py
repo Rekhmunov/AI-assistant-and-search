@@ -7,6 +7,7 @@ from app.models.subscription import Subscription, SubscriptionStatus
 from app.models.user import Plan, User
 from app.services.subscription_activation import (
     activate_from_yookassa_payment,
+    payment_amount_is_valid,
     payment_matches_user,
     recover_pro_for_user,
 )
@@ -70,6 +71,35 @@ class TestSubscriptionActivation(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(ok)
         db.add.assert_called_once()
         self.assertEqual(user.plan, Plan.PRO)
+
+    def test_payment_amount_is_valid(self):
+        self.assertTrue(payment_amount_is_valid({"amount": {"value": "299.00", "currency": "RUB"}}, 299))
+        self.assertFalse(payment_amount_is_valid({"amount": {"value": "1.00", "currency": "RUB"}}, 299))
+
+    async def test_activate_rejects_wrong_amount(self):
+        user_id = uuid.uuid4()
+        user = User(id=user_id, plan=Plan.FREE, email="a@b.c")
+        sub = Subscription(
+            user_id=user_id,
+            yookassa_payment_id="pay-wrong",
+            status=SubscriptionStatus.PENDING,
+            amount_rub=299,
+        )
+
+        db = self._mock_db()
+        sub_result = MagicMock()
+        sub_result.scalar_one_or_none.return_value = sub
+        user_result = MagicMock()
+        user_result.scalar_one_or_none.return_value = user
+        db.execute = AsyncMock(side_effect=[sub_result, user_result])
+
+        ok = await activate_from_yookassa_payment(
+            db,
+            payment_id="pay-wrong",
+            payment_object={"status": "succeeded", "amount": {"value": "1.00", "currency": "RUB"}},
+        )
+        self.assertFalse(ok)
+        self.assertEqual(user.plan, Plan.FREE)
 
     async def test_payment_matches_user_by_receipt_email(self):
         user = User(id=uuid.uuid4(), plan=Plan.FREE, email="Paid@Yandex.ru")

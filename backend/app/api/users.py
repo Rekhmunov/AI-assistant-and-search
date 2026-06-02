@@ -1,10 +1,11 @@
 from datetime import datetime, timezone
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_db, get_rate_limiter, get_redis
+from app.core.request_security import verify_allowed_origin
 from app.core.config import get_settings
 from app.core.limiter import RateLimiter
 from app.models.user import User
@@ -44,8 +45,10 @@ async def get_me(
 
 @router.delete("/me")
 async def delete_account(
+    request: Request,
     db: Annotated[AsyncSession, Depends(get_db)],
     user: Annotated[User, Depends(get_current_user)],
 ):
+    verify_allowed_origin(request)
     user.deleted_at = datetime.now(timezone.utc)
     return {"ok": True}

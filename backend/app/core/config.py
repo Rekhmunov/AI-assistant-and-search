@@ -30,6 +30,8 @@ class Settings(BaseSettings):
     follow_ups_post_done_timeout_sec: float = 4.0
 
     bot_token: str = ""
+    # Shared secret for POST /api/bot/webhook (MAX → our API). Empty = allowed only outside production.
+    max_bot_webhook_secret: str = ""
     jwt_secret: str = "change-me-in-production"
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 15

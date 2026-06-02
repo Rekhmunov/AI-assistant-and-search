@@ -8,6 +8,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_db, get_redis
+from app.core.request_security import verify_allowed_origin
 from app.core.config import get_settings
 from app.core.database import async_session_factory
 from app.models.subscription import Subscription, SubscriptionStatus
@@ -43,10 +44,12 @@ async def _save_pending_subscription(
 
 @router.post("/create")
 async def create_pro_payment(
+    request: Request,
     redis_client: Annotated[redis.Redis, Depends(get_redis)],
     user: Annotated[User, Depends(get_current_user)],
 ):
     """Create YooKassa payment for Pro subscription."""
+    verify_allowed_origin(request)
     settings = get_settings()
     return_url = f"{settings.public_web_url.rstrip('/')}/profile?payment=success"
 
@@ -77,6 +80,11 @@ async def create_pro_payment(
     )
 
     if not yookassa_configured:
+        if settings.environment.strip().lower() == "production":
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Оплата временно недоступна. Обратитесь в поддержку.",
+            )
         payment_id = f"stub-{uuid.uuid4()}"
         try:
             await _save_pending_subscription(

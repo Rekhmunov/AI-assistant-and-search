@@ -1,5 +1,13 @@
 import { useEffect, useState } from "react";
-import { bindMax, completeBindMax, fetchMe, loginWithInitData, logoutSession } from "../api/client";
+import {
+  bindMax,
+  completeBindMax,
+  fetchMe,
+  fetchSession,
+  loginWithInitData,
+  logoutSession,
+  refreshAccessToken,
+} from "../api/client";
 import {
   getMaxInitData,
   getMaxStartParam,
@@ -40,12 +48,29 @@ export function useAuthBootstrap() {
           }
         }
 
-        if (token) {
+        let accessToken = token;
+        if (!accessToken) {
           try {
-            const user = await fetchMe(token);
+            const session = await fetchSession(null);
+            if (session.authenticated && session.user) {
+              const refreshed = await refreshAccessToken();
+              accessToken = refreshed.access_token;
+              if (!cancelled) {
+                useAuthStore.getState().setToken(accessToken);
+                useAuthStore.getState().setUser(session.user);
+              }
+            }
+          } catch {
+            /* no refresh session */
+          }
+        }
+
+        if (accessToken) {
+          try {
+            const user = await fetchMe(accessToken);
             if (!cancelled) {
               setUser(user);
-              await tryBindMax(token);
+              await tryBindMax(accessToken);
               setReady(true);
             }
             return;

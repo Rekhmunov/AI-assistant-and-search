@@ -7,6 +7,8 @@ from app.models.user import Plan, User
 
 MSK = timezone(timedelta(hours=3))
 
+GUEST_CREATIONS_PER_IP_PER_DAY = 20
+
 
 def _day_key(prefix: str, user_id: str) -> str:
     today = datetime.now(MSK).strftime("%Y-%m-%d")
@@ -38,7 +40,45 @@ class RateLimiter:
             return self.settings.guest_searches_per_day
         return await self._search_limit_for_plan(user.plan)
 
-    async def check_search_limit(self, user_id: str, plan: Plan, user: User | None = None) -> tuple[bool, int, int]:
+    def _is_guest_user(self, user: User | None) -> bool:
+        return user is not None and bool(user.guest_key) and not user.email
+
+    async def check_guest_creation_limit(self, client_ip: str) -> None:
+        from fastapi import HTTPException, status
+
+        key = _day_key("guest_create", client_ip)
+        count = await self.redis.incr(key)
+        if count == 1:
+            now = datetime.now(MSK)
+            midnight = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+            await self.redis.expireat(key, int(midnight.timestamp()))
+        if count > GUEST_CREATIONS_PER_IP_PER_DAY:
+            await self.redis.decr(key)
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail="Слишком много гостевых сессий с этого адреса. Попробуйте позже или войдите.",
+            )
+
+    async def _check_guest_ip_search_limit(self, client_ip: str, limit: int) -> tuple[bool, int, int]:
+        key = _day_key("guest_ip_search", client_ip)
+        count = await self.redis.incr(key)
+        if count == 1:
+            now = datetime.now(MSK)
+            midnight = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+            await self.redis.expireat(key, int(midnight.timestamp()))
+        if count > limit:
+            await self.redis.decr(key)
+            return False, max(0, limit), limit
+        return True, count, limit
+
+    async def check_search_limit(
+        self,
+        user_id: str,
+        plan: Plan,
+        user: User | None = None,
+        *,
+        client_ip: str | None = None,
+    ) -> tuple[bool, int, int]:
         if user is not None:
             limit = await self._limit_for_user(user)
         else:
@@ -53,6 +93,12 @@ class RateLimiter:
         if count > limit:
             await self.redis.decr(key)
             return False, limit - max(0, count - 1), limit
+
+        if client_ip and self._is_guest_user(user):
+            ip_ok, ip_used, ip_limit = await self._check_guest_ip_search_limit(client_ip, limit)
+            if not ip_ok:
+                await self.redis.decr(key)
+                return False, ip_used, ip_limit
 
         return True, count, limit
 

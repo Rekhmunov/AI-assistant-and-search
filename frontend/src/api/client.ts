@@ -208,6 +208,15 @@ export async function logoutSession(): Promise<void> {
   if (!res.ok) throw new Error(await parseAuthError(res));
 }
 
+export async function refreshAccessToken(): Promise<{ access_token: string }> {
+  const res = await fetch(`${API_BASE}/api/auth/refresh`, {
+    method: "POST",
+    credentials: "include",
+  });
+  if (!res.ok) throw new Error(await parseAuthError(res));
+  return res.json();
+}
+
 export async function fetchAppConfig(): Promise<AppPublicConfig> {
   const res = await fetch(`${API_BASE}/api/config/public?_=${Date.now()}`, {
     credentials: "include",

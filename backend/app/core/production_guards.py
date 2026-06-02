@@ -18,3 +18,11 @@ def assert_production_security(settings: Settings) -> None:
             "JWT_SECRET must be set to a strong random value in production "
             "(default 'change-me-in-production' is not allowed)."
         )
+
+    if settings.skip_init_data_validation:
+        raise RuntimeError("SKIP_INIT_DATA_VALIDATION must be false in production.")
+
+    if not settings.max_bot_webhook_secret.strip():
+        raise RuntimeError(
+            "MAX_BOT_WEBHOOK_SECRET must be set in production (protects /api/bot/webhook)."
+        )

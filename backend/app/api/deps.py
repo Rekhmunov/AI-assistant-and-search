@@ -4,15 +4,17 @@ from dataclasses import dataclass
 from typing import Annotated
 
 import redis.asyncio as redis
-from fastapi import Cookie, Depends, Header, HTTPException, Response, status
+from fastapi import Cookie, Depends, Header, HTTPException, Request, Response, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 from app.core.database import get_db
+from app.core.auth_limits import client_ip
 from app.core.limiter import RateLimiter
 from app.core.security import decode_token
+from app.services.refresh_tokens import get_refresh_generation, refresh_generation_matches
 from app.models.admin_user import AdminUser
 from app.models.user import Plan, User
 
@@ -119,7 +121,11 @@ async def _user_from_access_token(db: AsyncSession, token: str) -> User | None:
     return result.scalar_one_or_none()
 
 
-async def _user_from_refresh_cookie(db: AsyncSession, refresh_token: str | None) -> User | None:
+async def _user_from_refresh_cookie(
+    db: AsyncSession,
+    refresh_token: str | None,
+    redis_client: redis.Redis | None = None,
+) -> User | None:
     if not refresh_token:
         return None
     settings = get_settings()
@@ -127,8 +133,28 @@ async def _user_from_refresh_cookie(db: AsyncSession, refresh_token: str | None)
     if not payload or not payload.get("sub"):
         return None
     user_id = uuid.UUID(payload["sub"])
+    if redis_client is not None:
+        current_gen = await get_refresh_generation(redis_client, str(user_id))
+        if not refresh_generation_matches(payload, current_gen):
+            return None
     result = await db.execute(select(User).where(User.id == user_id, User.deleted_at.is_(None)))
     return result.scalar_one_or_none()
+
+
+async def require_admin_or_api_key(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    creds: Annotated[HTTPAuthorizationCredentials | None, Depends(security)],
+    admin_token: Annotated[str | None, Cookie(alias="admin_token")] = None,
+    x_admin_key: Annotated[str | None, Header(alias="X-Admin-Key")] = None,
+) -> None:
+    """Admin session cookie or X-Admin-Key for operational endpoints (e.g. LLM health probes)."""
+    settings = get_settings()
+    if settings.admin_api_key and x_admin_key and x_admin_key == settings.admin_api_key:
+        return
+    try:
+        await get_current_admin(db, creds, admin_token)
+    except HTTPException:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unauthorized") from None
 
 
 async def guest_by_key(db: AsyncSession, guest_key: str | None) -> User | None:
@@ -148,12 +174,13 @@ async def _resolve_authenticated_user(
     db: AsyncSession,
     creds: HTTPAuthorizationCredentials | None,
     refresh_token: str | None,
+    redis_client: redis.Redis | None = None,
 ) -> User | None:
     if creds and creds.credentials:
         user = await _user_from_access_token(db, creds.credentials)
         if user:
             return user
-    return await _user_from_refresh_cookie(db, refresh_token)
+    return await _user_from_refresh_cookie(db, refresh_token, redis_client)
 
 
 @dataclass
@@ -170,9 +197,12 @@ async def resolve_search_user(
     x_guest_session: str | None,
     *,
     create_guest: bool,
+    request: Request | None = None,
+    limiter: RateLimiter | None = None,
+    redis_client: redis.Redis | None = None,
 ) -> SearchUserResult:
     """JWT user, existing guest, or (if create_guest) a new guest row."""
-    user = await _resolve_authenticated_user(db, creds, refresh_token)
+    user = await _resolve_authenticated_user(db, creds, refresh_token, redis_client)
     if user:
         return SearchUserResult(user=user)
 
@@ -184,6 +214,9 @@ async def resolve_search_user(
     if not create_guest:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
 
+    if limiter is not None and request is not None:
+        await limiter.check_guest_creation_limit(client_ip(request))
+
     new_key = secrets.token_urlsafe(32)
     guest = User(guest_key=new_key, plan=Plan.FREE)
     db.add(guest)
@@ -193,26 +226,46 @@ async def resolve_search_user(
 
 
 async def get_search_user(
+    request: Request,
     db: Annotated[AsyncSession, Depends(get_db)],
     creds: Annotated[HTTPAuthorizationCredentials | None, Depends(security)],
     refresh_token: Annotated[str | None, Cookie(alias="refresh_token")] = None,
     guest_session: Annotated[str | None, Cookie(alias=GUEST_COOKIE)] = None,
     x_guest_session: Annotated[str | None, Header(alias=GUEST_HEADER)] = None,
+    limiter: Annotated[RateLimiter, Depends(get_rate_limiter)],
+    redis_client: Annotated[redis.Redis, Depends(get_redis)],
 ) -> SearchUserResult:
     return await resolve_search_user(
-        db, creds, refresh_token, guest_session, x_guest_session, create_guest=True
+        db,
+        creds,
+        refresh_token,
+        guest_session,
+        x_guest_session,
+        create_guest=True,
+        request=request,
+        limiter=limiter,
+        redis_client=redis_client,
     )
 
 
 async def get_existing_search_user(
+    request: Request,
     db: Annotated[AsyncSession, Depends(get_db)],
     creds: Annotated[HTTPAuthorizationCredentials | None, Depends(security)],
     refresh_token: Annotated[str | None, Cookie(alias="refresh_token")] = None,
     guest_session: Annotated[str | None, Cookie(alias=GUEST_COOKIE)] = None,
     x_guest_session: Annotated[str | None, Header(alias=GUEST_HEADER)] = None,
+    redis_client: Annotated[redis.Redis, Depends(get_redis)],
 ) -> SearchUserResult:
     return await resolve_search_user(
-        db, creds, refresh_token, guest_session, x_guest_session, create_guest=False
+        db,
+        creds,
+        refresh_token,
+        guest_session,
+        x_guest_session,
+        create_guest=False,
+        request=request,
+        redis_client=redis_client,
     )
 
 
@@ -220,8 +273,9 @@ async def get_current_user(
     db: Annotated[AsyncSession, Depends(get_db)],
     creds: Annotated[HTTPAuthorizationCredentials | None, Depends(security)],
     refresh_token: Annotated[str | None, Cookie(alias="refresh_token")] = None,
+    redis_client: Annotated[redis.Redis, Depends(get_redis)] = None,
 ) -> User:
-    user = await _resolve_authenticated_user(db, creds, refresh_token)
+    user = await _resolve_authenticated_user(db, creds, refresh_token, redis_client)
     if user:
         return user
     raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")

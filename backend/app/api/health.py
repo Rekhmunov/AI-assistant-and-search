@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_db, get_redis
+from app.api.deps import get_db, get_redis, require_admin_or_api_key
 from app.core.config import get_settings
 from app.services.anthropic_probe import probe_anthropic
 from app.services.deepseek_probe import probe_deepseek
@@ -209,30 +209,30 @@ async def api_health_version():
 
 
 @router.get("/health/yandex")
-async def api_health_yandex():
+async def api_health_yandex(_auth: Annotated[None, Depends(require_admin_or_api_key)]):
     """Проверка Search API и YandexGPT Lite/Pro (может занять до ~30 с)."""
     return await probe_yandex()
 
 
 @router.get("/health/anthropic")
-async def api_health_anthropic():
+async def api_health_anthropic(_auth: Annotated[None, Depends(require_admin_or_api_key)]):
     """Тест Anthropic с ANTHROPIC_API_KEY из .env (появится в Usage консоли)."""
     return await probe_anthropic()
 
 
 @router.get("/health/deepseek")
-async def api_health_deepseek():
+async def api_health_deepseek(_auth: Annotated[None, Depends(require_admin_or_api_key)]):
     """Тест DeepSeek с DEEPSEEK_API_KEY из .env (lite + pro)."""
     return await probe_deepseek()
 
 
 @router.get("/health/gigachat")
-async def api_health_gigachat():
+async def api_health_gigachat(_auth: Annotated[None, Depends(require_admin_or_api_key)]):
     """Тест GigaChat с GIGACHAT_CREDENTIALS из .env (OAuth, lite + pro)."""
     return await probe_gigachat()
 
 
 @router.get("/health/perplexity")
-async def api_health_perplexity():
+async def api_health_perplexity(_auth: Annotated[None, Depends(require_admin_or_api_key)]):
     """Тест Perplexity Sonar с PERPLEXITY_API_KEY из .env."""
     return await probe_perplexity()

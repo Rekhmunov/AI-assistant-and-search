@@ -303,7 +303,10 @@ export function BroadcastsPage() {
           <li>Лимит API MAX — около 30 запросов/сек; при 429 рассылка ждёт и повторяет.</li>
           <li>Текст до 4000 символов, без агрессивного спама и рекламы без согласия.</li>
           <li>Сервисные сообщения (Pro, статус) — ок; массовые акции — редко и по делу.</li>
-          <li>Webhook должен быть HTTPS; подключите URL выше в кабинете MAX (POST /subscriptions).</li>
+          <li>
+            Webhook HTTPS в кабинете MAX: URL выше + секрет из <code>MAX_BOT_WEBHOOK_SECRET</code> (заголовок{" "}
+            <code>X-Webhook-Secret</code> или параметр <code>?secret=</code>).
+          </li>
         </ul>
       </section>
 

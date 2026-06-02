@@ -2,11 +2,12 @@ import logging
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 
 from app.api.deps import SearchUserResult, get_rate_limiter, get_redis, get_search_user, set_guest_cookie
+from app.core.auth_limits import client_ip
 from app.core.database import async_session_factory
 from app.core.limiter import RateLimiter
 from app.models.user import User
@@ -22,6 +23,7 @@ router = APIRouter(prefix="/search", tags=["search"])
 
 @router.post("")
 async def search_stream(
+    request: Request,
     body: SearchRequest,
     response: Response,
     actor: Annotated[SearchUserResult, Depends(get_search_user)],
@@ -66,6 +68,7 @@ async def search_stream(
                     body.thread_id,
                     body.attachment_ids,
                     redis_client=redis,
+                    client_ip=client_ip(request),
                 ):
                     yield event
             except YandexServiceError as e:

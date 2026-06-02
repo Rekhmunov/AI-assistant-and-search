@@ -8,6 +8,7 @@ interface AuthState {
   user: UserProfile | null;
   setAuth: (token: string, user: UserProfile) => void;
   setUser: (user: UserProfile) => void;
+  setToken: (token: string) => void;
   clear: () => void;
 }
 
@@ -21,11 +22,15 @@ export const useAuthStore = create<AuthState>()(
         set({ token, user });
       },
       setUser: (user) => set({ user }),
+      setToken: (token) => set({ token }),
       clear: () => {
         clearGuestSession();
         set({ token: null, user: null });
       },
     }),
-    { name: "glosix-auth" }
+    {
+      name: "glosix-auth",
+      partialize: (state) => ({ user: state.user }),
+    }
   )
 );

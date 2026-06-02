@@ -104,6 +104,7 @@ class SearchFlowService:
         thread_id: uuid.UUID | None,
         attachment_ids: list[uuid.UUID] | None = None,
         redis_client: redis.Redis | None = None,
+        client_ip: str | None = None,
     ) -> AsyncIterator[str]:
         if redis_client is None:
             from app.api.deps import get_redis
@@ -128,7 +129,9 @@ class SearchFlowService:
             )
             return
 
-        allowed, used, limit = await limiter.check_search_limit(user_id_str, user.plan, user)
+        allowed, used, limit = await limiter.check_search_limit(
+            user_id_str, user.plan, user, client_ip=client_ip
+        )
         if not allowed:
             if self._is_guest(user):
                 yield sse_event(

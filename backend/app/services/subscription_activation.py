@@ -136,6 +136,19 @@ def _normalize_email(value: str | None) -> str:
     return (value or "").strip().lower()
 
 
+def payment_amount_is_valid(payment_object: dict[str, Any], expected_rub: int) -> bool:
+    amount_block = payment_object.get("amount") or {}
+    value = amount_block.get("value")
+    currency = str(amount_block.get("currency") or "RUB").upper()
+    if value is None or currency != "RUB":
+        return False
+    try:
+        paid = int(round(float(str(value))))
+    except (TypeError, ValueError):
+        return False
+    return paid == int(expected_rub)
+
+
 def payment_matches_user(payment: dict[str, Any], user: User) -> bool:
     metadata = payment.get("metadata") or {}
     if str(metadata.get("user_id")) == str(user.id):
@@ -237,6 +250,18 @@ async def activate_from_yookassa_payment(
 
     if target_user.plan == Plan.PRO and sub.status == SubscriptionStatus.ACTIVE:
         return True
+
+    amount_value = (payment_object.get("amount") or {}).get("value")
+    if amount_value is not None:
+        expected_rub = int(sub.amount_rub or settings.pro_price_rub)
+        if not payment_amount_is_valid(payment_object, expected_rub):
+            logger.error(
+                "YooKassa payment %s amount mismatch (expected %s RUB, got %s)",
+                payment_id,
+                expected_rub,
+                amount_value,
+            )
+            return False
 
     upgraded = await activate_subscription_record(db, sub, target_user, settings=settings)
     await _reload_user_plan(db, target_user)

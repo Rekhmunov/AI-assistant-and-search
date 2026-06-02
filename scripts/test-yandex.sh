@@ -15,6 +15,10 @@ fi
 echo "=== /api/health ==="
 curl "${CURL_OPTS[@]}" "$BASE/api/health" | python3 -m json.tool 2>/dev/null || curl "${CURL_OPTS[@]}" "$BASE/api/health"
 echo ""
-echo "=== /api/health/yandex (может занять до 30 с) ==="
-curl "${CURL_OPTS[@]}" --max-time 60 "$BASE/api/health/yandex" | python3 -m json.tool 2>/dev/null || curl "${CURL_OPTS[@]}" "$BASE/api/health/yandex"
+echo "=== /api/health/yandex (может занять до 30 с; нужен X-Admin-Key или admin cookie) ==="
+ADMIN_HDR=()
+if [[ -n "${ADMIN_API_KEY:-}" ]]; then
+  ADMIN_HDR=(-H "X-Admin-Key: $ADMIN_API_KEY")
+fi
+curl "${CURL_OPTS[@]}" "${ADMIN_HDR[@]}" --max-time 60 "$BASE/api/health/yandex" | python3 -m json.tool 2>/dev/null || curl "${CURL_OPTS[@]}" "${ADMIN_HDR[@]}" "$BASE/api/health/yandex"
 echo ""

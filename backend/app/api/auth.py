@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Cookie, Depends, Header, HTTPException, Response, status
+from fastapi import APIRouter, Cookie, Depends, Header, HTTPException, Request, Response, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError, ProgrammingError
@@ -19,8 +19,11 @@ from app.api.deps import (
     get_redis,
     guest_by_key,
 )
+from app.core.auth_limits import check_auth_rate_limit, clear_auth_rate_limit, client_ip
 from app.core.config import get_settings
+from app.core.request_security import verify_allowed_origin
 from app.services.app_settings import get_setting
+from app.services.refresh_tokens import get_refresh_generation, refresh_generation_matches, revoke_refresh_tokens
 
 _session_security = HTTPBearer(auto_error=False)
 from app.core.limiter import RateLimiter
@@ -54,20 +57,28 @@ import redis.asyncio as redis
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
-def _set_auth_cookies(response: Response, user_id: str) -> tuple[str, str]:
+async def _set_auth_cookies(
+    response: Response,
+    user_id: str,
+    redis_client: redis.Redis,
+) -> str:
     settings = get_settings()
+    gen = await get_refresh_generation(redis_client, user_id)
     access = create_access_token(user_id)
-    refresh = create_refresh_token(user_id)
-    response.set_cookie(
-        key="refresh_token",
-        value=refresh,
-        httponly=True,
-        secure=not settings.debug,
-        samesite="none" if not settings.debug else "lax",
-        max_age=settings.refresh_token_expire_days * 86400,
-        path="/",
-    )
-    return access, refresh
+    refresh = create_refresh_token(user_id, refresh_gen=gen)
+    cookie_kwargs: dict = {
+        "key": "refresh_token",
+        "value": refresh,
+        "httponly": True,
+        "secure": not settings.debug,
+        "samesite": "none" if not settings.debug else "lax",
+        "max_age": settings.refresh_token_expire_days * 86400,
+        "path": "/",
+    }
+    if settings.cookie_domain:
+        cookie_kwargs["domain"] = settings.cookie_domain
+    response.set_cookie(**cookie_kwargs)
+    return access
 
 
 def _user_profile(user: User, used: int, limit: int) -> UserProfile:
@@ -157,7 +168,7 @@ async def session_status(
     settings = get_settings()
     guest_limit = int(await get_setting("guest_searches_per_day", db, redis_client, settings))
     pro_price_rub = int(await get_setting("pro_price_rub", db, redis_client, settings))
-    user = await _resolve_authenticated_user(db, creds, refresh_token)
+    user = await _resolve_authenticated_user(db, creds, refresh_token, redis_client)
     if user:
         used, limit = await _limits_for_user(user, limiter)
         return SessionStatus(
@@ -192,10 +203,12 @@ async def session_status(
 
 @router.post("/login", response_model=AuthResponse)
 async def login(
+    request: Request,
     body: InitDataRequest,
     response: Response,
     db: Annotated[AsyncSession, Depends(get_db)],
     limiter: Annotated[RateLimiter, Depends(get_rate_limiter)],
+    redis_client: Annotated[redis.Redis, Depends(get_redis)],
     guest_session: Annotated[str | None, Cookie(alias=GUEST_COOKIE)] = None,
 ):
     settings = get_settings()
@@ -231,6 +244,11 @@ async def login(
         db.add(user)
         await db.flush()
     else:
+        if user.deleted_at is not None:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Вы попали в бан, обратитесь в поддержку",
+            )
         user.first_name = user_data.get("first_name") or user.first_name
         user.last_name = user_data.get("last_name") or user.last_name
         user.username = user_data.get("username") or user.username
@@ -240,7 +258,7 @@ async def login(
 
     await _merge_guest_session(db, guest_session, user)
     clear_guest_cookie(response)
-    access, _ = _set_auth_cookies(response, str(user.id))
+    access = await _set_auth_cookies(response, str(user.id), redis_client)
     used, limit = await _limits_for_user(user, limiter)
     return AuthResponse(access_token=access, user=_user_profile(user, used, limit))
 
@@ -257,17 +275,26 @@ def _db_schema_error(exc: Exception) -> HTTPException | None:
 
 @router.post("/register", response_model=AuthResponse)
 async def register_email(
+    request: Request,
     body: EmailRegisterRequest,
     response: Response,
     db: Annotated[AsyncSession, Depends(get_db)],
     limiter: Annotated[RateLimiter, Depends(get_rate_limiter)],
+    redis_client: Annotated[redis.Redis, Depends(get_redis)],
     guest_session: Annotated[str | None, Cookie(alias=GUEST_COOKIE)] = None,
 ):
+    verify_allowed_origin(request)
     email = body.email.strip().lower()
+    ip = client_ip(request)
+    await check_auth_rate_limit(redis_client, f"register:{ip}")
+    await check_auth_rate_limit(redis_client, f"register_email:{email}")
     try:
         existing = await db.execute(select(User).where(User.email == email))
         if existing.scalar_one_or_none():
-            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email уже зарегистрирован")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Не удалось завершить регистрацию. Проверьте данные или войдите в аккаунт.",
+            )
 
         user = User(
             email=email,
@@ -280,13 +307,15 @@ async def register_email(
             await db.flush()
         except IntegrityError as exc:
             raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="Email уже зарегистрирован",
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Не удалось завершить регистрацию. Проверьте данные или войдите в аккаунт.",
             ) from exc
 
+        await clear_auth_rate_limit(redis_client, f"register:{ip}")
+        await clear_auth_rate_limit(redis_client, f"register_email:{email}")
         await _merge_guest_session(db, guest_session, user)
         clear_guest_cookie(response)
-        access, _ = _set_auth_cookies(response, str(user.id))
+        access = await _set_auth_cookies(response, str(user.id), redis_client)
         used, limit = await _limits_for_user(user, limiter)
         return AuthResponse(access_token=access, user=_user_profile(user, used, limit))
     except HTTPException:
@@ -305,13 +334,19 @@ async def register_email(
 
 @router.post("/email-login", response_model=AuthResponse)
 async def login_email(
+    request: Request,
     body: EmailLoginRequest,
     response: Response,
     db: Annotated[AsyncSession, Depends(get_db)],
     limiter: Annotated[RateLimiter, Depends(get_rate_limiter)],
+    redis_client: Annotated[redis.Redis, Depends(get_redis)],
     guest_session: Annotated[str | None, Cookie(alias=GUEST_COOKIE)] = None,
 ):
+    verify_allowed_origin(request)
     email = body.email.strip().lower()
+    ip = client_ip(request)
+    await check_auth_rate_limit(redis_client, f"login:{ip}")
+    await check_auth_rate_limit(redis_client, f"login_email:{email}")
     result = await db.execute(select(User).where(User.email == email))
     user = result.scalar_one_or_none()
     if not user or not user.password_hash or not verify_password(body.password, user.password_hash):
@@ -326,9 +361,11 @@ async def login_email(
         user.plan = Plan.FREE
         user.plan_expires_at = None
 
+    await clear_auth_rate_limit(redis_client, f"login:{ip}")
+    await clear_auth_rate_limit(redis_client, f"login_email:{email}")
     await _merge_guest_session(db, guest_session, user)
     clear_guest_cookie(response)
-    access, _ = _set_auth_cookies(response, str(user.id))
+    access = await _set_auth_cookies(response, str(user.id), redis_client)
     used, limit = await _limits_for_user(user, limiter)
     return AuthResponse(access_token=access, user=_user_profile(user, used, limit))
 
@@ -349,7 +386,10 @@ async def bind_email(
         select(User).where(User.email == email, User.id != user.id, User.deleted_at.is_(None))
     )
     if existing.scalar_one_or_none():
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Этот email уже занят")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Не удалось привязать email. Проверьте данные или используйте другой адрес.",
+        )
 
     user.email = email
     user.password_hash = hash_password(body.password)
@@ -420,14 +460,23 @@ async def bind_max_complete(
 
     await _merge_guest_session(db, guest_session, user)
     clear_guest_cookie(response)
-    access, _ = _set_auth_cookies(response, str(user.id))
+    access = await _set_auth_cookies(response, str(user.id), redis_client)
     used, limit = await _limits_for_user(user, limiter)
     return AuthResponse(access_token=access, user=_user_profile(user, used, limit))
 
 
 @router.post("/logout")
-async def logout(response: Response):
+async def logout(
+    response: Response,
+    redis_client: Annotated[redis.Redis, Depends(get_redis)],
+    refresh_token: Annotated[str | None, Cookie(alias="refresh_token")] = None,
+):
     """Clear server session cookies so the client can continue as a guest."""
+    settings = get_settings()
+    if refresh_token:
+        payload = decode_token(refresh_token, "refresh", settings)
+        if payload and payload.get("sub"):
+            await revoke_refresh_tokens(redis_client, str(payload["sub"]))
     clear_refresh_cookie(response)
     clear_guest_cookie(response)
     return {"ok": True}
@@ -437,6 +486,7 @@ async def logout(response: Response):
 async def refresh_session(
     response: Response,
     db: Annotated[AsyncSession, Depends(get_db)],
+    redis_client: Annotated[redis.Redis, Depends(get_redis)],
     refresh_token: Annotated[str | None, Cookie()] = None,
 ):
     settings = get_settings()
@@ -448,20 +498,27 @@ async def refresh_session(
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token")
 
     user_id = UUID(payload["sub"])
+    current_gen = await get_refresh_generation(redis_client, str(user_id))
+    if not refresh_generation_matches(payload, current_gen):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token")
+
     result = await db.execute(select(User).where(User.id == user_id, User.deleted_at.is_(None)))
     user = result.scalar_one_or_none()
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
 
     access = create_access_token(str(user.id))
-    new_refresh = create_refresh_token(str(user.id))
-    response.set_cookie(
-        key="refresh_token",
-        value=new_refresh,
-        httponly=True,
-        secure=not settings.debug,
-        samesite="none" if not settings.debug else "lax",
-        max_age=settings.refresh_token_expire_days * 86400,
-        path="/",
-    )
+    new_refresh = create_refresh_token(str(user.id), refresh_gen=current_gen)
+    cookie_kwargs: dict = {
+        "key": "refresh_token",
+        "value": new_refresh,
+        "httponly": True,
+        "secure": not settings.debug,
+        "samesite": "none" if not settings.debug else "lax",
+        "max_age": settings.refresh_token_expire_days * 86400,
+        "path": "/",
+    }
+    if settings.cookie_domain:
+        cookie_kwargs["domain"] = settings.cookie_domain
+    response.set_cookie(**cookie_kwargs)
     return TokenResponse(access_token=access)
