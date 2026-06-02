@@ -15,7 +15,9 @@ from app.services.prompts.defaults import (
 )
 from app.services.llm_runtime import fetch_llm_runtime_status
 from app.services.providers.registry import (
+    DEFAULT_IMAGE_GEN_PROVIDER,
     list_free_llm_providers,
+    list_image_gen_providers,
     list_llm_providers,
     list_search_providers,
     list_vision_providers,
@@ -38,6 +40,9 @@ BASE_SETTING_KEYS: dict[str, type] = {
     "free_llm_provider": str,
     "search_provider": str,
     "vision_provider": str,
+    "image_gen_provider": str,
+    "free_image_gens_per_day": int,
+    "pro_image_gens_per_day": int,
 }
 
 SETTING_KEYS: dict[str, type] = {
@@ -49,6 +54,8 @@ ENV_DEFAULTS: dict[str, str] = {
     "guest_searches_per_day": "guest_searches_per_day",
     "free_searches_per_day": "free_searches_per_day",
     "pro_searches_per_day": "pro_searches_per_day",
+    "pro_image_gens_per_day": "pro_image_gens_per_day",
+    "free_image_gens_per_day": "free_image_gens_per_day",
     "pro_price_rub": "pro_price_rub",
     "global_yandex_requests_per_day": "global_yandex_requests_per_day",
     "maintenance_mode": "false",
@@ -96,6 +103,8 @@ def default_for_key(key: str, settings: Settings | None = None) -> Any:
         return DEFAULT_SEARCH_PROVIDER
     if key == "vision_provider":
         return DEFAULT_VISION_PROVIDER
+    if key == "image_gen_provider":
+        return DEFAULT_IMAGE_GEN_PROVIDER
     env_attr = ENV_DEFAULTS.get(key)
     if env_attr and hasattr(settings, env_attr):
         return getattr(settings, env_attr)
@@ -229,6 +238,10 @@ async def list_settings_bundle(db: AsyncSession, redis_client: redis.Redis) -> d
         "vision_providers": [
             {"id": x.id, "label": x.label, "configured": x.configured, "hint": x.hint}
             for x in list_vision_providers(settings)
+        ],
+        "image_gen_providers": [
+            {"id": x.id, "label": x.label, "configured": x.configured, "hint": x.hint}
+            for x in list_image_gen_providers(settings)
         ],
         "prompts": prompts,
     }

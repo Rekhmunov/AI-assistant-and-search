@@ -393,6 +393,7 @@ export interface RouteInfo {
   needs_search: boolean;
   answer_model: string;
   reason?: string;
+  intent?: string;
 }
 
 export interface SearchDonePayload {
@@ -406,6 +407,8 @@ export interface SSEHandlers {
   onRoute?: (route: RouteInfo) => void;
   onSources?: (sources: Source[]) => void;
   onImages?: (images: EntityImage[]) => void;
+  onImageGenStart?: (status: string) => void;
+  onImageGenStatus?: (status: string) => void;
   onToken?: (text: string) => void;
   onResetAnswer?: () => void;
   onFollowUps?: (questions: string[]) => void;
@@ -678,6 +681,12 @@ export async function streamSearch(
             break;
           case "images":
             handlers.onImages?.(Array.isArray(parsed.images) ? parsed.images : []);
+            break;
+          case "image_gen_start":
+            if (typeof parsed.status === "string") handlers.onImageGenStart?.(parsed.status);
+            break;
+          case "image_gen_status":
+            if (typeof parsed.status === "string") handlers.onImageGenStatus?.(parsed.status);
             break;
           case "token":
             handlers.onToken?.(parsed.text);

@@ -13,7 +13,8 @@ from app.core.limiter import RateLimiter
 from app.models.user import User
 from app.schemas.search import SearchRequest
 from app.services.app_settings import get_setting
-from app.services.search_flow import SearchFlowService, sse_event
+from app.services.search_flow import SearchFlowService
+from app.services.sse import sse_event
 from app.services.yandex_errors import YandexServiceError
 
 logger = logging.getLogger(__name__)

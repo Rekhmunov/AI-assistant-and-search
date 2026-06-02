@@ -41,6 +41,7 @@ type SettingsBundle = {
   free_llm_providers?: ProviderOption[];
   search_providers: ProviderOption[];
   vision_providers?: ProviderOption[];
+  image_gen_providers?: ProviderOption[];
   prompts: PromptField[];
 };
 
@@ -51,6 +52,7 @@ export function SettingsPage() {
   const [freeLlmProviders, setFreeLlmProviders] = useState<ProviderOption[]>([]);
   const [searchProviders, setSearchProviders] = useState<ProviderOption[]>([]);
   const [visionProviders, setVisionProviders] = useState<ProviderOption[]>([]);
+  const [imageGenProviders, setImageGenProviders] = useState<ProviderOption[]>([]);
   const [prompts, setPrompts] = useState<PromptField[]>([]);
   const [msg, setMsg] = useState("");
   const [llmRuntime, setLlmRuntime] = useState<LlmRuntime | null>(null);
@@ -66,6 +68,7 @@ export function SettingsPage() {
       setFreeLlmProviders(r.free_llm_providers ?? []);
       setSearchProviders(r.search_providers);
       setVisionProviders(r.vision_providers ?? []);
+      setImageGenProviders(r.image_gen_providers ?? []);
       setPrompts(r.prompts);
     });
   }, []);
@@ -78,6 +81,7 @@ export function SettingsPage() {
   }, [llmProvider]);
   const searchProvider = String(settings.search_provider ?? "yandex_search");
   const visionProvider = String(settings.vision_provider ?? "gigachat");
+  const imageGenProvider = String(settings.image_gen_provider ?? "gigachat");
 
   const visiblePrompts = useMemo(
     () => prompts.filter((p) => p.provider === llmProvider),
@@ -120,6 +124,9 @@ export function SettingsPage() {
       free_llm_provider: freeLlmProvider,
       search_provider: searchProvider,
       vision_provider: visionProvider,
+      image_gen_provider: imageGenProvider,
+      free_image_gens_per_day: Number(settings.free_image_gens_per_day),
+      pro_image_gens_per_day: Number(settings.pro_image_gens_per_day),
     };
     for (const p of visiblePrompts) {
       payload[p.setting_key] = String(settings[p.setting_key] ?? p.value);
@@ -135,6 +142,7 @@ export function SettingsPage() {
       if (updated.free_llm_providers?.length) setFreeLlmProviders(updated.free_llm_providers);
       if (updated.search_providers?.length) setSearchProviders(updated.search_providers);
       if (updated.vision_providers?.length) setVisionProviders(updated.vision_providers);
+      if (updated.image_gen_providers?.length) setImageGenProviders(updated.image_gen_providers);
       if (updated.prompts?.length) setPrompts(updated.prompts);
       setMsg("Сохранено");
     } catch (err) {
@@ -242,6 +250,30 @@ export function SettingsPage() {
                   </span>
                 )}
               </label>
+
+              <label>
+                Генерация картинок
+                <select
+                  value={imageGenProvider}
+                  onChange={(e) => setSettings({ ...settings, image_gen_provider: e.target.value })}
+                  disabled={!can("settings:write")}
+                >
+                  {(imageGenProviders.length ? imageGenProviders : [{ id: "gigachat", label: "GigaChat (text2image)", configured: true }]).map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.label}
+                      {!p.configured ? " (не настроен)" : ""}
+                    </option>
+                  ))}
+                </select>
+                {imageGenProviders.find((p) => p.id === imageGenProvider)?.hint && (
+                  <span className="hint-inline">
+                    {imageGenProviders.find((p) => p.id === imageGenProvider)?.hint}
+                  </span>
+                )}
+                <span className="hint-inline">
+                  Триггер в чате: «нарисуй», «сгенерируй картинку» и т.п. Только тариф Pro.
+                </span>
+              </label>
             </div>
           )}
         </section>
@@ -334,6 +366,33 @@ export function SettingsPage() {
                   type="number"
                   value={String(settings.pro_searches_per_day ?? "")}
                   onChange={(e) => setSettings({ ...settings, pro_searches_per_day: e.target.value })}
+                  disabled={!can("settings:write")}
+                />
+              </label>
+              <label>
+                Free генераций картинок / день
+                <input
+                  type="number"
+                  min={0}
+                  value={String(settings.free_image_gens_per_day ?? "")}
+                  onChange={(e) =>
+                    setSettings({ ...settings, free_image_gens_per_day: e.target.value })
+                  }
+                  disabled={!can("settings:write")}
+                />
+                <span className="hint-inline">
+                  0 — генерация только на Pro (рекомендуется)
+                </span>
+              </label>
+              <label>
+                Pro генераций картинок / день
+                <input
+                  type="number"
+                  min={0}
+                  value={String(settings.pro_image_gens_per_day ?? "")}
+                  onChange={(e) =>
+                    setSettings({ ...settings, pro_image_gens_per_day: e.target.value })
+                  }
                   disabled={!can("settings:write")}
                 />
               </label>

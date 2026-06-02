@@ -7,6 +7,7 @@ import { AnswerErrorBoundary } from "../components/AnswerErrorBoundary";
 import { AnswerFooter } from "../components/AnswerFooter";
 import { FreeLimitNotice } from "../components/FreeLimitNotice";
 import { GuestLimitNotice } from "../components/GuestLimitNotice";
+import { ImageGenProNotice } from "../components/ImageGenProNotice";
 import { SearchComposer, type ComposerAttachment } from "../components/SearchComposer";
 import { SearchStatusLine, type SearchPhase } from "../components/SearchStatusLine";
 import { ThreadImagesTab } from "../components/ThreadImagesTab";
@@ -81,6 +82,7 @@ export function Thread() {
   const [streaming, setStreaming] = useState(false);
   const [needsSearch, setNeedsSearch] = useState(true);
   const [searchPhase, setSearchPhase] = useState<SearchPhase>("idle");
+  const [imageGenStatus, setImageGenStatus] = useState<string | null>(null);
   const [composerQuery, setComposerQuery] = useState("");
   const [activeTab, setActiveTab] = useState<ThreadTab>("answer");
   const started = useRef(false);
@@ -232,6 +234,7 @@ export function Thread() {
       setStreaming(true);
       setNeedsSearch(true);
       setSearchPhase("routing");
+      setImageGenStatus(null);
       setTurns((prev) => [
         ...prev,
         {
@@ -253,11 +256,25 @@ export function Thread() {
           if (!id) navigate(`/thread/${tid}`, { replace: true });
         },
         onRoute: (route) => {
+          const isImageGen =
+            route.intent === "image_generate" || route.reason === "image_generation";
           setNeedsSearch(route.needs_search);
-          setSearchPhase(route.needs_search ? "searching" : "answering");
+          if (isImageGen) {
+            setSearchPhase("image_generating");
+          } else {
+            setSearchPhase(route.needs_search ? "searching" : "answering");
+          }
           setTurns((prev) =>
             updateLastStreamingTurn(prev, { needsSearch: route.needs_search }),
           );
+        },
+        onImageGenStart: (status) => {
+          setSearchPhase("image_generating");
+          setImageGenStatus(status);
+        },
+        onImageGenStatus: (status) => {
+          setSearchPhase("image_generating");
+          setImageGenStatus(status);
         },
         onSources: (list) => {
           setSearchPhase("answering");
@@ -267,6 +284,7 @@ export function Thread() {
           setTurns((prev) => updateLastStreamingTurn(prev, { images: list ?? [] }));
         },
         onToken: (chunk) => {
+          setImageGenStatus(null);
           setSearchPhase("answering");
           setTurns((prev) => {
             const idx = findLastIndex(prev, (turn) => turn.streaming);
@@ -294,6 +312,7 @@ export function Thread() {
           streamingRef.current = false;
           setStreaming(false);
           setSearchPhase("idle");
+          setImageGenStatus(null);
           answerResetPendingRef.current = false;
           const messageId = done?.message_id;
           setTurns((prev) =>
@@ -316,6 +335,7 @@ export function Thread() {
           streamingRef.current = false;
           setStreaming(false);
           setSearchPhase("idle");
+          setImageGenStatus(null);
           const threadMissing =
             code === "not_found" || msg.includes("Тред не найден");
           if (threadMissing) {
@@ -347,6 +367,22 @@ export function Thread() {
                   ...turn,
                   answer: "",
                   errorCode: "free_rate_limit",
+                  streaming: false,
+                };
+              }
+              if (code === "free_image_gen_pro") {
+                return {
+                  ...turn,
+                  answer: "",
+                  errorCode: "free_image_gen_pro",
+                  streaming: false,
+                };
+              }
+              if (code === "image_gen_rate_limit") {
+                return {
+                  ...turn,
+                  answer: t("imageGenRateLimit"),
+                  errorCode: "image_gen_rate_limit",
                   streaming: false,
                 };
               }
@@ -387,8 +423,8 @@ export function Thread() {
   const imagesLoading = Boolean(
     streaming &&
       lastTurn?.streaming &&
-      lastTurn.needsSearch &&
-      (lastTurn.images?.length ?? 0) === 0,
+      (lastTurn.images?.length ?? 0) === 0 &&
+      (lastTurn.needsSearch || searchPhase === "image_generating"),
   );
 
   /** Мобилка: вкладка «Изображения» — новые фото сверху, сбрасываем scroll ответа. */
@@ -439,7 +475,13 @@ export function Thread() {
             const showStatus = isActive && streaming && !turn.answer.trim() && !turn.errorCode;
             const showGuestLimit = turn.errorCode === "guest_rate_limit" || turn.errorCode === "rate_limit";
             const showFreeLimit = turn.errorCode === "free_rate_limit";
-            const showAnswer = showGuestLimit || showFreeLimit || Boolean(turn.answer.trim()) || isActive;
+            const showImageGenPro = turn.errorCode === "free_image_gen_pro";
+            const showAnswer =
+              showGuestLimit ||
+              showFreeLimit ||
+              showImageGenPro ||
+              Boolean(turn.answer.trim()) ||
+              isActive;
             const showFollowUps =
               index === lastCompletedIndex &&
               turn.followUps.length > 0 &&
@@ -451,7 +493,11 @@ export function Thread() {
                 <ThreadQuery query={turn.query} />
 
                 {showStatus && (
-                  <SearchStatusLine phase={searchPhase} needsSearch={needsSearch} />
+                  <SearchStatusLine
+                    phase={searchPhase}
+                    needsSearch={needsSearch}
+                    customStatus={searchPhase === "image_generating" ? imageGenStatus : null}
+                  />
                 )}
 
                 {showAnswer && (
@@ -461,6 +507,8 @@ export function Thread() {
                         <GuestLimitNotice limit={guestSearchLimit} />
                       ) : showFreeLimit ? (
                         <FreeLimitNotice />
+                      ) : showImageGenPro ? (
+                        <ImageGenProNotice />
                       ) : (
                         <AnswerBody
                           text={turn.answer}

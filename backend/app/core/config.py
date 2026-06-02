@@ -99,6 +99,8 @@ class Settings(BaseSettings):
     guest_searches_per_day: int = 5
     free_searches_per_day: int = 10
     pro_searches_per_day: int = 200
+    free_image_gens_per_day: int = 0
+    pro_image_gens_per_day: int = 20
     global_yandex_requests_per_day: int = 5000
 
     pro_price_rub: int = 299

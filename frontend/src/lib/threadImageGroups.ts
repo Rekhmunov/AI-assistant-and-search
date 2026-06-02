@@ -32,7 +32,8 @@ export function countThreadImages(turns: ThreadTurn[]): number {
 export function threadHasSearchTurns(turns: ThreadTurn[]): boolean {
   return turns.some(
     (turn) =>
+      (turn.images?.length ?? 0) > 0 ||
       turn.needsSearch === true ||
-      (turn.needsSearch == null && ((turn.sources?.length ?? 0) > 0 || (turn.images?.length ?? 0) > 0)),
+      (turn.needsSearch == null && (turn.sources?.length ?? 0) > 0),
   );
 }

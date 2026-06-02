@@ -94,6 +94,21 @@ VALID_LLM_IDS = frozenset({"yandex_gpt", "anthropic_claude", "deepseek", "gigach
 VALID_FREE_LLM_IDS = frozenset({"deepseek", "gigachat"})
 VALID_SEARCH_IDS = frozenset({"yandex_search"})
 VALID_VISION_IDS = frozenset({"anthropic_claude", "gigachat"})
+VALID_IMAGE_GEN_IDS = frozenset({"gigachat"})
+DEFAULT_IMAGE_GEN_PROVIDER = "gigachat"
+
+
+def list_image_gen_providers(settings: Settings) -> list[ProviderInfo]:
+    giga_ok = settings.gigachat_configured
+    return [
+        ProviderInfo(
+            id="gigachat",
+            label="GigaChat (text2image)",
+            kind="image_gen",
+            configured=giga_ok,
+            hint=None if giga_ok else "Нужен GIGACHAT_CREDENTIALS в .env",
+        ),
+    ]
 
 
 def list_free_llm_providers(settings: Settings) -> list[ProviderInfo]:

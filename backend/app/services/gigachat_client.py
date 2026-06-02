@@ -165,6 +165,61 @@ async def iter_chat_stream(
                     yield str(text)
 
 
+async def download_file_bytes(
+    file_id: str,
+    *,
+    settings: Settings | None = None,
+) -> bytes:
+    settings = settings or get_settings()
+    token = await get_access_token(settings)
+    base = settings.gigachat_base_url.rstrip("/")
+    headers = {"Authorization": f"Bearer {token}", "Accept": "application/jpeg"}
+    async with _http_client(settings, timeout=120.0) as client:
+        resp = await client.get(f"{base}/files/{file_id}/content", headers=headers)
+    if resp.status_code >= 400:
+        logger.warning("GigaChat file download %s: %s", resp.status_code, resp.text[:200])
+        resp.raise_for_status()
+    return resp.content
+
+
+async def iter_chat_completion_chunks(
+    payload: dict[str, Any],
+    *,
+    settings: Settings | None = None,
+) -> AsyncIterator[dict[str, Any]]:
+    """SSE chunks parsed as JSON objects from GigaChat chat/completions."""
+    payload = {**payload, "stream": True}
+    settings = settings or get_settings()
+    token = await get_access_token(settings)
+    base = settings.gigachat_base_url.rstrip("/")
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json",
+        "Accept": "text/event-stream",
+    }
+    async with _http_client(settings, timeout=300.0) as client:
+        async with client.stream(
+            "POST",
+            f"{base}/chat/completions",
+            headers=headers,
+            json=payload,
+        ) as resp:
+            if resp.status_code >= 400:
+                body = await resp.aread()
+                logger.warning("GigaChat stream %s: %s", resp.status_code, body[:500])
+                resp.raise_for_status()
+            async for line in resp.aiter_lines():
+                if not line or not line.startswith("data:"):
+                    continue
+                chunk = line[5:].strip()
+                if chunk == "[DONE]":
+                    break
+                try:
+                    yield json.loads(chunk)
+                except json.JSONDecodeError:
+                    continue
+
+
 async def chat_completion_text(
     payload: dict[str, Any],
     *,

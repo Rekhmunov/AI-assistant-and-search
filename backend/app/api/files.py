@@ -3,6 +3,7 @@ from typing import Annotated, Any
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi.responses import Response
 from pydantic import BaseModel
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -22,7 +23,7 @@ from app.services.file_format import (
     resolve_upload_extension,
 )
 from app.services.file_parser import DOCUMENT_EXT, IMAGE_EXT, extract_text, ocr_image_bytes, prepare_image_for_ocr
-from app.services.upload_storage import delete_upload_file, mime_for_ext, save_upload_bytes
+from app.services.upload_storage import delete_upload_file, load_upload_bytes, mime_for_ext, save_upload_bytes
 
 router = APIRouter(prefix="/files", tags=["files"])
 
@@ -48,6 +49,37 @@ def _file_too_large_detail(filename: str, size: int, user: User) -> dict[str, An
         "max_bytes": limit,
         "size_bytes": size,
     }
+
+
+@router.get("/{file_id}/content")
+async def download_file_content(
+    file_id: UUID,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+):
+    """Скачивание сгенерированных и загруженных изображений (cookie/Bearer)."""
+    result = await db.execute(
+        select(UploadedFile).where(
+            UploadedFile.id == file_id,
+            UploadedFile.user_id == user.id,
+        )
+    )
+    row = result.scalar_one_or_none()
+    if not row or not row.storage_key:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="File not found")
+    if row.expires_at and row.expires_at < datetime.now(timezone.utc):
+        raise HTTPException(status_code=status.HTTP_410_GONE, detail="File expired")
+    if row.media_kind not in ("image", "generated"):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="File not found")
+    data = load_upload_bytes(row.storage_key)
+    if not data:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="File not found")
+    mime = row.mime_type or mime_for_ext(row.storage_key.rsplit(".", 1)[-1])
+    return Response(
+        content=data,
+        media_type=mime,
+        headers={"Cache-Control": "private, max-age=3600"},
+    )
 
 
 class UploadedFileOut(BaseModel):

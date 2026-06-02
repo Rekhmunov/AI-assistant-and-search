@@ -1,14 +1,18 @@
 import { useTypewriterText } from "../hooks/useTypewriterText";
 import { t } from "../i18n";
 
-export type SearchPhase = "routing" | "searching" | "answering" | "idle";
+export type SearchPhase = "routing" | "searching" | "answering" | "image_generating" | "idle";
 
 type Props = {
   phase: SearchPhase;
   needsSearch?: boolean;
+  /** Статус из SSE (GigaChat text2image): «Делаем шедевр…» */
+  customStatus?: string | null;
 };
 
-function statusLabel(phase: SearchPhase, needsSearch?: boolean): string {
+function statusLabel(phase: SearchPhase, needsSearch?: boolean, customStatus?: string | null): string {
+  if (customStatus?.trim()) return customStatus.trim();
+  if (phase === "image_generating") return t("imageGenWorking");
   if (phase === "routing") return t("thinking");
   if (phase === "searching") {
     return needsSearch ? t("searchingWeb") : t("searchingSolution");
@@ -17,9 +21,9 @@ function statusLabel(phase: SearchPhase, needsSearch?: boolean): string {
   return t("searchingSolution");
 }
 
-export function SearchStatusLine({ phase, needsSearch }: Props) {
+export function SearchStatusLine({ phase, needsSearch, customStatus }: Props) {
   const active = phase !== "idle";
-  const label = statusLabel(phase, needsSearch);
+  const label = statusLabel(phase, needsSearch, customStatus);
   const { text, isTyping } = useTypewriterText(label, active);
 
   if (!active) return null;

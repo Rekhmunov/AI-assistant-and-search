@@ -136,3 +136,37 @@ class RateLimiter:
             await self.redis.decr(key)
             return False
         return True
+
+    async def _image_gen_limit_for_plan(self, plan: Plan) -> int:
+        if plan != Plan.PRO:
+            return 0
+        cached = await self.redis.get("setting:pro_image_gens_per_day")
+        if cached is not None:
+            return int(cached)
+        return self.settings.pro_image_gens_per_day
+
+    async def check_image_gen_limit(self, user_id: str, plan: Plan) -> tuple[bool, int, int]:
+        limit = await self._image_gen_limit_for_plan(plan)
+        if limit <= 0:
+            return False, 0, 0
+        key = _day_key("image_gen", user_id)
+        count = await self.redis.incr(key)
+        if count == 1:
+            now = datetime.now(MSK)
+            midnight = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+            await self.redis.expireat(key, int(midnight.timestamp()))
+        if count > limit:
+            await self.redis.decr(key)
+            return False, max(0, count - 1), limit
+        return True, count, limit
+
+    async def release_image_gen(self, user_id: str) -> None:
+        key = _day_key("image_gen", user_id)
+        val = await self.redis.get(key)
+        if val and int(val) > 0:
+            await self.redis.decr(key)
+
+    async def get_image_gen_usage(self, user_id: str) -> int:
+        key = _day_key("image_gen", user_id)
+        val = await self.redis.get(key)
+        return int(val) if val else 0

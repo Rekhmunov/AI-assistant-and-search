@@ -229,6 +229,7 @@ class SettingsBundleOut(BaseModel):
     free_llm_providers: list[ProviderOptionOut] = []
     search_providers: list[ProviderOptionOut]
     vision_providers: list[ProviderOptionOut] = []
+    image_gen_providers: list[ProviderOptionOut] = []
     prompts: list[PromptFieldOut]
 
 

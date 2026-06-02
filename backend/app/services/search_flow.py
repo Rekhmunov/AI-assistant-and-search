@@ -38,6 +38,8 @@ from app.services.query_url_memory import (
 from app.services.entity_image import entity_images_to_json
 from app.services.message_images_column import messages_have_images_column
 from app.services.entity_image_routing import resolve_entity_image_query, wants_entity_images
+from app.services.image_gen_flow import stream_image_generation_turn
+from app.services.image_gen_routing import wants_image_generation
 from app.services.yandex_image_search import YandexImageSearchService
 from app.services.perplexity import PERPLEXITY_PROVIDER_ID, PerplexityProvider
 from app.services.providers.factory import resolve_runtime_providers
@@ -57,9 +59,7 @@ def sources_to_json(sources: list[SearchSource]) -> list[dict]:
     ]
 
 
-def sse_event(event: str, data: dict) -> str:
-    return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
-
+from app.services.sse import sse_event
 
 logger = logging.getLogger(__name__)
 
@@ -127,6 +127,19 @@ class SearchFlowService:
                 "error",
                 {"code": "auth_required", "message": "Войдите, чтобы прикреплять файлы"},
             )
+            return
+
+        user_text_preview = normalize_user_query(query)
+        if not attachment_ids and wants_image_generation(user_text_preview):
+            async for event in stream_image_generation_turn(
+                db,
+                user,
+                limiter,
+                query,
+                thread_id,
+                redis_client,
+            ):
+                yield event
             return
 
         allowed, used, limit = await limiter.check_search_limit(
