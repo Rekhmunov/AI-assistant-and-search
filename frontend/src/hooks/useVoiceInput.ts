@@ -22,17 +22,20 @@ function preferMp4Recording(): boolean {
   return getMaxPlatform() === "ios" || isIosLikeDevice();
 }
 
-/** iOS WebView: финальный chunk часто после onstop. Android MAX — лучше timeslice. */
-function preferSingleBlobRecording(): boolean {
-  return preferMp4Recording();
+/** В MAX WebView финальный chunk часто приходит после onstop — нужна пауза перед сборкой blob. */
+function blobFinalizeDelayMs(): number {
+  if (isMaxWebApp()) return 750;
+  if (preferMp4Recording()) return 450;
+  return 0;
 }
 
-/** Без timeslice: один blob; на iOS/MAX финальный chunk может прийти после onstop. */
+/** В MAX — периодические chunk'и; иначе iOS без timeslice, Android 250 ms. */
 function useRecorderTimesliceMs(): number | undefined {
-  return preferSingleBlobRecording() ? undefined : 250;
+  if (isMaxWebApp()) return 400;
+  return preferMp4Recording() ? undefined : 250;
 }
 
-const BLOB_FINALIZE_DELAY_MS = 400;
+const MAX_STOP_FLUSH_MS = 120;
 
 function recorderMimeCandidates(): string[] {
   return preferMp4Recording()
@@ -126,7 +129,7 @@ function collectFinalTranscript(ev: SpeechRecognitionEvent): string {
 }
 
 /** Голосовой ввод: Web Speech API в браузере; в MAX — запись + сервер (Yandex STT). */
-export function useVoiceInput(onText: (text: string) => void, token: string | null) {
+export function useVoiceInput(onText: (text: string) => void, token: string | null = null) {
   const [state, setState] = useState<VoiceState>("idle");
   const [error, setError] = useState<string | null>(null);
 
@@ -210,15 +213,38 @@ export function useVoiceInput(onText: (text: string) => void, token: string | nu
     clearAutoStop();
     const rec = recorderRef.current;
     if (rec && rec.state !== "inactive") {
+      const failStop = () => {
+        recordingRef.current = false;
+        releaseMic();
+        setState("idle");
+      };
+      const doStop = () => {
+        try {
+          rec.stop();
+        } catch {
+          failStop();
+        }
+      };
       try {
         if (rec.state === "recording" && typeof rec.requestData === "function") {
           rec.requestData();
         }
-        rec.stop();
+        if (isMaxWebApp()) {
+          window.setTimeout(() => {
+            try {
+              if (rec.state === "recording" && typeof rec.requestData === "function") {
+                rec.requestData();
+              }
+            } catch {
+              /* ignore */
+            }
+            window.setTimeout(doStop, MAX_STOP_FLUSH_MS);
+          }, MAX_STOP_FLUSH_MS);
+        } else {
+          doStop();
+        }
       } catch {
-        recordingRef.current = false;
-        releaseMic();
-        setState("idle");
+        failStop();
       }
       return;
     }
@@ -231,11 +257,6 @@ export function useVoiceInput(onText: (text: string) => void, token: string | nu
     setError(null);
     userStopRef.current = false;
     chunksRef.current = [];
-
-    if (!token) {
-      setError(t("loginForFiles"));
-      return;
-    }
 
     if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
       setError(t("voiceUnavailableMax"));
@@ -286,11 +307,10 @@ export function useVoiceInput(onText: (text: string) => void, token: string | nu
           const resolvedMime = guessRecordingMime(new Blob(chunks, { type: mime }), mime);
           const blob = new Blob(chunks, { type: resolvedMime });
           const elapsed = Date.now() - startedAtRef.current;
-          const minBytes = isMaxWebApp() ? 128 : 256;
-          if (blob.size < minBytes || elapsed < 400) {
+          if (blob.size === 0 || elapsed < 200) {
             recordingRef.current = false;
             if (import.meta.env.DEV) {
-              console.warn("voice: recording too short", {
+              console.warn("voice: empty recording", {
                 bytes: blob.size,
                 elapsed,
                 mime: resolvedMime,
@@ -304,8 +324,9 @@ export function useVoiceInput(onText: (text: string) => void, token: string | nu
           void uploadRecording(blob, resolvedMime);
         };
 
-        if (preferSingleBlobRecording()) {
-          window.setTimeout(finalize, BLOB_FINALIZE_DELAY_MS);
+        const delay = blobFinalizeDelayMs();
+        if (delay > 0) {
+          window.setTimeout(finalize, delay);
         } else {
           finalize();
         }

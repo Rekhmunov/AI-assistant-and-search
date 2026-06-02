@@ -52,8 +52,9 @@ async def transcribe_voice(
         text = await transcribe_audio(raw, resolved_type, settings)
     except SpeechTranscriptionError as exc:
         logger.warning(
-            "voice transcribe failed: code=%s bytes=%s type=%s filename=%s",
+            "voice transcribe failed: code=%s user=%s bytes=%s type=%s filename=%s",
             exc.code,
+            user.id,
             len(raw),
             resolved_type,
             file.filename,

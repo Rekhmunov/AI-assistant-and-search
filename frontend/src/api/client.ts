@@ -496,19 +496,34 @@ export async function transcribeVoice(
         : mime.includes("wav")
           ? "wav"
           : "webm";
-  const file = new File([blob], `voice.${ext}`, {
-    type: mime || "audio/webm",
-  });
-  const form = new FormData();
-  form.append("file", file);
-  const res = await fetch(`${API_BASE}/api/voice/transcribe`, {
-    method: "POST",
-    headers: token
-      ? { Authorization: `Bearer ${token}`, ...getGuestSessionHeader() }
-      : getGuestSessionHeader(),
-    credentials: "include",
-    body: form,
-  });
+  const buildForm = () => {
+    const file = new File([blob], `voice.${ext}`, {
+      type: mime || "audio/webm",
+    });
+    const form = new FormData();
+    form.append("file", file);
+    return form;
+  };
+
+  const postTranscribe = async (accessToken: string | null) =>
+    fetch(`${API_BASE}/api/voice/transcribe`, {
+      method: "POST",
+      headers: accessToken
+        ? { Authorization: `Bearer ${accessToken}`, ...getGuestSessionHeader() }
+        : getGuestSessionHeader(),
+      credentials: "include",
+      body: buildForm(),
+    });
+
+  let res = await postTranscribe(token);
+  if (res.status === 401) {
+    try {
+      const refreshed = await refreshAccessToken();
+      res = await postTranscribe(refreshed.access_token);
+    } catch {
+      /* keep original 401 response */
+    }
+  }
   if (!res.ok) {
     let msg = "Не удалось распознать речь";
     try {

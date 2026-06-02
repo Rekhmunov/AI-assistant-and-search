@@ -91,6 +91,15 @@ def _convert_to_lpcm_raw(input_bytes: bytes, input_ext: str) -> bytes:
     )
 
 
+def _ffmpeg_input_variants(input_ext: str) -> list[list[str]]:
+    if input_ext in ("mp4", "m4a", "caf", "mov"):
+        return [
+            ["-fflags", "+genpts", "-i"],
+            ["-f", "mp4", "-fflags", "+genpts", "-i"],
+        ]
+    return [["-i"]]
+
+
 def _ffmpeg_convert(input_bytes: bytes, input_ext: str, audio_args: list[str], out_name: str) -> bytes:
     if not _ffmpeg_available():
         raise SpeechTranscriptionError(
@@ -101,29 +110,26 @@ def _ffmpeg_convert(input_bytes: bytes, input_ext: str, audio_args: list[str], o
         inp = Path(tmp) / f"in.{input_ext}"
         out = Path(tmp) / out_name
         inp.write_bytes(input_bytes)
-        cmd = ["ffmpeg", "-y"]
-        if input_ext in ("mp4", "m4a", "caf", "mov"):
-            cmd.extend(["-f", "mp4"])
-        cmd.extend(["-i", str(inp), *audio_args, str(out)])
-        proc = subprocess.run(
-            cmd,
-            capture_output=True,
-            check=False,
+        last_err = ""
+        for input_args in _ffmpeg_input_variants(input_ext):
+            cmd = ["ffmpeg", "-y", *input_args, str(inp), *audio_args, str(out)]
+            proc = subprocess.run(cmd, capture_output=True, check=False)
+            if proc.returncode == 0 and out.exists() and out.stat().st_size >= 64:
+                return out.read_bytes()
+            last_err = proc.stderr.decode(errors="replace")[:300]
+            if out.exists():
+                out.unlink()
+        logger.warning(
+            "ffmpeg convert failed (%s -> %s, in=%s bytes): %s",
+            input_ext,
+            out_name,
+            len(input_bytes),
+            last_err,
         )
-        if proc.returncode != 0 or not out.exists() or out.stat().st_size < 128:
-            err = proc.stderr.decode(errors="replace")[:300]
-            logger.warning(
-                "ffmpeg convert failed (%s -> %s, in=%s bytes): %s",
-                input_ext,
-                out_name,
-                len(input_bytes),
-                err,
-            )
-            raise SpeechTranscriptionError(
-                "audio_convert_failed",
-                "Не удалось обработать аудиозапись",
-            )
-        return out.read_bytes()
+        raise SpeechTranscriptionError(
+            "audio_convert_failed",
+            "Не удалось обработать аудиозапись",
+        )
 
 
 async def transcribe_audio(
