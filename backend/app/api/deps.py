@@ -228,12 +228,12 @@ async def resolve_search_user(
 async def get_search_user(
     request: Request,
     db: Annotated[AsyncSession, Depends(get_db)],
+    limiter: Annotated[RateLimiter, Depends(get_rate_limiter)],
+    redis_client: Annotated[redis.Redis, Depends(get_redis)],
     creds: Annotated[HTTPAuthorizationCredentials | None, Depends(security)],
     refresh_token: Annotated[str | None, Cookie(alias="refresh_token")] = None,
     guest_session: Annotated[str | None, Cookie(alias=GUEST_COOKIE)] = None,
     x_guest_session: Annotated[str | None, Header(alias=GUEST_HEADER)] = None,
-    limiter: Annotated[RateLimiter, Depends(get_rate_limiter)],
-    redis_client: Annotated[redis.Redis, Depends(get_redis)],
 ) -> SearchUserResult:
     return await resolve_search_user(
         db,
@@ -251,11 +251,11 @@ async def get_search_user(
 async def get_existing_search_user(
     request: Request,
     db: Annotated[AsyncSession, Depends(get_db)],
+    redis_client: Annotated[redis.Redis, Depends(get_redis)],
     creds: Annotated[HTTPAuthorizationCredentials | None, Depends(security)],
     refresh_token: Annotated[str | None, Cookie(alias="refresh_token")] = None,
     guest_session: Annotated[str | None, Cookie(alias=GUEST_COOKIE)] = None,
     x_guest_session: Annotated[str | None, Header(alias=GUEST_HEADER)] = None,
-    redis_client: Annotated[redis.Redis, Depends(get_redis)],
 ) -> SearchUserResult:
     return await resolve_search_user(
         db,
@@ -271,9 +271,9 @@ async def get_existing_search_user(
 
 async def get_current_user(
     db: Annotated[AsyncSession, Depends(get_db)],
+    redis_client: Annotated[redis.Redis, Depends(get_redis)],
     creds: Annotated[HTTPAuthorizationCredentials | None, Depends(security)],
     refresh_token: Annotated[str | None, Cookie(alias="refresh_token")] = None,
-    redis_client: Annotated[redis.Redis, Depends(get_redis)] = None,
 ) -> User:
     user = await _resolve_authenticated_user(db, creds, refresh_token, redis_client)
     if user:
