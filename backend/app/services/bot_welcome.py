@@ -1,3 +1,5 @@
+import logging
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_redis
@@ -23,4 +25,10 @@ async def send_bot_welcome(db: AsyncSession, max_user_id: int | None) -> bool:
 
     bot = MaxBotService()
     result = await bot.send_message(max_user_id, text, attachments)
+    if not result.ok:
+        logging.getLogger(__name__).warning(
+            "bot welcome failed for max_user_id=%s: %s",
+            max_user_id,
+            result.error,
+        )
     return result.ok

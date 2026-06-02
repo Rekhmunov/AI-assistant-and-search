@@ -9,7 +9,8 @@ from app.core.config import Settings, get_settings
 
 logger = logging.getLogger(__name__)
 
-BOT_API_BASE = "https://botapi.max.ru"
+# https://dev.max.ru/docs-api — platform-api.max.ru, Authorization header
+BOT_API_BASE = "https://platform-api.max.ru"
 
 
 @dataclass
@@ -23,8 +24,12 @@ class MaxBotService:
     def __init__(self, settings: Settings | None = None):
         self.settings = settings or get_settings()
 
-    def _auth_params(self) -> dict[str, str]:
-        return {"access_token": self.settings.bot_token}
+    def _auth_headers(self, *, json_body: bool = True) -> dict[str, str]:
+        token = self.settings.bot_token.strip()
+        headers = {"Authorization": token}
+        if json_body:
+            headers["Content-Type"] = "application/json"
+        return headers
 
     async def send_message(
         self,
@@ -34,24 +39,28 @@ class MaxBotService:
         *,
         max_attempts: int = 3,
     ) -> BotSendResult:
-        if not self.settings.bot_token:
+        if not self.settings.bot_token.strip():
             return BotSendResult(ok=False, error="bot_token not configured")
         if user_id is None:
             return BotSendResult(ok=False, error="no max_user_id")
 
-        payload: dict = {"user_id": user_id, "text": text}
+        body: dict = {"text": text}
         if attachments:
-            payload["attachments"] = attachments
+            body["attachments"] = attachments
+
+        params = {"user_id": int(user_id)}
 
         for attempt in range(max_attempts):
             try:
                 async with httpx.AsyncClient(timeout=30.0) as client:
                     response = await client.post(
                         f"{BOT_API_BASE}/messages",
-                        params=self._auth_params(),
-                        json=payload,
+                        params=params,
+                        headers=self._auth_headers(),
+                        json=body,
                     )
             except httpx.HTTPError as exc:
+                logger.warning("MAX send_message network error user_id=%s: %s", user_id, exc)
                 return BotSendResult(ok=False, error=str(exc))
 
             if response.is_success:
@@ -65,7 +74,13 @@ class MaxBotService:
                     delay = 60.0
                 return BotSendResult(ok=False, error="rate_limited", retry_after_sec=delay)
 
-            detail = response.text[:300]
+            detail = response.text[:500]
+            logger.warning(
+                "MAX send_message failed user_id=%s HTTP %s: %s",
+                user_id,
+                response.status_code,
+                detail,
+            )
             if "attachment.not.ready" in detail.lower() and attempt + 1 < max_attempts:
                 await asyncio.sleep(2.0 * (attempt + 1))
                 continue
@@ -76,14 +91,18 @@ class MaxBotService:
 
     async def upload_media(self, data: bytes, filename: str, media_type: str) -> str | None:
         """Upload image or video to MAX and return attachment token."""
-        if not self.settings.bot_token:
+        if not self.settings.bot_token.strip():
             return None
         if media_type not in {"image", "video"}:
             return None
 
-        params = {**self._auth_params(), "type": media_type}
+        headers = self._auth_headers(json_body=False)
         async with httpx.AsyncClient(timeout=120.0) as client:
-            upload_resp = await client.post(f"{BOT_API_BASE}/uploads", params=params)
+            upload_resp = await client.post(
+                f"{BOT_API_BASE}/uploads",
+                params={"type": media_type},
+                headers=headers,
+            )
             if not upload_resp.is_success:
                 logger.warning("MAX upload init failed: %s", upload_resp.text[:300])
                 return None
@@ -92,16 +111,23 @@ class MaxBotService:
             upload_url = body.get("url")
             token = body.get("token")
             if not upload_url:
-                return token
+                return str(token) if token else None
 
             content_type = mimetypes.guess_type(filename)[0] or "application/octet-stream"
-            put_resp = await client.put(upload_url, content=data, headers={"Content-Type": content_type})
+            put_resp = await client.post(
+                upload_url,
+                headers={"Content-Type": "multipart/form-data"},
+                files={"data": (filename, data, content_type)},
+            )
             if not put_resp.is_success:
-                logger.warning("MAX upload PUT failed: %s", put_resp.text[:300])
-                return None
+                logger.warning("MAX upload POST failed: %s", put_resp.text[:300])
+                return str(token) if token else None
 
-            if token:
-                return str(token)
+            try:
+                put_body = put_resp.json()
+                if isinstance(put_body, dict) and put_body.get("token"):
+                    return str(put_body["token"])
+            except ValueError:
+                pass
 
-            # Some responses embed token only after PUT — re-read from URL fragment/query if needed.
-            return body.get("token")
+            return str(token) if token else None

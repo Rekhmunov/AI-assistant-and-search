@@ -13,21 +13,45 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/bot", tags=["bot"])
 
 
-def _extract_max_user_id(payload: dict[str, Any]) -> int | None:
-    for key in ("user_id", "id"):
-        if isinstance(payload.get(key), int):
-            return payload[key]
-        if isinstance(payload.get(key), str) and payload[key].isdigit():
-            return int(payload[key])
+def _parse_user_id(value: Any) -> int | None:
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str) and value.isdigit():
+        return int(value)
+    return None
 
-    user = payload.get("user")
-    if isinstance(user, dict):
-        for key in ("user_id", "id"):
-            value = user.get(key)
-            if isinstance(value, int):
-                return value
-            if isinstance(value, str) and value.isdigit():
-                return int(value)
+
+def _user_id_from_user_obj(user: Any) -> int | None:
+    if not isinstance(user, dict):
+        return None
+    uid = _parse_user_id(user.get("user_id"))
+    if uid is not None:
+        return uid
+    return _parse_user_id(user.get("id"))
+
+
+def _extract_max_user_id(payload: dict[str, Any]) -> int | None:
+    uid = _parse_user_id(payload.get("user_id"))
+    if uid is not None:
+        return uid
+
+    uid = _user_id_from_user_obj(payload.get("user"))
+    if uid is not None:
+        return uid
+
+    inner = payload.get("payload")
+    if isinstance(inner, dict):
+        uid = _parse_user_id(inner.get("user_id"))
+        if uid is not None:
+            return uid
+        uid = _user_id_from_user_obj(inner.get("user"))
+        if uid is not None:
+            return uid
+
+    for key in ("id",):
+        uid = _parse_user_id(payload.get(key))
+        if uid is not None:
+            return uid
     return None
 
 
@@ -86,9 +110,8 @@ async def max_webhook(
         logger.warning("MAX webhook bot_started without user id: %s", payload)
         return {"ok": True}
 
-    try:
-        await send_bot_welcome(db, max_user_id)
-    except Exception:
-        logger.exception("Failed to send bot welcome to MAX user %s", max_user_id)
+    sent = await send_bot_welcome(db, max_user_id)
+    if not sent:
+        logger.warning("Welcome not delivered to MAX user %s (check BOT_TOKEN / logs)", max_user_id)
 
     return {"ok": True}
