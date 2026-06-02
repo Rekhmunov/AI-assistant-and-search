@@ -1837,10 +1837,24 @@ pre.small {
 
 .broadcasts-history-header {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
   margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.broadcasts-history-header-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.broadcasts-history-header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
 }
 
 .broadcasts-history-item {

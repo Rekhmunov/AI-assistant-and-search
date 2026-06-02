@@ -2,7 +2,7 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile, status
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_db, get_redis
@@ -201,6 +201,70 @@ async def create_broadcast(
     )
     await db.flush()
     return broadcast
+
+
+@router.delete("")
+async def clear_broadcast_history(
+    request: Request,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    admin: Annotated[AdminUser, Depends(require_permission("broadcasts:write"))],
+):
+    """Удалить все рассылки, кроме идущих отправки (status=sending)."""
+    sending_count = int(
+        await db.scalar(
+            select(func.count())
+            .select_from(Broadcast)
+            .where(Broadcast.status == BroadcastStatus.SENDING)
+        )
+        or 0
+    )
+    if sending_count:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Нельзя очистить историю: есть рассылка в статусе «отправка». Дождитесь завершения.",
+        )
+
+    result = await db.execute(delete(Broadcast))
+    deleted = result.rowcount or 0
+    await log_admin_action(
+        db,
+        admin=admin,
+        action="broadcast.clear_history",
+        resource_type="broadcast",
+        details={"deleted": deleted},
+        ip_address=request.client.host if request.client else None,
+    )
+    return {"ok": True, "deleted": deleted}
+
+
+@router.delete("/{broadcast_id}")
+async def delete_broadcast(
+    broadcast_id: UUID,
+    request: Request,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    admin: Annotated[AdminUser, Depends(require_permission("broadcasts:write"))],
+):
+    result = await db.execute(select(Broadcast).where(Broadcast.id == broadcast_id))
+    broadcast = result.scalar_one_or_none()
+    if not broadcast:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Рассылка не найдена")
+    if broadcast.status == BroadcastStatus.SENDING:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Нельзя удалить рассылку во время отправки",
+        )
+
+    await db.delete(broadcast)
+    await log_admin_action(
+        db,
+        admin=admin,
+        action="broadcast.delete",
+        resource_type="broadcast",
+        resource_id=str(broadcast_id),
+        details={"audience": broadcast.audience.value, "status": broadcast.status.value},
+        ip_address=request.client.host if request.client else None,
+    )
+    return {"ok": True, "deleted": 1}
 
 
 @router.get("/{broadcast_id}/logs", response_model=list[BroadcastLogOut])

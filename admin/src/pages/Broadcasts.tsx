@@ -50,6 +50,9 @@ export function BroadcastsPage() {
   const [msg, setMsg] = useState("");
   const [loading, setLoading] = useState(true);
   const [confirmId, setConfirmId] = useState<string | null>(null);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [clearHistoryConfirm, setClearHistoryConfirm] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [draftPreview, setDraftPreview] = useState<number | null>(null);
 
   const [welcome, setWelcome] = useState<BotWelcome | null>(null);
@@ -110,6 +113,41 @@ export function BroadcastsPage() {
       load();
     } catch (e) {
       setError(String(e));
+    }
+  };
+
+  const removeOne = async (id: string) => {
+    setError("");
+    setMsg("");
+    setDeleting(true);
+    try {
+      await apiFetch(`/api/admin/broadcasts/${id}`, { method: "DELETE" });
+      setDeleteConfirmId(null);
+      setConfirmId((prev) => (prev === id ? null : prev));
+      setMsg("Рассылка удалена");
+      load();
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const clearHistory = async () => {
+    setError("");
+    setMsg("");
+    setDeleting(true);
+    try {
+      const res = await apiFetch<{ deleted: number }>("/api/admin/broadcasts", { method: "DELETE" });
+      setClearHistoryConfirm(false);
+      setConfirmId(null);
+      setDeleteConfirmId(null);
+      setMsg(`Удалено рассылок: ${res.deleted}`);
+      load();
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -345,8 +383,43 @@ export function BroadcastsPage() {
 
       <section className="broadcasts-history">
         <header className="broadcasts-history-header">
-          <h2 className="broadcasts-section-title">История</h2>
-          {!loading && <span className="admin-count-badge">{items.length}</span>}
+          <div className="broadcasts-history-header-left">
+            <h2 className="broadcasts-section-title">История</h2>
+            {!loading && <span className="admin-count-badge">{items.length}</span>}
+          </div>
+          {canWrite && !loading && items.length > 0 && (
+            <div className="broadcasts-history-header-actions">
+              {clearHistoryConfirm ? (
+                <>
+                  <span className="hint">Удалить всю историю рассылок?</span>
+                  <button
+                    type="button"
+                    className="btn-secondary btn-danger-outline"
+                    disabled={deleting}
+                    onClick={() => void clearHistory()}
+                  >
+                    {deleting ? "Удаление…" : "Да, очистить"}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    disabled={deleting}
+                    onClick={() => setClearHistoryConfirm(false)}
+                  >
+                    Отмена
+                  </button>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  className="btn-secondary btn-danger-outline"
+                  onClick={() => setClearHistoryConfirm(true)}
+                >
+                  Очистить всю историю
+                </button>
+              )}
+            </div>
+          )}
         </header>
 
         {loading && <p className="hint">Загрузка…</p>}
@@ -360,24 +433,65 @@ export function BroadcastsPage() {
               {AUDIENCE_LABEL[b.audience] ?? b.audience} · {STATUS_LABEL[b.status] ?? b.status} · отправлено{" "}
               {b.sent_count} · ошибок {b.failed_count} · {new Date(b.created_at).toLocaleString("ru-RU")}
             </p>
-            {b.status === "draft" && canWrite && (
+            {canWrite && (
               <div className="broadcasts-history-actions">
-                {confirmId === b.id ? (
+                {b.status === "draft" && (
                   <>
-                    <span className="hint">
-                      Отправить аудитории «{AUDIENCE_LABEL[b.audience]}» (~{draftPreview ?? "…"} в MAX)?
-                    </span>
-                    <button type="button" className="btn-primary" onClick={() => void send(b.id, b.audience)}>
-                      Да, отправить
-                    </button>
-                    <button type="button" className="btn-secondary" onClick={() => setConfirmId(null)}>
-                      Отмена
-                    </button>
+                    {confirmId === b.id ? (
+                      <>
+                        <span className="hint">
+                          Отправить аудитории «{AUDIENCE_LABEL[b.audience]}» (~{draftPreview ?? "…"} в MAX)?
+                        </span>
+                        <button type="button" className="btn-primary" onClick={() => void send(b.id, b.audience)}>
+                          Да, отправить
+                        </button>
+                        <button type="button" className="btn-secondary" onClick={() => setConfirmId(null)}>
+                          Отмена
+                        </button>
+                      </>
+                    ) : (
+                      <button type="button" className="btn-primary" onClick={() => void openSendConfirm(b)}>
+                        Отправить
+                      </button>
+                    )}
                   </>
-                ) : (
-                  <button type="button" className="btn-primary" onClick={() => void openSendConfirm(b)}>
-                    Отправить
-                  </button>
+                )}
+                {b.status !== "sending" &&
+                  (deleteConfirmId === b.id ? (
+                    <>
+                      <span className="hint">Удалить эту рассылку из истории?</span>
+                      <button
+                        type="button"
+                        className="btn-secondary btn-danger-outline"
+                        disabled={deleting}
+                        onClick={() => void removeOne(b.id)}
+                      >
+                        {deleting ? "Удаление…" : "Да, удалить"}
+                      </button>
+                      <button
+                        type="button"
+                        className="btn-secondary"
+                        disabled={deleting}
+                        onClick={() => setDeleteConfirmId(null)}
+                      >
+                        Отмена
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      type="button"
+                      className="btn-secondary btn-danger-outline"
+                      disabled={deleting}
+                      onClick={() => {
+                        setDeleteConfirmId(b.id);
+                        setClearHistoryConfirm(false);
+                      }}
+                    >
+                      Удалить
+                    </button>
+                  ))}
+                {b.status === "sending" && (
+                  <span className="hint">Удаление недоступно во время отправки</span>
                 )}
               </div>
             )}
