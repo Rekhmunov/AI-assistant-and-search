@@ -297,6 +297,23 @@ export async function deleteThread(token: string, id: string): Promise<void> {
   }
 }
 
+export async function deleteThreadsBulk(
+  token: string,
+  threadIds: string[],
+): Promise<{ deleted: number; not_found: number }> {
+  const res = await fetch(`${API_BASE}/api/threads/bulk-delete`, {
+    method: "POST",
+    headers: apiHeaders(token),
+    credentials: "include",
+    body: JSON.stringify({ thread_ids: threadIds }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error((err as { detail?: string }).detail || "Failed to delete threads");
+  }
+  return res.json();
+}
+
 export async function devActivatePro(token: string): Promise<void> {
   const res = await fetch(`${API_BASE}/api/payments/dev-activate`, {
     method: "POST",

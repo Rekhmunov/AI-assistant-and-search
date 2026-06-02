@@ -14,7 +14,16 @@ from app.models.message_feedback import MessageFeedback
 from app.models.thread import Thread
 from app.schemas.feedback import MessageFeedbackOut, reason_label
 from app.models.user import Plan, User
-from app.schemas.thread import MessageOut, SourceOut, ThreadDetail, ThreadListItem, ThreadUpdate, EntityImageOut
+from app.schemas.thread import (
+    EntityImageOut,
+    MessageOut,
+    SourceOut,
+    ThreadBulkDeleteIn,
+    ThreadBulkDeleteOut,
+    ThreadDetail,
+    ThreadListItem,
+    ThreadUpdate,
+)
 
 router = APIRouter(prefix="/threads", tags=["threads"])
 
@@ -75,6 +84,28 @@ async def search_threads(
 
     result = await db.execute(query)
     return result.scalars().all()
+
+
+@router.post("/bulk-delete", response_model=ThreadBulkDeleteOut)
+async def bulk_delete_threads(
+    body: ThreadBulkDeleteIn,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+):
+    unique_ids = list(dict.fromkeys(body.thread_ids))
+    now = datetime.now(timezone.utc)
+    result = await db.execute(
+        select(Thread).where(
+            Thread.id.in_(unique_ids),
+            Thread.user_id == user.id,
+            Thread.deleted_at.is_(None),
+        )
+    )
+    threads = result.scalars().all()
+    for thread in threads:
+        thread.deleted_at = now
+    deleted = len(threads)
+    return ThreadBulkDeleteOut(deleted=deleted, not_found=len(unique_ids) - deleted)
 
 
 @router.get("/{thread_id}", response_model=ThreadDetail)

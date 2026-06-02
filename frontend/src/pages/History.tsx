@@ -1,8 +1,9 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { fetchThreads, searchThreads } from "../api/client";
+import { useNavigate, useParams } from "react-router-dom";
+import { deleteThreadsBulk, fetchThreads, searchThreads } from "../api/client";
 import { AuthGate, HistoryGateIcon } from "../components/AuthGate";
+import { HistoryBulkBar } from "../components/HistoryBulkBar";
 import { MobileNewThreadButton } from "../components/MobileNewThreadButton";
 import { MobilePageHeader } from "../components/MobilePageHeader";
 import { ThreadHistoryMenu } from "../components/ThreadHistoryMenu";
@@ -23,11 +24,16 @@ function dayLabel(date: Date): string {
 
 export function History() {
   const navigate = useNavigate();
+  const { id: activeThreadId } = useParams();
   const token = useAuthStore((s) => s.token);
+  const queryClient = useQueryClient();
   const isDesktop = useDesktopLayout();
   const [historySearchOpen, setHistorySearchOpen] = useState(false);
   const [historySearchQuery, setHistorySearchQuery] = useState("");
   const [debouncedHistorySearch, setDebouncedHistorySearch] = useState("");
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
+  const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
 
   const { data: threads = [], isLoading } = useQuery({
     queryKey: ["threads"],
@@ -48,9 +54,52 @@ export function History() {
     enabled: !!token && historySearchOpen && debouncedHistorySearch.length > 0,
   });
 
+  const bulkDeleteMutation = useMutation({
+    mutationFn: (ids: string[]) => deleteThreadsBulk(token!, ids),
+    onSuccess: (_data, ids) => {
+      queryClient.invalidateQueries({ queryKey: ["threads"] });
+      setConfirmBulkDelete(false);
+      setSelectionMode(false);
+      setSelectedIds(new Set());
+      if (activeThreadId && ids.includes(activeThreadId)) {
+        navigate("/history", { replace: true });
+      }
+    },
+  });
+
   const inMax = isMaxWebApp();
   const isFiltering = historySearchOpen && debouncedHistorySearch.length > 0;
   const visibleThreads = isFiltering ? searchResults : threads;
+  const selectedCount = selectedIds.size;
+
+  const exitSelectionMode = () => {
+    setSelectionMode(false);
+    setSelectedIds(new Set());
+    setConfirmBulkDelete(false);
+    bulkDeleteMutation.reset();
+  };
+
+  const enterSelectionMode = () => {
+    setHistorySearchOpen(false);
+    setHistorySearchQuery("");
+    setDebouncedHistorySearch("");
+    setSelectionMode(true);
+    setSelectedIds(new Set());
+    setConfirmBulkDelete(false);
+  };
+
+  const toggleThreadSelected = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const selectAllVisible = () => {
+    setSelectedIds(new Set(visibleThreads.map((th) => th.id)));
+  };
 
   const toggleHistorySearch = () => {
     setHistorySearchOpen((open) => {
@@ -61,6 +110,23 @@ export function History() {
       return !open;
     });
   };
+
+  const headerTitle =
+    selectionMode && !isDesktop
+      ? t("historySelectedCount", { count: selectedCount })
+      : t("history");
+
+  const selectButton = (
+    <button type="button" className="history-header-select-btn" onClick={enterSelectionMode}>
+      {t("historySelect")}
+    </button>
+  );
+
+  const cancelSelectButton = (
+    <button type="button" className="history-header-select-btn" onClick={exitSelectionMode}>
+      {t("historyCancelSelect")}
+    </button>
+  );
 
   if (!token) {
     return (
@@ -84,22 +150,46 @@ export function History() {
   }
 
   return (
-    <div className={`page page-history${isDesktop ? "" : " page-history--mobile"}`}>
+    <div
+      className={`page page-history${isDesktop ? "" : " page-history--mobile"}${selectionMode ? " page-history--selecting" : ""}`}
+    >
       {isDesktop ? (
-        <header className="profile-page-header">
-          <h1 className="mobile-page-title">{t("history")}</h1>
+        <header className="profile-page-header history-page-header">
+          <h1 className="mobile-page-title">
+            {selectionMode ? t("historySelectedCount", { count: selectedCount }) : t("history")}
+          </h1>
+          <div className="history-page-header-actions">
+            {selectionMode ? cancelSelectButton : selectButton}
+          </div>
         </header>
       ) : (
         <MobilePageHeader
           variant="history"
-          title={t("history")}
+          title={headerTitle}
           historySearchActive={historySearchOpen}
           onHistorySearchToggle={toggleHistorySearch}
+          historySelectionMode={selectionMode}
+          rightAction={selectionMode ? cancelSelectButton : selectButton}
+        />
+      )}
+
+      {isDesktop && selectionMode && (
+        <HistoryBulkBar
+          selectedCount={selectedCount}
+          totalVisible={visibleThreads.length}
+          deleting={bulkDeleteMutation.isPending}
+          confirmOpen={confirmBulkDelete}
+          onSelectAll={selectAllVisible}
+          onClearSelection={() => setSelectedIds(new Set())}
+          onDelete={() => setConfirmBulkDelete(true)}
+          onConfirmDelete={() => bulkDeleteMutation.mutate([...selectedIds])}
+          onCancelConfirm={() => setConfirmBulkDelete(false)}
+          onExit={exitSelectionMode}
         />
       )}
 
       <div className="history-scroll">
-        {!isDesktop && historySearchOpen && (
+        {!isDesktop && historySearchOpen && !selectionMode && (
           <label className="history-search-bar">
             <SearchFieldIcon />
             <input
@@ -123,33 +213,70 @@ export function History() {
           <div key={label}>
             <div className="section-title">{label}</div>
             <ul className="history-list">
-              {items.map((th) => (
-                <li key={th.id} className="history-row">
-                  <button
-                    type="button"
-                    className="history-card"
-                    onClick={() =>
-                      navigate(`/thread/${th.id}`, { state: { fromHistory: true } })
-                    }
+              {items.map((th) => {
+                const isSelected = selectedIds.has(th.id);
+                return (
+                  <li
+                    key={th.id}
+                    className={`history-row${selectionMode ? " history-row--selecting" : ""}${isSelected ? " history-row--selected" : ""}`}
                   >
-                    <span className="history-card-title">{th.title}</span>
-                    <small className="history-card-meta">
-                      {th.message_count} {t("questionsCount")} •{" "}
-                      {new Date(th.last_message_at).toLocaleTimeString("ru-RU", {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
-                    </small>
-                  </button>
-                  <ThreadHistoryMenu threadId={th.id} title={th.title} />
-                </li>
-              ))}
+                    {selectionMode && (
+                      <label className="history-row-check">
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => toggleThreadSelected(th.id)}
+                          aria-label={th.title}
+                        />
+                      </label>
+                    )}
+                    <button
+                      type="button"
+                      className="history-card"
+                      onClick={() => {
+                        if (selectionMode) {
+                          toggleThreadSelected(th.id);
+                          return;
+                        }
+                        navigate(`/thread/${th.id}`, { state: { fromHistory: true } });
+                      }}
+                    >
+                      <span className="history-card-title">{th.title}</span>
+                      <small className="history-card-meta">
+                        {th.message_count} {t("questionsCount")} •{" "}
+                        {new Date(th.last_message_at).toLocaleTimeString("ru-RU", {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </small>
+                    </button>
+                    {!selectionMode && <ThreadHistoryMenu threadId={th.id} title={th.title} />}
+                  </li>
+                );
+              })}
             </ul>
           </div>
         ))}
       </div>
 
-      {!isDesktop && (
+      {!isDesktop && selectionMode && (
+        <div className="history-bulk-bar-wrap">
+          <HistoryBulkBar
+            selectedCount={selectedCount}
+            totalVisible={visibleThreads.length}
+            deleting={bulkDeleteMutation.isPending}
+            confirmOpen={confirmBulkDelete}
+            onSelectAll={selectAllVisible}
+            onClearSelection={() => setSelectedIds(new Set())}
+            onDelete={() => setConfirmBulkDelete(true)}
+            onConfirmDelete={() => bulkDeleteMutation.mutate([...selectedIds])}
+            onCancelConfirm={() => setConfirmBulkDelete(false)}
+            onExit={exitSelectionMode}
+          />
+        </div>
+      )}
+
+      {!isDesktop && !selectionMode && (
         <div className="mobile-new-thread-bar">
           <MobileNewThreadButton onClick={() => navigate("/")} />
         </div>

@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { t } from "../i18n";
 import { HistoryIcon, ProfileIcon, SearchIcon } from "./MobileNavIcons";
@@ -7,6 +8,8 @@ type Props = {
   title: string;
   historySearchActive?: boolean;
   onHistorySearchToggle?: () => void;
+  historySelectionMode?: boolean;
+  rightAction?: ReactNode;
 };
 
 export function MobilePageHeader({
@@ -14,6 +17,8 @@ export function MobilePageHeader({
   title,
   historySearchActive = false,
   onHistorySearchToggle,
+  historySelectionMode = false,
+  rightAction,
 }: Props) {
   return (
     <header className="thread-mobile-header mobile-page-header">
@@ -40,21 +45,25 @@ export function MobilePageHeader({
             >
               <ProfileIcon />
             </Link>
-            <button
-              type="button"
-              className={`thread-header-icon-btn${historySearchActive ? " thread-header-icon-btn--active" : ""}`}
-              aria-label={t("historySearch")}
-              title={t("historySearch")}
-              aria-pressed={historySearchActive}
-              onClick={onHistorySearchToggle}
-            >
-              <SearchIcon />
-            </button>
+            {!historySelectionMode && (
+              <button
+                type="button"
+                className={`thread-header-icon-btn${historySearchActive ? " thread-header-icon-btn--active" : ""}`}
+                aria-label={t("historySearch")}
+                title={t("historySearch")}
+                aria-pressed={historySearchActive}
+                onClick={onHistorySearchToggle}
+              >
+                <SearchIcon />
+              </button>
+            )}
           </>
         )}
       </div>
       <h1 className="mobile-page-title">{title}</h1>
-      <div className="thread-mobile-header-side thread-mobile-header-side--right" aria-hidden />
+      <div className="thread-mobile-header-side thread-mobile-header-side--right">
+        {rightAction}
+      </div>
     </header>
   );
 }

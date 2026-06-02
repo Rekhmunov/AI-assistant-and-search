@@ -62,3 +62,12 @@ class ThreadDetail(BaseModel):
 
 class ThreadUpdate(BaseModel):
     title: str = Field(..., min_length=1, max_length=500)
+
+
+class ThreadBulkDeleteIn(BaseModel):
+    thread_ids: list[UUID] = Field(..., min_length=1, max_length=100)
+
+
+class ThreadBulkDeleteOut(BaseModel):
+    deleted: int
+    not_found: int
