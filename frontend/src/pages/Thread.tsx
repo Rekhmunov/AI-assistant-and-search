@@ -449,34 +449,33 @@ export function Thread() {
       runSearch(initialQuery || t("analyzeFile"), null, initialFiles, pending);
       return;
     }
-      if (!token || !initialFiles.length) {
-        runSearch(initialQuery || t("analyzeFile"), null, initialFiles, []);
-        return;
-      }
-      void (async () => {
-        const metas = await Promise.all(
-          initialFiles.map(async (fileId) => {
-            try {
-              const meta = await fetchFileMeta(token, fileId);
-              return {
-                id: meta.id,
-                filename: meta.filename,
-                kind: (meta.media_kind === "image" ? "image" : "document") as "image" | "document",
-                url: meta.preview_url ?? undefined,
-              } satisfies MessageAttachment;
-            } catch {
-              return null;
-            }
-          }),
-        );
-        runSearch(
-          initialQuery || t("analyzeFile"),
-          null,
-          initialFiles,
-          metas.filter((m): m is MessageAttachment => m !== null),
-        );
-      })();
+    if (!token || !initialFiles.length) {
+      runSearch(initialQuery || t("analyzeFile"), null, initialFiles, []);
+      return;
     }
+    void (async () => {
+      const metas = await Promise.all(
+        initialFiles.map(async (fileId) => {
+          try {
+            const meta = await fetchFileMeta(token, fileId);
+            return {
+              id: meta.id,
+              filename: meta.filename,
+              kind: (meta.media_kind === "image" ? "image" : "document") as "image" | "document",
+              url: meta.preview_url ?? undefined,
+            } satisfies MessageAttachment;
+          } catch {
+            return null;
+          }
+        }),
+      );
+      runSearch(
+        initialQuery || t("analyzeFile"),
+        null,
+        initialFiles,
+        metas.filter((m): m is MessageAttachment => m !== null),
+      );
+    })();
   }, [initialQuery, initialFiles, id, runSearch, token, location.state]);
 
   const onComposerSubmit = (payload: {
