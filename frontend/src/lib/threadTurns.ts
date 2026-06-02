@@ -74,7 +74,7 @@ export function messagesToTurns(messages: Message[]): ThreadTurn[] {
     turns.push({
       key: pendingUser.id,
       query: pendingUser.content,
-      attachments: pendingUser.attachments ?? [],
+      attachments: normalizeMessageAttachments(pendingUser.attachments),
       answer: "",
       sources: [],
       images: [],
