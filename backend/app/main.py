@@ -7,6 +7,7 @@ from fastapi.responses import JSONResponse
 from app.api import api_router
 from app.core.config import get_settings
 from app.core.database import async_session_factory
+from app.core.production_guards import assert_production_security
 from app.services.admin_bootstrap import ensure_bootstrap_admin
 from app.services.app_settings import sync_settings_cache
 
@@ -30,6 +31,7 @@ async def lifespan(app: FastAPI):
 
 def create_app() -> FastAPI:
     settings = get_settings()
+    assert_production_security(settings)
     app = FastAPI(title=settings.app_name, lifespan=lifespan)
 
     app.add_middleware(

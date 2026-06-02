@@ -159,7 +159,7 @@ async def confirm_pro_payment(
 
 @router.post("/webhook")
 async def yookassa_webhook(request: Request, db: Annotated[AsyncSession, Depends(get_db)]):
-    """Handle YooKassa payment notifications."""
+    """Handle YooKassa payment notifications (verified via YooKassa API)."""
     settings = get_settings()
     try:
         body: dict[str, Any] = await request.json()
@@ -176,10 +176,35 @@ async def yookassa_webhook(request: Request, db: Annotated[AsyncSession, Depends
     if event != "payment.succeeded" or not payment_id:
         return {"ok": True}
 
+    if not settings.yookassa_shop_id.strip() or not settings.yookassa_secret_key.strip():
+        logger.warning("YooKassa webhook ignored: credentials not configured (payment_id=%s)", payment_id)
+        return {"ok": True}
+
+    try:
+        verified_payment = await get_payment(str(payment_id), settings)
+    except YooKassaError as e:
+        err = str(e)
+        if "HTTP 404" in err:
+            logger.warning("YooKassa webhook: payment %s not found in YooKassa", payment_id)
+            return {"ok": True}
+        logger.warning("YooKassa webhook: could not verify payment %s: %s", payment_id, e)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Payment verification temporarily unavailable",
+        ) from e
+
+    if verified_payment.get("status") != "succeeded":
+        logger.info(
+            "YooKassa webhook: payment %s status=%s — skip activation",
+            payment_id,
+            verified_payment.get("status"),
+        )
+        return {"ok": True}
+
     activated = await activate_from_yookassa_payment(
         db,
         payment_id=str(payment_id),
-        payment_object=obj,
+        payment_object=verified_payment,
         settings=settings,
     )
     if not activated:
