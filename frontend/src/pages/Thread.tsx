@@ -487,7 +487,9 @@ export function Thread() {
           {turns.map((turn, index) => {
             const isActive = turn.streaming;
             const sources = turn.sources ?? [];
-            const isImageGenTurn = turn.isImageGen === true;
+            const isImageGenTurn =
+              turn.isImageGen === true ||
+              (turn.images?.some((img) => isGeneratedImageUrl(img.url)) ?? false);
             const showStatus =
               isActive &&
               streaming &&
