@@ -41,6 +41,13 @@ async def transcribe_voice(
 
     settings = get_settings()
     resolved_type = resolve_audio_content_type(file.content_type, file.filename)
+    logger.info(
+        "voice transcribe user=%s bytes=%s type=%s filename=%s",
+        user.id,
+        len(raw),
+        resolved_type,
+        file.filename,
+    )
     try:
         text = await transcribe_audio(raw, resolved_type, settings)
     except SpeechTranscriptionError as exc:

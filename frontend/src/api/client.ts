@@ -482,7 +482,7 @@ export async function uploadFile(token: string, file: File): Promise<UploadedFil
 }
 
 export async function transcribeVoice(
-  token: string,
+  token: string | null,
   blob: Blob,
   mimeHint?: string,
 ): Promise<{ text: string }> {

@@ -183,12 +183,7 @@ export function useVoiceInput(onText: (text: string) => void, token: string | nu
 
   const uploadRecording = useCallback(
     async (blob: Blob, mimeHint?: string) => {
-      if (!token) {
-        setError(t("loginForFiles"));
-        setState("idle");
-        return;
-      }
-      setState("transcribing");
+    setState("transcribing");
       try {
         const res = await transcribeVoice(token, blob, mimeHint);
         const text = res.text.trim();
