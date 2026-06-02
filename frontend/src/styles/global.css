@@ -4135,6 +4135,7 @@ body:has(.page-thread) {
 
   .page-thread .thread-tabs-bar,
   .page-thread .thread-conversation > .thread-images-tab,
+  .page-thread .thread-turn > .thread-query-block,
   .page-thread .thread-turn > .thread-query,
   .page-thread .thread-turn > .search-status,
   .page-thread .thread-turn > .answer-section,
@@ -4145,6 +4146,13 @@ body:has(.page-thread) {
     margin-right: auto;
   }
 
+  .page-thread .composer-wrap--docked {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .page-thread .composer-wrap--docked .composer-outer-row,
   .page-thread .composer-wrap--docked .composer-error-wrap,
   .page-thread .composer-wrap--docked .search-composer {
     width: var(--desktop-thread-column-width);
@@ -4162,13 +4170,10 @@ body:has(.page-thread) {
 
   .page-thread .composer-wrap--docked {
     left: var(--sidebar-width);
+    right: 0;
     max-width: var(--desktop-search-max-width);
     margin-left: auto;
     margin-right: auto;
-  }
-
-  .page-thread .search-composer {
-    width: 100%;
   }
 
   .thread-scroll-down {
