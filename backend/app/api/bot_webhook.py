@@ -38,10 +38,15 @@ def _is_bot_started(payload: dict[str, Any]) -> bool:
     return payload.get("event") == "bot_started"
 
 
-def _verify_webhook_secret(x_webhook_secret: str | None, query_secret: str | None) -> None:
+def _verify_webhook_secret(
+    x_max_bot_api_secret: str | None,
+    x_webhook_secret: str | None,
+    query_secret: str | None,
+) -> None:
     settings = get_settings()
     expected = settings.max_bot_webhook_secret.strip()
-    provided = (x_webhook_secret or query_secret or "").strip()
+    # MAX official header: X-Max-Bot-Api-Secret (see POST /subscriptions)
+    provided = (x_max_bot_api_secret or x_webhook_secret or query_secret or "").strip()
     if settings.environment.strip().lower() == "production":
         if not expected:
             raise HTTPException(
@@ -59,11 +64,12 @@ def _verify_webhook_secret(x_webhook_secret: str | None, query_secret: str | Non
 async def max_webhook(
     request: Request,
     db: Annotated[AsyncSession, Depends(get_db)],
+    x_max_bot_api_secret: Annotated[str | None, Header(alias="X-Max-Bot-Api-Secret")] = None,
     x_webhook_secret: Annotated[str | None, Header(alias="X-Webhook-Secret")] = None,
     secret: Annotated[str | None, Query()] = None,
 ):
     """MAX Bot API webhook: отправляет приветствие при bot_started (/start)."""
-    _verify_webhook_secret(x_webhook_secret, secret)
+    _verify_webhook_secret(x_max_bot_api_secret, x_webhook_secret, secret)
     try:
         payload = await request.json()
     except Exception:

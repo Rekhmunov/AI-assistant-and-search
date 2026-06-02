@@ -304,8 +304,8 @@ export function BroadcastsPage() {
           <li>Текст до 4000 символов, без агрессивного спама и рекламы без согласия.</li>
           <li>Сервисные сообщения (Pro, статус) — ок; массовые акции — редко и по делу.</li>
           <li>
-            Webhook HTTPS в кабинете MAX: URL выше + секрет из <code>MAX_BOT_WEBHOOK_SECRET</code> (заголовок{" "}
-            <code>X-Webhook-Secret</code> или параметр <code>?secret=</code>).
+            Webhook: подписка через API MAX (<code>POST /subscriptions</code>), не в ЛК. Секрет — в{" "}
+            <code>MAX_BOT_WEBHOOK_SECRET</code>; MAX пришлёт заголовок <code>X-Max-Bot-Api-Secret</code>.
           </li>
         </ul>
       </section>
