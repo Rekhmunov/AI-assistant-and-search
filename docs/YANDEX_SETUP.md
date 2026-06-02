@@ -115,7 +115,7 @@ docker compose -f docker-compose.prod.yml exec backend \
 2. Если нужен веб-поиск → **Yandex Search** → источники в SSE.
 3. Ответ стримится через **YandexGPT Lite** или **Pro** (`answer_model` в событии `route`).
 4. В миниаппе бейдж: «Поиск в интернете» / «Ответ по диалогу» · Lite/Pro.
-5. **Голосовой ввод в MAX** — запись через `MediaRecorder` в WebView, распознавание на сервере через **SpeechKit STT** (`POST /api/voice/transcribe`). Отдельного API записи голоса в MAX Bridge нет.
+5. **Голосовой ввод в MAX** — запись WAV через Web Audio API в WebView (fallback: `MediaRecorder`), распознавание на сервере через **SpeechKit STT** (`POST /api/voice/transcribe`). Отдельного API записи голоса в MAX Bridge нет.
 
 ---
 

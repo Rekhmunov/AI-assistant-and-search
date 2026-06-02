@@ -2,6 +2,7 @@ import { useCallback, useRef, useState } from "react";
 import { transcribeVoice } from "../api/client";
 import { t } from "../i18n";
 import { getMaxPlatform, isIosLikeDevice, isMaxWebApp } from "../lib/maxApp";
+import { isMaxWavCaptureSupported, MaxWavRecorder } from "../lib/maxWavRecorder";
 
 type VoiceState = "idle" | "recording" | "transcribing";
 
@@ -13,9 +14,18 @@ function getSpeechRecognitionCtor(): (new () => SpeechRecognition) | null {
 }
 
 function preferServerStt(): boolean {
-  if (isMaxWebApp()) return true;
+  if (isMaxWebApp()) {
+    // В части WebView MAX есть Web Speech API — как в обычном браузере.
+    if (getSpeechRecognitionCtor()) return false;
+    return true;
+  }
   if (typeof MediaRecorder === "undefined") return false;
   return !getSpeechRecognitionCtor();
+}
+
+/** В MAX WebView MediaRecorder ненадёжен — пишем PCM/WAV через Web Audio. */
+function useMaxWavCapture(): boolean {
+  return isMaxWebApp() && isMaxWavCaptureSupported();
 }
 
 function preferMp4Recording(): boolean {
@@ -93,7 +103,7 @@ function mapVoiceStartError(err: unknown): string {
   if (!(err instanceof Error)) {
     return t("voiceStartFailed");
   }
-  if (err.message === "recorder_unsupported") {
+  if (err.message === "recorder_unsupported" || err.message === "audio_context_unsupported") {
     return t("voiceUnavailableMax");
   }
   const name = err.name;
@@ -136,6 +146,7 @@ export function useVoiceInput(onText: (text: string) => void, token: string | nu
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
+  const wavRecorderRef = useRef<MaxWavRecorder | null>(null);
   const chunksRef = useRef<BlobPart[]>([]);
   const recorderMimeRef = useRef<string>("audio/webm");
   const transcriptRef = useRef("");
@@ -156,6 +167,8 @@ export function useVoiceInput(onText: (text: string) => void, token: string | nu
     streamRef.current?.getTracks().forEach((track) => track.stop());
     streamRef.current = null;
     recorderRef.current = null;
+    wavRecorderRef.current?.abort();
+    wavRecorderRef.current = null;
     chunksRef.current = [];
   }, [clearAutoStop]);
 
@@ -207,8 +220,44 @@ export function useVoiceInput(onText: (text: string) => void, token: string | nu
     [onText, releaseMic, token],
   );
 
+  const stopMaxWavRecording = useCallback(() => {
+    if (!recordingRef.current) return;
+    userStopRef.current = true;
+    clearAutoStop();
+    const wavRec = wavRecorderRef.current;
+    wavRecorderRef.current = null;
+    if (!wavRec) {
+      recordingRef.current = false;
+      releaseMic();
+      setState("idle");
+      return;
+    }
+    void (async () => {
+      try {
+        const blob = await wavRec.stop();
+        const elapsed = Date.now() - startedAtRef.current;
+        recordingRef.current = false;
+        if (blob.size === 0 || elapsed < 200) {
+          setError(t("voiceNoSpeech"));
+          setState("idle");
+          return;
+        }
+        await uploadRecording(blob, "audio/wav");
+      } catch (e) {
+        recordingRef.current = false;
+        releaseMic();
+        setError(e instanceof Error ? e.message : t("voiceStartFailed"));
+        setState("idle");
+      }
+    })();
+  }, [clearAutoStop, releaseMic, uploadRecording]);
+
   const stopServerRecording = useCallback(() => {
     if (!recordingRef.current) return;
+    if (wavRecorderRef.current) {
+      stopMaxWavRecording();
+      return;
+    }
     userStopRef.current = true;
     clearAutoStop();
     const rec = recorderRef.current;
@@ -251,12 +300,40 @@ export function useVoiceInput(onText: (text: string) => void, token: string | nu
     recordingRef.current = false;
     releaseMic();
     setState("idle");
-  }, [clearAutoStop, releaseMic]);
+  }, [clearAutoStop, releaseMic, stopMaxWavRecording]);
+
+  const startMaxWavRecording = useCallback(async () => {
+    setError(null);
+    userStopRef.current = false;
+    releaseMic();
+
+    try {
+      const wavRec = new MaxWavRecorder();
+      await wavRec.start();
+      wavRecorderRef.current = wavRec;
+      recordingRef.current = true;
+      startedAtRef.current = Date.now();
+      setState("recording");
+      autoStopTimerRef.current = window.setTimeout(() => {
+        if (recordingRef.current) stopMaxWavRecording();
+      }, MAX_RECORD_MS);
+    } catch (err) {
+      releaseMic();
+      recordingRef.current = false;
+      setState("idle");
+      setError(mapVoiceStartError(err));
+    }
+  }, [releaseMic, stopMaxWavRecording]);
 
   const startServerRecording = useCallback(async () => {
     setError(null);
     userStopRef.current = false;
     chunksRef.current = [];
+
+    if (useMaxWavCapture()) {
+      await startMaxWavRecording();
+      return;
+    }
 
     if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
       setError(t("voiceUnavailableMax"));
@@ -350,7 +427,7 @@ export function useVoiceInput(onText: (text: string) => void, token: string | nu
       setState("idle");
       setError(mapVoiceStartError(err));
     }
-  }, [releaseMic, stopServerRecording, token, uploadRecording]);
+  }, [releaseMic, startMaxWavRecording, stopServerRecording, token, uploadRecording]);
 
   const stopBrowserRecording = useCallback(() => {
     if (!recordingRef.current) return;

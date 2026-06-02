@@ -154,16 +154,6 @@ async def transcribe_audio(
         attempts.append(("oggopus", audio, "audio/ogg", {"lang": "ru-RU", "format": "oggopus"}, {}))
     elif mime in ("audio/mpeg", "audio/mp3"):
         attempts.append(("mp3", audio, "audio/mpeg", {"lang": "ru-RU", "format": "mp3"}, {}))
-    elif mime in ("audio/wav", "audio/x-wav"):
-        attempts.append(
-            (
-                "lpcm",
-                audio,
-                "audio/wav",
-                {"lang": "ru-RU", "format": "lpcm", "sampleRateHz": "48000"},
-                {},
-            )
-        )
     else:
         ogg = await asyncio.to_thread(_convert_to_ogg_opus, audio, source_ext)
         attempts.append(("oggopus", ogg, "audio/ogg", {"lang": "ru-RU", "format": "oggopus"}, {}))
