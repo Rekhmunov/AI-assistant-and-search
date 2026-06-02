@@ -1784,31 +1784,42 @@ body:has(.page-thread) {
   }
 }
 
+.answer-generated-media {
+  margin-top: 1.25rem;
+  margin-bottom: 4px;
+  clear: both;
+}
+
 .chat-generated-images {
-  margin: 12px 0 16px;
+  margin: 0;
   width: 100%;
   display: flex;
   flex-direction: column;
+  align-items: stretch;
   gap: 12px;
 }
 
 .chat-generated-image-item {
   display: block;
   width: 100%;
+  max-width: 100%;
   padding: 0;
   border: none;
   background: transparent;
   cursor: pointer;
   border-radius: 12px;
-  overflow: hidden;
+  overflow: visible;
+  line-height: 0;
 }
 
 .chat-generated-image-item img {
   display: block;
   width: 100%;
   height: auto;
-  max-height: min(72vh, 560px);
+  max-width: 100%;
+  max-height: min(75vh, 640px);
   object-fit: contain;
+  object-position: center center;
   border-radius: 12px;
   border: 1px solid var(--border-subtle);
   background: var(--surface);
@@ -1817,7 +1828,20 @@ body:has(.page-thread) {
 
 @media (min-width: 900px) {
   .chat-generated-images {
-    max-width: 380px;
+    width: auto;
+    max-width: min(100%, 400px);
+    align-items: flex-start;
+  }
+
+  .chat-generated-image-item {
+    width: auto;
+    max-width: 100%;
+  }
+
+  .chat-generated-image-item img {
+    width: auto;
+    max-width: min(100%, 400px);
+    height: auto;
   }
 }
 

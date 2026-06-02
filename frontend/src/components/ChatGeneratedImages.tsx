@@ -10,36 +10,9 @@ type Props = {
   images: EntityImage[];
 };
 
-function preloadImage(url: string): Promise<boolean> {
-  return new Promise((resolve) => {
-    const img = new Image();
-    img.referrerPolicy = "no-referrer";
-    img.decoding = "async";
-    img.onload = () => resolve(img.naturalWidth >= 32 && img.naturalHeight >= 32);
-    img.onerror = () => resolve(false);
-    img.src = url;
-  });
-}
-
 export function ChatGeneratedImages({ images }: Props) {
-  const [ready, setReady] = useState<EntityImage[]>([]);
+  const ready = images.filter((img) => img.url?.trim());
   const [lightbox, setLightbox] = useState<LightboxState | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    void Promise.all(
-      images
-        .filter((img) => img.url)
-        .map(async (img) => ({ img, ok: await preloadImage(img.url) })),
-    ).then((rows) => {
-      if (!cancelled) {
-        setReady(rows.filter((r) => r.ok).map((r) => r.img));
-      }
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [images]);
 
   useEffect(() => {
     if (!lightbox) return;

@@ -25,7 +25,7 @@ import { ThreadTabsBar, type ThreadTab } from "../components/ThreadTabsBar";
 import { TurnImageGallery } from "../components/TurnImageGallery";
 import { t } from "../i18n";
 import { findLastIndex } from "../lib/arrayUtils";
-import { isGeneratedImageUrl } from "../lib/generatedImageUrl";
+import { useChatGeneratedImageLayout } from "../lib/generatedImageUrl";
 import { wantsImageGeneration } from "../lib/imageGenRouting";
 import {
   buildThreadImageGroups,
@@ -553,9 +553,7 @@ export function Thread() {
           {turns.map((turn, index) => {
             const isActive = turn.streaming;
             const sources = turn.sources ?? [];
-            const isImageGenTurn =
-              turn.isImageGen === true ||
-              (turn.images?.some((img) => isGeneratedImageUrl(img.url)) ?? false);
+            const isImageGenTurn = useChatGeneratedImageLayout(turn);
             const showStatus =
               isActive &&
               streaming &&
@@ -610,12 +608,15 @@ export function Thread() {
                         />
                       )}
                     </AnswerErrorBoundary>
-                    {(turn.images?.length ?? 0) > 0 &&
-                      (isImageGenTurn ? (
-                        <ChatGeneratedImages images={turn.images} />
-                      ) : (
-                        <TurnImageGallery images={turn.images} />
-                      ))}
+                    {(turn.images?.length ?? 0) > 0 && (
+                      <div className="answer-generated-media">
+                        {isImageGenTurn ? (
+                          <ChatGeneratedImages images={turn.images} />
+                        ) : (
+                          <TurnImageGallery images={turn.images} />
+                        )}
+                      </div>
+                    )}
                     {turn.answer.trim() && (
                       <AnswerFooter
                         answer={turn.answer}
