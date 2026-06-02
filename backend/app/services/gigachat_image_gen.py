@@ -17,8 +17,13 @@ from app.services.gigachat_client import (
 
 logger = logging.getLogger(__name__)
 
-_IMG_ID_RE = re.compile(
-    r'<img\s+[^>]*src=["\']([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})["\']',
+_GIGACHAT_FILE_ID = (
+    r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+)
+# GigaChat: <img src="uuid" fuse="true"/> — атрибуты в любом порядке
+_IMG_TAG_RE = re.compile(rf"<img\s+[^>]*/?>", re.I)
+_FILE_ID_IN_IMG_RE = re.compile(
+    rf'src=["\']({_GIGACHAT_FILE_ID})["\']',
     re.I,
 )
 
@@ -37,8 +42,18 @@ class ImageGenerationResult:
 
 
 def _extract_file_id(text: str) -> str | None:
-    match = _IMG_ID_RE.search(text or "")
+    match = _FILE_ID_IN_IMG_RE.search(text or "")
     return match.group(1) if match else None
+
+
+def _clean_assistant_text(raw: str) -> str:
+    """Убирает тег <img … fuse=\"true\"/> и лишние разделители из ответа GigaChat."""
+    text = _IMG_TAG_RE.sub("", raw or "")
+    text = re.sub(r'fuse\s*=\s*["\']true["\']\s*/>', "", text, flags=re.I)
+    text = re.sub(r"<img[^>]*", "", text, flags=re.I)
+    text = re.sub(r"\s+", " ", text).strip()
+    text = re.sub(r"^[\s\-—–:]+", "", text).strip()
+    return text
 
 
 def _delta_from_chunk(data: dict) -> tuple[str, str, str]:
@@ -139,7 +154,7 @@ async def stream_gigachat_image_generation(
         yield ("error", "Пустой файл изображения")
         return
 
-    clean_text = _IMG_ID_RE.sub("", full_text).strip()
+    clean_text = _clean_assistant_text(full_text)
     yield ("done", f"{file_id}\n{clean_text}")
 
 
