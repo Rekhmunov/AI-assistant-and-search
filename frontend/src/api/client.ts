@@ -484,11 +484,20 @@ export async function uploadFile(token: string, file: File): Promise<UploadedFil
 export async function transcribeVoice(
   token: string,
   blob: Blob,
+  mimeHint?: string,
 ): Promise<{ text: string }> {
-  const ext =
-    blob.type.includes("mp4") ? "m4a" : blob.type.includes("ogg") ? "ogg" : "webm";
+  const mime = (mimeHint || blob.type || "audio/webm").split(";")[0].trim().toLowerCase();
+  const ext = mime.includes("mp4") || mime.includes("aac")
+    ? "m4a"
+    : mime.includes("ogg")
+      ? "ogg"
+      : mime.includes("mpeg") || mime.includes("mp3")
+        ? "mp3"
+        : mime.includes("wav")
+          ? "wav"
+          : "webm";
   const file = new File([blob], `voice.${ext}`, {
-    type: blob.type || "audio/webm",
+    type: mime || "audio/webm",
   });
   const form = new FormData();
   form.append("file", file);

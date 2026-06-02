@@ -22,8 +22,9 @@ function preferMp4Recording(): boolean {
   return getMaxPlatform() === "ios" || isIosLikeDevice();
 }
 
+/** iOS WebView: финальный chunk часто после onstop. Android MAX — лучше timeslice. */
 function preferSingleBlobRecording(): boolean {
-  return isMaxWebApp() || preferMp4Recording();
+  return preferMp4Recording();
 }
 
 /** Без timeslice: один blob; на iOS/MAX финальный chunk может прийти после onstop. */
@@ -31,7 +32,7 @@ function useRecorderTimesliceMs(): number | undefined {
   return preferSingleBlobRecording() ? undefined : 250;
 }
 
-const BLOB_FINALIZE_DELAY_MS = 120;
+const BLOB_FINALIZE_DELAY_MS = 400;
 
 function recorderMimeCandidates(): string[] {
   return preferMp4Recording()
@@ -49,6 +50,17 @@ function recorderMimeCandidates(): string[] {
         "audio/aac",
         "audio/ogg;codecs=opus",
       ];
+}
+
+function guessRecordingMime(blob: Blob, recorderMime: string): string {
+  const fromBlob = (blob.type || "").split(";")[0].trim().toLowerCase();
+  if (fromBlob && fromBlob !== "application/octet-stream") {
+    return fromBlob;
+  }
+  const fromRec = (recorderMime || "").split(";")[0].trim().toLowerCase();
+  if (fromRec) return fromRec;
+  if (preferMp4Recording()) return "audio/mp4";
+  return "audio/webm";
 }
 
 function createMediaRecorder(stream: MediaStream): { recorder: MediaRecorder; mimeType: string } {
@@ -170,7 +182,7 @@ export function useVoiceInput(onText: (text: string) => void, token: string | nu
   );
 
   const uploadRecording = useCallback(
-    async (blob: Blob) => {
+    async (blob: Blob, mimeHint?: string) => {
       if (!token) {
         setError(t("loginForFiles"));
         setState("idle");
@@ -178,7 +190,7 @@ export function useVoiceInput(onText: (text: string) => void, token: string | nu
       }
       setState("transcribing");
       try {
-        const res = await transcribeVoice(token, blob);
+        const res = await transcribeVoice(token, blob, mimeHint);
         const text = res.text.trim();
         if (!text) {
           setError(t("voiceNoSpeech"));
@@ -276,15 +288,25 @@ export function useVoiceInput(onText: (text: string) => void, token: string | nu
             return;
           }
 
-          const blob = new Blob(chunks, { type: mime });
+          const resolvedMime = guessRecordingMime(new Blob(chunks, { type: mime }), mime);
+          const blob = new Blob(chunks, { type: resolvedMime });
           const elapsed = Date.now() - startedAtRef.current;
-          if (blob.size < 256 || elapsed < 400) {
+          const minBytes = isMaxWebApp() ? 128 : 256;
+          if (blob.size < minBytes || elapsed < 400) {
             recordingRef.current = false;
+            if (import.meta.env.DEV) {
+              console.warn("voice: recording too short", {
+                bytes: blob.size,
+                elapsed,
+                mime: resolvedMime,
+                chunks: chunks.length,
+              });
+            }
             setError(t("voiceNoSpeech"));
             setState("idle");
             return;
           }
-          void uploadRecording(blob);
+          void uploadRecording(blob, resolvedMime);
         };
 
         if (preferSingleBlobRecording()) {

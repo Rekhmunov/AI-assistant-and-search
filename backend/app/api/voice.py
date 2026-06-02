@@ -44,11 +44,12 @@ async def transcribe_voice(
     try:
         text = await transcribe_audio(raw, resolved_type, settings)
     except SpeechTranscriptionError as exc:
-        logger.info(
-            "voice transcribe failed: code=%s bytes=%s type=%s",
+        logger.warning(
+            "voice transcribe failed: code=%s bytes=%s type=%s filename=%s",
             exc.code,
             len(raw),
             resolved_type,
+            file.filename,
         )
         status_code = status.HTTP_503_SERVICE_UNAVAILABLE
         if exc.code in ("empty_audio", "no_speech"):

@@ -20,7 +20,10 @@ STT_URL = "https://stt.api.cloud.yandex.net/speech/v1/stt:recognize"
 _EXT_BY_MIME: dict[str, str] = {
     "audio/webm": "webm",
     "audio/mp4": "mp4",
+    "audio/m4a": "mp4",
+    "audio/x-m4a": "mp4",
     "audio/aac": "aac",
+    "audio/x-caf": "caf",
     "audio/mpeg": "mp3",
     "audio/mp3": "mp3",
     "audio/ogg": "ogg",
@@ -98,8 +101,12 @@ def _ffmpeg_convert(input_bytes: bytes, input_ext: str, audio_args: list[str], o
         inp = Path(tmp) / f"in.{input_ext}"
         out = Path(tmp) / out_name
         inp.write_bytes(input_bytes)
+        cmd = ["ffmpeg", "-y"]
+        if input_ext in ("mp4", "m4a", "caf", "mov"):
+            cmd.extend(["-f", "mp4"])
+        cmd.extend(["-i", str(inp), *audio_args, str(out)])
         proc = subprocess.run(
-            ["ffmpeg", "-y", "-i", str(inp), *audio_args, str(out)],
+            cmd,
             capture_output=True,
             check=False,
         )
