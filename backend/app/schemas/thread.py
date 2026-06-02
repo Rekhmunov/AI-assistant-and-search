@@ -28,12 +28,20 @@ class EntityImageOut(BaseModel):
     height: int | None = None
 
 
+class MessageAttachmentOut(BaseModel):
+    id: str
+    filename: str
+    kind: str
+    url: str | None = None
+
+
 class MessageOut(BaseModel):
     id: UUID
     role: MessageRole
     content: str
     sources: list[SourceOut] | None
     images: list[EntityImageOut] | None = None
+    attachments: list[MessageAttachmentOut] | None = None
     follow_up_questions: list[str] | None
     user_feedback: MessageFeedbackOut | None = None
     created_at: datetime

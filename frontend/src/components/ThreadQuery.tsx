@@ -1,14 +1,17 @@
 import { useEffect, useRef, useState } from "react";
-import { t } from "../i18n";
+import type { MessageAttachment } from "../api/client";
 import { useDesktopLayout } from "../hooks/useDesktopLayout";
+import { t } from "../i18n";
+import { ThreadQueryAttachments } from "./ThreadQueryAttachments";
 
 type Props = {
   query: string;
+  attachments?: MessageAttachment[];
 };
 
 const LONG_PRESS_MS = 450;
 
-export function ThreadQuery({ query }: Props) {
+export function ThreadQuery({ query, attachments = [] }: Props) {
   const isDesktop = useDesktopLayout();
   const [menuOpen, setMenuOpen] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -61,15 +64,21 @@ export function ThreadQuery({ query }: Props) {
     clearLongPressTimer();
   };
 
+  const chips = attachments.length > 0 ? <ThreadQueryAttachments attachments={attachments} /> : null;
+
   if (isDesktop) {
     return (
-      <div className="thread-query">
-        <p className="thread-query-text">{query}</p>
+      <div className="thread-query-block">
+        <div className="thread-query">
+          <p className="thread-query-text">{query}</p>
+        </div>
+        {chips}
       </div>
     );
   }
 
   return (
+    <div className="thread-query-block thread-query-block--mobile">
     <div
       ref={rootRef}
       className={`thread-query thread-query--mobile${menuOpen ? " thread-query--menu-open" : ""}`}
@@ -105,6 +114,8 @@ export function ThreadQuery({ query }: Props) {
           </button>
         </div>
       )}
+    </div>
+    {chips}
     </div>
   );
 }

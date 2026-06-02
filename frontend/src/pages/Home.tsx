@@ -15,7 +15,11 @@ export function Home() {
   const [query, setQuery] = useState("");
   const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
 
-  const startSearch = (payload: { query: string; attachmentIds: string[] }) => {
+  const startSearch = (payload: {
+    query: string;
+    attachmentIds: string[];
+    attachments: ComposerAttachment[];
+  }) => {
     if (!payload.query.trim() && payload.attachmentIds.length > 0) {
       return;
     }
@@ -24,7 +28,15 @@ export function Home() {
     if (payload.attachmentIds.length) {
       params.set("files", payload.attachmentIds.join(","));
     }
-    navigate(`/thread?${params.toString()}`);
+    const pendingAttachments = payload.attachments.map((a) => ({
+      id: a.id,
+      filename: a.filename,
+      kind: a.kind,
+      previewUrl: a.previewUrl,
+    }));
+    navigate(`/thread?${params.toString()}`, {
+      state: pendingAttachments.length ? { pendingAttachments } : undefined,
+    });
   };
 
   const hasDraft = Boolean(query.trim() || attachments.length > 0);

@@ -30,6 +30,7 @@ class Message(Base):
     content: Mapped[str] = mapped_column(Text, default="")
     sources: Mapped[list | None] = mapped_column(JSONB, nullable=True)
     images: Mapped[list | None] = mapped_column(JSONB, nullable=True)
+    attachments: Mapped[list | None] = mapped_column(JSONB, nullable=True)
     follow_up_questions: Mapped[list | None] = mapped_column(JSONB, nullable=True)
     debug_trace: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

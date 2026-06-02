@@ -49,6 +49,14 @@ export interface Source {
   domain: string;
 }
 
+export interface MessageAttachment {
+  id: string;
+  filename: string;
+  kind: "document" | "image";
+  url?: string | null;
+  previewUrl?: string;
+}
+
 export interface EntityImage {
   url: string;
   title: string;
@@ -71,6 +79,7 @@ export interface Message {
   role: "user" | "assistant";
   content: string;
   sources: Source[] | null;
+  attachments?: MessageAttachment[] | null;
   images?: EntityImage[] | null;
   follow_up_questions: string[] | null;
   user_feedback?: MessageFeedback | null;
@@ -497,6 +506,20 @@ export async function uploadFile(token: string, file: File): Promise<UploadedFil
     const err = await res.json().catch(() => ({}));
     const detail = (err as { detail?: UploadErrorDetail }).detail;
     throw parseUploadErrorDetail(detail);
+  }
+  return res.json();
+}
+
+export async function fetchFileMeta(
+  token: string,
+  fileId: string,
+): Promise<{ id: string; filename: string; media_kind: string; preview_url: string | null }> {
+  const res = await fetch(`${API_BASE}/api/files/${fileId}/meta`, {
+    headers: apiHeaders(token, false),
+    credentials: "include",
+  });
+  if (!res.ok) {
+    throw new Error("Не удалось загрузить данные файла");
   }
   return res.json();
 }

@@ -16,6 +16,7 @@ from app.schemas.feedback import MessageFeedbackOut, reason_label
 from app.models.user import Plan, User
 from app.schemas.thread import (
     EntityImageOut,
+    MessageAttachmentOut,
     MessageOut,
     SourceOut,
     ThreadBulkDeleteIn,
@@ -147,6 +148,9 @@ async def get_thread(
         images = None
         if m.images:
             images = [EntityImageOut(**img) for img in m.images]
+        attachments = None
+        if m.attachments:
+            attachments = [MessageAttachmentOut(**a) for a in m.attachments]
         uf = None
         fb = feedback_by_message.get(m.id)
         if fb:
@@ -163,6 +167,7 @@ async def get_thread(
                 content=m.content,
                 sources=sources,
                 images=images,
+                attachments=attachments,
                 follow_up_questions=m.follow_up_questions,
                 user_feedback=uf,
                 created_at=m.created_at,

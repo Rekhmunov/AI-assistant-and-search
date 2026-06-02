@@ -39,6 +39,7 @@ from app.services.entity_image import entity_images_to_json
 from app.services.message_images_column import messages_have_images_column
 from app.services.entity_image_routing import resolve_entity_image_query, wants_entity_images
 from app.services.image_gen_flow import stream_image_generation_turn
+from app.services.message_attachments import attachments_json_from_files
 from app.services.image_gen_routing import wants_image_generation
 from app.services.yandex_image_search import YandexImageSearchService
 from app.services.perplexity import PERPLEXITY_PROVIDER_ID, PerplexityProvider
@@ -283,7 +284,16 @@ class SearchFlowService:
         if user.plan != Plan.PRO:
             route.answer_model = "lite"
 
-        user_msg = Message(thread_id=thread.id, role=MessageRole.USER, content=display_content)
+        attachments_payload = None
+        if has_attachments and bundle.uploaded_files:
+            attachments_payload = attachments_json_from_files(bundle.uploaded_files)
+
+        user_msg = Message(
+            thread_id=thread.id,
+            role=MessageRole.USER,
+            content=display_content,
+            attachments=attachments_payload,
+        )
         db.add(user_msg)
         await db.flush()
         # Сохраняем тред до долгого поиска: при сбое rollback не должен «стирать» уже отданный thread_id.

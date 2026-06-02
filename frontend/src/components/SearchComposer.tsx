@@ -33,7 +33,11 @@ export interface ComposerAttachment {
 interface Props {
   value: string;
   onChange: (v: string) => void;
-  onSubmit: (payload: { query: string; attachmentIds: string[] }) => void;
+  onSubmit: (payload: {
+    query: string;
+    attachmentIds: string[];
+    attachments: ComposerAttachment[];
+  }) => void;
   /** Первое сообщение в треде: нельзя отправить только вложение без текста */
   requireTextWithAttachments?: boolean;
   disabled?: boolean;
@@ -122,10 +126,8 @@ export function SearchComposer({
     onSubmit({
       query: q || t("analyzeFile"),
       attachmentIds: attachments.map((a) => a.id),
+      attachments: [...attachments],
     });
-    for (const a of attachments) {
-      if (a.previewUrl) URL.revokeObjectURL(a.previewUrl);
-    }
     onAttachmentsChange([]);
   };
 

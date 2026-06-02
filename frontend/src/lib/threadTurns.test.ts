@@ -72,6 +72,7 @@ describe("mergeThreadTurns", () => {
         key: "stream-1",
         messageId: "msg-1",
         query: "питбуль",
+        attachments: [],
         answer: "Ответ",
         sources: [],
         images: [],
@@ -82,6 +83,7 @@ describe("mergeThreadTurns", () => {
       {
         key: "msg-1",
         query: "питбуль",
+        attachments: [],
         answer: "Ответ",
         sources: [],
         images: [],
@@ -105,6 +107,7 @@ describe("mergeThreadTurns", () => {
         key: "msg-1",
         messageId: "msg-1",
         query: "Gefu",
+        attachments: [],
         answer: "Ответ",
         sources: [],
         images,
@@ -115,6 +118,7 @@ describe("mergeThreadTurns", () => {
       {
         key: "msg-1",
         query: "Gefu",
+        attachments: [],
         answer: "Ответ",
         sources: [],
         images: [],

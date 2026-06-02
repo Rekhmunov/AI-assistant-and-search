@@ -1,10 +1,11 @@
-import type { Message, MessageFeedback, Source, EntityImage } from "../api/client";
+import type { Message, MessageAttachment, MessageFeedback, Source, EntityImage } from "../api/client";
 
 export type ThreadTurn = {
   key: string;
   /** UUID сообщения ассистента после done — для футера до смены key */
   messageId?: string;
   query: string;
+  attachments: MessageAttachment[];
   answer: string;
   sources: Source[];
   images: EntityImage[];
@@ -16,6 +17,19 @@ export type ThreadTurn = {
   streaming?: boolean;
   errorCode?: string;
 };
+
+function normalizeMessageAttachments(
+  raw: Message["attachments"] | undefined,
+): MessageAttachment[] {
+  if (!raw?.length) return [];
+  return raw.map((a) => ({
+    id: a.id,
+    filename: a.filename,
+    kind: a.kind === "image" ? "image" : "document",
+    url: a.url ?? undefined,
+    previewUrl: a.previewUrl,
+  }));
+}
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -44,6 +58,7 @@ export function messagesToTurns(messages: Message[]): ThreadTurn[] {
         key: m.id,
         messageId: m.id,
         query: pendingUser.content,
+        attachments: normalizeMessageAttachments(pendingUser.attachments),
         answer: m.content,
         sources: m.sources ?? [],
         images: m.images ?? [],
@@ -59,6 +74,7 @@ export function messagesToTurns(messages: Message[]): ThreadTurn[] {
     turns.push({
       key: pendingUser.id,
       query: pendingUser.content,
+      attachments: pendingUser.attachments ?? [],
       answer: "",
       sources: [],
       images: [],
@@ -84,6 +100,7 @@ export function mergeThreadTurns(local: ThreadTurn[], api: ThreadTurn[]): Thread
         ...turn,
         images: turn.images?.length ? turn.images : prev.images,
         sources: turn.sources?.length ? turn.sources : prev.sources,
+        attachments: turn.attachments?.length ? turn.attachments : prev.attachments,
       };
     });
 

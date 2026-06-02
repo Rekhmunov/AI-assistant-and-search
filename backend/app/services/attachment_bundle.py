@@ -39,6 +39,7 @@ class AttachmentBundle:
     vision_images: list[VisionImage] = field(default_factory=list)
     needs_vision: bool = False
     has_document_text: bool = False
+    uploaded_files: list[UploadedFile] = field(default_factory=list)
 
 
 def _is_image_row(row: UploadedFile) -> bool:
@@ -123,4 +124,5 @@ async def resolve_attachment_bundle(
         vision_images=vision_images,
         needs_vision=bool(vision_images),
         has_document_text=has_document_text,
+        uploaded_files=files,
     )

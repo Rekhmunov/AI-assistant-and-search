@@ -51,6 +51,44 @@ def _file_too_large_detail(filename: str, size: int, user: User) -> dict[str, An
     }
 
 
+class UploadedFileMetaOut(BaseModel):
+    id: UUID
+    filename: str
+    media_kind: str
+    preview_url: str | None = None
+
+
+@router.get("/{file_id}/meta", response_model=UploadedFileMetaOut)
+async def file_meta(
+    file_id: UUID,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+):
+    """Метаданные загруженного файла для превью в чате."""
+    from app.services.image_gen_service import public_file_content_url
+
+    result = await db.execute(
+        select(UploadedFile).where(
+            UploadedFile.id == file_id,
+            UploadedFile.user_id == user.id,
+        )
+    )
+    row = result.scalar_one_or_none()
+    if not row:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="File not found")
+    if row.expires_at and row.expires_at < datetime.now(timezone.utc):
+        raise HTTPException(status_code=status.HTTP_410_GONE, detail="File expired")
+    preview = None
+    if row.media_kind in ("image", "generated") and row.storage_key:
+        preview = public_file_content_url(file_id)
+    return UploadedFileMetaOut(
+        id=row.id,
+        filename=row.filename,
+        media_kind=row.media_kind or "document",
+        preview_url=preview,
+    )
+
+
 @router.get("/{file_id}/content")
 async def download_file_content(
     file_id: UUID,

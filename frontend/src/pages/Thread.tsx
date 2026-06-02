@@ -1,7 +1,13 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { fetchThread, fetchSession, streamSearch } from "../api/client";
+import {
+  fetchFileMeta,
+  fetchThread,
+  fetchSession,
+  streamSearch,
+  type MessageAttachment,
+} from "../api/client";
 import { AnswerBody } from "../components/AnswerBody";
 import { AnswerErrorBoundary } from "../components/AnswerErrorBoundary";
 import { AnswerFooter } from "../components/AnswerFooter";
@@ -64,7 +70,21 @@ function updateLastActiveTurn(
   return next;
 }
 
-type ThreadLocationState = { fromHistory?: boolean };
+type ThreadLocationState = {
+  fromHistory?: boolean;
+  pendingAttachments?: MessageAttachment[];
+};
+
+function mapComposerAttachments(
+  items: { id: string; filename: string; kind: "document" | "image"; previewUrl?: string }[],
+): MessageAttachment[] {
+  return items.map((a) => ({
+    id: a.id,
+    filename: a.filename,
+    kind: a.kind,
+    previewUrl: a.previewUrl,
+  }));
+}
 
 export function Thread() {
   const { id } = useParams();
@@ -231,7 +251,12 @@ export function Thread() {
   }, [turns.length, activeTab, turns]);
 
   const runSearch = useCallback(
-    async (text: string, existingThreadId: string | null, attachmentIds: string[]) => {
+    async (
+      text: string,
+      existingThreadId: string | null,
+      attachmentIds: string[],
+      messageAttachments: MessageAttachment[] = [],
+    ) => {
       if (!text.trim() && !attachmentIds.length) return;
       if (streamingRef.current) return;
 
@@ -248,6 +273,7 @@ export function Thread() {
         {
           key: pendingKey,
           query: text,
+          attachments: messageAttachments,
           answer: "",
           sources: [],
           images: [],
@@ -416,14 +442,54 @@ export function Thread() {
   );
 
   useEffect(() => {
-    if ((initialQuery || initialFiles.length) && !id && !started.current) {
-      started.current = true;
-      runSearch(initialQuery || t("analyzeFile"), null, initialFiles);
+    if (!(initialQuery || initialFiles.length) || id || started.current) return;
+    started.current = true;
+    const pending = (location.state as ThreadLocationState | null)?.pendingAttachments;
+    if (pending?.length) {
+      runSearch(initialQuery || t("analyzeFile"), null, initialFiles, pending);
+      return;
     }
-  }, [initialQuery, initialFiles, id, runSearch]);
+      if (!token || !initialFiles.length) {
+        runSearch(initialQuery || t("analyzeFile"), null, initialFiles, []);
+        return;
+      }
+      void (async () => {
+        const metas = await Promise.all(
+          initialFiles.map(async (fileId) => {
+            try {
+              const meta = await fetchFileMeta(token, fileId);
+              return {
+                id: meta.id,
+                filename: meta.filename,
+                kind: (meta.media_kind === "image" ? "image" : "document") as "image" | "document",
+                url: meta.preview_url ?? undefined,
+              } satisfies MessageAttachment;
+            } catch {
+              return null;
+            }
+          }),
+        );
+        runSearch(
+          initialQuery || t("analyzeFile"),
+          null,
+          initialFiles,
+          metas.filter((m): m is MessageAttachment => m !== null),
+        );
+      })();
+    }
+  }, [initialQuery, initialFiles, id, runSearch, token, location.state]);
 
-  const onComposerSubmit = (payload: { query: string; attachmentIds: string[] }) => {
-    runSearch(payload.query, threadId, payload.attachmentIds);
+  const onComposerSubmit = (payload: {
+    query: string;
+    attachmentIds: string[];
+    attachments: ComposerAttachment[];
+  }) => {
+    runSearch(
+      payload.query,
+      threadId,
+      payload.attachmentIds,
+      mapComposerAttachments(payload.attachments),
+    );
   };
 
   const lastCompletedIndex = findLastIndex(
@@ -515,7 +581,7 @@ export function Thread() {
 
             return (
               <article key={turn.key} id={`turn-${turn.key}`} className="thread-turn">
-                <ThreadQuery query={turn.query} />
+                <ThreadQuery query={turn.query} attachments={turn.attachments} />
 
                 {showStatus &&
                   (isImageGenTurn ? (
