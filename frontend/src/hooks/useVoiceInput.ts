@@ -14,11 +14,8 @@ function getSpeechRecognitionCtor(): (new () => SpeechRecognition) | null {
 }
 
 function preferServerStt(): boolean {
-  if (isMaxWebApp()) {
-    // В части WebView MAX есть Web Speech API — как в обычном браузере.
-    if (getSpeechRecognitionCtor()) return false;
-    return true;
-  }
+  // MAX WebView: Web Speech часто есть, но не работает — только запись + серверный STT.
+  if (isMaxWebApp()) return true;
   if (typeof MediaRecorder === "undefined") return false;
   return !getSpeechRecognitionCtor();
 }
@@ -366,11 +363,29 @@ export function useVoiceInput(onText: (text: string) => void, token: string | nu
     chunksRef.current = [];
 
     if (useMaxWavCapture()) {
-      await startMaxWavRecording();
-      return;
+      try {
+        await startMaxWavRecording();
+        return;
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        void reportVoiceClient({
+          event: "wav_start_failed",
+          platform: getMaxPlatform(),
+          max_webapp: true,
+          error: message,
+        });
+        releaseMic();
+        /* fallback: MediaRecorder */
+      }
     }
 
     if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
+      void reportVoiceClient({
+        event: "recorder_unavailable",
+        platform: getMaxPlatform(),
+        max_webapp: isMaxWebApp(),
+        error: "no getUserMedia or MediaRecorder",
+      });
       setError(t("voiceUnavailableMax"));
       return;
     }
@@ -495,6 +510,11 @@ export function useVoiceInput(onText: (text: string) => void, token: string | nu
     const SR = getSpeechRecognitionCtor();
     if (!SR) {
       releaseMic();
+      void reportVoiceClient({
+        event: "browser_stt_unavailable",
+        platform: getMaxPlatform(),
+        max_webapp: isMaxWebApp(),
+      });
       setError(t("voiceUnavailable"));
       return;
     }
@@ -536,6 +556,13 @@ export function useVoiceInput(onText: (text: string) => void, token: string | nu
       }
 
       if (code === "service-not-allowed" || code === "network") {
+        void reportVoiceClient({
+          event: "browser_stt_error",
+          platform: getMaxPlatform(),
+          max_webapp: isMaxWebApp(),
+          error: code,
+          elapsed_ms: elapsed,
+        });
         setError(t("voiceUnavailable"));
         return;
       }
@@ -579,6 +606,12 @@ export function useVoiceInput(onText: (text: string) => void, token: string | nu
   }, [finishBrowserSession, releaseMic]);
 
   const start = useCallback(async () => {
+    void reportVoiceClient({
+      event: "mic_click",
+      platform: getMaxPlatform(),
+      max_webapp: isMaxWebApp(),
+      error: preferServerStt() ? "path=server" : "path=browser",
+    });
     if (preferServerStt()) {
       await startServerRecording();
     } else {

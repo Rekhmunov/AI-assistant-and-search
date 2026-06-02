@@ -154,5 +154,13 @@ export function isMaxWavCaptureSupported(): boolean {
   if (typeof navigator === "undefined") return false;
   if (!navigator.mediaDevices?.getUserMedia) return false;
   const Ctx = window.AudioContext || (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-  return Boolean(Ctx);
+  if (!Ctx) return false;
+  try {
+    const probe = new Ctx();
+    const supported = typeof probe.createScriptProcessor === "function";
+    void probe.close();
+    return supported;
+  } catch {
+    return false;
+  }
 }
