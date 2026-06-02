@@ -1,6 +1,9 @@
 /** True when opened inside MAX miniapp (WebApp bridge present). */
 export function isMaxWebApp(): boolean {
-  return typeof window !== "undefined" && Boolean(window.WebApp?.initData?.trim());
+  if (typeof window === "undefined") return false;
+  const bridge = window.WebApp;
+  if (!bridge) return false;
+  return Boolean(bridge.initData?.trim() || bridge.platform?.trim());
 }
 
 /** MAX client platform: ios | android | desktop | web */
