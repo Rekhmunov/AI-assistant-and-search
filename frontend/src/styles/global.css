@@ -3248,46 +3248,37 @@ body:has(.page-thread) {
   z-index: 30;
   padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
   background: linear-gradient(to top, var(--bg) 70%, transparent);
+  display: flex;
+  justify-content: flex-start;
+}
+
+.history-bulk-bar-wrap--desktop {
+  position: static;
+  padding: 0 0 12px;
+  background: none;
+  justify-content: flex-end;
 }
 
 .history-bulk-bar {
   display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 12px 14px;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-start;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  padding: 10px 14px;
   border: 1px solid var(--border);
   border-radius: 14px;
   background: var(--surface);
   box-shadow: 0 4px 24px rgba(0, 0, 0, 0.12);
-}
-
-.history-bulk-bar--confirm {
-  align-items: stretch;
-}
-
-.history-bulk-confirm-text {
-  margin: 0;
-  font-size: 0.95rem;
-}
-
-.history-bulk-meta {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  width: max-content;
+  max-width: 100%;
 }
 
 .history-bulk-count {
   font-size: 0.9rem;
   color: var(--muted);
-}
-
-.history-bulk-actions {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 10px;
-  flex-wrap: wrap;
+  white-space: nowrap;
 }
 
 .history-bulk-text-btn {
@@ -3297,9 +3288,10 @@ body:has(.page-thread) {
   font-size: 0.9rem;
   padding: 8px 10px;
   cursor: pointer;
+  white-space: nowrap;
 }
 
-.history-bulk-actions .danger {
+.history-bulk-bar .danger {
   padding: 8px 16px;
   border-radius: 10px;
   border: none;
@@ -3307,28 +3299,18 @@ body:has(.page-thread) {
   color: #fff;
   font-weight: 500;
   cursor: pointer;
+  white-space: nowrap;
 }
 
-.history-bulk-actions .danger:disabled {
+.history-bulk-bar .danger:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
 
 @media (min-width: 900px) {
-  .history-bulk-bar {
-    margin-bottom: 16px;
-    flex-direction: row;
-    align-items: center;
-    justify-content: space-between;
-  }
-
-  .history-bulk-bar--confirm {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .history-bulk-meta {
-    flex: 1;
+  .history-bulk-bar-wrap:not(.history-bulk-bar-wrap--desktop) .history-bulk-bar {
+    margin-left: auto;
+    margin-right: 0;
   }
 }
 

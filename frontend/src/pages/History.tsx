@@ -4,6 +4,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { deleteThreadsBulk, fetchThreads, searchThreads } from "../api/client";
 import { AuthGate, HistoryGateIcon } from "../components/AuthGate";
 import { HistoryBulkBar } from "../components/HistoryBulkBar";
+import { HistoryBulkDeleteModal } from "../components/HistoryBulkDeleteModal";
 import { MobileNewThreadButton } from "../components/MobileNewThreadButton";
 import { MobilePageHeader } from "../components/MobilePageHeader";
 import { ThreadHistoryMenu } from "../components/ThreadHistoryMenu";
@@ -174,18 +175,16 @@ export function History() {
       )}
 
       {isDesktop && selectionMode && (
-        <HistoryBulkBar
-          selectedCount={selectedCount}
-          totalVisible={visibleThreads.length}
-          deleting={bulkDeleteMutation.isPending}
-          confirmOpen={confirmBulkDelete}
-          onSelectAll={selectAllVisible}
-          onClearSelection={() => setSelectedIds(new Set())}
-          onDelete={() => setConfirmBulkDelete(true)}
-          onConfirmDelete={() => bulkDeleteMutation.mutate([...selectedIds])}
-          onCancelConfirm={() => setConfirmBulkDelete(false)}
-          onExit={exitSelectionMode}
-        />
+        <div className="history-bulk-bar-wrap history-bulk-bar-wrap--desktop">
+          <HistoryBulkBar
+            selectedCount={selectedCount}
+            totalVisible={visibleThreads.length}
+            deleting={bulkDeleteMutation.isPending}
+            onSelectAll={selectAllVisible}
+            onClearSelection={() => setSelectedIds(new Set())}
+            onDelete={() => setConfirmBulkDelete(true)}
+          />
+        </div>
       )}
 
       <div className="history-scroll">
@@ -265,16 +264,20 @@ export function History() {
             selectedCount={selectedCount}
             totalVisible={visibleThreads.length}
             deleting={bulkDeleteMutation.isPending}
-            confirmOpen={confirmBulkDelete}
             onSelectAll={selectAllVisible}
             onClearSelection={() => setSelectedIds(new Set())}
             onDelete={() => setConfirmBulkDelete(true)}
-            onConfirmDelete={() => bulkDeleteMutation.mutate([...selectedIds])}
-            onCancelConfirm={() => setConfirmBulkDelete(false)}
-            onExit={exitSelectionMode}
           />
         </div>
       )}
+
+      <HistoryBulkDeleteModal
+        open={confirmBulkDelete}
+        count={selectedCount}
+        deleting={bulkDeleteMutation.isPending}
+        onConfirm={() => bulkDeleteMutation.mutate([...selectedIds])}
+        onCancel={() => setConfirmBulkDelete(false)}
+      />
 
       {!isDesktop && !selectionMode && (
         <div className="mobile-new-thread-bar">
