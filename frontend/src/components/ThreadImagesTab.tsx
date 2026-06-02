@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { EntityImage } from "../api/client";
+import { isGeneratedImageUrl } from "../lib/generatedImageUrl";
 import { preloadEntityImages } from "../lib/preloadEntityImages";
 import { faviconUrl, sourceDomainLabel } from "../lib/sourceDomainLabel";
 import type { ThreadImageGroup } from "../lib/threadImageGroups";
@@ -177,11 +178,15 @@ export function ThreadImagesTab({ groups, loading = false }: Props) {
               const domain = sourceDomainLabel(sourceHref);
               const index = flatIndex;
               flatIndex += 1;
+              const generated = isGeneratedImageUrl(img.url);
               return (
-                <li key={`${group.turnKey}-${img.url}`} className="turn-images-grid-item">
+                <li
+                  key={`${group.turnKey}-${img.url}`}
+                  className={`turn-images-grid-item${generated ? " turn-images-grid-item--generated" : ""}`}
+                >
                   <button
                     type="button"
-                    className="turn-images-grid-thumb"
+                    className={`turn-images-grid-thumb${generated ? " turn-images-grid-thumb--generated" : ""}`}
                     onClick={() => setLightboxIndex(index)}
                   >
                     <img
@@ -191,23 +196,25 @@ export function ThreadImagesTab({ groups, loading = false }: Props) {
                       loading="lazy"
                     />
                   </button>
-                  <a
-                    className="turn-images-grid-source"
-                    href={sourceHref}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    <img
-                      className="turn-images-grid-source-icon"
-                      src={faviconUrl(sourceHref)}
-                      alt=""
-                      width={16}
-                      height={16}
-                      loading="lazy"
-                      decoding="async"
-                    />
-                    <span>{domain || sourceHref}</span>
-                  </a>
+                  {!generated && (
+                    <a
+                      className="turn-images-grid-source"
+                      href={sourceHref}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      <img
+                        className="turn-images-grid-source-icon"
+                        src={faviconUrl(sourceHref)}
+                        alt=""
+                        width={16}
+                        height={16}
+                        loading="lazy"
+                        decoding="async"
+                      />
+                      <span>{domain || sourceHref}</span>
+                    </a>
+                  )}
                 </li>
               );
             })}

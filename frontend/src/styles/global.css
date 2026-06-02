@@ -1682,6 +1682,66 @@ body:has(.page-thread) {
   object-fit: cover;
 }
 
+.turn-images-grid-item--generated {
+  grid-column: 1 / -1;
+}
+
+.turn-images-grid-thumb--generated {
+  aspect-ratio: auto;
+  max-height: none;
+}
+
+.turn-images-grid-thumb--generated img {
+  width: 100%;
+  height: auto;
+  max-height: min(70vh, 560px);
+  object-fit: contain;
+  background: var(--surface);
+}
+
+@media (min-width: 900px) {
+  .turn-images-grid-thumb--generated {
+    max-width: 380px;
+  }
+}
+
+.chat-generated-images {
+  margin: 12px 0 16px;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.chat-generated-image-item {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.chat-generated-image-item img {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: min(72vh, 560px);
+  object-fit: contain;
+  border-radius: 12px;
+  border: 1px solid var(--border-subtle);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+
+@media (min-width: 900px) {
+  .chat-generated-images {
+    max-width: 380px;
+  }
+}
+
 .turn-images-grid-source {
   display: inline-flex;
   align-items: center;

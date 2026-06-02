@@ -7,7 +7,9 @@ import { AnswerErrorBoundary } from "../components/AnswerErrorBoundary";
 import { AnswerFooter } from "../components/AnswerFooter";
 import { FreeLimitNotice } from "../components/FreeLimitNotice";
 import { GuestLimitNotice } from "../components/GuestLimitNotice";
+import { ChatGeneratedImages } from "../components/ChatGeneratedImages";
 import { ImageGenProNotice } from "../components/ImageGenProNotice";
+import { ImageGenStatusLine } from "../components/ImageGenStatusLine";
 import { SearchComposer, type ComposerAttachment } from "../components/SearchComposer";
 import { SearchStatusLine, type SearchPhase } from "../components/SearchStatusLine";
 import { ThreadImagesTab } from "../components/ThreadImagesTab";
@@ -17,6 +19,7 @@ import { ThreadTabsBar, type ThreadTab } from "../components/ThreadTabsBar";
 import { TurnImageGallery } from "../components/TurnImageGallery";
 import { t } from "../i18n";
 import { findLastIndex } from "../lib/arrayUtils";
+import { isGeneratedImageUrl } from "../lib/generatedImageUrl";
 import { wantsImageGeneration } from "../lib/imageGenRouting";
 import {
   buildThreadImageGroups,
@@ -86,7 +89,6 @@ export function Thread() {
   const [streaming, setStreaming] = useState(false);
   const [needsSearch, setNeedsSearch] = useState(true);
   const [searchPhase, setSearchPhase] = useState<SearchPhase>("idle");
-  const [imageGenStatus, setImageGenStatus] = useState<string | null>(null);
   const [composerQuery, setComposerQuery] = useState("");
   const [activeTab, setActiveTab] = useState<ThreadTab>("answer");
   const started = useRef(false);
@@ -241,7 +243,6 @@ export function Thread() {
       setStreaming(true);
       setNeedsSearch(!imageGenQuery);
       setSearchPhase(imageGenQuery ? "image_generating" : "routing");
-      setImageGenStatus(imageGenQuery ? t("imageGenWorking") : null);
       setTurns((prev) => [
         ...prev,
         {
@@ -270,7 +271,6 @@ export function Thread() {
           setNeedsSearch(route.needs_search);
           if (isImageGen) {
             setSearchPhase("image_generating");
-            setImageGenStatus(t("imageGenWorking"));
           } else {
             setSearchPhase(route.needs_search ? "searching" : "answering");
           }
@@ -281,13 +281,11 @@ export function Thread() {
             }),
           );
         },
-        onImageGenStart: (status) => {
+        onImageGenStart: () => {
           setSearchPhase("image_generating");
-          setImageGenStatus(status);
         },
-        onImageGenStatus: (status) => {
+        onImageGenStatus: () => {
           setSearchPhase("image_generating");
-          setImageGenStatus(status);
         },
         onSources: (list) => {
           setSearchPhase("answering");
@@ -296,16 +294,11 @@ export function Thread() {
         onImages: (list) => {
           if (imageGenActiveRef.current) {
             setSearchPhase("idle");
-            setImageGenStatus(null);
           }
           setTurns((prev) => updateLastStreamingTurn(prev, { images: list ?? [] }));
         },
         onToken: (chunk) => {
-          if (imageGenActiveRef.current) {
-            setSearchPhase("image_generating");
-            setImageGenStatus(t("imageGenComposing"));
-          } else {
-            setImageGenStatus(null);
+          if (!imageGenActiveRef.current) {
             setSearchPhase("answering");
           }
           setTurns((prev) => {
@@ -335,7 +328,6 @@ export function Thread() {
           imageGenActiveRef.current = false;
           setStreaming(false);
           setSearchPhase("idle");
-          setImageGenStatus(null);
           answerResetPendingRef.current = false;
           const messageId = done?.message_id;
           setTurns((prev) =>
@@ -359,7 +351,6 @@ export function Thread() {
           imageGenActiveRef.current = false;
           setStreaming(false);
           setSearchPhase("idle");
-          setImageGenStatus(null);
           const threadMissing =
             code === "not_found" || msg.includes("Тред не найден");
           if (threadMissing) {
@@ -524,13 +515,12 @@ export function Thread() {
               <article key={turn.key} id={`turn-${turn.key}`} className="thread-turn">
                 <ThreadQuery query={turn.query} />
 
-                {showStatus && (
-                  <SearchStatusLine
-                    phase={isImageGenTurn ? "image_generating" : searchPhase}
-                    needsSearch={needsSearch}
-                    customStatus={isImageGenTurn ? imageGenStatus : null}
-                  />
-                )}
+                {showStatus &&
+                  (isImageGenTurn ? (
+                    <ImageGenStatusLine active={streaming} />
+                  ) : (
+                    <SearchStatusLine phase={searchPhase} needsSearch={needsSearch} />
+                  ))}
 
                 {showAnswer && (
                   <section className="answer-section">
@@ -552,9 +542,12 @@ export function Thread() {
                         />
                       )}
                     </AnswerErrorBoundary>
-                    {(turn.images?.length ?? 0) > 0 && (
-                      <TurnImageGallery images={turn.images} />
-                    )}
+                    {(turn.images?.length ?? 0) > 0 &&
+                      (isImageGenTurn ? (
+                        <ChatGeneratedImages images={turn.images} />
+                      ) : (
+                        <TurnImageGallery images={turn.images} />
+                      ))}
                     {turn.answer.trim() && (
                       <AnswerFooter
                         answer={turn.answer}
