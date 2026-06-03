@@ -96,6 +96,7 @@
   "docGenStatus7": "Собираем файл Word…",
   "downloadDocument": "Скачать",
   "downloadDocumentFailed": "Не удалось скачать файл",
+  "exportBlockDocx": "Скачать Word (.docx)",
   "shareDocumentGlosix": "Документ из Glosix",
   "turnTabAnswer": "Ответ",
   "turnTabImages": "Изображения",

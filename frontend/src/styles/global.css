@@ -2407,6 +2407,13 @@ body:has(.page-thread) {
   letter-spacing: 0.02em;
 }
 
+.answer-code-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
 .answer-code-pre {
   margin: 0;
   padding: 12px 14px;

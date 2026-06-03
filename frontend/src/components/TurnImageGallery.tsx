@@ -56,20 +56,22 @@ export function TurnImageGallery({ images }: Props) {
   const [start, setStart] = useState(0);
   const [lightbox, setLightbox] = useState<LightboxState | null>(null);
   const imagesKey = useMemo(() => imagesStableKey(images), [images]);
+  const imagesRef = useRef(images);
+  imagesRef.current = images;
 
   useEffect(() => {
     let cancelled = false;
     setStart(0);
     setReadyImages([]);
 
-    void preloadGalleryImages(images).then((loaded) => {
+    void preloadGalleryImages(imagesRef.current).then((loaded) => {
       if (!cancelled) setReadyImages(loaded);
     });
 
     return () => {
       cancelled = true;
     };
-  }, [imagesKey, images]);
+  }, [imagesKey]);
 
   const maxStart = Math.max(0, readyImages.length - VISIBLE);
   const clampedStart = Math.min(start, maxStart);
