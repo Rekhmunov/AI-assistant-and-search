@@ -281,6 +281,13 @@ async def get_current_user(
     raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
 
 
+async def get_file_access_user(
+    access: Annotated[SearchUserResult, Depends(get_existing_search_user)],
+) -> User:
+    """JWT, refresh cookie или гостевая сессия — для скачивания своих файлов."""
+    return access.user
+
+
 async def get_current_admin(
     db: Annotated[AsyncSession, Depends(get_db)],
     creds: Annotated[HTTPAuthorizationCredentials | None, Depends(security)],

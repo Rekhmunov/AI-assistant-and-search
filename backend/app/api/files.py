@@ -8,7 +8,7 @@ from pydantic import BaseModel
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user, get_db
+from app.api.deps import get_current_user, get_db, get_file_access_user
 from app.constants.attachments import (
     UPLOAD_TTL_HOURS,
     max_upload_bytes,
@@ -63,7 +63,7 @@ class UploadedFileMetaOut(BaseModel):
 async def file_meta(
     file_id: UUID,
     db: Annotated[AsyncSession, Depends(get_db)],
-    user: Annotated[User, Depends(get_current_user)],
+    user: Annotated[User, Depends(get_file_access_user)],
 ):
     """Метаданные загруженного файла для превью в чате."""
     from app.services.image_gen_service import public_file_content_url
@@ -94,9 +94,9 @@ async def file_meta(
 async def download_file_content(
     file_id: UUID,
     db: Annotated[AsyncSession, Depends(get_db)],
-    user: Annotated[User, Depends(get_current_user)],
+    user: Annotated[User, Depends(get_file_access_user)],
 ):
-    """Скачивание сгенерированных и загруженных изображений (cookie/Bearer)."""
+    """Скачивание сгенерированных и загруженных файлов (JWT, refresh или guest cookie)."""
     result = await db.execute(
         select(UploadedFile).where(
             UploadedFile.id == file_id,

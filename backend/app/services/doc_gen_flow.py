@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import uuid
 from collections.abc import AsyncIterator
@@ -29,10 +30,16 @@ from app.services.sse import sse_event
 logger = logging.getLogger(__name__)
 
 STATUS_MESSAGES = (
+    "Анализируем запрос…",
     "Готовим структуру документа…",
-    "Формируем текст…",
+    "Прописываем разделы…",
+    "Формируем формулировки…",
+    "Согласуем текст…",
+    "Проверяем оформление…",
     "Собираем файл Word…",
 )
+
+DOC_GEN_STATUS_PAUSE_SEC = 2.5
 
 
 def _assistant_message_text(ttl_hours: int) -> str:
@@ -154,13 +161,27 @@ async def stream_document_generation_turn(
     assistant_text = _assistant_message_text(ttl_hours)
 
     try:
-        yield sse_event("doc_gen_status", {"status": STATUS_MESSAGES[1]})
-        structure = await generate_document_structure(
-            llm,
-            display_content,
-            answer_model=answer_model,
+        structure_task = asyncio.create_task(
+            generate_document_structure(
+                llm,
+                display_content,
+                answer_model=answer_model,
+            )
         )
-        yield sse_event("doc_gen_status", {"status": STATUS_MESSAGES[2]})
+        tick = 0
+        while not structure_task.done():
+            msg = STATUS_MESSAGES[1 + (tick % max(len(STATUS_MESSAGES) - 2, 1))]
+            tick += 1
+            yield sse_event("doc_gen_status", {"status": msg})
+            done, _ = await asyncio.wait({structure_task}, timeout=DOC_GEN_STATUS_PAUSE_SEC)
+            if structure_task in done:
+                break
+        structure = structure_task.result()
+
+        for post_msg in STATUS_MESSAGES[-2:]:
+            yield sse_event("doc_gen_status", {"status": post_msg})
+            await asyncio.sleep(DOC_GEN_STATUS_PAUSE_SEC)
+
         docx_bytes = build_docx_bytes(structure, show_glosix_footer=show_glosix)
         if len(docx_bytes) < 256:
             raise DocumentStructureError("empty_docx")

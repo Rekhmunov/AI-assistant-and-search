@@ -653,7 +653,7 @@ export function Thread() {
 
                 {showStatus &&
                   (isDocumentGenTurn ? (
-                    <DocGenStatusLine active={streaming} status={docGenStatus} />
+                    <DocGenStatusLine active={Boolean(isActive && streaming)} status={docGenStatus} />
                   ) : isImageGenTurn ? (
                     <ImageGenStatusLine active={streaming} />
                   ) : (

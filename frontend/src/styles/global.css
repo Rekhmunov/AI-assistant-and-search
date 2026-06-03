@@ -1573,7 +1573,26 @@ body:has(.page-thread) {
 
 .generated-document-card-icon {
   flex-shrink: 0;
-  opacity: 0.85;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  color: var(--accent);
+  background: linear-gradient(145deg, var(--accent-soft) 0%, rgba(255, 255, 255, 0.95) 70%);
+  border: 1px solid rgba(32, 128, 141, 0.18);
+  box-shadow: 0 2px 8px rgba(32, 128, 141, 0.1);
+}
+
+.generated-document-card-icon-svg {
+  display: block;
+}
+
+.generated-document-card-error {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: #b42318;
 }
 
 .generated-document-card-body {
@@ -1593,7 +1612,7 @@ body:has(.page-thread) {
 }
 
 .doc-gen-status-line {
-  margin: 8px 0;
+  margin: 0 0 20px;
 }
 
 .thread-query-attachments {

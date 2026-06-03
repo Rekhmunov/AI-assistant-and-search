@@ -566,16 +566,29 @@ export async function fetchFileMeta(
   return res.json();
 }
 
-/** Бинарник файла с cookie/Bearer — для превью в чате (обычный img без Authorization не грузит). */
-export async function fetchFileContent(token: string | null, fileId: string): Promise<Blob> {
-  const res = await fetch(`${API_BASE}/api/files/${fileId}/content`, {
-    headers: apiHeaders(token, false),
-    credentials: "include",
-  });
-  if (!res.ok) {
-    throw new Error("Не удалось загрузить файл");
+function resolveApiUrl(path: string): string {
+  return path.startsWith("http") ? path : `${API_BASE}${path}`;
+}
+
+/** Бинарник файла: подписанная ссылка, затем /content с cookie/Bearer (в т.ч. гость). */
+export async function fetchFileContent(
+  token: string | null,
+  fileId: string,
+  opts?: { shareUrl?: string | null },
+): Promise<Blob> {
+  const urls: string[] = [];
+  if (opts?.shareUrl?.trim()) urls.push(resolveApiUrl(opts.shareUrl.trim()));
+  urls.push(resolveApiUrl(`/api/files/${fileId}/content`));
+
+  for (const url of urls) {
+    const shared = url.includes("/shared?");
+    const res = await fetch(url, {
+      headers: shared ? undefined : apiHeaders(token, false),
+      credentials: "include",
+    });
+    if (res.ok) return res.blob();
   }
-  return res.blob();
+  throw new Error("Не удалось загрузить файл");
 }
 
 export type VoiceClientReportPayload = {
