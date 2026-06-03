@@ -177,6 +177,7 @@ class UserAdminUpdate(BaseModel):
     plan: str | None = None
     plan_expires_at: datetime | None = None
     banned: bool | None = None
+    password: str | None = Field(default=None, min_length=8, max_length=128)
 
 
 class GrantProRequest(BaseModel):

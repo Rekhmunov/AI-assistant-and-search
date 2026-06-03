@@ -56,6 +56,9 @@ export function UserDetailPage() {
   const [msg, setMsg] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
+  const [showPasswordForm, setShowPasswordForm] = useState(false);
+  const [newPassword, setNewPassword] = useState("");
+  const [passwordBusy, setPasswordBusy] = useState(false);
   const [systemStatus, setSystemStatus] = useState<{
     messages_debug_trace_column: boolean;
     thread_debug_api: boolean;
@@ -146,6 +149,27 @@ export function UserDetailPage() {
       setError(result.message || "Успешная оплата не найдена");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Не удалось синхронизировать оплату");
+    }
+  };
+
+  const setPassword = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!id || !user?.email) return;
+    setMsg("");
+    setError("");
+    setPasswordBusy(true);
+    try {
+      await apiFetch(`/api/admin/users/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ password: newPassword }),
+      });
+      setMsg("Пароль обновлён");
+      setNewPassword("");
+      setShowPasswordForm(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Не удалось сменить пароль");
+    } finally {
+      setPasswordBusy(false);
     }
   };
 
@@ -261,6 +285,18 @@ export function UserDetailPage() {
             </button>
           </form>
           <div className="user-detail-actions-row">
+            {user.email && (
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => {
+                  setShowPasswordForm((v) => !v);
+                  setError("");
+                }}
+              >
+                Сменить пароль
+              </button>
+            )}
             <button
               type="button"
               className={`btn-secondary${user.deleted_at ? "" : " btn-danger-outline"}`}
@@ -269,6 +305,38 @@ export function UserDetailPage() {
               {user.deleted_at ? "Разбанить" : "Забанить"}
             </button>
           </div>
+          {showPasswordForm && user.email && (
+            <form className="user-detail-password-form" onSubmit={setPassword}>
+              <label className="user-detail-field">
+                <span className="user-detail-field-label">Новый пароль</span>
+                <input
+                  type="password"
+                  minLength={8}
+                  required
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  autoComplete="new-password"
+                  placeholder="мин. 8 символов"
+                />
+              </label>
+              <div className="user-detail-actions-row">
+                <button type="submit" className="btn-primary" disabled={passwordBusy}>
+                  {passwordBusy ? "…" : "Сохранить пароль"}
+                </button>
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  disabled={passwordBusy}
+                  onClick={() => {
+                    setShowPasswordForm(false);
+                    setNewPassword("");
+                  }}
+                >
+                  Отмена
+                </button>
+              </div>
+            </form>
+          )}
         </section>
       )}
 

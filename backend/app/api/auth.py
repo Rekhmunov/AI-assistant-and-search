@@ -44,6 +44,7 @@ from app.schemas.auth import (
     BindMaxCompleteRequest,
     BindMaxStartResponse,
     EmailLoginRequest,
+    ChangePasswordRequest,
     EmailRegisterRequest,
     InitDataRequest,
     SessionStatus,
@@ -369,6 +370,33 @@ async def login_email(
     access = await _set_auth_cookies(response, str(user.id), redis_client)
     used, limit = await _limits_for_user(user, limiter)
     return AuthResponse(access_token=access, user=_user_profile(user, used, limit))
+
+
+@router.post("/change-password", response_model=UserProfile)
+async def change_password(
+    body: ChangePasswordRequest,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+    limiter: Annotated[RateLimiter, Depends(get_rate_limiter)],
+    redis_client: Annotated[redis.Redis, Depends(get_redis)],
+):
+    """Смена пароля для входа по email."""
+    if not user.email or not user.password_hash:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Сначала привяжите email и пароль",
+        )
+    if not verify_password(body.current_password, user.password_hash):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Неверный текущий пароль")
+    if body.current_password == body.new_password:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Новый пароль должен отличаться от текущего",
+        )
+    user.password_hash = hash_password(body.new_password)
+    await revoke_refresh_tokens(redis_client, str(user.id))
+    used, limit = await _limits_for_user(user, limiter)
+    return _user_profile(user, used, limit)
 
 
 @router.post("/bind-email", response_model=UserProfile)

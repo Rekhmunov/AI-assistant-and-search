@@ -3,12 +3,13 @@ from datetime import datetime, timedelta, timezone
 from typing import Annotated
 from uuid import UUID
 
+import redis.asyncio as redis
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.api.deps import get_db, get_rate_limiter
+from app.api.deps import get_db, get_rate_limiter, get_redis
 from app.core.admin_permissions import require_permission
 from app.core.config import get_settings
 from app.models.admin_user import AdminUser
@@ -24,7 +25,9 @@ from app.schemas.admin import (
     UserAdminOut,
     UserAdminUpdate,
 )
+from app.core.security import hash_password
 from app.services.admin_audit import log_admin_action
+from app.services.refresh_tokens import revoke_refresh_tokens
 from app.services.subscription_activation import recover_pro_for_user
 
 router = APIRouter(prefix="/users", tags=["admin-users"])
@@ -200,6 +203,7 @@ async def update_user(
     db: Annotated[AsyncSession, Depends(get_db)],
     admin: Annotated[AdminUser, Depends(require_permission("users:write"))],
     limiter=Depends(get_rate_limiter),
+    redis_client: Annotated[redis.Redis, Depends(get_redis)],
 ):
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
@@ -220,6 +224,15 @@ async def update_user(
     if body.plan_expires_at is not None:
         user.plan_expires_at = body.plan_expires_at
         changes["plan_expires_at"] = body.plan_expires_at.isoformat()
+    if body.password is not None:
+        if not user.email:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="У пользователя нет email — пароль задать нельзя",
+            )
+        user.password_hash = hash_password(body.password)
+        changes["password"] = "changed"
+        await revoke_refresh_tokens(redis_client, str(user.id))
 
     await log_admin_action(
         db,

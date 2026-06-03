@@ -738,6 +738,12 @@ body:has(.page-thread) {
   margin-bottom: 0;
 }
 
+.profile-bind-form-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
 .profile-bind-form .btn-block {
   margin-top: 14px;
 }
