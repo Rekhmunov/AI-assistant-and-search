@@ -27,6 +27,21 @@ if [ -f hosting.config ]; then
   ADMIN_HOST_CHECK="${ADMIN_HOST:-$ADMIN_HOST_CHECK}"
 fi
 
+_wait_backend_health() {
+  local label="$1"
+  for i in $(seq 1 60); do
+    if $COMPOSE exec -T backend curl -sf http://127.0.0.1:8000/health >/dev/null 2>&1; then
+      echo "    ${label}: backend /health OK (${i}×2s)"
+      return 0
+    fi
+    if [ "$i" -eq 60 ]; then
+      echo "    ${label}: backend /health FAIL — $COMPOSE logs backend --tail 50"
+      return 1
+    fi
+    sleep 2
+  done
+}
+
 echo "==> Glosix update-prod (main) @ $(pwd)"
 
 if [ ! -f .env ]; then
@@ -78,12 +93,20 @@ $COMPOSE up -d --remove-orphans
 if grep -qE '^(ANTHROPIC_API_KEY|DEEPSEEK_API_KEY|GIGACHAT_CREDENTIALS|PERPLEXITY_API_KEY)=.+' .env 2>/dev/null; then
   echo "==> API keys в .env — пересоздаём backend/worker (подхват ключей LLM)"
   $COMPOSE up -d --force-recreate backend worker
+  if ! _wait_backend_health "after API keys recreate"; then
+    exit 1
+  fi
 fi
 
 echo "==> Recreate frontend, admin, nginx (новый JS и upstream IP; иначе 502 на admin)"
 $COMPOSE up -d --force-recreate frontend admin nginx
 
-echo "==> Alembic migrations"
+echo "==> Wait for backend (alembic + uvicorn in container startup)"
+if ! _wait_backend_health "startup"; then
+  exit 1
+fi
+
+echo "==> Alembic migrations (exec; обычно no-op если startup уже применил)"
 $COMPOSE exec -T backend alembic upgrade head
 
 echo "==> Cleanup expired uploads (optional)"
@@ -98,14 +121,31 @@ if grep -qE '^ANTHROPIC_API_KEY=.+' .env 2>/dev/null; then
   $COMPOSE exec -T backend python scripts/sync_provider_answer_prompts.py anthropic_claude --apply || true
 fi
 
+_check_proxy_api_health() {
+  local host="$1"
+  curl -sf "http://127.0.0.1:${PROXY_PORT}/api/health" -H "Host: ${host}" >/dev/null 2>&1
+}
+
 echo "==> Health checks (127.0.0.1:${PROXY_PORT})"
 for i in $(seq 1 30); do
-  if curl -sf "http://127.0.0.1:${PROXY_PORT}/api/health" -H "Host: ${API_HOST_CHECK}" >/dev/null 2>&1; then
-    echo "    API OK"
+  if _check_proxy_api_health "${API_HOST_CHECK}"; then
+    echo "    API OK (Host: ${API_HOST_CHECK})"
+    break
+  fi
+  if _check_proxy_api_health "${APP_HOST_CHECK}"; then
+    echo "    API OK (Host: ${APP_HOST_CHECK})"
     break
   fi
   if [ "$i" -eq 30 ]; then
-    echo "    API FAIL — $COMPOSE logs backend --tail 40"
+    echo "    API FAIL через nginx (пробовали Host: ${API_HOST_CHECK}, ${APP_HOST_CHECK})"
+    echo "    Прямой backend:"
+    $COMPOSE exec -T backend curl -sS -m 5 http://127.0.0.1:8000/health 2>&1 | head -c 200 || true
+    echo ""
+    echo "    nginx:"
+    $COMPOSE logs nginx --tail 20
+    echo "    backend:"
+    $COMPOSE logs backend --tail 40
+    echo "    Диагностика: bash scripts/verify-deploy.sh"
     exit 1
   fi
   sleep 2

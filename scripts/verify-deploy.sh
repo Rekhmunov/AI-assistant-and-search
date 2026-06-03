@@ -24,8 +24,17 @@ echo "==> Alembic revision (inside backend)"
 $COMPOSE exec -T backend alembic current || true
 
 echo ""
+echo "==> Backend direct (inside container)"
+$COMPOSE exec -T backend curl -sf http://127.0.0.1:8000/health 2>/dev/null | head -c 300 || echo "FAIL (backend not listening)"
+echo ""
+
+echo ""
 echo "==> API health (docker nginx, Host: ${APP_HOST})"
 curl -sf "http://127.0.0.1:${PROXY_PORT}/api/health" -H "Host: ${APP_HOST}" | head -c 500 || echo "FAIL"
+echo ""
+
+echo "==> API health (docker nginx, Host: ${API_HOST})"
+curl -sf "http://127.0.0.1:${PROXY_PORT}/api/health" -H "Host: ${API_HOST}" | head -c 500 || echo "FAIL"
 echo ""
 
 echo ""
