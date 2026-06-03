@@ -24,6 +24,7 @@ from app.services.file_format import (
 )
 from app.services.file_parser import DOCUMENT_EXT, IMAGE_EXT, extract_text, ocr_image_bytes, prepare_image_for_ocr
 from app.services.file_share_token import verify_file_share_token
+from app.services.http_disposition import attachment_content_disposition
 from app.services.upload_storage import delete_upload_file, load_upload_bytes, mime_for_ext, save_upload_bytes
 
 router = APIRouter(prefix="/files", tags=["files"])
@@ -114,9 +115,11 @@ async def download_file_content(
     if not data:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="File not found")
     mime = row.mime_type or mime_for_ext(row.storage_key.rsplit(".", 1)[-1])
-    disposition = "attachment"
-    if row.media_kind == "generated_doc":
-        disposition = f'attachment; filename="{row.filename}"'
+    disposition = (
+        attachment_content_disposition(row.filename)
+        if row.media_kind == "generated_doc"
+        else "attachment"
+    )
     return Response(
         content=data,
         media_type=mime,
@@ -153,7 +156,7 @@ async def download_file_shared(
         media_type=mime,
         headers={
             "Cache-Control": "private, max-age=3600",
-            "Content-Disposition": f'attachment; filename="{row.filename}"',
+            "Content-Disposition": attachment_content_disposition(row.filename),
         },
     )
 

@@ -52,10 +52,13 @@ def delete_upload_file(storage_key: str | None) -> None:
 
 
 def mime_for_ext(ext: str) -> str:
+    ext = ext.lower().lstrip(".")
     if ext in ("jpg", "jpeg"):
         return "image/jpeg"
     if ext == "png":
         return "image/png"
     if ext == "webp":
         return "image/webp"
-    return "image/jpeg"
+    if ext == "docx":
+        return "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    return "application/octet-stream"
