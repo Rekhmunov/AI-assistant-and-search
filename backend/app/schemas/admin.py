@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, model_validator
 
 from app.models.admin_user import AdminRole
 from app.models.broadcast import BroadcastAudience, BroadcastStatus
@@ -84,13 +84,30 @@ class DashboardMetrics(BaseModel):
 
 
 class BroadcastCreate(BaseModel):
-    text: str = Field(..., min_length=1, max_length=4096)
+    text: str = Field(default="", max_length=4096)
     audience: BroadcastAudience = BroadcastAudience.ALL
+    media_type: str = Field(default="none", pattern="^(none|image|video)$")
+    media_token: str | None = None
+    media_filename: str | None = None
+
+    @model_validator(mode="after")
+    def validate_content(self):
+        body = self.text.strip()
+        mt = self.media_type.strip().lower()
+        token = (self.media_token or "").strip()
+        if mt in {"image", "video"} and not token:
+            raise ValueError("Загрузите изображение или видео перед созданием рассылки")
+        if not body and mt == "none":
+            raise ValueError("Укажите текст рассылки или прикрепите медиа")
+        return self
 
 
 class BroadcastOut(BaseModel):
     id: UUID
     text: str
+    media_type: str = "none"
+    media_token: str | None = None
+    media_filename: str | None = None
     audience: BroadcastAudience
     status: BroadcastStatus
     sent_count: int

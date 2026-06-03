@@ -8,6 +8,9 @@ type WelcomeMediaType = "none" | "image" | "video";
 interface Broadcast {
   id: string;
   text: string;
+  media_type: WelcomeMediaType;
+  media_token: string | null;
+  media_filename: string | null;
   audience: Audience;
   status: string;
   sent_count: number;
@@ -43,6 +46,11 @@ export function BroadcastsPage() {
 
   const [items, setItems] = useState<Broadcast[]>([]);
   const [text, setText] = useState("");
+  const [broadcastMediaType, setBroadcastMediaType] = useState<WelcomeMediaType>("none");
+  const [broadcastMediaToken, setBroadcastMediaToken] = useState<string | null>(null);
+  const [broadcastMediaFilename, setBroadcastMediaFilename] = useState<string | null>(null);
+  const [broadcastUploadBusy, setBroadcastUploadBusy] = useState(false);
+  const broadcastFileInputRef = useRef<HTMLInputElement>(null);
   const [audience, setAudience] = useState<Audience>("all");
   const [preview, setPreview] = useState<number | null>(null);
   const [previewError, setPreviewError] = useState("");
@@ -100,15 +108,55 @@ export function BroadcastsPage() {
       });
   }, [audience]);
 
+  const onBroadcastFile = async (file: File | null) => {
+    if (!file || !canWrite) return;
+    setBroadcastUploadBusy(true);
+    setError("");
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      const uploaded = await apiUpload<{
+        media_type: WelcomeMediaType;
+        media_token: string;
+        media_filename: string;
+      }>("/api/admin/broadcasts/media", form);
+      setBroadcastMediaType(uploaded.media_type);
+      setBroadcastMediaToken(uploaded.media_token);
+      setBroadcastMediaFilename(uploaded.media_filename);
+      setMsg("Медиа для рассылки загружено в MAX");
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setBroadcastUploadBusy(false);
+      if (broadcastFileInputRef.current) broadcastFileInputRef.current.value = "";
+    }
+  };
+
+  const clearBroadcastMedia = () => {
+    setBroadcastMediaType("none");
+    setBroadcastMediaToken(null);
+    setBroadcastMediaFilename(null);
+  };
+
+  const canCreateDraft =
+    text.trim().length > 0 || (broadcastMediaType !== "none" && Boolean(broadcastMediaToken));
+
   const create = async () => {
     setError("");
     setMsg("");
     try {
       await apiFetch("/api/admin/broadcasts", {
         method: "POST",
-        body: JSON.stringify({ text, audience }),
+        body: JSON.stringify({
+          text,
+          audience,
+          media_type: broadcastMediaType,
+          media_token: broadcastMediaToken,
+          media_filename: broadcastMediaFilename,
+        }),
       });
       setText("");
+      clearBroadcastMedia();
       setMsg("Черновик рассылки создан");
       load();
     } catch (e) {
@@ -339,7 +387,8 @@ export function BroadcastsPage() {
           <li>Рассылка только пользователям, которые сами нажали «Старт» в боте (есть MAX ID).</li>
           <li>Не чаще 5 запусков рассылки в час; между сообщениями — пауза (~8/сек).</li>
           <li>Лимит API MAX — около 30 запросов/сек; при 429 рассылка ждёт и повторяет.</li>
-          <li>Текст до 4000 символов, без агрессивного спама и рекламы без согласия.</li>
+          <li>Текст до 4000 символов; можно добавить фото или видео над текстом (как в приветствии).</li>
+          <li>Медиа загружается в MAX до отправки; при ошибке «attachment.not.ready» бот повторит отправку.</li>
           <li>Сервисные сообщения (Pro, статус) — ок; массовые акции — редко и по делу.</li>
           <li>
             Webhook: подписка через API MAX (<code>POST /subscriptions</code>), не в ЛК. Секрет — в{" "}
@@ -364,17 +413,54 @@ export function BroadcastsPage() {
               Получателей в MAX: {previewError ? "—" : preview ?? "…"}
               {previewError && <span className="broadcasts-preview-error"> ({previewError})</span>}
             </p>
+            <div className="broadcasts-welcome-media">
+              <span className="broadcasts-field-label">Медиа над текстом</span>
+              <div className="broadcasts-media-toolbar">
+                <label className="btn-secondary broadcasts-file-btn">
+                  {broadcastUploadBusy ? "Загрузка…" : "Загрузить фото или видео"}
+                  <input
+                    ref={broadcastFileInputRef}
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm,video/quicktime"
+                    hidden
+                    disabled={broadcastUploadBusy}
+                    onChange={(e) => void onBroadcastFile(e.target.files?.[0] ?? null)}
+                  />
+                </label>
+                {broadcastMediaFilename && (
+                  <span className="broadcasts-media-name">
+                    {broadcastMediaType === "video" ? "🎬" : "🖼"} {broadcastMediaFilename}
+                  </span>
+                )}
+                {broadcastMediaToken && (
+                  <button
+                    type="button"
+                    className="btn-secondary btn-danger-outline"
+                    disabled={broadcastUploadBusy}
+                    onClick={clearBroadcastMedia}
+                  >
+                    Убрать медиа
+                  </button>
+                )}
+              </div>
+              <p className="hint">Фото или видео появится в MAX над текстом сообщения.</p>
+            </div>
             <label className="broadcasts-field broadcasts-field--wide">
               <span className="broadcasts-field-label">Текст рассылки</span>
               <textarea
                 rows={5}
                 value={text}
                 onChange={(e) => setText(e.target.value)}
-                placeholder="Текст сообщения в MAX"
+                placeholder="Текст сообщения в MAX (под медиа)"
                 maxLength={4096}
               />
             </label>
-            <button type="button" className="btn-primary" disabled={!text.trim()} onClick={() => void create()}>
+            <button
+              type="button"
+              className="btn-primary"
+              disabled={!canCreateDraft}
+              onClick={() => void create()}
+            >
               Создать черновик
             </button>
           </div>
@@ -429,6 +515,11 @@ export function BroadcastsPage() {
         {items.map((b) => (
           <div key={b.id} className="card broadcasts-history-item">
             <p className="broadcasts-history-text">{b.text}</p>
+            {b.media_type !== "none" && b.media_filename && (
+              <p className="hint broadcasts-history-media">
+                {b.media_type === "video" ? "Видео" : "Фото"}: {b.media_filename}
+              </p>
+            )}
             <p className="hint broadcasts-history-meta">
               {AUDIENCE_LABEL[b.audience] ?? b.audience} · {STATUS_LABEL[b.status] ?? b.status} · отправлено{" "}
               {b.sent_count} · ошибок {b.failed_count} · {new Date(b.created_at).toLocaleString("ru-RU")}

@@ -8,6 +8,7 @@ from app.core.config import get_settings
 from app.models.broadcast import Broadcast, BroadcastAudience, BroadcastLog, BroadcastLogStatus, BroadcastStatus
 from app.models.user import Plan, User
 from app.services.bot import MaxBotService
+from app.services.bot_media import max_bot_media_attachments
 from celery_app import celery
 
 BATCH_SIZE = 50
@@ -40,13 +41,16 @@ async def _send_broadcast_async(broadcast_id: str) -> None:
         users_result = await db.execute(q)
         users = users_result.scalars().all()
 
+        attachments = max_bot_media_attachments(broadcast.media_type, broadcast.media_token)
+        message_text = broadcast.text.strip() or " "
+
         sent = 0
         failed = 0
         for user in users:
-            result = await bot.send_message(user.max_user_id, broadcast.text)
+            result = await bot.send_message(user.max_user_id, message_text, attachments)
             if not result.ok and result.retry_after_sec:
                 await asyncio.sleep(result.retry_after_sec)
-                result = await bot.send_message(user.max_user_id, broadcast.text)
+                result = await bot.send_message(user.max_user_id, message_text, attachments)
 
             log = BroadcastLog(
                 broadcast_id=broadcast.id,

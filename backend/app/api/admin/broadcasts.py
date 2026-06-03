@@ -22,14 +22,10 @@ from app.schemas.admin import (
 )
 from app.services.admin_audit import log_admin_action
 from app.services.app_settings import get_setting, set_setting
-from app.services.bot import MaxBotService
+from app.services.bot_media import read_and_upload_max_media
 from app.workers.broadcast_tasks import send_broadcast_task
 
 router = APIRouter(prefix="/broadcasts", tags=["admin-broadcasts"])
-
-WELCOME_IMAGE_EXT = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
-WELCOME_VIDEO_EXT = {".mp4", ".mov", ".webm", ".m4v"}
-MAX_WELCOME_BYTES = 50 * 1024 * 1024
 
 
 async def _audience_count(db: AsyncSession, audience: BroadcastAudience) -> int:
@@ -115,38 +111,24 @@ async def upload_bot_welcome_media(
     admin: Annotated[AdminUser, Depends(require_permission("broadcasts:write"))],
     file: UploadFile = File(...),
 ):
-    filename = (file.filename or "media").lower()
-    ext = "." + filename.rsplit(".", 1)[-1] if "." in filename else ""
-    if ext in WELCOME_IMAGE_EXT:
-        media_type = "image"
-    elif ext in WELCOME_VIDEO_EXT:
-        media_type = "video"
-    else:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Поддерживаются изображения (jpg, png, webp, gif) и видео (mp4, mov, webm)",
-        )
-
-    data = await file.read()
-    if not data:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Пустой файл")
-    if len(data) > MAX_WELCOME_BYTES:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Файл больше 50 МБ")
-
-    bot = MaxBotService()
-    token = await bot.upload_media(data, filename, media_type)
-    if not token:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Не удалось загрузить файл в MAX. Проверьте BOT_TOKEN.",
-        )
+    media_type, token, filename = await read_and_upload_max_media(file)
 
     redis = await get_redis()
     await set_setting("bot_welcome_media_type", media_type, db, redis, admin.id)
     await set_setting("bot_welcome_media_token", token, db, redis, admin.id)
-    await set_setting("bot_welcome_media_filename", file.filename or filename, db, redis, admin.id)
+    await set_setting("bot_welcome_media_filename", filename, db, redis, admin.id)
 
-    return BotWelcomeMediaOut(media_type=media_type, media_token=token, media_filename=file.filename or filename)
+    return BotWelcomeMediaOut(media_type=media_type, media_token=token, media_filename=filename)
+
+
+@router.post("/media", response_model=BotWelcomeMediaOut)
+async def upload_broadcast_media(
+    _admin: Annotated[AdminUser, Depends(require_permission("broadcasts:write"))],
+    file: UploadFile = File(...),
+):
+    """Загрузить фото/видео в MAX для черновика рассылки (токен подставляется при создании)."""
+    media_type, token, filename = await read_and_upload_max_media(file)
+    return BotWelcomeMediaOut(media_type=media_type, media_token=token, media_filename=filename)
 
 
 @router.delete("/welcome/media")
@@ -187,7 +169,21 @@ async def create_broadcast(
     db: Annotated[AsyncSession, Depends(get_db)],
     admin: Annotated[AdminUser, Depends(require_permission("broadcasts:write"))],
 ):
-    broadcast = Broadcast(text=body.text, audience=body.audience, status=BroadcastStatus.DRAFT)
+    media_type = body.media_type if body.media_type in {"none", "image", "video"} else "none"
+    media_token = (body.media_token or "").strip() or None
+    media_filename = (body.media_filename or "").strip() or None
+    if media_type == "none":
+        media_token = None
+        media_filename = None
+
+    broadcast = Broadcast(
+        text=body.text.strip(),
+        audience=body.audience,
+        status=BroadcastStatus.DRAFT,
+        media_type=media_type,
+        media_token=media_token,
+        media_filename=media_filename,
+    )
     db.add(broadcast)
     await db.flush()
     await log_admin_action(
@@ -196,7 +192,12 @@ async def create_broadcast(
         action="broadcast.create",
         resource_type="broadcast",
         resource_id=str(broadcast.id),
-        details={"audience": body.audience.value, "text_len": len(body.text)},
+        details={
+            "audience": body.audience.value,
+            "text_len": len(body.text.strip()),
+            "media_type": media_type,
+            "has_media": bool(media_token),
+        },
         ip_address=request.client.host if request.client else None,
     )
     await db.flush()
