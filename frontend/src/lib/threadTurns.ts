@@ -6,6 +6,7 @@ import type {
   Source,
   EntityImage,
 } from "../api/client";
+import { answerHasText, normalizeAnswerText } from "./answerText";
 import { stripUserQueryDisplay } from "./userQueryDisplay";
 
 export type ThreadTurn = {
@@ -114,7 +115,7 @@ export function messagesToTurns(messages: Message[]): ThreadTurn[] {
         messageId: m.id,
         query: stripUserQueryDisplay(pendingUser.content),
         attachments: normalizeMessageAttachments(pendingUser.attachments),
-        answer: m.content,
+        answer: normalizeAnswerText(m.content),
         sources: m.sources ?? [],
         images: m.images ?? [],
         followUps: (m.follow_up_questions ?? []).slice(0, 3),
@@ -168,7 +169,7 @@ export function mergeThreadTurns(local: ThreadTurn[], api: ThreadTurn[]): Thread
 
   if (lastLocal.messageId) {
     const match = api.find((t) => t.key === lastLocal.messageId);
-    if (match?.answer.trim()) {
+    if (answerHasText(match?.answer)) {
       if (lastLocal.followUps.length > 0 && match.followUps.length === 0) {
         return preserveLocalMedia(
           api.map((t) =>
@@ -182,8 +183,8 @@ export function mergeThreadTurns(local: ThreadTurn[], api: ThreadTurn[]): Thread
 
   if (
     lastLocal.query === lastApi.query &&
-    !lastApi.answer.trim() &&
-    (lastLocal.answer.trim() || lastLocal.images.length > 0)
+    !answerHasText(lastApi.answer) &&
+    (answerHasText(lastLocal.answer) || lastLocal.images.length > 0)
   ) {
     return preserveLocalMedia([
       ...api.slice(0, -1),

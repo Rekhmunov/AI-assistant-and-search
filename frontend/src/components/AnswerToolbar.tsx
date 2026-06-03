@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { answerHasText } from "../lib/answerText";
 import { formatAnswerForDisplay } from "../lib/formatAnswer";
 import { buildCopyText, isProPlan } from "../lib/copyAttribution";
 import { t } from "../i18n";
@@ -14,7 +15,7 @@ export function AnswerToolbar({ answer, title }: Props) {
   const plan = useAuthStore((s) => s.user?.plan);
   const isPro = isProPlan(plan);
 
-  if (!answer.trim()) return null;
+  if (!answerHasText(answer)) return null;
 
   const plainAnswer = formatAnswerForDisplay(answer);
   const copyText = buildCopyText(plainAnswer, isPro);

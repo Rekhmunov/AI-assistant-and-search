@@ -36,6 +36,8 @@ import {
   countThreadImages,
   threadHasSearchTurns,
 } from "../lib/threadImageGroups";
+import { answerHasText, normalizeAnswerText } from "../lib/answerText";
+import { SEARCH_QUERY_MAX_LENGTH } from "../lib/searchQueryLimits";
 import { mergeThreadTurns, messagesToTurns, resolveAssistantMessageId, type ThreadTurn } from "../lib/threadTurns";
 import { useDesktopLayout } from "../hooks/useDesktopLayout";
 import { useAuthStore } from "../store/authStore";
@@ -65,7 +67,12 @@ function updateLastStreamingTurn(
   next[idx] = {
     ...current,
     ...patch,
-    answer: appendAnswer !== undefined ? current.answer + appendAnswer : (patch.answer ?? current.answer),
+    answer:
+      appendAnswer !== undefined
+        ? normalizeAnswerText(current.answer) + normalizeAnswerText(appendAnswer)
+        : patch.answer !== undefined
+          ? normalizeAnswerText(patch.answer)
+          : normalizeAnswerText(current.answer),
   };
   return next;
 }
@@ -77,7 +84,7 @@ function updateLastActiveTurn(
 ): ThreadTurn[] {
   const idx = findLastIndex(
     turns,
-    (turn) => turn.streaming || Boolean(turn.messageId) || Boolean(turn.answer.trim()),
+    (turn) => turn.streaming || Boolean(turn.messageId) || answerHasText(turn.answer),
   );
   if (idx < 0) return turns;
   const next = [...turns];
@@ -277,6 +284,23 @@ export function Thread() {
     ) => {
       if (!text.trim() && !attachmentIds.length) return;
       if (streamingRef.current) return;
+      if (text.length > SEARCH_QUERY_MAX_LENGTH) {
+        const pendingKey = `stream-${Date.now()}`;
+        setTurns((prev) => [
+          ...prev,
+          {
+            key: pendingKey,
+            query: text,
+            attachments: messageAttachments,
+            answer: `Запрос слишком длинный (${text.length} символов). Сократите текст до ${SEARCH_QUERY_MAX_LENGTH} символов или отправьте описание частями.`,
+            sources: [],
+            images: [],
+            followUps: [],
+            streaming: false,
+          },
+        ]);
+        return;
+      }
 
       setActiveTab("answer");
       const pendingKey = `stream-${Date.now()}`;
@@ -505,10 +529,10 @@ export function Thread() {
                   streaming: false,
                 };
               }
-              const keepAnswer = turn.answer.trim().length > 0;
+              const keepAnswer = answerHasText(turn.answer);
               return {
                 ...turn,
-                answer: keepAnswer ? turn.answer : msg,
+                answer: keepAnswer ? normalizeAnswerText(turn.answer) : normalizeAnswerText(msg),
                 streaming: false,
               };
             }),
@@ -571,7 +595,7 @@ export function Thread() {
 
   const lastCompletedIndex = findLastIndex(
     turns,
-    (turn) => !turn.streaming && turn.answer.trim(),
+    (turn) => !turn.streaming && answerHasText(turn.answer),
   );
 
   const showImagesTab = threadHasSearchTurns(turns);
@@ -637,10 +661,10 @@ export function Thread() {
               streaming &&
               !turn.errorCode &&
               (isDocumentGenTurn
-                ? !turn.answer.trim() && !turn.generatedDocument
+                ? !answerHasText(turn.answer) && !turn.generatedDocument
                 : isImageGenTurn
                   ? (turn.images?.length ?? 0) === 0
-                  : !turn.answer.trim());
+                  : !answerHasText(turn.answer));
             const showGuestLimit = turn.errorCode === "guest_rate_limit" || turn.errorCode === "rate_limit";
             const showFreeLimit = turn.errorCode === "free_rate_limit";
             const showImageGenPro = turn.errorCode === "free_image_gen_pro";
@@ -648,7 +672,7 @@ export function Thread() {
               showGuestLimit ||
               showFreeLimit ||
               showImageGenPro ||
-              Boolean(turn.answer.trim()) ||
+              answerHasText(turn.answer) ||
               Boolean(turn.generatedDocument) ||
               (turn.images?.length ?? 0) > 0 ||
               isActive;
@@ -682,7 +706,7 @@ export function Thread() {
                         <ImageGenProNotice />
                       ) : (
                         <AnswerBody
-                          text={turn.answer}
+                          text={normalizeAnswerText(turn.answer)}
                           sources={sources}
                           isStreaming={
                             isActive && streaming && !isImageGenTurn && !isDocumentGenTurn
@@ -712,9 +736,9 @@ export function Thread() {
                         )}
                       </div>
                     )}
-                    {(turn.answer.trim() || turn.generatedDocument || turn.markdownDocument) && (
+                    {(answerHasText(turn.answer) || turn.generatedDocument || turn.markdownDocument) && (
                       <AnswerFooter
-                        answer={turn.answer}
+                        answer={normalizeAnswerText(turn.answer)}
                         title={turn.query}
                         sources={sources}
                         messageId={resolveAssistantMessageId(turn)}

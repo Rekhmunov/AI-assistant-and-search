@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { GeneratedDocumentInfo, MessageFeedback, Source } from "../api/client";
 import { shareGeneratedDocument } from "./GeneratedDocumentCard";
+import { answerHasText } from "../lib/answerText";
 import { formatAnswerForDisplay } from "../lib/formatAnswer";
 import { buildCopyText, isProPlan } from "../lib/copyAttribution";
 import { t } from "../i18n";
@@ -36,7 +37,7 @@ export function AnswerFooter({
   const plan = useAuthStore((s) => s.user?.plan);
   const isPro = isProPlan(plan);
 
-  if (!answer.trim()) return null;
+  if (!answerHasText(answer)) return null;
 
   const plainAnswer = formatAnswerForDisplay(answer);
   const copyText = buildCopyText(plainAnswer, isPro);

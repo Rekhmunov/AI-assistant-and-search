@@ -863,7 +863,7 @@ export async function streamSearch(
     let msg = "Ошибка поиска";
     try {
       const err = await res.json();
-      msg = (err as { detail?: string }).detail || msg;
+      msg = formatApiErrorDetail(err, msg);
     } catch {
       /* ignore */
     }
@@ -936,9 +936,12 @@ export async function streamSearch(
               collapsible: Boolean(parsed.collapsible),
             });
             break;
-          case "token":
-            handlers.onToken?.(parsed.text);
+          case "token": {
+            const chunk = parsed.text;
+            if (typeof chunk === "string") handlers.onToken?.(chunk);
+            else if (chunk != null) handlers.onToken?.(String(chunk));
             break;
+          }
           case "reset_answer":
             handlers.onResetAnswer?.();
             break;
@@ -951,7 +954,12 @@ export async function streamSearch(
             break;
           case "error":
             gotError = true;
-            handlers.onError?.(parsed.message, parsed.code as string | undefined);
+            handlers.onError?.(
+              typeof parsed.message === "string"
+                ? parsed.message
+                : formatApiErrorDetail({ detail: parsed.message }, "Ошибка поиска"),
+              parsed.code as string | undefined,
+            );
             break;
         }
       }
