@@ -233,17 +233,6 @@ async def stream_document_generation_turn(
     for i in range(0, len(assistant_text), chunk_size):
         yield sse_event("token", {"text": assistant_text[i : i + chunk_size]})
 
-    yield sse_event(
-        "document_ready",
-        {
-            "file_id": str(file_id),
-            "filename": filename,
-            "download_url": download_url,
-            "share_url": share_path,
-            "ttl_hours": ttl_hours,
-        },
-    )
-
     assistant_msg = Message(
         thread_id=thread.id,
         role=MessageRole.ASSISTANT,
@@ -260,6 +249,17 @@ async def stream_document_generation_turn(
     if not thread_id:
         thread.title = display_content[:200]
     await db.commit()
+
+    yield sse_event(
+        "document_ready",
+        {
+            "file_id": str(file_id),
+            "filename": filename,
+            "download_url": download_url,
+            "share_url": share_path,
+            "ttl_hours": ttl_hours,
+        },
+    )
 
     await limiter.record_doc_gen_success(user_id_str, user)
     used_after, limit_after = await limiter.get_doc_gen_usage(user_id_str, user)

@@ -67,7 +67,10 @@ export async function shareGeneratedDocument(
 ): Promise<boolean> {
   const shareText = isPro ? undefined : t("shareDocumentGlosix");
   try {
-    const blob = await fetchFileContent(token, doc.id, { shareUrl: doc.share_url });
+    const blob = await fetchFileContent(token, doc.id, {
+      shareUrl: doc.share_url,
+      downloadUrl: doc.url,
+    });
     const file = new File([blob], doc.filename || "document.docx", {
       type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     });
