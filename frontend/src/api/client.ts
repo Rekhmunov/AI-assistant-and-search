@@ -1,4 +1,5 @@
 import { formatApiErrorDetail } from "../lib/apiErrorDetail";
+import { HttpResponseError, isAuthFailureStatus, isTransientFailureStatus } from "../lib/httpError";
 import { clearGuestSession, getGuestSessionHeader, saveGuestSession } from "../lib/guestSession";
 
 const API_BASE = import.meta.env.VITE_API_URL || "";
@@ -113,21 +114,36 @@ function apiHeaders(token: string | null, json = true): HeadersInit {
   return h;
 }
 
+function serverUnavailableMessage(status: number): string | null {
+  if (status === 500 || status === 502 || status === 503 || status === 504) {
+    return "Сервер временно недоступен. Попробуйте через минуту.";
+  }
+  return null;
+}
+
 async function parseAuthError(res: Response): Promise<string> {
   const fallback =
-    res.status === 500
-      ? "Сервер временно недоступен. Попробуйте через минуту."
-      : res.status === 403
-        ? "Запрос отклонён. Откройте сайт с официального адреса glosix.ru."
-        : res.status === 429
-          ? "Слишком много попыток. Попробуйте позже."
-          : "Ошибка авторизации";
+    serverUnavailableMessage(res.status) ??
+    (res.status === 403
+      ? "Запрос отклонён. Откройте сайт с официального адреса glosix.ru."
+      : res.status === 429
+        ? "Слишком много попыток. Попробуйте позже."
+        : "Ошибка авторизации");
   try {
     const body = await res.json();
-    return formatApiErrorDetail(body, fallback);
+    const text = formatApiErrorDetail(body, fallback);
+    if (serverUnavailableMessage(res.status) && text === "Ошибка авторизации") {
+      return serverUnavailableMessage(res.status)!;
+    }
+    return text;
   } catch {
     return `${fallback} (код ${res.status})`;
   }
+}
+
+async function throwHttpError(res: Response, parse: (r: Response) => Promise<string>): Promise<never> {
+  const message = await parse(res);
+  throw new HttpResponseError(message, res.status);
 }
 
 export async function loginWithInitData(initData: string): Promise<{ access_token: string; user: UserProfile }> {
@@ -137,7 +153,7 @@ export async function loginWithInitData(initData: string): Promise<{ access_toke
     credentials: "include",
     body: JSON.stringify({ init_data: initData }),
   });
-  if (!res.ok) throw new Error(await parseAuthError(res));
+  if (!res.ok) await throwHttpError(res, parseAuthError);
   return res.json();
 }
 
@@ -151,7 +167,7 @@ export async function loginEmail(
     credentials: "include",
     body: JSON.stringify({ email, password }),
   });
-  if (!res.ok) throw new Error(await parseAuthError(res));
+  if (!res.ok) await throwHttpError(res, parseAuthError);
   return res.json();
 }
 
@@ -166,7 +182,7 @@ export async function registerEmail(
     credentials: "include",
     body: JSON.stringify({ email, password, first_name: firstName || null }),
   });
-  if (!res.ok) throw new Error(await parseAuthError(res));
+  if (!res.ok) await throwHttpError(res, parseAuthError);
   return res.json();
 }
 
@@ -184,7 +200,7 @@ export async function changePassword(
       new_password: newPassword,
     }),
   });
-  if (!res.ok) throw new Error(await parseAuthError(res));
+  if (!res.ok) await throwHttpError(res, parseAuthError);
   return res.json();
 }
 
@@ -200,7 +216,7 @@ export async function bindEmail(
     credentials: "include",
     body: JSON.stringify({ email, password, first_name: firstName }),
   });
-  if (!res.ok) throw new Error(await parseAuthError(res));
+  if (!res.ok) await throwHttpError(res, parseAuthError);
   return res.json();
 }
 
@@ -211,7 +227,7 @@ export async function bindMax(token: string, initData: string): Promise<UserProf
     credentials: "include",
     body: JSON.stringify({ init_data: initData }),
   });
-  if (!res.ok) throw new Error(await parseAuthError(res));
+  if (!res.ok) await throwHttpError(res, parseAuthError);
   return res.json();
 }
 
@@ -221,7 +237,7 @@ export async function startBindMax(token: string): Promise<{ bind_token: string;
     headers: apiHeaders(token),
     credentials: "include",
   });
-  if (!res.ok) throw new Error(await parseAuthError(res));
+  if (!res.ok) await throwHttpError(res, parseAuthError);
   return res.json();
 }
 
@@ -235,7 +251,7 @@ export async function completeBindMax(
     credentials: "include",
     body: JSON.stringify({ bind_token: bindToken, init_data: initData }),
   });
-  if (!res.ok) throw new Error(await parseAuthError(res));
+  if (!res.ok) await throwHttpError(res, parseAuthError);
   return res.json();
 }
 
@@ -244,7 +260,10 @@ export async function fetchSession(token: string | null): Promise<SessionStatus>
     headers: apiHeaders(token),
     credentials: "include",
   });
-  if (!res.ok) throw new Error("Failed to load session");
+  if (!res.ok) {
+    const msg = serverUnavailableMessage(res.status) ?? "Failed to load session";
+    throw new HttpResponseError(msg, res.status);
+  }
   return res.json();
 }
 
@@ -253,7 +272,9 @@ export async function logoutSession(): Promise<void> {
     method: "POST",
     credentials: "include",
   });
-  if (!res.ok) throw new Error(await parseAuthError(res));
+  if (!res.ok && !isTransientFailureStatus(res.status)) {
+    await throwHttpError(res, parseAuthError);
+  }
 }
 
 export async function refreshAccessToken(): Promise<{ access_token: string }> {
@@ -261,7 +282,7 @@ export async function refreshAccessToken(): Promise<{ access_token: string }> {
     method: "POST",
     credentials: "include",
   });
-  if (!res.ok) throw new Error(await parseAuthError(res));
+  if (!res.ok) await throwHttpError(res, parseAuthError);
   return res.json();
 }
 
@@ -279,7 +300,10 @@ export async function fetchMe(token: string): Promise<UserProfile> {
     headers: apiHeaders(token),
     credentials: "include",
   });
-  if (!res.ok) throw new Error("Failed to load profile");
+  if (!res.ok) {
+    const msg = serverUnavailableMessage(res.status) ?? "Failed to load profile";
+    throw new HttpResponseError(msg, res.status);
+  }
   return res.json();
 }
 

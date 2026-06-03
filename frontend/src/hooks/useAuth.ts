@@ -14,7 +14,32 @@ import {
   parseMaxBindToken,
   setMaxBindError,
 } from "../lib/maxApp";
+import { HttpResponseError, isAuthFailureStatus, isTransientFailureStatus } from "../lib/httpError";
 import { useAuthStore } from "../store/authStore";
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+async function refreshAccessTokenWithRetry(): Promise<string> {
+  let last: unknown;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const { access_token } = await refreshAccessToken();
+      return access_token;
+    } catch (err) {
+      last = err;
+      if (
+        err instanceof HttpResponseError &&
+        isTransientFailureStatus(err.status) &&
+        attempt < 2
+      ) {
+        await sleep(1500);
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw last;
+}
 
 /** JWT, then MAX deeplink bind, then MAX initData login, else guest-ready web session. */
 export function useAuthBootstrap() {
@@ -53,15 +78,24 @@ export function useAuthBootstrap() {
           try {
             const session = await fetchSession(null);
             if (session.authenticated && session.user) {
-              const refreshed = await refreshAccessToken();
-              accessToken = refreshed.access_token;
-              if (!cancelled) {
-                useAuthStore.getState().setToken(accessToken);
-                useAuthStore.getState().setUser(session.user);
+              try {
+                accessToken = await refreshAccessTokenWithRetry();
+                if (!cancelled) {
+                  useAuthStore.getState().setToken(accessToken);
+                  useAuthStore.getState().setUser(session.user);
+                }
+              } catch (err) {
+                if (
+                  err instanceof HttpResponseError &&
+                  isTransientFailureStatus(err.status) &&
+                  !cancelled
+                ) {
+                  useAuthStore.getState().setUser(session.user);
+                }
               }
             }
           } catch {
-            /* no refresh session */
+            /* session unavailable */
           }
         }
 
@@ -74,13 +108,18 @@ export function useAuthBootstrap() {
               setReady(true);
             }
             return;
-          } catch {
-            try {
-              await logoutSession();
-            } catch {
-              /* ignore */
+          } catch (err) {
+            if (err instanceof HttpResponseError && isAuthFailureStatus(err.status)) {
+              try {
+                await logoutSession();
+              } catch {
+                /* ignore */
+              }
+              if (!cancelled) clear();
+            } else if (!cancelled) {
+              setReady(true);
             }
-            clear();
+            return;
           }
         }
 
