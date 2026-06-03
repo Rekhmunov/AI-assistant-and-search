@@ -5,6 +5,7 @@ def test_wants_document_generation_positive():
     assert wants_document_generation("Составь договор купли-продажи квартиры")
     assert wants_document_generation("Сделай заявление на отпуск")
     assert wants_document_generation("Оформи документ word с планом проекта")
+    assert wants_document_generation("Сгенерируй публичную оферту для Glosix")
 
 
 def test_wants_document_generation_negative():

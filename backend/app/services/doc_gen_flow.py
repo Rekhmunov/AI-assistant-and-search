@@ -17,6 +17,7 @@ from app.models.message import Message, MessageRole
 from app.models.thread import Thread
 from app.models.user import Plan, User
 from app.services.app_settings import get_setting
+from app.services.doc_gen_context import build_doc_gen_user_message
 from app.services.doc_gen_llm import generate_document_structure
 from app.services.doc_gen_routing import resolve_output_format
 from app.services.doc_gen_schema import DocumentStructureError
@@ -121,6 +122,8 @@ async def stream_document_generation_turn(
     llm, _, _, _, _ = await resolve_runtime_providers(db, redis_client, user=user)
     answer_model = "pro" if user.plan == Plan.PRO else "lite"
 
+    prior_messages: list[Message] = []
+
     if thread_id:
         result = await db.execute(
             select(Thread).where(
@@ -133,10 +136,18 @@ async def stream_document_generation_turn(
         if not thread:
             yield sse_event("error", {"code": "not_found", "message": "Тред не найден"})
             return
+        msg_result = await db.execute(
+            select(Message)
+            .where(Message.thread_id == thread.id)
+            .order_by(Message.created_at.asc())
+        )
+        prior_messages = list(msg_result.scalars().all())
     else:
         thread = Thread(user_id=user.id, title=display_content[:200])
         db.add(thread)
         await db.flush()
+
+    doc_gen_prompt = build_doc_gen_user_message(display_content, prior_messages)
 
     user_msg = Message(thread_id=thread.id, role=MessageRole.USER, content=display_content)
     db.add(user_msg)
@@ -164,7 +175,7 @@ async def stream_document_generation_turn(
         structure_task = asyncio.create_task(
             generate_document_structure(
                 llm,
-                display_content,
+                doc_gen_prompt,
                 answer_model=answer_model,
             )
         )
