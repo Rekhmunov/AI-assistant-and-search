@@ -21,8 +21,10 @@
   --sidebar-width: 220px;
   --desktop-nav-min: 900px;
   --desktop-search-max-width: min(2160px, calc(100vw - var(--sidebar-width) - 48px));
-  /* Веб: узкая колонка треда по центру (~70% ширины области чата) */
+  /* Веб: колонка треда по центру (вопрос / ответ / composer) */
   --desktop-thread-column-width: 70%;
+  /* Composer: fixed-бар чуть уже области .page из‑за padding — 80% визуально совпадает с колонкой 70% */
+  --desktop-thread-composer-width: 80%;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   color: var(--text);
   background: var(--bg);
@@ -4170,7 +4172,13 @@ body:has(.page-thread) {
     margin-right: auto;
   }
 
-  /* Тред с сообщениями: composer в той же колонке 70%, что вопрос и ответ */
+  /* Тред: без боковых padding у .page — та же база ширины, что у fixed composer */
+  .page-thread.page {
+    padding-left: 0;
+    padding-right: 0;
+  }
+
+  /* Тред с сообщениями: composer по ширине совпадает с колонкой вопроса/ответа */
   .page-thread:has(.thread-turn) .composer-wrap--docked {
     display: flex;
     flex-direction: column;
@@ -4182,10 +4190,11 @@ body:has(.page-thread) {
   .page-thread:has(.thread-turn) .composer-wrap--docked .composer-outer-row,
   .page-thread:has(.thread-turn) .composer-wrap--docked .composer-error-wrap,
   .page-thread:has(.thread-turn) .composer-wrap--docked .search-composer {
-    width: var(--desktop-thread-column-width);
-    max-width: var(--desktop-thread-column-width);
+    width: var(--desktop-thread-composer-width);
+    max-width: var(--desktop-thread-composer-width);
     margin-left: auto;
     margin-right: auto;
+    box-sizing: border-box;
   }
 
   .page-thread:not(:has(.thread-turn)) .composer-wrap--docked .composer-outer-row,
