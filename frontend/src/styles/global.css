@@ -2288,6 +2288,8 @@ body:has(.page-thread) {
 
 .answer-section {
   margin-bottom: 16px;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .answer-section .answer {
@@ -2416,6 +2418,8 @@ body:has(.page-thread) {
 
 .markdown-document-block {
   margin: 12px 0;
+  max-width: 100%;
+  min-width: 0;
   border-radius: 10px;
   border: 1px solid var(--border);
   background: var(--surface-hover);
@@ -2449,7 +2453,10 @@ body:has(.page-thread) {
 }
 
 .markdown-document-body {
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
+  max-width: 100%;
+  -webkit-overflow-scrolling: touch;
 }
 
 .markdown-document-body--collapsed {
@@ -2460,10 +2467,14 @@ body:has(.page-thread) {
 .markdown-document-pre {
   margin: 0;
   padding: 12px 14px;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 0.8125rem;
   line-height: 1.55;
   white-space: pre-wrap;
+  overflow-wrap: anywhere;
   word-break: break-word;
   color: var(--text);
 }
