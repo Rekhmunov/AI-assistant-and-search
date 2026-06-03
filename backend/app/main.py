@@ -1,6 +1,8 @@
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.exception_handlers import request_validation_exception_handler
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
@@ -61,9 +63,16 @@ def create_app() -> FastAPI:
 
     app.include_router(api_router)
 
+    @app.exception_handler(RequestValidationError)
+    async def validation_exception(request: Request, exc: RequestValidationError):
+        return await request_validation_exception_handler(request, exc)
+
     @app.exception_handler(Exception)
     async def unhandled_exception(request: Request, exc: Exception):
         from starlette.exceptions import HTTPException as StarletteHTTPException
+
+        if isinstance(exc, RequestValidationError):
+            return await request_validation_exception_handler(request, exc)
 
         if isinstance(exc, StarletteHTTPException):
             detail = exc.detail

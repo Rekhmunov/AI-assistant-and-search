@@ -331,7 +331,13 @@ async def register_email(
         schema_err = _db_schema_error(exc)
         if schema_err:
             raise schema_err from exc
-        raise
+        import logging
+
+        logging.getLogger(__name__).exception("register_email failed")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Не удалось зарегистрироваться. Попробуйте позже.",
+        ) from exc
 
 
 @router.post("/email-login", response_model=AuthResponse)

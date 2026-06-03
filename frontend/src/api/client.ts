@@ -1,3 +1,4 @@
+import { formatApiErrorDetail } from "../lib/apiErrorDetail";
 import { clearGuestSession, getGuestSessionHeader, saveGuestSession } from "../lib/guestSession";
 
 const API_BASE = import.meta.env.VITE_API_URL || "";
@@ -113,11 +114,19 @@ function apiHeaders(token: string | null, json = true): HeadersInit {
 }
 
 async function parseAuthError(res: Response): Promise<string> {
+  const fallback =
+    res.status === 500
+      ? "Сервер временно недоступен. Попробуйте через минуту."
+      : res.status === 403
+        ? "Запрос отклонён. Откройте сайт с официального адреса glosix.ru."
+        : res.status === 429
+          ? "Слишком много попыток. Попробуйте позже."
+          : "Ошибка авторизации";
   try {
     const body = await res.json();
-    return (body as { detail?: string }).detail || "Ошибка авторизации";
+    return formatApiErrorDetail(body, fallback);
   } catch {
-    return "Ошибка авторизации";
+    return `${fallback} (код ${res.status})`;
   }
 }
 
@@ -138,7 +147,7 @@ export async function loginEmail(
 ): Promise<{ access_token: string; user: UserProfile }> {
   const res = await fetch(`${API_BASE}/api/auth/email-login`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: apiHeaders(null),
     credentials: "include",
     body: JSON.stringify({ email, password }),
   });
@@ -153,9 +162,9 @@ export async function registerEmail(
 ): Promise<{ access_token: string; user: UserProfile }> {
   const res = await fetch(`${API_BASE}/api/auth/register`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: apiHeaders(null),
     credentials: "include",
-    body: JSON.stringify({ email, password, first_name: firstName }),
+    body: JSON.stringify({ email, password, first_name: firstName || null }),
   });
   if (!res.ok) throw new Error(await parseAuthError(res));
   return res.json();
