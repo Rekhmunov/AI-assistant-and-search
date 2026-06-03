@@ -526,6 +526,18 @@ export async function fetchFileMeta(
   return res.json();
 }
 
+/** Бинарник файла с cookie/Bearer — для превью в чате (обычный img без Authorization не грузит). */
+export async function fetchFileContent(token: string | null, fileId: string): Promise<Blob> {
+  const res = await fetch(`${API_BASE}/api/files/${fileId}/content`, {
+    headers: apiHeaders(token, false),
+    credentials: "include",
+  });
+  if (!res.ok) {
+    throw new Error("Не удалось загрузить файл");
+  }
+  return res.blob();
+}
+
 export type VoiceClientReportPayload = {
   event: string;
   bytes?: number;

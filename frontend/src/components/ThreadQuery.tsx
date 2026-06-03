@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { MessageAttachment } from "../api/client";
 import { useDesktopLayout } from "../hooks/useDesktopLayout";
 import { t } from "../i18n";
+import { stripUserQueryDisplay } from "../lib/userQueryDisplay";
 import { ThreadQueryAttachments } from "./ThreadQueryAttachments";
 
 type Props = {
@@ -12,6 +13,7 @@ type Props = {
 const LONG_PRESS_MS = 450;
 
 export function ThreadQuery({ query, attachments = [] }: Props) {
+  const displayQuery = stripUserQueryDisplay(query);
   const isDesktop = useDesktopLayout();
   const [menuOpen, setMenuOpen] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -38,9 +40,9 @@ export function ThreadQuery({ query, attachments = [] }: Props) {
   };
 
   const copyQuery = async () => {
-    if (!query.trim()) return;
+    if (!displayQuery.trim()) return;
     try {
-      await navigator.clipboard.writeText(query);
+      await navigator.clipboard.writeText(displayQuery);
       setCopied(true);
       window.setTimeout(() => {
         setCopied(false);
@@ -70,7 +72,7 @@ export function ThreadQuery({ query, attachments = [] }: Props) {
     return (
       <div className="thread-query-block">
         <div className="thread-query">
-          <p className="thread-query-text">{query}</p>
+          <p className="thread-query-text">{displayQuery}</p>
         </div>
         {chips}
       </div>
@@ -99,7 +101,7 @@ export function ThreadQuery({ query, attachments = [] }: Props) {
           setMenuOpen(true);
         }}
       >
-        <span className="thread-query-text">{query}</span>
+        <span className="thread-query-text">{displayQuery}</span>
       </div>
 
       {menuOpen && (

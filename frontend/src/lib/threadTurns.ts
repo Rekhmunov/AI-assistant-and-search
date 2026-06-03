@@ -1,4 +1,5 @@
 import type { Message, MessageAttachment, MessageFeedback, Source, EntityImage } from "../api/client";
+import { stripUserQueryDisplay } from "./userQueryDisplay";
 
 export type ThreadTurn = {
   key: string;
@@ -31,6 +32,21 @@ function normalizeMessageAttachments(
   }));
 }
 
+/** После refetch API-URL важнее отозванного blob previewUrl. */
+function mergeTurnAttachments(
+  api: MessageAttachment[],
+  local: MessageAttachment[] | undefined,
+): MessageAttachment[] {
+  if (!api.length) return local ?? [];
+  if (!local?.length) return api;
+  return api.map((item) => {
+    const prev = local.find((p) => p.id === item.id);
+    const url = item.url || prev?.url;
+    const previewUrl = url ? undefined : prev?.previewUrl;
+    return { ...item, url, previewUrl };
+  });
+}
+
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -57,7 +73,7 @@ export function messagesToTurns(messages: Message[]): ThreadTurn[] {
       turns.push({
         key: m.id,
         messageId: m.id,
-        query: pendingUser.content,
+        query: stripUserQueryDisplay(pendingUser.content),
         attachments: normalizeMessageAttachments(pendingUser.attachments),
         answer: m.content,
         sources: m.sources ?? [],
@@ -73,7 +89,7 @@ export function messagesToTurns(messages: Message[]): ThreadTurn[] {
   if (pendingUser) {
     turns.push({
       key: pendingUser.id,
-      query: pendingUser.content,
+      query: stripUserQueryDisplay(pendingUser.content),
       attachments: normalizeMessageAttachments(pendingUser.attachments),
       answer: "",
       sources: [],
@@ -100,7 +116,7 @@ export function mergeThreadTurns(local: ThreadTurn[], api: ThreadTurn[]): Thread
         ...turn,
         images: turn.images?.length ? turn.images : prev.images,
         sources: turn.sources?.length ? turn.sources : prev.sources,
-        attachments: turn.attachments?.length ? turn.attachments : prev.attachments,
+        attachments: mergeTurnAttachments(turn.attachments, prev.attachments),
       };
     });
 

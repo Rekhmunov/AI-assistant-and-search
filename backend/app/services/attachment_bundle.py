@@ -75,7 +75,6 @@ async def resolve_attachment_bundle(
         raise ValueError("attachment_expired")
 
     files = [by_id[fid] for fid in attachment_ids]
-    names = [f.filename for f in files]
     parts = [query]
     vision_images: list[VisionImage] = []
     budget = MAX_TOTAL_ATTACHMENT_CHARS
@@ -117,7 +116,8 @@ async def resolve_attachment_bundle(
             raise ValueError("attachment_empty")
 
     llm_query = "\n".join(parts)
-    display = f"{query}\n\n[Файлы: {', '.join(names)}]" if names else query
+    # В UI имена файлов показываются чипами вложений; в текст вопроса маркер не дублируем.
+    display = query
     return AttachmentBundle(
         llm_query=llm_query,
         display_query=display,

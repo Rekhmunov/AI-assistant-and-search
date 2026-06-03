@@ -129,4 +129,47 @@ describe("mergeThreadTurns", () => {
     const merged = mergeThreadTurns(local, api);
     expect(merged[0].images).toEqual(images);
   });
+
+  it("prefers API attachment url over revoked blob previewUrl", () => {
+    const local: ThreadTurn[] = [
+      {
+        key: "msg-1",
+        query: "вопрос",
+        attachments: [
+          {
+            id: "f1",
+            filename: "a.jpg",
+            kind: "image",
+            previewUrl: "blob:http://localhost/abc",
+          },
+        ],
+        answer: "ответ",
+        sources: [],
+        images: [],
+        followUps: [],
+      },
+    ];
+    const api: ThreadTurn[] = [
+      {
+        key: "msg-1",
+        query: "вопрос",
+        attachments: [
+          {
+            id: "f1",
+            filename: "a.jpg",
+            kind: "image",
+            url: "https://glosix.ru/api/files/f1/content",
+          },
+        ],
+        answer: "ответ",
+        sources: [],
+        images: [],
+        followUps: [],
+      },
+    ];
+
+    const merged = mergeThreadTurns(local, api);
+    expect(merged[0].attachments[0].url).toBe("https://glosix.ru/api/files/f1/content");
+    expect(merged[0].attachments[0].previewUrl).toBeUndefined();
+  });
 });
