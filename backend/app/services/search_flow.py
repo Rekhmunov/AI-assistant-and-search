@@ -327,7 +327,13 @@ class SearchFlowService:
         route = await self.router.route(llm_query, thread_ctx, has_attachments, user.plan)
         if not vision_only_answer and not hybrid_vision_search and not image_display_request:
             if flow.flow == "chat":
-                route.needs_search = False
+                # Галерея сущностей (Yandex Image) грузится только при needs_search.
+                if not has_attachments and wants_entity_images(
+                    user_text, intent=str(route.intent)
+                ):
+                    route.needs_search = flow.needs_search or True
+                else:
+                    route.needs_search = False
                 route.reason = f"llm_flow:{flow.reason}"
             elif flow.flow == "search_rag":
                 route.needs_search = flow.needs_search
