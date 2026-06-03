@@ -59,14 +59,13 @@ services:
       redis:
         condition: service_healthy
     command: >
-      sh -c "alembic upgrade head &&
-             uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2"
+      sh -c "uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-      interval: 30s
+      interval: 15s
       timeout: 10s
-      retries: 3
-      start_period: 40s
+      retries: 5
+      start_period: 90s
     volumes:
       - upload_data:/data/uploads
     networks:

@@ -29,17 +29,29 @@ fi
 
 _wait_backend_health() {
   local label="$1"
-  for i in $(seq 1 60); do
-    if $COMPOSE exec -T backend curl -sf http://127.0.0.1:8000/health >/dev/null 2>&1; then
-      echo "    ${label}: backend /health OK (${i}×2s)"
+  local max_attempts="${2:-45}"
+  echo "    ${label}: ждём backend /health (до $((max_attempts * 2)) с)…"
+  for i in $(seq 1 "$max_attempts"); do
+    if $COMPOSE exec -T backend curl -sf --max-time 5 http://127.0.0.1:8000/health >/dev/null 2>&1; then
+      echo "    ${label}: backend /health OK (~$((i * 2)) с)"
       return 0
     fi
-    if [ "$i" -eq 60 ]; then
-      echo "    ${label}: backend /health FAIL — $COMPOSE logs backend --tail 50"
+    if [ $((i % 5)) -eq 0 ]; then
+      local st
+      st="$($COMPOSE ps backend --format '{{.Status}}' 2>/dev/null | head -1 || echo unknown)"
+      echo "    … ${label}: попытка ${i}/${max_attempts}, статус: ${st}"
+    fi
+    if [ "$i" -eq "$max_attempts" ]; then
+      echo "    ${label}: backend /health FAIL"
+      $COMPOSE logs backend --tail 50
       return 1
     fi
     sleep 2
   done
+}
+
+_backend_health_ok() {
+  $COMPOSE exec -T backend curl -sf --max-time 5 http://127.0.0.1:8000/health >/dev/null 2>&1
 }
 
 echo "==> Glosix update-prod (main) @ $(pwd)"
@@ -93,21 +105,25 @@ $COMPOSE up -d --remove-orphans
 if grep -qE '^(ANTHROPIC_API_KEY|DEEPSEEK_API_KEY|GIGACHAT_CREDENTIALS|PERPLEXITY_API_KEY)=.+' .env 2>/dev/null; then
   echo "==> API keys в .env — пересоздаём backend/worker (подхват ключей LLM)"
   $COMPOSE up -d --force-recreate backend worker
-  if ! _wait_backend_health "after API keys recreate"; then
+fi
+
+if ! _backend_health_ok; then
+  if ! _wait_backend_health "backend startup" 45; then
     exit 1
   fi
 fi
 
+echo "==> Alembic migrations"
+$COMPOSE exec -T backend alembic upgrade head
+
 echo "==> Recreate frontend, admin, nginx (новый JS и upstream IP; иначе 502 на admin)"
 $COMPOSE up -d --force-recreate frontend admin nginx
 
-echo "==> Wait for backend (alembic + uvicorn in container startup)"
-if ! _wait_backend_health "startup"; then
-  exit 1
+if ! _backend_health_ok; then
+  if ! _wait_backend_health "after nginx recreate" 30; then
+    exit 1
+  fi
 fi
-
-echo "==> Alembic migrations (exec; обычно no-op если startup уже применил)"
-$COMPOSE exec -T backend alembic upgrade head
 
 echo "==> Cleanup expired uploads (optional)"
 $COMPOSE exec -T backend python scripts/cleanup_uploads.py 2>/dev/null || true
