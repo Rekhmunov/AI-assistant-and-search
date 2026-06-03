@@ -80,8 +80,8 @@ if grep -qE '^(ANTHROPIC_API_KEY|DEEPSEEK_API_KEY|GIGACHAT_CREDENTIALS|PERPLEXIT
   $COMPOSE up -d --force-recreate backend worker
 fi
 
-echo "==> Recreate frontend + nginx (новый JS и upstream IP)"
-$COMPOSE up -d --force-recreate frontend nginx
+echo "==> Recreate frontend, admin, nginx (новый JS и upstream IP; иначе 502 на admin)"
+$COMPOSE up -d --force-recreate frontend admin nginx
 
 echo "==> Alembic migrations"
 $COMPOSE exec -T backend alembic upgrade head
@@ -134,10 +134,21 @@ fi
 echo "    app (${APP_HOST_CHECK}): HTTP ${APP_CODE}"
 echo "    admin (${ADMIN_HOST_CHECK}): HTTP ${ADMIN_CODE} ${ADMIN_TITLE}"
 
+if [ "${ADMIN_CODE}" != "200" ]; then
+  echo "ERROR: admin недоступен (HTTP ${ADMIN_CODE}) — часто 502 после обновления без пересоздания admin/nginx"
+  echo "       $COMPOSE ps admin nginx"
+  echo "       $COMPOSE logs admin --tail 30"
+  echo "       bash scripts/fix-docker-admin-502.sh"
+  exit 1
+fi
+
 if echo "${ADMIN_TITLE:-}" | grep -qi 'Glosix Admin'; then
   echo "    admin: OK (Glosix Admin)"
 elif echo "${ADMIN_TITLE:-}" | grep -qi Glosix; then
   echo "ERROR: admin отдаёт frontend (Glosix) — проверьте server_name admin в nginx.prod.conf"
+  exit 1
+else
+  echo "ERROR: admin не отдаёт Glosix Admin — проверьте контейнер admin и nginx.prod.conf (resolver 127.0.0.11)"
   exit 1
 fi
 
