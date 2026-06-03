@@ -16,6 +16,7 @@
   "attachCamera": "Сделать снимок",
   "attachProcessing": "Обработка…",
   "attachRemove": "Удалить",
+  "openAttachmentImage": "Открыть изображение",
   "attachLimit": "Не более {n} файлов за раз",
   "attachUploadFailed": "Не удалось загрузить файл",
   "voiceInput": "Голосовой ввод",
