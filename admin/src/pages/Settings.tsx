@@ -385,6 +385,54 @@ export function SettingsPage() {
                 </span>
               </label>
               <label>
+                Гостевых генераций документов (за жизнь)
+                <input
+                  type="number"
+                  min={0}
+                  value={String(settings.guest_doc_gens_lifetime ?? "")}
+                  onChange={(e) =>
+                    setSettings({ ...settings, guest_doc_gens_lifetime: e.target.value })
+                  }
+                  disabled={!can("settings:write")}
+                />
+              </label>
+              <label>
+                Free генераций документов / день
+                <input
+                  type="number"
+                  min={0}
+                  value={String(settings.free_doc_gens_per_day ?? "")}
+                  onChange={(e) =>
+                    setSettings({ ...settings, free_doc_gens_per_day: e.target.value })
+                  }
+                  disabled={!can("settings:write")}
+                />
+              </label>
+              <label>
+                Pro генераций документов / день
+                <input
+                  type="number"
+                  min={0}
+                  value={String(settings.pro_doc_gens_per_day ?? "")}
+                  onChange={(e) =>
+                    setSettings({ ...settings, pro_doc_gens_per_day: e.target.value })
+                  }
+                  disabled={!can("settings:write")}
+                />
+              </label>
+              <label>
+                Хранение сгенерированных документов (часов)
+                <input
+                  type="number"
+                  min={1}
+                  value={String(settings.generated_doc_ttl_hours ?? "")}
+                  onChange={(e) =>
+                    setSettings({ ...settings, generated_doc_ttl_hours: e.target.value })
+                  }
+                  disabled={!can("settings:write")}
+                />
+              </label>
+              <label>
                 Pro генераций картинок / день
                 <input
                   type="number"

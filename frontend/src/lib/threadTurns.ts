@@ -14,7 +14,11 @@ export type ThreadTurn = {
   needsSearch?: boolean;
   /** Генерация изображения (GigaChat text2image), не веб-поиск */
   isImageGen?: boolean;
+  /** Генерация Word-документа */
+  isDocumentGen?: boolean;
   userFeedback?: MessageFeedback | null;
+  /** Сгенерированный .docx на ответе ассистента */
+  generatedDocument?: MessageAttachment | null;
   streaming?: boolean;
   errorCode?: string;
 };
@@ -29,7 +33,15 @@ function normalizeMessageAttachments(
     kind: a.kind === "image" ? "image" : "document",
     url: a.url ?? undefined,
     previewUrl: a.previewUrl,
+    share_url: a.share_url ?? undefined,
+    ttl_hours: a.ttl_hours ?? undefined,
   }));
+}
+
+function pickGeneratedDocument(raw: Message["attachments"] | undefined): MessageAttachment | null {
+  const items = normalizeMessageAttachments(raw);
+  const doc = items.find((a) => a.kind === "document" && (a.url || a.share_url));
+  return doc ?? null;
 }
 
 /** После refetch API-URL важнее отозванного blob previewUrl. */
@@ -81,6 +93,7 @@ export function messagesToTurns(messages: Message[]): ThreadTurn[] {
         followUps: (m.follow_up_questions ?? []).slice(0, 3),
         needsSearch: (m.sources?.length ?? 0) > 0 || (m.images?.length ?? 0) > 0,
         userFeedback: m.user_feedback ?? null,
+        generatedDocument: pickGeneratedDocument(m.attachments),
       });
       pendingUser = null;
     }
@@ -117,6 +130,7 @@ export function mergeThreadTurns(local: ThreadTurn[], api: ThreadTurn[]): Thread
         images: turn.images?.length ? turn.images : prev.images,
         sources: turn.sources?.length ? turn.sources : prev.sources,
         attachments: mergeTurnAttachments(turn.attachments, prev.attachments),
+        generatedDocument: turn.generatedDocument ?? prev.generatedDocument,
       };
     });
 

@@ -33,6 +33,8 @@ class MessageAttachmentOut(BaseModel):
     filename: str
     kind: str
     url: str | None = None
+    share_url: str | None = None
+    ttl_hours: int | None = None
 
 
 class MessageOut(BaseModel):

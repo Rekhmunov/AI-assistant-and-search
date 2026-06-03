@@ -170,3 +170,59 @@ class RateLimiter:
         key = _day_key("image_gen", user_id)
         val = await self.redis.get(key)
         return int(val) if val else 0
+
+    async def _free_doc_gen_limit(self) -> int:
+        cached = await self.redis.get("setting:free_doc_gens_per_day")
+        if cached is not None:
+            return int(cached)
+        return self.settings.free_doc_gens_per_day
+
+    async def _pro_doc_gen_limit(self) -> int:
+        cached = await self.redis.get("setting:pro_doc_gens_per_day")
+        if cached is not None:
+            return int(cached)
+        return self.settings.pro_doc_gens_per_day
+
+    async def _guest_doc_gen_lifetime_limit(self) -> int:
+        cached = await self.redis.get("setting:guest_doc_gens_lifetime")
+        if cached is not None:
+            return int(cached)
+        return self.settings.guest_doc_gens_lifetime
+
+    async def get_doc_gen_usage(self, user_id: str, user: User) -> tuple[int, int]:
+        """(used, limit) — без инкремента."""
+        if user.guest_key and not user.email:
+            key = f"doc_gen_guest:{user_id}"
+            val = await self.redis.get(key)
+            used = int(val) if val else 0
+            limit = await self._guest_doc_gen_lifetime_limit()
+            return used, limit
+        if user.plan == Plan.PRO:
+            key = _day_key("doc_gen", user_id)
+            val = await self.redis.get(key)
+            used = int(val) if val else 0
+            limit = await self._pro_doc_gen_limit()
+            return used, limit
+        key = _day_key("doc_gen", user_id)
+        val = await self.redis.get(key)
+        used = int(val) if val else 0
+        limit = await self._free_doc_gen_limit()
+        return used, limit
+
+    async def check_doc_gen_allowed(self, user_id: str, user: User) -> tuple[bool, int, int]:
+        used, limit = await self.get_doc_gen_usage(user_id, user)
+        if limit <= 0:
+            return False, used, limit
+        return used < limit, used, limit
+
+    async def record_doc_gen_success(self, user_id: str, user: User) -> None:
+        if user.guest_key and not user.email:
+            key = f"doc_gen_guest:{user_id}"
+            await self.redis.incr(key)
+            return
+        key = _day_key("doc_gen", user_id)
+        count = await self.redis.incr(key)
+        if count == 1:
+            now = datetime.now(MSK)
+            midnight = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+            await self.redis.expireat(key, int(midnight.timestamp()))

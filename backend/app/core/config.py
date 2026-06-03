@@ -101,6 +101,10 @@ class Settings(BaseSettings):
     pro_searches_per_day: int = 200
     free_image_gens_per_day: int = 0
     pro_image_gens_per_day: int = 20
+    guest_doc_gens_lifetime: int = 1
+    free_doc_gens_per_day: int = 1
+    pro_doc_gens_per_day: int = 20
+    generated_doc_ttl_hours: int = 72
     global_yandex_requests_per_day: int = 5000
 
     pro_price_rub: int = 299

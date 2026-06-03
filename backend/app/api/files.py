@@ -23,6 +23,7 @@ from app.services.file_format import (
     resolve_upload_extension,
 )
 from app.services.file_parser import DOCUMENT_EXT, IMAGE_EXT, extract_text, ocr_image_bytes, prepare_image_for_ocr
+from app.services.file_share_token import verify_file_share_token
 from app.services.upload_storage import delete_upload_file, load_upload_bytes, mime_for_ext, save_upload_bytes
 
 router = APIRouter(prefix="/files", tags=["files"])
@@ -79,7 +80,7 @@ async def file_meta(
     if row.expires_at and row.expires_at < datetime.now(timezone.utc):
         raise HTTPException(status_code=status.HTTP_410_GONE, detail="File expired")
     preview = None
-    if row.media_kind in ("image", "generated") and row.storage_key:
+    if row.media_kind in ("image", "generated", "generated_doc") and row.storage_key:
         preview = public_file_content_url(file_id)
     return UploadedFileMetaOut(
         id=row.id,
@@ -107,7 +108,41 @@ async def download_file_content(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="File not found")
     if row.expires_at and row.expires_at < datetime.now(timezone.utc):
         raise HTTPException(status_code=status.HTTP_410_GONE, detail="File expired")
-    if row.media_kind not in ("image", "generated"):
+    if row.media_kind not in ("image", "generated", "generated_doc"):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="File not found")
+    data = load_upload_bytes(row.storage_key)
+    if not data:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="File not found")
+    mime = row.mime_type or mime_for_ext(row.storage_key.rsplit(".", 1)[-1])
+    disposition = "attachment"
+    if row.media_kind == "generated_doc":
+        disposition = f'attachment; filename="{row.filename}"'
+    return Response(
+        content=data,
+        media_type=mime,
+        headers={
+            "Cache-Control": "private, max-age=3600",
+            "Content-Disposition": disposition,
+        },
+    )
+
+
+@router.get("/{file_id}/shared")
+async def download_file_shared(
+    file_id: UUID,
+    token: str,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """Скачивание по подписанной ссылке (share fallback без Bearer)."""
+    if not verify_file_share_token(file_id, token):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid or expired link")
+    result = await db.execute(select(UploadedFile).where(UploadedFile.id == file_id))
+    row = result.scalar_one_or_none()
+    if not row or not row.storage_key:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="File not found")
+    if row.expires_at and row.expires_at < datetime.now(timezone.utc):
+        raise HTTPException(status_code=status.HTTP_410_GONE, detail="File expired")
+    if row.media_kind not in ("generated_doc", "generated", "image"):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="File not found")
     data = load_upload_bytes(row.storage_key)
     if not data:
@@ -116,7 +151,10 @@ async def download_file_content(
     return Response(
         content=data,
         media_type=mime,
-        headers={"Cache-Control": "private, max-age=3600"},
+        headers={
+            "Cache-Control": "private, max-age=3600",
+            "Content-Disposition": f'attachment; filename="{row.filename}"',
+        },
     )
 
 

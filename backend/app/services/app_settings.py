@@ -43,6 +43,10 @@ BASE_SETTING_KEYS: dict[str, type] = {
     "image_gen_provider": str,
     "free_image_gens_per_day": int,
     "pro_image_gens_per_day": int,
+    "guest_doc_gens_lifetime": int,
+    "free_doc_gens_per_day": int,
+    "pro_doc_gens_per_day": int,
+    "generated_doc_ttl_hours": int,
 }
 
 SETTING_KEYS: dict[str, type] = {
@@ -56,6 +60,10 @@ ENV_DEFAULTS: dict[str, str] = {
     "pro_searches_per_day": "pro_searches_per_day",
     "pro_image_gens_per_day": "pro_image_gens_per_day",
     "free_image_gens_per_day": "free_image_gens_per_day",
+    "guest_doc_gens_lifetime": "guest_doc_gens_lifetime",
+    "free_doc_gens_per_day": "free_doc_gens_per_day",
+    "pro_doc_gens_per_day": "pro_doc_gens_per_day",
+    "generated_doc_ttl_hours": "generated_doc_ttl_hours",
     "pro_price_rub": "pro_price_rub",
     "global_yandex_requests_per_day": "global_yandex_requests_per_day",
     "maintenance_mode": "false",

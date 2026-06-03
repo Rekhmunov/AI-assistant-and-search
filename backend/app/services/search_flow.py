@@ -41,6 +41,8 @@ from app.services.entity_image_routing import resolve_entity_image_query, wants_
 from app.services.image_gen_flow import stream_image_generation_turn
 from app.services.message_attachments import attachments_json_from_files
 from app.services.image_gen_routing import wants_image_generation
+from app.services.doc_gen_routing import wants_document_generation
+from app.services.doc_gen_flow import stream_document_generation_turn
 from app.services.yandex_image_search import YandexImageSearchService
 from app.services.perplexity import PERPLEXITY_PROVIDER_ID, PerplexityProvider
 from app.services.providers.factory import resolve_runtime_providers
@@ -131,6 +133,18 @@ class SearchFlowService:
             return
 
         user_text_preview = normalize_user_query(query)
+        if not attachment_ids and wants_document_generation(user_text_preview):
+            async for event in stream_document_generation_turn(
+                db,
+                user,
+                limiter,
+                query,
+                thread_id,
+                redis_client,
+            ):
+                yield event
+            return
+
         if not attachment_ids and wants_image_generation(user_text_preview):
             async for event in stream_image_generation_turn(
                 db,

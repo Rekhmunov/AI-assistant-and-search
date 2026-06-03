@@ -6,6 +6,7 @@ import {
   fetchThread,
   fetchSession,
   streamSearch,
+  type GeneratedDocumentInfo,
   type MessageAttachment,
 } from "../api/client";
 import { AnswerBody } from "../components/AnswerBody";
@@ -16,6 +17,8 @@ import { GuestLimitNotice } from "../components/GuestLimitNotice";
 import { ChatGeneratedImages } from "../components/ChatGeneratedImages";
 import { ImageGenProNotice } from "../components/ImageGenProNotice";
 import { ImageGenStatusLine } from "../components/ImageGenStatusLine";
+import { DocGenStatusLine } from "../components/DocGenStatusLine";
+import { GeneratedDocumentCard } from "../components/GeneratedDocumentCard";
 import { SearchComposer, type ComposerAttachment } from "../components/SearchComposer";
 import { SearchStatusLine, type SearchPhase } from "../components/SearchStatusLine";
 import { ThreadImagesTab } from "../components/ThreadImagesTab";
@@ -39,7 +42,17 @@ import { useAuthStore } from "../store/authStore";
 function updateLastStreamingTurn(
   turns: ThreadTurn[],
   patch: Partial<
-    Pick<ThreadTurn, "answer" | "sources" | "images" | "followUps" | "needsSearch" | "isImageGen">
+    Pick<
+      ThreadTurn,
+      | "answer"
+      | "sources"
+      | "images"
+      | "followUps"
+      | "needsSearch"
+      | "isImageGen"
+      | "isDocumentGen"
+      | "generatedDocument"
+    >
   >,
   appendAnswer?: string,
 ): ThreadTurn[] {
@@ -121,6 +134,8 @@ export function Thread() {
   const imagesPanelRef = useRef<HTMLDivElement>(null);
   const answerResetPendingRef = useRef(false);
   const imageGenActiveRef = useRef(false);
+  const docGenActiveRef = useRef(false);
+  const [docGenStatus, setDocGenStatus] = useState<string | undefined>();
   const [showScrollDown, setShowScrollDown] = useState(false);
   const isDesktop = useDesktopLayout();
 
@@ -264,6 +279,8 @@ export function Thread() {
       const pendingKey = `stream-${Date.now()}`;
       const imageGenQuery = !attachmentIds.length && wantsImageGeneration(text);
       imageGenActiveRef.current = imageGenQuery;
+      docGenActiveRef.current = false;
+      setDocGenStatus(undefined);
       streamingRef.current = true;
       setStreaming(true);
       setNeedsSearch(!imageGenQuery);
@@ -291,9 +308,15 @@ export function Thread() {
           if (!id) navigate(`/thread/${tid}`, { replace: true });
         },
         onRoute: (route) => {
+          const isDocGen = route.intent === "generate_document";
           const isImageGen =
             route.intent === "image_generate" || route.reason === "image_generation";
+          docGenActiveRef.current = isDocGen;
           imageGenActiveRef.current = isImageGen;
+          if (isDocGen) {
+            setNeedsSearch(false);
+            setSearchPhase("idle");
+          }
           setNeedsSearch(route.needs_search);
           if (isImageGen) {
             setSearchPhase("image_generating");
@@ -304,6 +327,27 @@ export function Thread() {
             updateLastStreamingTurn(prev, {
               needsSearch: route.needs_search,
               isImageGen,
+              isDocumentGen: isDocGen,
+            }),
+          );
+        },
+        onDocGenStart: (status) => {
+          setDocGenStatus(status);
+        },
+        onDocGenStatus: (status) => {
+          setDocGenStatus(status);
+        },
+        onDocumentReady: (doc: GeneratedDocumentInfo) => {
+          setTurns((prev) =>
+            updateLastStreamingTurn(prev, {
+              generatedDocument: {
+                id: doc.id,
+                filename: doc.filename,
+                kind: "document",
+                url: doc.url,
+                share_url: doc.share_url,
+                ttl_hours: doc.ttl_hours,
+              },
             }),
           );
         },
@@ -352,6 +396,8 @@ export function Thread() {
         onDone: (done) => {
           streamingRef.current = false;
           imageGenActiveRef.current = false;
+          docGenActiveRef.current = false;
+          setDocGenStatus(undefined);
           setStreaming(false);
           setSearchPhase("idle");
           answerResetPendingRef.current = false;
@@ -375,6 +421,8 @@ export function Thread() {
         onError: (msg, code) => {
           streamingRef.current = false;
           imageGenActiveRef.current = false;
+          docGenActiveRef.current = false;
+          setDocGenStatus(undefined);
           setStreaming(false);
           setSearchPhase("idle");
           const threadMissing =
@@ -424,6 +472,25 @@ export function Thread() {
                   ...turn,
                   answer: t("imageGenRateLimit"),
                   errorCode: "image_gen_rate_limit",
+                  streaming: false,
+                };
+              }
+              if (
+                code === "doc_gen_rate_limit" ||
+                code === "doc_gen_guest_limit" ||
+                code === "doc_gen_format_unavailable"
+              ) {
+                return {
+                  ...turn,
+                  answer: msg,
+                  errorCode: code,
+                  streaming: false,
+                };
+              }
+              if (code === "doc_gen_failed") {
+                return {
+                  ...turn,
+                  answer: msg,
                   streaming: false,
                 };
               }
@@ -553,13 +620,16 @@ export function Thread() {
             const isActive = turn.streaming;
             const sources = turn.sources ?? [];
             const isImageGenTurn = useChatGeneratedImageLayout(turn);
+            const isDocumentGenTurn = Boolean(turn.isDocumentGen || turn.generatedDocument);
             const showStatus =
               isActive &&
               streaming &&
               !turn.errorCode &&
-              (isImageGenTurn
-                ? (turn.images?.length ?? 0) === 0
-                : !turn.answer.trim());
+              (isDocumentGenTurn
+                ? !turn.answer.trim() && !turn.generatedDocument
+                : isImageGenTurn
+                  ? (turn.images?.length ?? 0) === 0
+                  : !turn.answer.trim());
             const showGuestLimit = turn.errorCode === "guest_rate_limit" || turn.errorCode === "rate_limit";
             const showFreeLimit = turn.errorCode === "free_rate_limit";
             const showImageGenPro = turn.errorCode === "free_image_gen_pro";
@@ -568,6 +638,7 @@ export function Thread() {
               showFreeLimit ||
               showImageGenPro ||
               Boolean(turn.answer.trim()) ||
+              Boolean(turn.generatedDocument) ||
               (turn.images?.length ?? 0) > 0 ||
               isActive;
             const showFollowUps =
@@ -581,7 +652,9 @@ export function Thread() {
                 <ThreadQuery query={turn.query} attachments={turn.attachments} />
 
                 {showStatus &&
-                  (isImageGenTurn ? (
+                  (isDocumentGenTurn ? (
+                    <DocGenStatusLine active={streaming} status={docGenStatus} />
+                  ) : isImageGenTurn ? (
                     <ImageGenStatusLine active={streaming} />
                   ) : (
                     <SearchStatusLine phase={searchPhase} needsSearch={needsSearch} />
@@ -600,13 +673,18 @@ export function Thread() {
                         <AnswerBody
                           text={turn.answer}
                           sources={sources}
-                          isStreaming={isActive && streaming && !isImageGenTurn}
+                          isStreaming={
+                            isActive && streaming && !isImageGenTurn && !isDocumentGenTurn
+                          }
                           onTypingChange={
                             index === turns.length - 1 ? handleAnswerTypingChange : undefined
                           }
                         />
                       )}
                     </AnswerErrorBoundary>
+                    {turn.generatedDocument && (
+                      <GeneratedDocumentCard document={turn.generatedDocument} />
+                    )}
                     {(turn.images?.length ?? 0) > 0 && (
                       <div className="answer-generated-media">
                         {isImageGenTurn ? (
@@ -616,7 +694,7 @@ export function Thread() {
                         )}
                       </div>
                     )}
-                    {turn.answer.trim() && (
+                    {(turn.answer.trim() || turn.generatedDocument) && (
                       <AnswerFooter
                         answer={turn.answer}
                         title={turn.query}
@@ -624,6 +702,7 @@ export function Thread() {
                         messageId={resolveAssistantMessageId(turn)}
                         token={token}
                         userFeedback={turn.userFeedback}
+                        generatedDocument={turn.generatedDocument ?? null}
                       />
                     )}
                   </section>

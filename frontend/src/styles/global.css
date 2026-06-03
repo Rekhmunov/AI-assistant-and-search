@@ -1496,6 +1496,43 @@ body:has(.page-thread) {
   align-self: flex-end;
 }
 
+.generated-document-card {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  margin: 12px 0 8px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--border-subtle);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.generated-document-card-icon {
+  flex-shrink: 0;
+  opacity: 0.85;
+}
+
+.generated-document-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.generated-document-card-name {
+  font-size: 0.92rem;
+  word-break: break-word;
+}
+
+.generated-document-card-download {
+  align-self: flex-start;
+}
+
+.doc-gen-status-line {
+  margin: 8px 0;
+}
+
 .thread-query-attachments {
   display: flex;
   flex-wrap: wrap;

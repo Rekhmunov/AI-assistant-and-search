@@ -56,7 +56,17 @@ export interface MessageAttachment {
   filename: string;
   kind: "document" | "image";
   url?: string | null;
+  share_url?: string | null;
+  ttl_hours?: number | null;
   previewUrl?: string;
+}
+
+export interface GeneratedDocumentInfo {
+  id: string;
+  filename: string;
+  url?: string | null;
+  share_url?: string | null;
+  ttl_hours?: number;
 }
 
 export interface EntityImage {
@@ -420,6 +430,9 @@ export interface SSEHandlers {
   onImages?: (images: EntityImage[]) => void;
   onImageGenStart?: (status: string) => void;
   onImageGenStatus?: (status: string) => void;
+  onDocGenStart?: (status: string) => void;
+  onDocGenStatus?: (status: string) => void;
+  onDocumentReady?: (doc: GeneratedDocumentInfo) => void;
   onToken?: (text: string) => void;
   onResetAnswer?: () => void;
   onFollowUps?: (questions: string[]) => void;
@@ -724,6 +737,21 @@ export async function streamSearch(
             break;
           case "image_gen_status":
             if (typeof parsed.status === "string") handlers.onImageGenStatus?.(parsed.status);
+            break;
+          case "doc_gen_start":
+            if (typeof parsed.status === "string") handlers.onDocGenStart?.(parsed.status);
+            break;
+          case "doc_gen_status":
+            if (typeof parsed.status === "string") handlers.onDocGenStatus?.(parsed.status);
+            break;
+          case "document_ready":
+            handlers.onDocumentReady?.({
+              id: String(parsed.file_id ?? ""),
+              filename: String(parsed.filename ?? "document.docx"),
+              url: parsed.download_url as string | undefined,
+              share_url: parsed.share_url as string | undefined,
+              ttl_hours: typeof parsed.ttl_hours === "number" ? parsed.ttl_hours : undefined,
+            });
             break;
           case "token":
             handlers.onToken?.(parsed.text);

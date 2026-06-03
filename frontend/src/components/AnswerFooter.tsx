@@ -1,5 +1,6 @@
 import { useState } from "react";
-import type { MessageFeedback, Source } from "../api/client";
+import type { GeneratedDocumentInfo, MessageFeedback, Source } from "../api/client";
+import { shareGeneratedDocument } from "./GeneratedDocumentCard";
 import { formatAnswerForDisplay } from "../lib/formatAnswer";
 import { buildCopyText, isProPlan } from "../lib/copyAttribution";
 import { t } from "../i18n";
@@ -15,12 +16,21 @@ type Props = {
   messageId?: string;
   token?: string | null;
   userFeedback?: MessageFeedback | null;
+  generatedDocument?: GeneratedDocumentInfo | null;
 };
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-export function AnswerFooter({ answer, title, sources, messageId, token, userFeedback }: Props) {
+export function AnswerFooter({
+  answer,
+  title,
+  sources,
+  messageId,
+  token,
+  userFeedback,
+  generatedDocument,
+}: Props) {
   const [copied, setCopied] = useState(false);
   const [sourcesOpen, setSourcesOpen] = useState(false);
   const plan = useAuthStore((s) => s.user?.plan);
@@ -43,6 +53,10 @@ export function AnswerFooter({ answer, title, sources, messageId, token, userFee
   };
 
   const share = async () => {
+    if (generatedDocument?.id) {
+      await shareGeneratedDocument(generatedDocument, token ?? null, isPro);
+      return;
+    }
     const payload = { title: title || "Glosix", text: copyText };
     try {
       if (navigator.share) {
