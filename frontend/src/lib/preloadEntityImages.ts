@@ -3,13 +3,19 @@ import type { EntityImage } from "../api/client";
 const MIN_SIDE = 80;
 const MAX_IMAGES = 12;
 
+/** Уже успешно проверенные в этой вкладке — не дергаем сеть повторно при refetch треда. */
+const validatedUrlCache = new Set<string>();
+
 function preloadImage(url: string): Promise<boolean> {
+  if (validatedUrlCache.has(url)) return Promise.resolve(true);
   return new Promise((resolve) => {
     const img = new Image();
     img.referrerPolicy = "no-referrer";
     img.decoding = "async";
     img.onload = () => {
-      resolve(img.naturalWidth >= MIN_SIDE && img.naturalHeight >= MIN_SIDE);
+      const ok = img.naturalWidth >= MIN_SIDE && img.naturalHeight >= MIN_SIDE;
+      if (ok) validatedUrlCache.add(url);
+      resolve(ok);
     };
     img.onerror = () => resolve(false);
     img.src = url;

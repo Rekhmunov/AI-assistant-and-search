@@ -186,6 +186,7 @@ export function Thread() {
     queryKey: ["thread", id ?? threadId],
     queryFn: () => fetchThread(token, (id ?? threadId)!),
     enabled: !!(id ?? threadId),
+    staleTime: 60_000,
   });
 
   const syncTurnsFromThread = useCallback(() => {

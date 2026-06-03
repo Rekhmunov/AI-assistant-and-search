@@ -117,7 +117,7 @@ export function ThreadImagesTab({ groups, loading = false }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [groupsKey, groups]);
+  }, [groupsKey]);
 
   useEffect(() => {
     if (lightboxIndex === null) return;

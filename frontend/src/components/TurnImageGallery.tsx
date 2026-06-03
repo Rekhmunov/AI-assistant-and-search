@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { EntityImage } from "../api/client";
 import { ImageLightboxOverlay } from "./ImageLightboxOverlay";
 
@@ -43,10 +43,19 @@ async function preloadGalleryImages(images: EntityImage[]): Promise<EntityImage[
   return loaded.filter((entry) => entry.ok).map((entry) => entry.img);
 }
 
+function imagesStableKey(images: EntityImage[]): string {
+  return images
+    .map((i) => i.url)
+    .filter(Boolean)
+    .slice(0, MAX_IMAGES)
+    .join("|");
+}
+
 export function TurnImageGallery({ images }: Props) {
   const [readyImages, setReadyImages] = useState<EntityImage[]>([]);
   const [start, setStart] = useState(0);
   const [lightbox, setLightbox] = useState<LightboxState | null>(null);
+  const imagesKey = useMemo(() => imagesStableKey(images), [images]);
 
   useEffect(() => {
     let cancelled = false;
@@ -60,7 +69,7 @@ export function TurnImageGallery({ images }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [images]);
+  }, [imagesKey, images]);
 
   const maxStart = Math.max(0, readyImages.length - VISIBLE);
   const clampedStart = Math.min(start, maxStart);
@@ -84,12 +93,6 @@ export function TurnImageGallery({ images }: Props) {
 
   return (
     <>
-      <div className="turn-image-gallery-preload" aria-hidden>
-        {readyImages.map((img) => (
-          <img key={`preload-${img.url}`} src={img.url} alt="" referrerPolicy="no-referrer" />
-        ))}
-      </div>
-
       <div className="turn-image-gallery" aria-label="Изображения">
         {canPrev && (
           <button
