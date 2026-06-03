@@ -5,7 +5,9 @@ import { formatAnswerForDisplay } from "../lib/formatAnswer";
 import { buildCopyText, isProPlan } from "../lib/copyAttribution";
 import { t } from "../i18n";
 import { useAuthStore } from "../store/authStore";
+import { isDocxExportableBlock } from "../lib/isDocxExportableBlock";
 import { AnswerFeedback } from "./AnswerFeedback";
+import { DocxExportIconButton } from "./DocxExportIconButton";
 import { SourcesPanel } from "./SourcesPanel";
 import { SourcesTriggerButton } from "./SourcesTriggerButton";
 
@@ -41,6 +43,13 @@ export function AnswerFooter({
   const plainAnswer = formatAnswerForDisplay(answer);
   const copyText = buildCopyText(plainAnswer, isPro);
   const hasSources = sources.length > 0;
+  const showAnswerDocx =
+    !generatedDocument?.id &&
+    isDocxExportableBlock(plainAnswer, "txt", false);
+  const docTitleHint = plainAnswer
+    .split("\n")
+    .map((l) => l.trim())
+    .find((l) => l.length >= 8);
 
   const copy = async () => {
     try {
@@ -91,6 +100,9 @@ export function AnswerFooter({
           >
             <CopyIcon />
           </button>
+          {showAnswerDocx ? (
+            <DocxExportIconButton content={plainAnswer} titleHint={docTitleHint} />
+          ) : null}
           {messageId && UUID_RE.test(messageId) && (
             <AnswerFeedback messageId={messageId} token={token ?? null} initialFeedback={userFeedback} />
           )}

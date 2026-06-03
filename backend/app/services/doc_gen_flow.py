@@ -17,8 +17,13 @@ from app.models.message import Message, MessageRole
 from app.models.thread import Thread
 from app.models.user import Plan, User
 from app.services.app_settings import get_setting
-from app.services.doc_gen_context import build_doc_gen_user_message
+from app.services.doc_gen_context import (
+    build_doc_gen_user_message,
+    prior_assistant_source_text,
+    refers_to_prior_answer,
+)
 from app.services.doc_gen_llm import generate_document_structure
+from app.services.doc_gen_plain import structure_from_plain_text
 from app.services.doc_gen_routing import resolve_output_format
 from app.services.doc_gen_schema import DocumentStructureError
 from app.services.doc_gen_storage import persist_generated_docx
@@ -172,13 +177,23 @@ async def stream_document_generation_turn(
     assistant_text = _assistant_message_text(ttl_hours)
 
     try:
-        structure_task = asyncio.create_task(
-            generate_document_structure(
+        prior_source = prior_assistant_source_text(prior_messages)
+        use_plain = bool(
+            prior_source and refers_to_prior_answer(display_content)
+        )
+
+        async def _resolve_structure():
+            if use_plain and prior_source:
+                plain = structure_from_plain_text(prior_source)
+                if plain is not None:
+                    return plain
+            return await generate_document_structure(
                 llm,
                 doc_gen_prompt,
                 answer_model=answer_model,
             )
-        )
+
+        structure_task = asyncio.create_task(_resolve_structure())
         tick = 0
         while not structure_task.done():
             msg = STATUS_MESSAGES[1 + (tick % max(len(STATUS_MESSAGES) - 2, 1))]

@@ -9,12 +9,28 @@ from app.models.message import Message, MessageRole
 REFER_PRIOR_RE = re.compile(
     r"(?i)(?:"
     r"из\s+текста\s+выше|из\s+ответа\s+выше|по\s+тексту\s+выше|"
+    r"(?:текст|ответ|материал)\s+выше|выше\s+в\s+документ|"
     r"на\s+основе\s+(?:текста|ответа|материала|выше)|"
     r"из\s+предыдущ|из\s+диалог|из\s+чата|"
     r"оформи\s+(?:в\s+)?(?:word|документ|docx)|"
     r"сгенерируй\s+документ|сделай\s+документ|в\s+виде\s+документа"
     r")",
 )
+
+
+def refers_to_prior_answer(query: str) -> bool:
+    """Запрос на Word из уже показанного ответа в треде."""
+    return wants_prior_thread_material(query) or bool(
+        re.search(r"(?i)\b(?:в|как)\s+(?:файл\s+)?(?:документ|docx|word)\b", query or "")
+    )
+
+
+def prior_assistant_source_text(prior_messages: list[Message]) -> str | None:
+    parts = _assistant_contents(prior_messages, max_messages=1)
+    if not parts:
+        return None
+    text = parts[-1].strip()
+    return text if len(text) >= 200 else None
 
 # Лимит исходника из чата (символы), чтобы влезть в контекст LLM + JSON.
 MAX_SOURCE_MATERIAL_CHARS = 14_000
@@ -41,6 +57,8 @@ def _assistant_contents(messages: list[Message], *, max_messages: int = 2) -> li
 def should_attach_prior_material(query: str, prior_messages: list[Message]) -> bool:
     if not prior_messages:
         return False
+    if refers_to_prior_answer(query):
+        return True
     if wants_prior_thread_material(query):
         return True
     last = _assistant_contents(prior_messages, max_messages=1)

@@ -13,7 +13,8 @@ from app.core.limiter import RateLimiter
 from app.models.user import Plan, User
 from app.services.app_settings import get_setting
 from app.services.doc_gen_llm import generate_document_structure
-from app.services.doc_gen_schema import DocumentStructureError
+from app.services.doc_gen_plain import structure_from_plain_text
+from app.services.doc_gen_schema import DocumentStructure, DocumentStructureError
 from app.services.doc_gen_storage import persist_generated_docx
 from app.services.docx_builder import build_docx_bytes
 from app.services.file_share_token import create_file_share_token
@@ -76,11 +77,13 @@ async def export_chat_text_to_docx(
         f"---\n{text}\n---"
     )
 
-    structure = await generate_document_structure(
-        llm,
-        doc_prompt,
-        answer_model=answer_model,
-    )
+    structure: DocumentStructure | None = structure_from_plain_text(text)
+    if structure is None:
+        structure = await generate_document_structure(
+            llm,
+            doc_prompt,
+            answer_model=answer_model,
+        )
     docx_bytes = build_docx_bytes(structure, show_glosix_footer=user.plan != Plan.PRO)
     if len(docx_bytes) < 256:
         raise DocumentStructureError("empty_docx")

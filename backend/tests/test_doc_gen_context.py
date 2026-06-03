@@ -34,3 +34,11 @@ def test_build_message_includes_source():
 def test_build_message_query_only_without_prior():
     out = build_doc_gen_user_message("Сделай заявление на отпуск", [])
     assert out == "Сделай заявление на отпуск"
+
+
+def test_attach_on_text_above_in_document():
+    offer = "ПУБЛИЧНАЯ ОФЕРТА\n" + "Раздел.\n" * 50
+    prior = [_assistant(offer)]
+    assert should_attach_prior_material("Сгенерируй текст выше в документ", prior)
+    out = build_doc_gen_user_message("Сгенерируй текст выше в документ", prior)
+    assert "ПУБЛИЧНАЯ ОФЕРТА" in out
