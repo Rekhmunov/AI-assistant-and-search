@@ -4170,24 +4170,27 @@ body:has(.page-thread) {
     margin-right: auto;
   }
 
-  .page-thread:has(.answer-section) .composer-wrap--docked {
+  /* Тред с сообщениями: composer в той же колонке 70%, что вопрос и ответ */
+  .page-thread:has(.thread-turn) .composer-wrap--docked {
     display: flex;
     flex-direction: column;
     align-items: center;
+    padding-left: 0;
+    padding-right: 0;
   }
 
-  .page-thread:has(.answer-section) .composer-wrap--docked .composer-outer-row,
-  .page-thread:has(.answer-section) .composer-wrap--docked .composer-error-wrap,
-  .page-thread:has(.answer-section) .composer-wrap--docked .search-composer {
+  .page-thread:has(.thread-turn) .composer-wrap--docked .composer-outer-row,
+  .page-thread:has(.thread-turn) .composer-wrap--docked .composer-error-wrap,
+  .page-thread:has(.thread-turn) .composer-wrap--docked .search-composer {
     width: var(--desktop-thread-column-width);
     max-width: var(--desktop-thread-column-width);
     margin-left: auto;
     margin-right: auto;
   }
 
-  .page-thread:not(:has(.answer-section)) .composer-wrap--docked .composer-outer-row,
-  .page-thread:not(:has(.answer-section)) .composer-wrap--docked .composer-error-wrap,
-  .page-thread:not(:has(.answer-section)) .composer-wrap--docked .search-composer {
+  .page-thread:not(:has(.thread-turn)) .composer-wrap--docked .composer-outer-row,
+  .page-thread:not(:has(.thread-turn)) .composer-wrap--docked .composer-error-wrap,
+  .page-thread:not(:has(.thread-turn)) .composer-wrap--docked .search-composer {
     width: 100%;
     max-width: 100%;
   }
@@ -4202,9 +4205,11 @@ body:has(.page-thread) {
   .page-thread .composer-wrap--docked {
     left: var(--sidebar-width);
     right: 0;
+    width: min(var(--desktop-search-max-width), calc(100vw - var(--sidebar-width)));
     max-width: var(--desktop-search-max-width);
     margin-left: auto;
     margin-right: auto;
+    box-sizing: border-box;
   }
 
   .thread-scroll-down {
