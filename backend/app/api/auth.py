@@ -287,8 +287,8 @@ async def register_email(
     verify_allowed_origin(request)
     email = body.email.strip().lower()
     ip = client_ip(request)
-    await check_auth_rate_limit(redis_client, f"register:{ip}")
-    await check_auth_rate_limit(redis_client, f"register_email:{email}")
+    await check_auth_rate_limit(redis_client, "register", ip)
+    await check_auth_rate_limit(redis_client, "register_email", email)
     try:
         existing = await db.execute(select(User).where(User.email == email))
         if existing.scalar_one_or_none():
@@ -312,8 +312,8 @@ async def register_email(
                 detail="Не удалось завершить регистрацию. Проверьте данные или войдите в аккаунт.",
             ) from exc
 
-        await clear_auth_rate_limit(redis_client, f"register:{ip}")
-        await clear_auth_rate_limit(redis_client, f"register_email:{email}")
+        await clear_auth_rate_limit(redis_client, "register", ip)
+        await clear_auth_rate_limit(redis_client, "register_email", email)
         await _merge_guest_session(db, guest_session, user)
         clear_guest_cookie(response)
         access = await _set_auth_cookies(response, str(user.id), redis_client)
@@ -346,8 +346,8 @@ async def login_email(
     verify_allowed_origin(request)
     email = body.email.strip().lower()
     ip = client_ip(request)
-    await check_auth_rate_limit(redis_client, f"login:{ip}")
-    await check_auth_rate_limit(redis_client, f"login_email:{email}")
+    await check_auth_rate_limit(redis_client, "login", ip)
+    await check_auth_rate_limit(redis_client, "login_email", email)
     result = await db.execute(select(User).where(User.email == email))
     user = result.scalar_one_or_none()
     if not user or not user.password_hash or not verify_password(body.password, user.password_hash):
@@ -362,8 +362,8 @@ async def login_email(
         user.plan = Plan.FREE
         user.plan_expires_at = None
 
-    await clear_auth_rate_limit(redis_client, f"login:{ip}")
-    await clear_auth_rate_limit(redis_client, f"login_email:{email}")
+    await clear_auth_rate_limit(redis_client, "login", ip)
+    await clear_auth_rate_limit(redis_client, "login_email", email)
     await _merge_guest_session(db, guest_session, user)
     clear_guest_cookie(response)
     access = await _set_auth_cookies(response, str(user.id), redis_client)
