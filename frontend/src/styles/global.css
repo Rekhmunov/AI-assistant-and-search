@@ -1234,11 +1234,13 @@ body:has(.page-thread) {
   color: var(--text);
   font-size: 1rem;
   resize: none;
-  max-height: 120px;
+  max-height: 30dvh;
   min-height: 24px;
   line-height: 1.4;
   padding: 8px 4px;
   font-family: inherit;
+  overflow-y: hidden;
+  box-sizing: border-box;
 }
 
 .composer-input:focus {
@@ -4139,7 +4141,8 @@ body:has(.page-thread) {
   }
 
   .page-thread .thread-tabs-bar,
-  .page-thread .thread-conversation > .thread-images-tab,
+  .page-thread .thread-panel--images,
+  .page-thread .thread-panel--images .thread-images-tab,
   .page-thread .thread-turn > .thread-query-block,
   .page-thread .thread-turn > .thread-query,
   .page-thread .thread-turn > .search-status,
@@ -4151,19 +4154,26 @@ body:has(.page-thread) {
     margin-right: auto;
   }
 
-  .page-thread .composer-wrap--docked {
+  .page-thread:has(.answer-section) .composer-wrap--docked {
     display: flex;
     flex-direction: column;
     align-items: center;
   }
 
-  .page-thread .composer-wrap--docked .composer-outer-row,
-  .page-thread .composer-wrap--docked .composer-error-wrap,
-  .page-thread .composer-wrap--docked .search-composer {
+  .page-thread:has(.answer-section) .composer-wrap--docked .composer-outer-row,
+  .page-thread:has(.answer-section) .composer-wrap--docked .composer-error-wrap,
+  .page-thread:has(.answer-section) .composer-wrap--docked .search-composer {
     width: var(--desktop-thread-column-width);
     max-width: var(--desktop-thread-column-width);
     margin-left: auto;
     margin-right: auto;
+  }
+
+  .page-thread:not(:has(.answer-section)) .composer-wrap--docked .composer-outer-row,
+  .page-thread:not(:has(.answer-section)) .composer-wrap--docked .composer-error-wrap,
+  .page-thread:not(:has(.answer-section)) .composer-wrap--docked .search-composer {
+    width: 100%;
+    max-width: 100%;
   }
 
   .composer-wrap--docked {

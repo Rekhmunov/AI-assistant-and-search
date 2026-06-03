@@ -86,6 +86,20 @@ export function SearchComposer({
   const [attachMenuOpen, setAttachMenuOpen] = useState(false);
   const blurTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const attachMenuOpenRef = useRef(false);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const COMPOSER_MAX_HEIGHT_RATIO = 0.3;
+
+  const adjustTextareaHeight = useCallback(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    const maxPx = Math.max(48, Math.floor(window.innerHeight * COMPOSER_MAX_HEIGHT_RATIO));
+    const scroll = el.scrollHeight;
+    const next = Math.min(scroll, maxPx);
+    el.style.height = `${next}px`;
+    el.style.overflowY = scroll > maxPx ? "auto" : "hidden";
+  }, []);
 
   const { data: me } = useQuery({
     queryKey: ["me"],
@@ -255,6 +269,16 @@ export function SearchComposer({
   const hasComposerText = value.trim().length > 0;
   const hasAttachment = totalCount > 0;
   const composerExpanded = inputFocused || attachMenuOpen || hasComposerText;
+
+  useEffect(() => {
+    adjustTextareaHeight();
+  }, [value, hasAttachment, adjustTextareaHeight]);
+
+  useEffect(() => {
+    const onResize = () => adjustTextareaHeight();
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, [adjustTextareaHeight]);
   const showTypingOverlay =
     animatedPlaceholder && !value.trim() && !disabled && !inputFocused;
   const typingPlaceholder = useTypingPlaceholder(showTypingOverlay, placeholderPhrases);
@@ -368,14 +392,18 @@ export function SearchComposer({
               </span>
             )}
             <textarea
+              ref={textareaRef}
               className="composer-input"
-              rows={hasAttachment ? 2 : 1}
+              rows={1}
               value={value}
               placeholder={textareaPlaceholder}
               disabled={disabled}
               onFocus={handleInputFocus}
               onBlur={handleInputBlur}
-              onChange={(e) => onChange(e.target.value)}
+              onChange={(e) => {
+                onChange(e.target.value);
+                requestAnimationFrame(adjustTextareaHeight);
+              }}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();
