@@ -164,22 +164,22 @@ export function ProfileAccountSection({ user, token, onUserUpdated }: Props) {
             inactiveLabel={t("emailNotSet")}
           />
         </div>
-        {hasEmail && (
-          <div className="profile-bind-block">
-            {!showChangePassword ? (
-              <button
-                type="button"
-                className="btn-secondary btn-block"
-                onClick={() => {
-                  setShowChangePassword(true);
-                  setBindError("");
-                  setBindInfo("");
-                }}
-              >
-                {t("changePassword")}
-              </button>
-            ) : (
-              <form className="profile-bind-form" onSubmit={onChangePassword}>
+        {hasEmail && !showChangePassword && (
+          <button
+            type="button"
+            className="profile-email-action"
+            onClick={() => {
+              setShowChangePassword(true);
+              setBindError("");
+              setBindInfo("");
+            }}
+          >
+            {t("changePassword")}
+          </button>
+        )}
+        {hasEmail && showChangePassword && (
+          <div className="profile-bind-block profile-bind-block--password">
+            <form className="profile-bind-form" onSubmit={onChangePassword}>
                 <label className="auth-field">
                   <span className="auth-field-label">{t("currentPassword")}</span>
                   <input
@@ -233,8 +233,7 @@ export function ProfileAccountSection({ user, token, onUserUpdated }: Props) {
                     {t("cancel")}
                   </button>
                 </div>
-              </form>
-            )}
+            </form>
           </div>
         )}
         {!hasEmail && hasMax && (

@@ -725,6 +725,46 @@ body:has(.page-thread) {
   margin-top: 12px;
 }
 
+.profile-email-action {
+  display: inline-block;
+  margin-top: 8px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--accent);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  font-family: inherit;
+  line-height: 1.35;
+  cursor: pointer;
+  text-align: left;
+}
+
+.profile-email-action:hover {
+  text-decoration: underline;
+}
+
+.profile-bind-block--password {
+  margin-top: 10px;
+}
+
+.profile-bind-block--password .profile-bind-form-actions {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.profile-bind-block--password .profile-bind-form-actions .btn-block {
+  width: auto;
+  flex: 1 1 auto;
+  min-width: 0;
+  margin-top: 0;
+  padding: 10px 14px;
+  font-size: 0.875rem;
+}
+
 .profile-bind-form {
   display: flex;
   flex-direction: column;
@@ -817,6 +857,23 @@ body:has(.page-thread) {
   justify-content: center;
   padding-left: 24px;
   padding-right: 24px;
+}
+
+.page-profile:not(.page-profile--mobile) .profile-bind-block--password .profile-bind-form-actions .btn-block {
+  width: auto;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 18px;
+}
+
+.page-profile:not(.page-profile--mobile) .profile-bind-block--password .profile-bind-form-actions {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 14px;
 }
 
 .profile-settings-row {
