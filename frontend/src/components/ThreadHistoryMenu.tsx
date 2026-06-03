@@ -1,5 +1,15 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useId, useRef, useState, type FormEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type FormEvent,
+} from "react";
+import { createPortal } from "react-dom";
 import { useNavigate, useParams } from "react-router-dom";
 import { deleteThread, renameThread } from "../api/client";
 import { t } from "../i18n";
@@ -10,6 +20,28 @@ type Props = {
   title: string;
 };
 
+const MENU_WIDTH = 220;
+const MENU_GAP = 6;
+
+type MenuPlacement = {
+  top: number;
+  left: number;
+  transform?: string;
+};
+
+function computeMenuPlacement(anchor: DOMRect, menuHeight: number): MenuPlacement {
+  const left = Math.min(
+    Math.max(8, anchor.right - MENU_WIDTH),
+    window.innerWidth - MENU_WIDTH - 8,
+  );
+  const belowTop = anchor.bottom + MENU_GAP;
+  const fitsBelow = belowTop + menuHeight <= window.innerHeight - 8;
+  if (fitsBelow) {
+    return { top: belowTop, left };
+  }
+  return { top: anchor.top - MENU_GAP, left, transform: "translateY(-100%)" };
+}
+
 export function ThreadHistoryMenu({ threadId, title }: Props) {
   const menuId = useId();
   const token = useAuthStore((s) => s.token);
@@ -17,27 +49,60 @@ export function ThreadHistoryMenu({ threadId, title }: Props) {
   const navigate = useNavigate();
   const { id: activeThreadId } = useParams();
   const rootRef = useRef<HTMLDivElement>(null);
+  const kebabRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
 
   const [menuOpen, setMenuOpen] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [draftTitle, setDraftTitle] = useState(title);
   const [error, setError] = useState("");
+  const [menuPlacement, setMenuPlacement] = useState<MenuPlacement | null>(null);
 
   useEffect(() => {
     setDraftTitle(title);
   }, [title]);
 
+  const positionMenu = useCallback(() => {
+    const btn = kebabRef.current;
+    if (!btn) return;
+    const rect = btn.getBoundingClientRect();
+    const menuHeight = menuRef.current?.offsetHeight ?? (confirmDelete ? 120 : 100);
+    setMenuPlacement(computeMenuPlacement(rect, menuHeight));
+  }, [confirmDelete]);
+
+  useLayoutEffect(() => {
+    if (!menuOpen) {
+      setMenuPlacement(null);
+      return;
+    }
+    positionMenu();
+    window.addEventListener("resize", positionMenu);
+    window.addEventListener("scroll", positionMenu, true);
+    return () => {
+      window.removeEventListener("resize", positionMenu);
+      window.removeEventListener("scroll", positionMenu, true);
+    };
+  }, [menuOpen, confirmDelete, positionMenu]);
+
   useEffect(() => {
     if (!menuOpen && !renaming) return;
-    const onPointerDown = (e: MouseEvent) => {
-      if (rootRef.current && !rootRef.current.contains(e.target as Node)) {
-        setMenuOpen(false);
-        setConfirmDelete(false);
-      }
+    const onPointerDown = (e: MouseEvent | TouchEvent) => {
+      const target = e.target as Node;
+      if (rootRef.current?.contains(target)) return;
+      if (menuRef.current?.contains(target)) return;
+      setMenuOpen(false);
+      setConfirmDelete(false);
     };
-    document.addEventListener("mousedown", onPointerDown);
-    return () => document.removeEventListener("mousedown", onPointerDown);
+    const timer = window.setTimeout(() => {
+      document.addEventListener("mousedown", onPointerDown);
+      document.addEventListener("touchstart", onPointerDown, { passive: true });
+    }, 0);
+    return () => {
+      clearTimeout(timer);
+      document.removeEventListener("mousedown", onPointerDown);
+      document.removeEventListener("touchstart", onPointerDown);
+    };
   }, [menuOpen, renaming]);
 
   const renameMutation = useMutation({
@@ -65,6 +130,15 @@ export function ThreadHistoryMenu({ threadId, title }: Props) {
     onError: (e: Error) => setError(e.message),
   });
 
+  useEffect(() => {
+    if (!renaming) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && !renameMutation.isPending) setRenaming(false);
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [renaming, renameMutation.isPending]);
+
   const openRename = () => {
     setDraftTitle(title);
     setMenuOpen(false);
@@ -89,62 +163,69 @@ export function ThreadHistoryMenu({ threadId, title }: Props) {
 
   if (!token) return null;
 
-  return (
-    <div className="thread-history-menu" ref={rootRef}>
-      <button
-        type="button"
-        className="kebab-btn"
-        aria-label={t("threadActions")}
-        aria-expanded={menuOpen}
-        aria-haspopup="menu"
-        aria-controls={menuId}
-        onClick={(e) => {
-          e.stopPropagation();
-          setMenuOpen((v) => !v);
-          setConfirmDelete(false);
-        }}
-      >
-        <KebabIcon />
-      </button>
+  const menuStyle: CSSProperties | undefined = menuPlacement
+    ? {
+        top: menuPlacement.top,
+        left: menuPlacement.left,
+        transform: menuPlacement.transform,
+      }
+    : undefined;
 
-      {menuOpen && !confirmDelete && (
-        <div id={menuId} className="thread-dropdown" role="menu">
-          <button type="button" role="menuitem" onClick={openRename}>
-            <PencilIcon />
-            {t("renameThread")}
-          </button>
-          <button
-            type="button"
-            role="menuitem"
-            className="danger"
-            onClick={() => setConfirmDelete(true)}
-          >
-            <TrashIcon />
-            {t("deleteThread")}
-          </button>
-        </div>
-      )}
-
-      {menuOpen && confirmDelete && (
-        <div className="thread-dropdown thread-dropdown-confirm" role="dialog" aria-label={t("deleteThreadConfirm")}>
-          <p>{t("deleteThreadConfirm")}</p>
-          <div className="thread-dropdown-actions">
-            <button type="button" className="btn-secondary" onClick={() => setConfirmDelete(false)}>
-              {t("cancel")}
-            </button>
-            <button
-              type="button"
-              className="danger"
-              disabled={deleteMutation.isPending}
-              onClick={() => deleteMutation.mutate()}
+  const dropdownPortal =
+    menuOpen && menuPlacement
+      ? createPortal(
+          !confirmDelete ? (
+            <div
+              ref={menuRef}
+              id={menuId}
+              className="thread-dropdown thread-dropdown--portal"
+              role="menu"
+              style={menuStyle}
             >
-              {t("delete")}
-            </button>
-          </div>
-        </div>
-      )}
+              <button type="button" role="menuitem" onClick={openRename}>
+                <PencilIcon />
+                {t("renameThread")}
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                className="danger"
+                onClick={() => setConfirmDelete(true)}
+              >
+                <TrashIcon />
+                {t("deleteThread")}
+              </button>
+            </div>
+          ) : (
+            <div
+              ref={menuRef}
+              className="thread-dropdown thread-dropdown-confirm thread-dropdown--portal"
+              role="dialog"
+              aria-label={t("deleteThreadConfirm")}
+              style={menuStyle}
+            >
+              <p>{t("deleteThreadConfirm")}</p>
+              <div className="thread-dropdown-actions">
+                <button type="button" className="btn-secondary" onClick={() => setConfirmDelete(false)}>
+                  {t("cancel")}
+                </button>
+                <button
+                  type="button"
+                  className="danger"
+                  disabled={deleteMutation.isPending}
+                  onClick={() => deleteMutation.mutate()}
+                >
+                  {t("delete")}
+                </button>
+              </div>
+            </div>
+          ),
+          document.body,
+        )
+      : null;
 
-      {renaming && (
+  const renamePortal = renaming
+    ? createPortal(
         <div
           className="thread-rename-overlay"
           role="dialog"
@@ -190,8 +271,31 @@ export function ThreadHistoryMenu({ threadId, title }: Props) {
               </button>
             </div>
           </form>
-        </div>
-      )}
+        </div>,
+        document.body,
+      )
+    : null;
+
+  return (
+    <div className="thread-history-menu" ref={rootRef}>
+      <button
+        ref={kebabRef}
+        type="button"
+        className="kebab-btn"
+        aria-label={t("threadActions")}
+        aria-expanded={menuOpen}
+        aria-haspopup="menu"
+        aria-controls={menuId}
+        onClick={(e) => {
+          e.stopPropagation();
+          setMenuOpen((v) => !v);
+          setConfirmDelete(false);
+        }}
+      >
+        <KebabIcon />
+      </button>
+      {dropdownPortal}
+      {renamePortal}
     </div>
   );
 }
