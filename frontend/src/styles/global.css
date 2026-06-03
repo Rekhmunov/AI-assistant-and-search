@@ -2414,6 +2414,114 @@ body:has(.page-thread) {
   flex-shrink: 0;
 }
 
+.markdown-document-block {
+  margin: 12px 0;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface-hover);
+  overflow: hidden;
+}
+
+.markdown-document-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg);
+}
+
+.markdown-document-title {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.markdown-document-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.markdown-document-body {
+  overflow: auto;
+}
+
+.markdown-document-body--collapsed {
+  position: relative;
+  mask-image: linear-gradient(to bottom, #000 75%, transparent 100%);
+}
+
+.markdown-document-pre {
+  margin: 0;
+  padding: 12px 14px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.8125rem;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--text);
+}
+
+.markdown-document-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  padding: 8px 12px;
+  border: none;
+  border-top: 1px solid var(--border-subtle);
+  background: var(--bg);
+  color: var(--muted);
+  font-size: 0.8125rem;
+  cursor: pointer;
+}
+
+.markdown-document-toggle:hover {
+  color: var(--text);
+  background: var(--surface-hover);
+}
+
+.download-format-menu {
+  position: relative;
+}
+
+.download-format-menu-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 20;
+  min-width: 180px;
+  padding: 4px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+}
+
+.download-format-menu-item {
+  display: block;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  font-size: 0.875rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.download-format-menu-item:hover {
+  background: var(--surface-hover);
+}
+
 .answer-code-pre {
   margin: 0;
   padding: 12px 14px;

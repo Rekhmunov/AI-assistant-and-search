@@ -18,6 +18,7 @@ import { ChatGeneratedImages } from "../components/ChatGeneratedImages";
 import { ImageGenProNotice } from "../components/ImageGenProNotice";
 import { ImageGenStatusLine } from "../components/ImageGenStatusLine";
 import { DocGenStatusLine } from "../components/DocGenStatusLine";
+import { CollapsibleMarkdownDocument } from "../components/CollapsibleMarkdownDocument";
 import { GeneratedDocumentCard } from "../components/GeneratedDocumentCard";
 import { SearchComposer, type ComposerAttachment } from "../components/SearchComposer";
 import { SearchStatusLine, type SearchPhase } from "../components/SearchStatusLine";
@@ -52,6 +53,7 @@ function updateLastStreamingTurn(
       | "isImageGen"
       | "isDocumentGen"
       | "generatedDocument"
+      | "markdownDocument"
     >
   >,
   appendAnswer?: string,
@@ -310,11 +312,12 @@ export function Thread() {
         },
         onRoute: (route) => {
           const isDocGen = route.intent === "generate_document";
+          const isExportMd = route.intent === "export_chat_document";
           const isImageGen =
             route.intent === "image_generate" || route.reason === "image_generation";
           docGenActiveRef.current = isDocGen;
           imageGenActiveRef.current = isImageGen;
-          if (isDocGen) {
+          if (isDocGen || isExportMd) {
             setNeedsSearch(false);
             setSearchPhase("idle");
           }
@@ -329,6 +332,13 @@ export function Thread() {
               needsSearch: route.needs_search,
               isImageGen,
               isDocumentGen: isDocGen,
+            }),
+          );
+        },
+        onMarkdownDocument: (doc) => {
+          setTurns((prev) =>
+            updateLastStreamingTurn(prev, {
+              markdownDocument: doc,
             }),
           );
         },
@@ -683,6 +693,13 @@ export function Thread() {
                         />
                       )}
                     </AnswerErrorBoundary>
+                    {turn.markdownDocument && (
+                      <CollapsibleMarkdownDocument
+                        title={turn.markdownDocument.title}
+                        content={turn.markdownDocument.content}
+                        collapsible={turn.markdownDocument.collapsible}
+                      />
+                    )}
                     {turn.generatedDocument && (
                       <GeneratedDocumentCard document={turn.generatedDocument} />
                     )}
@@ -695,7 +712,7 @@ export function Thread() {
                         )}
                       </div>
                     )}
-                    {(turn.answer.trim() || turn.generatedDocument) && (
+                    {(turn.answer.trim() || turn.generatedDocument || turn.markdownDocument) && (
                       <AnswerFooter
                         answer={turn.answer}
                         title={turn.query}

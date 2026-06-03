@@ -35,6 +35,8 @@ class MessageAttachmentOut(BaseModel):
     url: str | None = None
     share_url: str | None = None
     ttl_hours: int | None = None
+    title: str | None = None
+    content: str | None = None
 
 
 class MessageOut(BaseModel):

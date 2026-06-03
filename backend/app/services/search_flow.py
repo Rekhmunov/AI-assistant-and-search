@@ -40,9 +40,9 @@ from app.services.message_images_column import messages_have_images_column
 from app.services.entity_image_routing import resolve_entity_image_query, wants_entity_images
 from app.services.image_gen_flow import stream_image_generation_turn
 from app.services.message_attachments import attachments_json_from_files
-from app.services.image_gen_routing import wants_image_generation
-from app.services.doc_gen_routing import wants_document_generation
 from app.services.doc_gen_flow import stream_document_generation_turn
+from app.services.export_chat_document_flow import stream_export_chat_document_turn
+from app.services.llm_flow_router import resolve_service_flow
 from app.services.yandex_image_search import YandexImageSearchService
 from app.services.perplexity import PERPLEXITY_PROVIDER_ID, PerplexityProvider
 from app.services.providers.factory import resolve_runtime_providers
@@ -84,7 +84,18 @@ async def _messages_have_debug_trace(db: AsyncSession) -> bool:
 
 
 _VALID_INTENTS: frozenset[str] = frozenset(
-    {"factual_current", "howto", "document", "edit_prior", "compare_analyze", "chitchat", "vision_image"}
+    {
+        "factual_current",
+        "howto",
+        "document",
+        "edit_prior",
+        "compare_analyze",
+        "chitchat",
+        "vision_image",
+        "generate_document",
+        "export_chat_document",
+        "image_generate",
+    }
 )
 
 
@@ -133,7 +144,40 @@ class SearchFlowService:
             return
 
         user_text_preview = normalize_user_query(query)
-        if not attachment_ids and wants_document_generation(user_text_preview):
+
+        early_prior: list[Message] = []
+        if thread_id:
+            msgs_result = await db.execute(
+                select(Message)
+                .where(
+                    Message.thread_id == thread_id,
+                )
+                .order_by(Message.created_at.asc())
+            )
+            early_prior = list(msgs_result.scalars().all())
+
+        flow_ctx = build_thread_context(early_prior)
+        flow = await resolve_service_flow(
+            llm,
+            user_text_preview,
+            flow_ctx,
+            has_attachments=bool(attachment_ids),
+            user_plan=user.plan,
+        )
+
+        if not attachment_ids and flow.flow == "export_chat_document":
+            async for event in stream_export_chat_document_turn(
+                db,
+                user,
+                limiter,
+                query,
+                thread_id,
+                redis_client,
+            ):
+                yield event
+            return
+
+        if not attachment_ids and flow.flow == "document_file":
             async for event in stream_document_generation_turn(
                 db,
                 user,
@@ -145,7 +189,7 @@ class SearchFlowService:
                 yield event
             return
 
-        if not attachment_ids and wants_image_generation(user_text_preview):
+        if not attachment_ids and flow.flow == "image_generate":
             async for event in stream_image_generation_turn(
                 db,
                 user,
@@ -281,6 +325,14 @@ class SearchFlowService:
 
         thread_ctx = build_thread_context(prior_messages)
         route = await self.router.route(llm_query, thread_ctx, has_attachments, user.plan)
+        if not vision_only_answer and not hybrid_vision_search and not image_display_request:
+            if flow.flow == "chat":
+                route.needs_search = False
+                route.reason = f"llm_flow:{flow.reason}"
+            elif flow.flow == "search_rag":
+                route.needs_search = flow.needs_search
+                route.answer_model = flow.answer_model
+                route.reason = f"llm_flow:{flow.reason}"
         if vision_only_answer:
             route.needs_search = False
             route.intent = "vision_image"

@@ -56,11 +56,19 @@ export interface Source {
 export interface MessageAttachment {
   id: string;
   filename: string;
-  kind: "document" | "image";
+  kind: "document" | "image" | "markdown_document";
   url?: string | null;
   share_url?: string | null;
   ttl_hours?: number | null;
   previewUrl?: string;
+  title?: string | null;
+  content?: string | null;
+}
+
+export interface MarkdownDocumentInfo {
+  title: string;
+  content: string;
+  collapsible?: boolean;
 }
 
 export interface GeneratedDocumentInfo {
@@ -484,6 +492,7 @@ export interface SSEHandlers {
   onDocGenStart?: (status: string) => void;
   onDocGenStatus?: (status: string) => void;
   onDocumentReady?: (doc: GeneratedDocumentInfo) => void;
+  onMarkdownDocument?: (doc: MarkdownDocumentInfo) => void;
   onToken?: (text: string) => void;
   onResetAnswer?: () => void;
   onFollowUps?: (questions: string[]) => void;
@@ -918,6 +927,13 @@ export async function streamSearch(
               url: parsed.download_url as string | undefined,
               share_url: parsed.share_url as string | undefined,
               ttl_hours: typeof parsed.ttl_hours === "number" ? parsed.ttl_hours : undefined,
+            });
+            break;
+          case "markdown_document":
+            handlers.onMarkdownDocument?.({
+              title: String(parsed.title ?? "Документ"),
+              content: String(parsed.content ?? ""),
+              collapsible: Boolean(parsed.collapsible),
             });
             break;
           case "token":

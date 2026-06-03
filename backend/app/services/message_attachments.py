@@ -48,6 +48,9 @@ def message_attachments_out(
     for item in raw_list:
         data = dict(item)
         kind = str(data.get("kind") or "document")
+        if kind == "markdown_document":
+            out.append(MessageAttachmentOut(**data))
+            continue
         file_id_raw = data.get("id")
         if kind == "document" and file_id_raw:
             try:
