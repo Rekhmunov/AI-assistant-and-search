@@ -1078,7 +1078,7 @@ body:has(.page-thread) {
 
 @media (max-width: 899px) {
   .composer-row {
-    align-items: center;
+    align-items: flex-end;
     gap: 0;
     min-height: 40px;
   }
@@ -1106,11 +1106,14 @@ body:has(.page-thread) {
   .composer-input-wrap {
     flex: 1;
     min-width: 0;
+    align-items: flex-start;
   }
 
   .composer-input {
+    max-height: 30dvh;
     padding-top: 10px;
     padding-bottom: 10px;
+    -webkit-overflow-scrolling: touch;
   }
 }
 
@@ -3098,10 +3101,23 @@ body:has(.page-thread) {
   min-height: 0;
 }
 
+.search-composer--thread-mobile .composer-input-wrap {
+  align-items: flex-start;
+}
+
+.search-composer--thread-mobile .composer-input {
+  max-height: 30dvh;
+  -webkit-overflow-scrolling: touch;
+}
+
 .search-composer--thread-mobile.search-composer--focused .composer-input {
   min-height: 44px;
   padding-top: 8px;
   padding-bottom: 4px;
+}
+
+.home-mobile-composer-wrap .composer-input {
+  max-height: 30dvh;
 }
 
 .composer-toolbar {

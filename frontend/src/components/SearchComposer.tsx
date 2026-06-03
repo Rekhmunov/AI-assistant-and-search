@@ -1,4 +1,13 @@
-import { FormEvent, useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from "react";
+import {
+  FormEvent,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type Dispatch,
+  type SetStateAction,
+} from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { FileUploadError, uploadFile, fetchMe } from "../api/client";
@@ -90,16 +99,22 @@ export function SearchComposer({
 
   const COMPOSER_MAX_HEIGHT_RATIO = 0.3;
 
+  const getComposerMaxHeightPx = useCallback(() => {
+    const vh = window.visualViewport?.height ?? window.innerHeight;
+    return Math.max(48, Math.floor(vh * COMPOSER_MAX_HEIGHT_RATIO));
+  }, []);
+
   const adjustTextareaHeight = useCallback(() => {
     const el = textareaRef.current;
     if (!el) return;
-    el.style.height = "auto";
-    const maxPx = Math.max(48, Math.floor(window.innerHeight * COMPOSER_MAX_HEIGHT_RATIO));
+    const maxPx = getComposerMaxHeightPx();
+    el.style.height = "0px";
     const scroll = el.scrollHeight;
     const next = Math.min(scroll, maxPx);
     el.style.height = `${next}px`;
+    el.style.maxHeight = `${maxPx}px`;
     el.style.overflowY = scroll > maxPx ? "auto" : "hidden";
-  }, []);
+  }, [getComposerMaxHeightPx]);
 
   const { data: me } = useQuery({
     queryKey: ["me"],
@@ -231,6 +246,7 @@ export function SearchComposer({
       blurTimerRef.current = null;
     }
     setInputFocused(true);
+    requestAnimationFrame(() => requestAnimationFrame(adjustTextareaHeight));
   };
 
   const handleInputBlur = () => {
@@ -270,14 +286,28 @@ export function SearchComposer({
   const hasAttachment = totalCount > 0;
   const composerExpanded = inputFocused || attachMenuOpen || hasComposerText;
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     adjustTextareaHeight();
-  }, [value, hasAttachment, adjustTextareaHeight]);
+  }, [value, hasAttachment, composerExpanded, layoutMode, adjustTextareaHeight]);
 
   useEffect(() => {
     const onResize = () => adjustTextareaHeight();
     window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
+    window.visualViewport?.addEventListener("resize", onResize);
+    window.visualViewport?.addEventListener("scroll", onResize);
+    return () => {
+      window.removeEventListener("resize", onResize);
+      window.visualViewport?.removeEventListener("resize", onResize);
+      window.visualViewport?.removeEventListener("scroll", onResize);
+    };
+  }, [adjustTextareaHeight]);
+
+  useEffect(() => {
+    const el = textareaRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(() => adjustTextareaHeight());
+    ro.observe(el);
+    return () => ro.disconnect();
   }, [adjustTextareaHeight]);
   const showTypingOverlay =
     animatedPlaceholder && !value.trim() && !disabled && !inputFocused;
