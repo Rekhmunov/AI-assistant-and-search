@@ -202,8 +202,8 @@ async def update_user(
     request: Request,
     db: Annotated[AsyncSession, Depends(get_db)],
     admin: Annotated[AdminUser, Depends(require_permission("users:write"))],
-    limiter=Depends(get_rate_limiter),
     redis_client: Annotated[redis.Redis, Depends(get_redis)],
+    limiter=Depends(get_rate_limiter),
 ):
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
