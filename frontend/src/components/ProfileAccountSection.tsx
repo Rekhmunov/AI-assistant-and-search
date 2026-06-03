@@ -95,7 +95,13 @@ export function ProfileAccountSection({ user, token, onUserUpdated }: Props) {
       <div className="profile-link-item">
         <div className="profile-link-main">
           <span className="profile-link-label">MAX</span>
-          <StatusBadge active={hasMax} activeLabel={t("maxLinked")} inactiveLabel={t("maxNotLinked")} />
+          <StatusBadge
+            active={hasMax}
+            activeLabel={
+              user.max_user_id != null ? String(user.max_user_id) : t("maxLinked")
+            }
+            inactiveLabel={t("maxNotLinked")}
+          />
         </div>
         {!hasMax && (
           <div className="profile-bind-block">

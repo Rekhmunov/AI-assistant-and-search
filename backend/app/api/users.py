@@ -31,6 +31,7 @@ async def get_me(
         id=user.id,
         email=user.email,
         max_linked=user.max_user_id is not None,
+        max_user_id=user.max_user_id,
         first_name=user.first_name,
         last_name=user.last_name,
         username=user.username,

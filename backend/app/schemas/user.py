@@ -10,6 +10,8 @@ class UserProfile(BaseModel):
     id: UUID
     email: str | None = None
     max_linked: bool = False
+    """Стабильный ID пользователя в MAX (platform), не меняется в Glosix."""
+    max_user_id: int | None = None
     first_name: str | None
     last_name: str | None
     username: str | None

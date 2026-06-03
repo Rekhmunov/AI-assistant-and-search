@@ -17,6 +17,8 @@ export interface UserProfile {
   id: string;
   email?: string | null;
   max_linked?: boolean;
+  /** Стабильный ID аккаунта в MAX (только для отображения владельцу). */
+  max_user_id?: number | null;
   first_name: string | null;
   last_name: string | null;
   username: string | null;
