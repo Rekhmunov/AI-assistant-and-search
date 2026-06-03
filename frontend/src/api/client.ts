@@ -566,27 +566,74 @@ export async function fetchFileMeta(
   return res.json();
 }
 
-function resolveApiUrl(path: string): string {
-  return path.startsWith("http") ? path : `${API_BASE}${path}`;
+function appendFileFetchUrl(urls: string[], path: string) {
+  const normalized = path.startsWith("http") ? path : path.startsWith("/") ? path : `/${path}`;
+  if (normalized.startsWith("http")) {
+    urls.push(normalized);
+    return;
+  }
+  if (typeof window !== "undefined" && window.location?.origin) {
+    urls.push(`${window.location.origin}${normalized}`);
+  }
+  const base = (API_BASE || "").replace(/\/$/, "");
+  if (base) urls.push(`${base}${normalized}`);
 }
 
-/** Бинарник файла: подписанная ссылка, затем /content с cookie/Bearer (в т.ч. гость). */
+function buildFileFetchUrls(
+  fileId: string,
+  opts?: { shareUrl?: string | null; downloadUrl?: string | null },
+): string[] {
+  const urls: string[] = [];
+  if (opts?.shareUrl?.trim()) appendFileFetchUrl(urls, opts.shareUrl.trim());
+  if (opts?.downloadUrl?.trim()) appendFileFetchUrl(urls, opts.downloadUrl.trim());
+  appendFileFetchUrl(urls, `/api/files/${fileId}/content`);
+  return [...new Set(urls)];
+}
+
+async function blobLooksLikeDocx(blob: Blob): Promise<boolean> {
+  if (blob.size < 4) return false;
+  const headText =
+    blob.size < 256 && (blob.type.includes("json") || blob.type.includes("text"))
+      ? await blob.slice(0, Math.min(blob.size, 200)).text()
+      : "";
+  if (headText.includes('"detail"') || headText.trim().startsWith("{")) return false;
+  const sig = new Uint8Array(await blob.slice(0, 4).arrayBuffer());
+  return sig[0] === 0x50 && sig[1] === 0x4b;
+}
+
+async function fetchFileOnce(url: string, token: string | null): Promise<Blob | null> {
+  const shared = url.includes("/shared?");
+  const res = await fetch(url, {
+    headers: shared ? undefined : apiHeaders(token, false),
+    credentials: "include",
+  });
+  if (!res.ok) return null;
+  const blob = await res.blob();
+  return (await blobLooksLikeDocx(blob)) ? blob : null;
+}
+
+/** Бинарник файла: share (без JWT), затем /content с cookie/Bearer. */
 export async function fetchFileContent(
   token: string | null,
   fileId: string,
-  opts?: { shareUrl?: string | null },
+  opts?: { shareUrl?: string | null; downloadUrl?: string | null },
 ): Promise<Blob> {
-  const urls: string[] = [];
-  if (opts?.shareUrl?.trim()) urls.push(resolveApiUrl(opts.shareUrl.trim()));
-  urls.push(resolveApiUrl(`/api/files/${fileId}/content`));
+  let accessToken = token;
+  const urls = buildFileFetchUrls(fileId, opts);
 
-  for (const url of urls) {
-    const shared = url.includes("/shared?");
-    const res = await fetch(url, {
-      headers: shared ? undefined : apiHeaders(token, false),
-      credentials: "include",
-    });
-    if (res.ok) return res.blob();
+  for (let attempt = 0; attempt < 2; attempt++) {
+    for (const url of urls) {
+      const blob = await fetchFileOnce(url, accessToken);
+      if (blob) return blob;
+    }
+    if (attempt > 0) break;
+    try {
+      const refreshed = await refreshAccessToken();
+      accessToken = refreshed.access_token;
+      useAuthStore.getState().setToken(accessToken);
+    } catch {
+      break;
+    }
   }
   throw new Error("Не удалось загрузить файл");
 }

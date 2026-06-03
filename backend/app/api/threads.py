@@ -14,6 +14,7 @@ from app.models.message_feedback import MessageFeedback
 from app.models.thread import Thread
 from app.schemas.feedback import MessageFeedbackOut, reason_label
 from app.models.user import Plan, User
+from app.core.config import get_settings
 from app.schemas.thread import (
     EntityImageOut,
     MessageAttachmentOut,
@@ -25,6 +26,7 @@ from app.schemas.thread import (
     ThreadListItem,
     ThreadUpdate,
 )
+from app.services.message_attachments import message_attachments_out
 
 router = APIRouter(prefix="/threads", tags=["threads"])
 
@@ -140,6 +142,7 @@ async def get_thread(
         except ProgrammingError:
             await db.rollback()
 
+    settings = get_settings()
     messages_out: list[MessageOut] = []
     for m in thread.messages:
         sources = None
@@ -148,9 +151,7 @@ async def get_thread(
         images = None
         if m.images:
             images = [EntityImageOut(**img) for img in m.images]
-        attachments = None
-        if m.attachments:
-            attachments = [MessageAttachmentOut(**a) for a in m.attachments]
+        attachments = message_attachments_out(m.attachments, settings=settings)
         uf = None
         fb = feedback_by_message.get(m.id)
         if fb:

@@ -20,7 +20,10 @@ export function GeneratedDocumentCard({ document: doc }: Props) {
     setDownloading(true);
     setError("");
     try {
-      const blob = await fetchFileContent(token, doc.id, { shareUrl: doc.share_url });
+      const blob = await fetchFileContent(token, doc.id, {
+        shareUrl: doc.share_url,
+        downloadUrl: doc.url,
+      });
       const url = URL.createObjectURL(blob);
       const a = window.document.createElement("a");
       a.href = url;
