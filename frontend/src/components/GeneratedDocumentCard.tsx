@@ -1,41 +1,14 @@
-import { useState } from "react";
 import type { GeneratedDocumentInfo } from "../api/client";
-import { fetchFileContent } from "../api/client";
+import { fetchFileContent, resolveGeneratedDocumentOpenUrl } from "../api/client";
 import { t } from "../i18n";
-import { useAuthStore } from "../store/authStore";
-import { isProPlan } from "../lib/copyAttribution";
 
 type Props = {
   document: GeneratedDocumentInfo;
 };
 
 export function GeneratedDocumentCard({ document: doc }: Props) {
-  const token = useAuthStore((s) => s.token);
-  const plan = useAuthStore((s) => s.user?.plan);
-  const isPro = isProPlan(plan);
-  const [downloading, setDownloading] = useState(false);
-  const [error, setError] = useState("");
-
-  const download = async () => {
-    setDownloading(true);
-    setError("");
-    try {
-      const blob = await fetchFileContent(token, doc.id, {
-        shareUrl: doc.share_url,
-        downloadUrl: doc.url,
-      });
-      const url = URL.createObjectURL(blob);
-      const a = window.document.createElement("a");
-      a.href = url;
-      a.download = doc.filename || "document.docx";
-      a.click();
-      URL.revokeObjectURL(url);
-    } catch {
-      setError(t("downloadDocumentFailed"));
-    } finally {
-      setDownloading(false);
-    }
-  };
+  const openUrl = resolveGeneratedDocumentOpenUrl(doc);
+  const filename = doc.filename || "document.docx";
 
   return (
     <div className="generated-document-card">
@@ -46,15 +19,15 @@ export function GeneratedDocumentCard({ document: doc }: Props) {
         <span className="generated-document-card-name" title={doc.filename}>
           {doc.filename}
         </span>
-        <button
-          type="button"
+        <a
+          href={openUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          download={filename}
           className="btn btn-secondary generated-document-card-download"
-          disabled={downloading}
-          onClick={() => void download()}
         >
-          {downloading ? t("loading") : t("downloadDocument")}
-        </button>
-        {error ? <p className="generated-document-card-error">{error}</p> : null}
+          {t("downloadDocument")}
+        </a>
       </div>
     </div>
   );
@@ -86,15 +59,7 @@ export async function shareGeneratedDocument(
     if ((err as Error).name === "AbortError") return true;
   }
 
-  const API_BASE = import.meta.env.VITE_API_URL || "";
-  const link = doc.share_url
-    ? doc.share_url.startsWith("http")
-      ? doc.share_url
-      : `${API_BASE}${doc.share_url}`
-    : doc.url?.startsWith("http")
-      ? doc.url
-      : `${API_BASE}/api/files/${doc.id}/content`;
-
+  const link = resolveGeneratedDocumentOpenUrl(doc);
   const clipboardText = shareText ? `${shareText}\n${link}` : link;
   try {
     await navigator.clipboard.writeText(clipboardText);

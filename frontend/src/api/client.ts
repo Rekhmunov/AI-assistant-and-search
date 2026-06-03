@@ -590,8 +590,31 @@ export async function fetchFileMeta(
   return res.json();
 }
 
+function normalizeApiPath(path: string): string {
+  return path.startsWith("http") ? path : path.startsWith("/") ? path : `/${path}`;
+}
+
+function resolveAbsoluteApiUrl(path: string): string {
+  const normalized = normalizeApiPath(path);
+  if (normalized.startsWith("http")) return normalized;
+  if (typeof window !== "undefined" && window.location?.origin) {
+    return `${window.location.origin}${normalized}`;
+  }
+  const base = (API_BASE || "").replace(/\/$/, "");
+  return base ? `${base}${normalized}` : normalized;
+}
+
+/** Прямая ссылка на .docx (share предпочтительнее — работает в новой вкладке без Bearer). */
+export function resolveGeneratedDocumentOpenUrl(
+  doc: Pick<GeneratedDocumentInfo, "id" | "share_url" | "url">,
+): string {
+  if (doc.share_url?.trim()) return resolveAbsoluteApiUrl(doc.share_url.trim());
+  if (doc.url?.trim()) return resolveAbsoluteApiUrl(doc.url.trim());
+  return resolveAbsoluteApiUrl(`/api/files/${doc.id}/content`);
+}
+
 function appendFileFetchUrl(urls: string[], path: string) {
-  const normalized = path.startsWith("http") ? path : path.startsWith("/") ? path : `/${path}`;
+  const normalized = normalizeApiPath(path);
   if (normalized.startsWith("http")) {
     urls.push(normalized);
     return;
