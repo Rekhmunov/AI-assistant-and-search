@@ -49,7 +49,19 @@ def should_attach_prior_material(query: str, prior_messages: list[Message]) -> b
     q = (query or "").strip().lower()
     if len(q) > 120:
         return False
-    hints = ("документ", "word", "docx", "оферт", "договор", "заявлен")
+    hints = (
+        "документ",
+        "word",
+        "docx",
+        "оферт",
+        "договор",
+        "заявлен",
+        "соглашен",
+        "политик",
+        "регламент",
+        "отчет",
+        "отчёт",
+    )
     return any(h in q for h in hints)
 
 
