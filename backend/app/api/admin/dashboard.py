@@ -24,6 +24,7 @@ from app.schemas.admin import (
 )
 from app.schemas.feedback import reason_label
 from app.services.app_settings import get_setting
+from app.services.service_incidents import get_incidents_dashboard
 
 router = APIRouter(tags=["admin-dashboard"])
 
@@ -174,6 +175,8 @@ async def dashboard(
     except ProgrammingError:
         logger.warning("message_feedback table missing — run alembic upgrade head")
 
+    incidents_raw = await get_incidents_dashboard(redis)
+
     return DashboardMetrics(
         users_total=users_total or 0,
         users_new_7d=users_new_7d or 0,
@@ -186,6 +189,7 @@ async def dashboard(
         redis_ok=redis_ok,
         maintenance_mode=bool(maintenance),
         answer_feedback=feedback_block,
+        service_incidents=incidents_raw,
     )
 
 

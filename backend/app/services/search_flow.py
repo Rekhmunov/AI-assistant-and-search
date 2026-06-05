@@ -602,6 +602,7 @@ class SearchFlowService:
                         bootstrap_sources=bootstrap_sources or None,
                         prefer_official_docs=rewrite.prefer_official_docs,
                         needs_second_search=rewrite.needs_second_search,
+                        redis_client=redis_client,
                     )
                 )
                 pipeline_result = None
@@ -784,13 +785,36 @@ class SearchFlowService:
                     full_answer += chunk
                     yield sse_event("token", {"text": chunk})
         except YandexServiceError as e:
-            await db.rollback()
-            await limiter.release_search(user_id_str)
-            yield sse_event(
-                "error",
-                {"code": "yandex_error", "message": str(e)},
+            from app.services.service_incidents import (
+                DEGRADABLE_SEARCH_SERVICES,
+                record_service_incident,
             )
-            return
+
+            await record_service_incident(
+                redis_client,
+                service=e.service,
+                kind="user_error",
+                message=str(e),
+                status_code=e.status_code,
+            )
+            if e.service in DEGRADABLE_SEARCH_SERVICES and not full_answer.strip():
+                logger.warning("Search service error, falling back to direct LLM: %s", e)
+                async for chunk in llm.stream_answer_direct(
+                    llm_query,
+                    llm_history,
+                    model=route.answer_model,
+                    prior_sources_block=prior_sources_block,
+                ):
+                    full_answer += chunk
+                    yield sse_event("token", {"text": chunk})
+            else:
+                await db.rollback()
+                await limiter.release_search(user_id_str)
+                yield sse_event(
+                    "error",
+                    {"code": "yandex_error", "message": str(e)},
+                )
+                return
 
         settings = get_settings()
         follow_ups: list[str] = []

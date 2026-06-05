@@ -73,7 +73,16 @@ async def search_stream(
                 ):
                     yield event
             except YandexServiceError as e:
+                from app.services.service_incidents import record_service_incident
+
                 logger.warning("Search stream Yandex/Claude error for user %s: %s", user_id, e)
+                await record_service_incident(
+                    redis,
+                    service=e.service,
+                    kind="stream_abort",
+                    message=str(e),
+                    status_code=e.status_code,
+                )
                 await db.rollback()
                 await limiter.release_search(str(user_id))
                 yield sse_event("error", {"code": "yandex_error", "message": str(e)})

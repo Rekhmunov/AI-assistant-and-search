@@ -69,6 +69,30 @@ class FeedbackRecentPage(BaseModel):
     page_size: int
 
 
+class ServiceIncidentStat(BaseModel):
+    service: str
+    service_label: str
+    count_24h: int = 0
+    count_7d: int = 0
+    last_message: str | None = None
+    last_at: str | None = None
+
+
+class ServiceIncidentRecentItem(BaseModel):
+    service: str
+    service_label: str
+    kind: str = ""
+    message: str = ""
+    status_code: int | None = None
+    at: str | None = None
+
+
+class ServiceIncidentsDashboard(BaseModel):
+    totals_24h: int = 0
+    by_service: list[ServiceIncidentStat] = Field(default_factory=list)
+    recent: list[ServiceIncidentRecentItem] = Field(default_factory=list)
+
+
 class DashboardMetrics(BaseModel):
     users_total: int
     users_new_7d: int
@@ -81,6 +105,7 @@ class DashboardMetrics(BaseModel):
     redis_ok: bool
     maintenance_mode: bool
     answer_feedback: FeedbackDashboardBlock = Field(default_factory=FeedbackDashboardBlock)
+    service_incidents: ServiceIncidentsDashboard = Field(default_factory=ServiceIncidentsDashboard)
 
 
 class BroadcastCreate(BaseModel):

@@ -21,6 +21,7 @@ from app.services.page_depth import (
 )
 from app.services.source_ranking import rank_sources
 from app.services.providers.factory import ChatLLM
+from app.services.yandex_errors import YandexServiceError
 from app.services.yandex_gpt import YandexGPTProvider
 from app.services.yandex_search import YandexSearchService
 
@@ -67,9 +68,26 @@ class FactPipeline:
         howto: bool,
         answer_model: str,
         prefer_official_docs: bool = False,
+        redis_client=None,
     ) -> tuple[str, list[SearchSource], RetrievalAssessment]:
         search_q = enhance_fn(base_q)
-        raw = await self.search.search(search_q)
+        try:
+            raw = await self.search.search(search_q)
+        except YandexServiceError as e:
+            if e.service != "search":
+                raise
+            from app.services.service_incidents import record_service_incident
+
+            logger.warning("Yandex Search degraded (no results): %s", e)
+            await record_service_incident(
+                redis_client,
+                service=e.service,
+                kind="degraded",
+                message=str(e),
+                status_code=e.status_code,
+            )
+            empty = assess_retrieval([], llm_query, fact_slots=slots)
+            return search_q, [], empty
         ranked = rank_sources(
             raw,
             howto=howto or answer_model == "pro",
@@ -92,6 +110,7 @@ class FactPipeline:
         bootstrap_sources: list[SearchSource] | None = None,
         prefer_official_docs: bool = False,
         needs_second_search: bool = False,
+        redis_client=None,
     ) -> FactPipelineResult:
         settings = get_settings()
         slots = resolve_fact_slots(fact_slots)
@@ -124,6 +143,7 @@ class FactPipeline:
                 howto=howto,
                 answer_model=answer_model,
                 prefer_official_docs=prefer_official_docs,
+                redis_client=redis_client,
             )
             last_q = search_q
             batches.append(ranked)
@@ -152,6 +172,7 @@ class FactPipeline:
                             howto=howto,
                             answer_model=answer_model,
                             prefer_official_docs=prefer_official_docs,
+                            redis_client=redis_client,
                         )
                         for q in queries[1:]
                     ]
@@ -183,6 +204,7 @@ class FactPipeline:
                         howto=howto,
                         answer_model=answer_model,
                         prefer_official_docs=prefer_official_docs,
+                        redis_client=redis_client,
                     )
                     last_q = search_q
                     batches.append(ranked)

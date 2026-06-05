@@ -798,6 +798,110 @@ pre.small {
   border: 1px solid var(--border-subtle);
 }
 
+.incidents-dashboard {
+  margin-bottom: 28px;
+}
+
+.incidents-dashboard-header h2 {
+  margin: 0 0 4px;
+  font-size: 1.25rem;
+}
+
+.incidents-dashboard-sub {
+  margin: 0 0 16px;
+  font-size: 0.875rem;
+  color: var(--muted);
+}
+
+.incidents-by-service {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.incidents-service-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--surface-hover);
+  border: 1px solid var(--border-subtle);
+}
+
+.incidents-service-label {
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.incidents-service-counts {
+  font-size: 0.8125rem;
+  color: var(--muted);
+}
+
+.incidents-service-last {
+  font-size: 0.8125rem;
+  color: var(--text);
+  opacity: 0.85;
+}
+
+.incidents-empty {
+  margin: 0 0 12px;
+  font-size: 0.875rem;
+  color: var(--muted);
+}
+
+.incidents-recent-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 0;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font-size: 0.875rem;
+  cursor: pointer;
+  text-align: left;
+}
+
+.incidents-recent-chevron {
+  display: inline-block;
+  transition: transform 0.15s ease;
+  font-size: 0.7rem;
+}
+
+.incidents-recent-chevron--open {
+  transform: rotate(90deg);
+}
+
+.incidents-recent-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.incidents-recent-item {
+  padding: 10px 0;
+  border-top: 1px solid var(--border-subtle);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.incidents-recent-meta {
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.incidents-recent-msg {
+  font-size: 0.8125rem;
+  word-break: break-word;
+}
+
 .feedback-dashboard {
   margin-bottom: 28px;
 }
