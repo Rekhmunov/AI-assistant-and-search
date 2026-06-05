@@ -221,7 +221,12 @@ class FactPipeline:
                     if assessment.ok:
                         break
 
-        sources = merge_search_sources(batches, max_sources=12)
+        sources = merge_search_sources(
+            batches,
+            max_sources=12,
+            howto=howto or answer_model == "pro",
+            prefer_official_docs=prefer_official_docs,
+        )
         retrieval_trace: dict[str, Any] | None = None
         if sources:
             a = assess_retrieval(sources, llm_query, fact_slots=slots)

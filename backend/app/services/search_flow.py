@@ -22,6 +22,7 @@ from app.services.llm_provider import SearchSource
 from app.services.answer_guard import free_vision_pro_addon, image_display_answer_addon, is_template_evasion
 from app.services.query_router import QueryRouter
 from app.services.query_rewriter import QueryRewriter
+from app.services.facts.merge_sources import diversify_sources_by_domain
 from app.services.facts.pipeline import FactPipeline
 from app.services.facts.verify import verify_answer_against_facts
 from app.services.search_debug import build_debug_trace, build_gpt_messages_preview
@@ -478,7 +479,12 @@ class SearchFlowService:
                             except Exception:
                                 logger.exception("Entity image search failed (non-fatal)")
                         if event.sources and not sources:
-                            sources = event.sources
+                            sources = diversify_sources_by_domain(
+                                event.sources,
+                                max_sources=12,
+                                howto=route.intent == "howto" or route.answer_model == "pro",
+                                prefer_official_docs=route.intent == "howto",
+                            )
                             sources_json = sources_to_json(sources)
                             if sources_json:
                                 yield sse_event("sources", {"sources": sources_json})
