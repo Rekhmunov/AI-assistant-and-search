@@ -181,7 +181,8 @@ export function DashboardPage() {
         <div className="incidents-dashboard-header">
           <h2 id="incidents-dashboard-title">Сбои сервисов</h2>
           <p className="incidents-dashboard-sub">
-            Ошибки Yandex Search, LLM и др. За 24 ч: <strong>{incidents.totals_24h}</strong>
+            Ошибки Yandex Search, генерации картинок, LLM и др. За 24 ч:{" "}
+            <strong>{incidents.totals_24h}</strong>
           </p>
         </div>
         {incidents.by_service.length > 0 ? (

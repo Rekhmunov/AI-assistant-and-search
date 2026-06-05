@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { EntityImage } from "../api/client";
 import { ImageLightboxOverlay } from "./ImageLightboxOverlay";
+import { ProtectedGeneratedImage } from "./ProtectedGeneratedImage";
 
 type LightboxState = {
   url: string;
@@ -21,16 +22,14 @@ export function ChatGeneratedImages({ images }: Props) {
     <>
       <div className="chat-generated-images" aria-label="Сгенерированное изображение">
         {ready.map((img) => (
-          <button
+          <ProtectedGeneratedImage
             key={img.url}
-            type="button"
+            image={img}
             className="chat-generated-image-item"
             onClick={() =>
               setLightbox({ url: img.url, title: img.title || "Сгенерированное изображение" })
             }
-          >
-            <img src={img.url} alt={img.title || ""} referrerPolicy="no-referrer" decoding="async" />
-          </button>
+          />
         ))}
       </div>
 

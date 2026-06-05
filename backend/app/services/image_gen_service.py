@@ -44,14 +44,18 @@ async def persist_generated_image(
     *,
     title: str,
 ) -> tuple[UUID, list[dict]]:
+    from app.services.image_bytes import detect_image_mime
+
+    mime = detect_image_mime(image_bytes) or "image/jpeg"
+    ext = "png" if mime == "image/png" else "jpg"
     file_id = uuid4()
     now = datetime.now(timezone.utc)
-    storage_key = save_upload_bytes(user.id, file_id, image_bytes, "png")
+    storage_key = save_upload_bytes(user.id, file_id, image_bytes, ext)
     row = UploadedFile(
         id=file_id,
         user_id=user.id,
-        filename=f"generated-{file_id.hex[:8]}.png",
-        mime_type="image/png",
+        filename=f"generated-{file_id.hex[:8]}.{ext}",
+        mime_type=mime,
         size_bytes=len(image_bytes),
         media_kind="generated",
         storage_key=storage_key,

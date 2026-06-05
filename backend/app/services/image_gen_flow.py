@@ -21,6 +21,8 @@ from app.services.image_gen_service import (
     stream_image_generation,
 )
 from app.services.message_images_column import messages_have_images_column
+from app.services.image_bytes import is_valid_image_bytes
+from app.services.service_incidents import record_service_incident
 from app.services.sse import sse_event
 from app.services.search_query import normalize_user_query
 
@@ -124,7 +126,15 @@ async def stream_image_generation_turn(
         async for event_type, payload in stream_image_generation(display_content, provider_id):
             if event_type == "status" and payload:
                 yield sse_event("image_gen_status", {"status": payload})
+            elif event_type == "image_bytes" and isinstance(payload, bytes):
+                image_bytes = payload
             elif event_type == "error":
+                await record_service_incident(
+                    redis_client,
+                    service="image_gen",
+                    kind="generation_failed",
+                    message=str(payload),
+                )
                 await limiter.release_image_gen(user_id_str)
                 yield sse_event(
                     "error",
@@ -133,13 +143,15 @@ async def stream_image_generation_turn(
                 return
             elif event_type == "done":
                 lines = payload.split("\n", 1)
-                from app.services.gigachat_client import download_file_bytes
-
-                file_id_giga = lines[0].strip()
                 assistant_text = lines[1].strip() if len(lines) > 1 else ""
-                image_bytes = await download_file_bytes(file_id_giga, settings=settings)
-    except Exception:
+    except Exception as exc:
         logger.exception("image generation failed")
+        await record_service_incident(
+            redis_client,
+            service="image_gen",
+            kind="exception",
+            message=str(exc),
+        )
         await limiter.release_image_gen(user_id_str)
         yield sse_event(
             "error",
@@ -150,13 +162,19 @@ async def stream_image_generation_turn(
         )
         return
 
-    if not image_bytes or len(image_bytes) < 128:
+    if not image_bytes or not is_valid_image_bytes(image_bytes):
+        await record_service_incident(
+            redis_client,
+            service="image_gen",
+            kind="invalid_image",
+            message="Пустое или повреждённое изображение от GigaChat",
+        )
         await limiter.release_image_gen(user_id_str)
         yield sse_event(
             "error",
             {
                 "code": "image_gen_failed",
-                "message": "Пустое изображение от сервиса генерации.",
+                "message": "Пустое или повреждённое изображение от сервиса генерации.",
             },
         )
         return

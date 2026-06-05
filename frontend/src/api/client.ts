@@ -679,15 +679,14 @@ function buildFileFetchUrls(
   return [...new Set(urls)];
 }
 
-async function blobLooksLikeDocx(blob: Blob): Promise<boolean> {
-  if (blob.size < 4) return false;
-  const headText =
-    blob.size < 256 && (blob.type.includes("json") || blob.type.includes("text"))
-      ? await blob.slice(0, Math.min(blob.size, 200)).text()
-      : "";
-  if (headText.includes('"detail"') || headText.trim().startsWith("{")) return false;
-  const sig = new Uint8Array(await blob.slice(0, 4).arrayBuffer());
-  return sig[0] === 0x50 && sig[1] === 0x4b;
+async function blobLooksLikeApiError(blob: Blob): Promise<boolean> {
+  if (blob.size >= 256) return false;
+  if (!blob.type.includes("json") && !blob.type.includes("text") && !blob.type.includes("html")) {
+    return false;
+  }
+  const headText = await blob.slice(0, Math.min(blob.size, 200)).text();
+  const trimmed = headText.trim();
+  return trimmed.startsWith("{") || trimmed.startsWith("<") || headText.includes('"detail"');
 }
 
 async function fetchFileOnce(url: string, token: string | null): Promise<Blob | null> {
@@ -698,7 +697,8 @@ async function fetchFileOnce(url: string, token: string | null): Promise<Blob | 
   });
   if (!res.ok) return null;
   const blob = await res.blob();
-  return (await blobLooksLikeDocx(blob)) ? blob : null;
+  if (await blobLooksLikeApiError(blob)) return null;
+  return blob;
 }
 
 /** Бинарник файла: share (без JWT), затем /content с cookie/Bearer. */

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useBodyScrollLock } from "../hooks/useBodyScrollLock";
 import type { EntityImage } from "../api/client";
+import { ProtectedGeneratedImage } from "./ProtectedGeneratedImage";
 import { isGeneratedImageUrl } from "../lib/generatedImageUrl";
 import { preloadEntityImages } from "../lib/preloadEntityImages";
 import { faviconUrl, sourceDomainLabel } from "../lib/sourceDomainLabel";
@@ -188,18 +189,26 @@ export function ThreadImagesTab({ groups, loading = false }: Props) {
                   key={`${group.turnKey}-${img.url}`}
                   className={`turn-images-grid-item${generated ? " turn-images-grid-item--generated" : ""}`}
                 >
-                  <button
-                    type="button"
-                    className={`turn-images-grid-thumb${generated ? " turn-images-grid-thumb--generated" : ""}`}
-                    onClick={() => setLightboxIndex(index)}
-                  >
-                    <img
-                      src={img.url}
-                      alt={img.title || domain || ""}
-                      referrerPolicy="no-referrer"
-                      loading="lazy"
+                  {generated ? (
+                    <ProtectedGeneratedImage
+                      image={img}
+                      className={`turn-images-grid-thumb turn-images-grid-thumb--generated`}
+                      onClick={() => setLightboxIndex(index)}
                     />
-                  </button>
+                  ) : (
+                    <button
+                      type="button"
+                      className="turn-images-grid-thumb"
+                      onClick={() => setLightboxIndex(index)}
+                    >
+                      <img
+                        src={img.url}
+                        alt={img.title || domain || ""}
+                        referrerPolicy="no-referrer"
+                        loading="lazy"
+                      />
+                    </button>
+                  )}
                   {!generated && (
                     <a
                       className="turn-images-grid-source"

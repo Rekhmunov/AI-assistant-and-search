@@ -1,8 +1,16 @@
+const GENERATED_FILE_URL_RE = /\/api\/files\/([0-9a-f-]{36})\/content/i;
+
 /** URL сгенерированных картинок Glosix (не веб-поиск). */
 export function isGeneratedImageUrl(url: string): boolean {
   const u = (url || "").trim();
   if (!u) return false;
-  return /\/api\/files\/[0-9a-f-]{36}\/content/i.test(u);
+  return GENERATED_FILE_URL_RE.test(u);
+}
+
+export function parseGeneratedFileId(url: string): string | null {
+  const u = (url || "").trim();
+  const match = GENERATED_FILE_URL_RE.exec(u);
+  return match?.[1] ?? null;
 }
 
 /** Показывать полноразмерный блок в чате, а не карусель поиска. */

@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { createPortal } from "react-dom";
 import { useBodyScrollLock } from "../hooks/useBodyScrollLock";
+import { useProtectedImageSrc } from "../hooks/useProtectedImageSrc";
 import { t } from "../i18n";
 
 type Props = {
@@ -12,6 +13,7 @@ type Props = {
 
 /** Полноэкранный просмотр фото (portal + крестик сверху справа). */
 export function ImageLightboxOverlay({ url, title, onClose, pageUrl }: Props) {
+  const src = useProtectedImageSrc(url) ?? url;
   useBodyScrollLock(true);
 
   useEffect(() => {
@@ -47,7 +49,7 @@ export function ImageLightboxOverlay({ url, title, onClose, pageUrl }: Props) {
         onClick={(e) => e.stopPropagation()}
       >
         <div className="image-lightbox-stage">
-          <img src={url} alt={title} referrerPolicy="no-referrer" decoding="sync" draggable={false} />
+          <img src={src} alt={title} referrerPolicy="no-referrer" decoding="sync" draggable={false} />
         </div>
         {pageUrl && pageUrl !== url && (
           <a

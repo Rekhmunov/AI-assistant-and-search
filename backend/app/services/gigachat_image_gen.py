@@ -14,6 +14,7 @@ from app.services.gigachat_client import (
     download_file_bytes,
     iter_chat_completion_chunks,
 )
+from app.services.image_bytes import detect_image_mime, is_valid_image_bytes
 
 logger = logging.getLogger(__name__)
 
@@ -150,26 +151,41 @@ async def stream_gigachat_image_generation(
         yield ("error", "Не удалось скачать сгенерированное изображение")
         return
 
-    if len(image_bytes) < 128:
-        yield ("error", "Пустой файл изображения")
+    if not is_valid_image_bytes(image_bytes):
+        mime_hint = detect_image_mime(image_bytes) or "unknown"
+        logger.warning(
+            "GigaChat image invalid: file_id=%s size=%d mime=%s head=%s",
+            file_id,
+            len(image_bytes),
+            mime_hint,
+            image_bytes[:16].hex() if image_bytes else "",
+        )
+        yield ("error", "GigaChat вернул повреждённое изображение")
         return
 
     clean_text = _clean_assistant_text(full_text)
+    yield ("image_bytes", image_bytes)
     yield ("done", f"{file_id}\n{clean_text}")
 
 
 async def generate_gigachat_image(prompt: str, *, settings: Settings | None = None) -> ImageGenerationResult:
     last_status = ""
+    image_bytes: bytes | None = None
     async for event_type, payload in stream_gigachat_image_generation(prompt, settings=settings):
         if event_type == "status":
             last_status = payload
         elif event_type == "error":
             raise ImageGenerationError("generation_failed", payload)
+        elif event_type == "image_bytes":
+            image_bytes = payload
         elif event_type == "done":
             lines = payload.split("\n", 1)
             file_id = lines[0].strip()
             text = lines[1].strip() if len(lines) > 1 else ""
-            image_bytes = await download_file_bytes(file_id, settings=settings)
+            if not isinstance(image_bytes, bytes) or not is_valid_image_bytes(image_bytes):
+                image_bytes = await download_file_bytes(file_id, settings=settings)
+            if not is_valid_image_bytes(image_bytes):
+                raise ImageGenerationError("generation_failed", "GigaChat вернул повреждённое изображение")
             return ImageGenerationResult(
                 image_bytes=image_bytes,
                 assistant_text=text or "Готово — изображение сгенерировано.",
