@@ -30,6 +30,8 @@ export type ThreadTurn = {
   /** Markdown-документ в чате (оферта и т.п.) */
   markdownDocument?: MarkdownDocumentInfo | null;
   streaming?: boolean;
+  /** Вопрос сохранён, ответ ассистента ещё не появился в API (вернулись на тред). */
+  preparing?: boolean;
   errorCode?: string;
 };
 
@@ -98,6 +100,15 @@ export function resolveAssistantMessageId(
   return UUID_RE.test(candidate) ? candidate : undefined;
 }
 
+/** Последнее сообщение — user без следующего assistant (ответ ещё генерируется на сервере). */
+export function threadHasPendingAnswer(messages: Message[]): boolean {
+  if (!messages.length) return false;
+  const sorted = [...messages].sort(
+    (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+  );
+  return sorted[sorted.length - 1]?.role === "user";
+}
+
 /** Собирает пары вопрос–ответ из сообщений API (по порядку created_at). */
 export function messagesToTurns(messages: Message[]): ThreadTurn[] {
   const sorted = [...messages].sort(
@@ -137,6 +148,7 @@ export function messagesToTurns(messages: Message[]): ThreadTurn[] {
       sources: [],
       images: [],
       followUps: [],
+      preparing: true,
     });
   }
 

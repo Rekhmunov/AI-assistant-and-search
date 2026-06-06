@@ -38,7 +38,13 @@ import {
 } from "../lib/threadImageGroups";
 import { answerHasText, normalizeAnswerText } from "../lib/answerText";
 import { SEARCH_QUERY_MAX_LENGTH } from "../lib/searchQueryLimits";
-import { mergeThreadTurns, messagesToTurns, resolveAssistantMessageId, type ThreadTurn } from "../lib/threadTurns";
+import {
+  mergeThreadTurns,
+  messagesToTurns,
+  resolveAssistantMessageId,
+  threadHasPendingAnswer,
+  type ThreadTurn,
+} from "../lib/threadTurns";
 import { useDesktopLayout } from "../hooks/useDesktopLayout";
 import { useAuthStore } from "../store/authStore";
 
@@ -97,6 +103,9 @@ type ThreadLocationState = {
   pendingAttachments?: MessageAttachment[];
 };
 
+const PENDING_ANSWER_POLL_MS = 4000;
+const PENDING_ANSWER_POLL_MAX_MS = 10 * 60 * 1000;
+
 function mapComposerAttachments(
   items: { id: string; filename: string; kind: "document" | "image"; previewUrl?: string }[],
 ): MessageAttachment[] {
@@ -134,6 +143,7 @@ export function Thread() {
   const [composerQuery, setComposerQuery] = useState("");
   const [activeTab, setActiveTab] = useState<ThreadTab>("answer");
   const started = useRef(false);
+  const pendingPollStartedAtRef = useRef<number | null>(null);
   const streamingRef = useRef(false);
   const isRevealingRef = useRef(false);
   const activeThreadIdRef = useRef<string | null>(id ?? null);
@@ -191,11 +201,26 @@ export function Thread() {
     [activeTab, isDesktop, scrollAnswerToLastTurn],
   );
 
+  const activeThreadKey = id ?? threadId;
+
   const { data: thread } = useQuery({
-    queryKey: ["thread", id ?? threadId],
-    queryFn: () => fetchThread(token, (id ?? threadId)!),
-    enabled: !!(id ?? threadId),
+    queryKey: ["thread", activeThreadKey],
+    queryFn: () => fetchThread(token, activeThreadKey!),
+    enabled: !!activeThreadKey,
     staleTime: 60_000,
+    refetchInterval: (query) => {
+      if (streamingRef.current) return false;
+      const data = query.state.data;
+      if (!data || !threadHasPendingAnswer(data.messages)) {
+        pendingPollStartedAtRef.current = null;
+        return false;
+      }
+      if (pendingPollStartedAtRef.current === null) {
+        pendingPollStartedAtRef.current = Date.now();
+      }
+      if (Date.now() - pendingPollStartedAtRef.current > PENDING_ANSWER_POLL_MAX_MS) return false;
+      return PENDING_ANSWER_POLL_MS;
+    },
   });
 
   const syncTurnsFromThread = useCallback(() => {
@@ -656,15 +681,18 @@ export function Thread() {
             const sources = turn.sources ?? [];
             const isImageGenTurn = useChatGeneratedImageLayout(turn);
             const isDocumentGenTurn = Boolean(turn.isDocumentGen || turn.generatedDocument);
+            const showPreparing =
+              Boolean(turn.preparing && !streaming && !turn.errorCode && !answerHasText(turn.answer));
             const showStatus =
-              isActive &&
-              streaming &&
-              !turn.errorCode &&
-              (isDocumentGenTurn
-                ? !answerHasText(turn.answer) && !turn.generatedDocument
-                : isImageGenTurn
-                  ? (turn.images?.length ?? 0) === 0
-                  : !answerHasText(turn.answer));
+              showPreparing ||
+              (isActive &&
+                streaming &&
+                !turn.errorCode &&
+                (isDocumentGenTurn
+                  ? !answerHasText(turn.answer) && !turn.generatedDocument
+                  : isImageGenTurn
+                    ? (turn.images?.length ?? 0) === 0
+                    : !answerHasText(turn.answer)));
             const showGuestLimit = turn.errorCode === "guest_rate_limit" || turn.errorCode === "rate_limit";
             const showFreeLimit = turn.errorCode === "free_rate_limit";
             const showImageGenPro = turn.errorCode === "free_image_gen_pro";
@@ -687,7 +715,9 @@ export function Thread() {
                 <ThreadQuery query={turn.query} attachments={turn.attachments} />
 
                 {showStatus &&
-                  (isDocumentGenTurn ? (
+                  (showPreparing ? (
+                    <SearchStatusLine phase="preparing" />
+                  ) : isDocumentGenTurn ? (
                     <DocGenStatusLine active={Boolean(isActive && streaming)} status={docGenStatus} />
                   ) : isImageGenTurn ? (
                     <ImageGenStatusLine active={streaming} />

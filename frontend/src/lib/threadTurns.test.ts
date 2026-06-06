@@ -3,6 +3,7 @@ import {
   mergeThreadTurns,
   messagesToTurns,
   resolveAssistantMessageId,
+  threadHasPendingAnswer,
   type ThreadTurn,
 } from "./threadTurns";
 
@@ -35,7 +36,71 @@ describe("resolveAssistantMessageId", () => {
   });
 });
 
+describe("threadHasPendingAnswer", () => {
+  it("is true when last message is user without assistant", () => {
+    expect(
+      threadHasPendingAnswer([
+        {
+          id: "user-1",
+          role: "user",
+          content: "вопрос",
+          created_at: "2026-01-01T10:00:00Z",
+          sources: null,
+          images: null,
+          follow_up_questions: null,
+          user_feedback: null,
+        },
+      ]),
+    ).toBe(true);
+  });
+
+  it("is false when assistant follows user", () => {
+    expect(
+      threadHasPendingAnswer([
+        {
+          id: "user-1",
+          role: "user",
+          content: "вопрос",
+          created_at: "2026-01-01T10:00:00Z",
+          sources: null,
+          images: null,
+          follow_up_questions: null,
+          user_feedback: null,
+        },
+        {
+          id: ASSISTANT_ID,
+          role: "assistant",
+          content: "ответ",
+          created_at: "2026-01-01T10:00:01Z",
+          sources: null,
+          images: null,
+          follow_up_questions: null,
+          user_feedback: null,
+        },
+      ]),
+    ).toBe(false);
+  });
+});
+
 describe("messagesToTurns", () => {
+  it("marks trailing user-only message as preparing", () => {
+    const turns = messagesToTurns([
+      {
+        id: "user-1",
+        role: "user",
+        content: "вопрос",
+        created_at: "2026-01-01T10:00:00Z",
+        sources: null,
+        images: null,
+        follow_up_questions: null,
+        user_feedback: null,
+      },
+    ]);
+    expect(turns).toHaveLength(1);
+    expect(turns[0].preparing).toBe(true);
+    expect(turns[0].answer).toBe("");
+  });
+
   it("sets messageId on assistant turns", () => {
     const turns = messagesToTurns([
       {

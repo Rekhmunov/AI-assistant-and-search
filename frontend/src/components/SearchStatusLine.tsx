@@ -1,7 +1,13 @@
 import { useTypewriterText } from "../hooks/useTypewriterText";
 import { t } from "../i18n";
 
-export type SearchPhase = "routing" | "searching" | "answering" | "image_generating" | "idle";
+export type SearchPhase =
+  | "routing"
+  | "searching"
+  | "answering"
+  | "image_generating"
+  | "preparing"
+  | "idle";
 
 type Props = {
   phase: SearchPhase;
@@ -12,6 +18,7 @@ type Props = {
 
 function statusLabel(phase: SearchPhase, needsSearch?: boolean, customStatus?: string | null): string {
   if (customStatus?.trim()) return customStatus.trim();
+  if (phase === "preparing") return t("answerPreparing");
   if (phase === "image_generating") return t("imageGenWorking");
   if (phase === "routing") return t("thinking");
   if (phase === "searching") {
