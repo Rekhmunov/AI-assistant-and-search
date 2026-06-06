@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 import uuid
 from dataclasses import dataclass
+from datetime import datetime, timezone
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -18,9 +19,12 @@ DEFAULT_DOCUMENTS: tuple[tuple[str, str, str], ...] = (
     ("privacy", "Политика конфиденциальности", "/privacy"),
     ("pd_consent", "Согласие на обработку персональных данных", "/consent-personal-data"),
     ("cookies", "Политика использования cookie", "/cookies"),
+    ("offer", "Публичная оферта", "/offer"),
+    ("terms", "Пользовательское соглашение", "/terms"),
 )
 
 REQUIRED_REGISTER_SLUGS = frozenset({"privacy", "pd_consent"})
+RECONSENT_SLUGS = frozenset({"privacy", "pd_consent", "cookies"})
 
 ONLY_VERSION_ERROR = "Нельзя удалить единственную версию документа"
 CONSENT_BLOCKED_ERROR = "Нельзя удалить версию: с ней ознакомился хотя бы один пользователь"
@@ -38,6 +42,23 @@ def normalize_public_path(path: str) -> str:
     if len(p) > 1 and p.endswith("/"):
         p = p.rstrip("/")
     return p
+
+
+@dataclass(frozen=True)
+class ConsentMeta:
+    source: str
+    consent_method: str
+    ip_address: str | None = None
+    user_agent: str | None = None
+
+
+@dataclass(frozen=True)
+class PendingConsent:
+    slug: str
+    title: str
+    public_path: str
+    version_id: uuid.UUID
+    version_number: int
 
 
 @dataclass(frozen=True)
@@ -150,6 +171,117 @@ async def delete_document_version(
     return doc
 
 
+def user_needs_reconsent(user: User) -> bool:
+    return bool(user.email or user.max_user_id)
+
+
+async def get_user_consent(
+    db: AsyncSession,
+    user_id: uuid.UUID,
+    document_id: uuid.UUID,
+) -> UserLegalConsent | None:
+    result = await db.execute(
+        select(UserLegalConsent).where(
+            UserLegalConsent.user_id == user_id,
+            UserLegalConsent.document_id == document_id,
+        )
+    )
+    return result.scalar_one_or_none()
+
+
+async def upsert_user_consent(
+    db: AsyncSession,
+    user: User,
+    doc: LegalDocument,
+    version_id: uuid.UUID,
+    *,
+    meta: ConsentMeta,
+) -> UserLegalConsent:
+    if doc.current_version_id != version_id:
+        raise ValueError(f"Устаревшая версия документа: {doc.slug}")
+    ver_result = await db.execute(
+        select(LegalDocumentVersion).where(
+            LegalDocumentVersion.id == version_id,
+            LegalDocumentVersion.document_id == doc.id,
+        )
+    )
+    if not ver_result.scalar_one_or_none():
+        raise ValueError(f"Invalid version for {doc.slug}")
+
+    existing = await get_user_consent(db, user.id, doc.id)
+    now = datetime.now(timezone.utc)
+    if existing:
+        existing.version_id = version_id
+        existing.consented_at = now
+        existing.source = meta.source
+        existing.ip_address = meta.ip_address
+        existing.user_agent = meta.user_agent
+        existing.consent_method = meta.consent_method
+        await db.flush()
+        return existing
+
+    row = UserLegalConsent(
+        user_id=user.id,
+        document_id=doc.id,
+        version_id=version_id,
+        consented_at=now,
+        source=meta.source,
+        ip_address=meta.ip_address,
+        user_agent=meta.user_agent,
+        consent_method=meta.consent_method,
+    )
+    db.add(row)
+    await db.flush()
+    return row
+
+
+async def record_consent(
+    db: AsyncSession,
+    user: User,
+    *,
+    slug: str,
+    version_id: uuid.UUID,
+    meta: ConsentMeta,
+) -> UserLegalConsent:
+    doc = await get_document_by_slug(db, slug)
+    if not doc or not doc.current_version_id:
+        raise ValueError(f"Document not configured: {slug}")
+    return await upsert_user_consent(db, user, doc, version_id, meta=meta)
+
+
+async def get_pending_consents(db: AsyncSession, user: User) -> list[PendingConsent]:
+    if not user_needs_reconsent(user):
+        return []
+
+    result = await db.execute(
+        select(LegalDocument)
+        .where(LegalDocument.slug.in_(RECONSENT_SLUGS))
+        .order_by(LegalDocument.slug)
+    )
+    docs = list(result.scalars().all())
+    pending: list[PendingConsent] = []
+    for doc in docs:
+        if not doc.current_version_id:
+            continue
+        await db.refresh(doc, attribute_names=["current_version"])
+        current = doc.current_version
+        if not current:
+            continue
+        consent = await get_user_consent(db, user.id, doc.id)
+        if consent and consent.version_id == doc.current_version_id:
+            continue
+        pending.append(
+            PendingConsent(
+                slug=doc.slug,
+                title=doc.title,
+                public_path=doc.public_path,
+                version_id=current.id,
+                version_number=current.version_number,
+            )
+        )
+    return pending
+
+
 async def save_document_version(
     db: AsyncSession,
     *,
@@ -216,29 +348,11 @@ async def record_user_consents(
     *,
     privacy_version_id: uuid.UUID,
     pd_consent_version_id: uuid.UUID,
+    meta: ConsentMeta,
 ) -> None:
     mapping = {
         "privacy": privacy_version_id,
         "pd_consent": pd_consent_version_id,
     }
     for slug, version_id in mapping.items():
-        doc = await get_document_by_slug(db, slug)
-        if not doc or not doc.current_version_id:
-            raise ValueError(f"Document not configured: {slug}")
-        if doc.current_version_id != version_id:
-            raise ValueError(f"Устаревшая версия документа: {slug}")
-        ver_result = await db.execute(
-            select(LegalDocumentVersion).where(
-                LegalDocumentVersion.id == version_id,
-                LegalDocumentVersion.document_id == doc.id,
-            )
-        )
-        if not ver_result.scalar_one_or_none():
-            raise ValueError(f"Invalid version for {slug}")
-        db.add(
-            UserLegalConsent(
-                user_id=user.id,
-                document_id=doc.id,
-                version_id=version_id,
-            )
-        )
+        await record_consent(db, user, slug=slug, version_id=version_id, meta=meta)

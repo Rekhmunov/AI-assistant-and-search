@@ -222,6 +222,51 @@ export async function fetchLegalByPath(path: string): Promise<LegalDocumentPubli
   return res.json();
 }
 
+export type PendingConsent = {
+  slug: string;
+  title: string;
+  public_path: string;
+  version_id: string;
+  version_number: number;
+};
+
+export async function fetchConsentStatus(
+  token: string,
+): Promise<{ pending: PendingConsent[] }> {
+  const res = await fetch(`${API_BASE}/api/legal/consent-status`, {
+    headers: apiHeaders(token),
+    credentials: "include",
+  });
+  if (!res.ok) throw new Error("Failed to load consent status");
+  return res.json();
+}
+
+export async function recordLegalConsent(
+  token: string | null,
+  body: {
+    consents: Array<{ slug: string; version_id: string }>;
+    source: string;
+    consent_method: string;
+  },
+): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/legal/consent`, {
+    method: "POST",
+    headers: apiHeaders(token),
+    credentials: "include",
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    let msg = "Failed to record consent";
+    try {
+      const data = await res.json();
+      if (typeof data.detail === "string") msg = data.detail;
+    } catch {
+      /* ignore */
+    }
+    throw new Error(msg);
+  }
+}
+
 export async function registerEmail(
   email: string,
   password: string,
@@ -454,12 +499,14 @@ export async function devActivatePro(token: string): Promise<void> {
 }
 
 export async function createProPayment(
-  token: string
+  token: string,
+  offerVersionId: string,
 ): Promise<{ confirmation_url: string; dev_mode?: boolean }> {
   const res = await fetch(`${API_BASE}/api/payments/create`, {
     method: "POST",
     headers: apiHeaders(token),
     credentials: "include",
+    body: JSON.stringify({ offer_version_id: offerVersionId }),
   });
   if (!res.ok) {
     let msg = "Не удалось создать платёж";

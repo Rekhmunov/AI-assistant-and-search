@@ -29,6 +29,8 @@ const SLUG_LABELS: Record<string, string> = {
   privacy: "Политика конфиденциальности",
   pd_consent: "Согласие на обработку персональных данных",
   cookies: "Куки",
+  offer: "Публичная оферта",
+  terms: "Пользовательское соглашение",
 };
 
 function formatDate(iso: string): string {
@@ -330,8 +332,7 @@ export function DocumentsPage() {
     <div className="settings-page documents-page">
       <h1>Документы</h1>
       <p className="documents-page-sub">
-        Политика конфиденциальности, согласие на обработку ПДн и cookie. Каждое сохранение создаёт
-        новую версию.
+        Юридические документы сервиса. Каждое сохранение создаёт новую версию.
       </p>
       {loading && <p>Загрузка…</p>}
       {!loading && (

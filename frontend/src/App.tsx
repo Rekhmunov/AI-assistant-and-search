@@ -9,6 +9,7 @@ import { Home } from "./pages/Home";
 import { LoginPage } from "./pages/Login";
 import { Profile } from "./pages/Profile";
 import { SourceViewPage } from "./pages/SourceViewPage";
+import { LegalCompliance } from "./components/LegalCompliance";
 import { LegalPathCatch } from "./components/LegalPathCatch";
 import { Thread } from "./pages/Thread";
 
@@ -40,6 +41,7 @@ function AppRoutes() {
           </div>
         )}
       </main>
+      {ready && <LegalCompliance />}
     </div>
   );
 }

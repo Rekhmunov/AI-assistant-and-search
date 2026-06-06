@@ -45,3 +45,26 @@ class LegalRouteOut(BaseModel):
 
 class LegalRegisterMetaOut(BaseModel):
     documents: list[LegalRouteOut]
+
+
+class PendingConsentOut(BaseModel):
+    slug: str
+    title: str
+    public_path: str
+    version_id: UUID
+    version_number: int
+
+
+class LegalConsentStatusOut(BaseModel):
+    pending: list[PendingConsentOut]
+
+
+class LegalConsentItem(BaseModel):
+    slug: str
+    version_id: UUID
+
+
+class LegalConsentRequest(BaseModel):
+    consents: list[LegalConsentItem] = Field(..., min_length=1)
+    source: str = Field(..., min_length=1, max_length=64)
+    consent_method: str = Field(..., min_length=1, max_length=32)

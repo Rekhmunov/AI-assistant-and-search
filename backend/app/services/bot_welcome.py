@@ -18,7 +18,10 @@ async def send_bot_welcome(db: AsyncSession, max_user_id: int | None) -> bool:
     media_token = str(await get_setting("bot_welcome_media_token", db, redis) or "").strip()
 
     if not text and (media_type == "none" or not media_token):
-        text = "Привет! Нажмите кнопку ниже, чтобы открыть Glosix."
+        text = (
+            "Продолжая пользоваться ботом, вы принимаете Пользовательское соглашение.\n\n"
+            "Привет! Нажмите кнопку ниже, чтобы открыть Glosix."
+        )
 
     attachments = max_bot_media_attachments(media_type, media_token)
 

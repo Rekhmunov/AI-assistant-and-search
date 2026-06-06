@@ -8,7 +8,10 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_db, get_redis
+from app.core.request_meta import consent_request_meta
 from app.core.request_security import verify_allowed_origin
+from app.schemas.payments import ProPaymentCreateRequest
+from app.services.legal_documents import ConsentMeta, record_consent
 from app.core.config import get_settings
 from app.core.database import async_session_factory
 from app.models.subscription import Subscription, SubscriptionStatus
@@ -45,13 +48,36 @@ async def _save_pending_subscription(
 @router.post("/create")
 async def create_pro_payment(
     request: Request,
+    body: ProPaymentCreateRequest,
     redis_client: Annotated[redis.Redis, Depends(get_redis)],
     user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
 ):
     """Create YooKassa payment for Pro subscription."""
     verify_allowed_origin(request)
     settings = get_settings()
     return_url = f"{settings.public_web_url.rstrip('/')}/profile?payment=success"
+
+    ip_address, ua = consent_request_meta(request)
+    try:
+        await record_consent(
+            db,
+            user,
+            slug="offer",
+            version_id=body.offer_version_id,
+            meta=ConsentMeta(
+                source="pro_payment",
+                consent_method="checkbox",
+                ip_address=ip_address,
+                user_agent=ua,
+            ),
+        )
+        await db.commit()
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Подтвердите актуальную публичную оферту.",
+        ) from exc
 
     async with async_session_factory() as db:
         pro_price_rub = int(await get_setting("pro_price_rub", db, redis_client, settings))

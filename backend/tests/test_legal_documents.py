@@ -14,3 +14,8 @@ def test_consent_blocked_error_message():
 def test_legal_version_delete_blocked_carries_message():
     err = LegalVersionDeleteBlocked(CONSENT_BLOCKED_ERROR)
     assert err.args[0] == CONSENT_BLOCKED_ERROR
+
+
+def test_reconsent_slugs_include_cookies():
+    assert "cookies" in RECONSENT_SLUGS
+    assert "privacy" in RECONSENT_SLUGS

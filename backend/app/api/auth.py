@@ -51,7 +51,8 @@ from app.schemas.auth import (
     TokenResponse,
 )
 from app.schemas.user import UserProfile
-from app.services.legal_documents import record_user_consents
+from app.core.request_meta import consent_request_meta
+from app.services.legal_documents import ConsentMeta, record_user_consents
 from app.services.max_bind_token import BIND_TOKEN_TTL_SEC, consume_max_bind_token, create_max_bind_token
 
 import redis.asyncio as redis
@@ -319,12 +320,19 @@ async def register_email(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Подтвердите согласие на обработку данных и политику конфиденциальности.",
             )
+        ip_address, ua = consent_request_meta(request)
         try:
             await record_user_consents(
                 db,
                 user,
                 privacy_version_id=body.privacy_version_id,
                 pd_consent_version_id=body.pd_consent_version_id,
+                meta=ConsentMeta(
+                    source="web_register",
+                    consent_method="checkbox",
+                    ip_address=ip_address,
+                    user_agent=ua,
+                ),
             )
         except ValueError as exc:
             raise HTTPException(

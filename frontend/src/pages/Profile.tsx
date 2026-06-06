@@ -7,10 +7,13 @@ import {
   devActivatePro,
   deleteAccount,
   fetchAppConfig,
+  fetchLegalBySlug,
+  fetchLegalRoutes,
   fetchMe,
   fetchSession,
 } from "../api/client";
 import { AuthGate } from "../components/AuthGate";
+import { LegalDocumentModal } from "../components/LegalDocumentModal";
 import { MobileNewThreadButton } from "../components/MobileNewThreadButton";
 import { MobilePageHeader } from "../components/MobilePageHeader";
 import { ProPurchaseBlockedModal } from "../components/ProPurchaseBlockedModal";
@@ -52,6 +55,8 @@ export function Profile() {
   const confirmInFlight = useRef(false);
   const [proBlockedOpen, setProBlockedOpen] = useState(false);
   const [paymentModal, setPaymentModal] = useState<ProPaymentModalState>({ open: false });
+  const [acceptOffer, setAcceptOffer] = useState(false);
+  const [offerModalOpen, setOfferModalOpen] = useState(false);
   const inMax = isMaxWebApp();
   const isDesktop = useDesktopLayout();
 
@@ -75,6 +80,20 @@ export function Profile() {
     queryFn: fetchAppConfig,
     staleTime: 0,
     refetchOnMount: "always",
+  });
+
+  const { data: legalRoutes } = useQuery({
+    queryKey: ["legal-routes"],
+    queryFn: fetchLegalRoutes,
+    staleTime: 60_000,
+  });
+
+  const offerMeta = legalRoutes?.find((r) => r.slug === "offer");
+
+  const { data: offerDoc, isLoading: offerLoading } = useQuery({
+    queryKey: ["legal-offer-modal"],
+    queryFn: () => fetchLegalBySlug("offer"),
+    enabled: offerModalOpen,
   });
 
   const searchesToday = session?.searches_today ?? profileUser?.searches_today ?? 0;
@@ -180,8 +199,12 @@ export function Profile() {
       setProBlockedOpen(true);
       return;
     }
+    if (!acceptOffer || !offerMeta?.version_id) {
+      alert(t("proOfferConsentRequired"));
+      return;
+    }
     try {
-      const payment = await createProPayment(token!);
+      const payment = await createProPayment(token!, offerMeta.version_id);
       if (payment.dev_mode) {
         await devActivatePro(token!);
         const updated = await fetchMe(token!);
@@ -265,7 +288,25 @@ export function Profile() {
           </div>
           <p className="profile-pro-price">{t("proPrice", { price: proPriceRub })}</p>
           <p className="profile-pro-benefits">{t("proBenefits")}</p>
-          <button type="button" className="btn-primary btn-block" onClick={activatePro}>
+          <label className="auth-consent-row profile-pro-offer">
+            <input
+              type="checkbox"
+              checked={acceptOffer}
+              onChange={(e) => setAcceptOffer(e.target.checked)}
+            />
+            <span>
+              {t("proOfferConsentPrefix")}{" "}
+              <button type="button" className="auth-consent-link" onClick={() => setOfferModalOpen(true)}>
+                {t("proOfferConsentLink")}
+              </button>
+            </span>
+          </label>
+          <button
+            type="button"
+            className="btn-primary btn-block"
+            disabled={!acceptOffer || !offerMeta?.version_id}
+            onClick={activatePro}
+          >
             {t("upgradePro")}
           </button>
           <p className="profile-pro-check-hint">{t("checkProPaymentHint")}</p>
@@ -310,6 +351,15 @@ export function Profile() {
         onClose={() => setPaymentModal({ open: false })}
         onRetry={() => void runPaymentConfirm()}
       />
+
+      {offerModalOpen && (
+        <LegalDocumentModal
+          title={offerDoc?.title ?? t("proOfferConsentLink")}
+          contentHtml={offerDoc?.content_html ?? ""}
+          loading={offerLoading}
+          onClose={() => setOfferModalOpen(false)}
+        />
+      )}
     </div>
   );
 }

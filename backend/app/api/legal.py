@@ -1,15 +1,28 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_db
-from app.schemas.legal import LegalDocumentPublicOut, LegalRegisterMetaOut, LegalRouteOut
+from app.api.deps import get_current_user, get_db
+from app.core.request_meta import consent_request_meta
+from app.core.request_security import verify_allowed_origin
+from app.models.user import User
+from app.schemas.legal import (
+    LegalConsentRequest,
+    LegalConsentStatusOut,
+    LegalDocumentPublicOut,
+    LegalRegisterMetaOut,
+    LegalRouteOut,
+    PendingConsentOut,
+)
 from app.services.legal_documents import (
+    ConsentMeta,
     document_to_public,
     get_document_by_path,
     get_document_by_slug,
+    get_pending_consents,
     list_documents_admin,
+    record_consent,
 )
 
 router = APIRouter(prefix="/legal", tags=["legal"])
@@ -72,6 +85,49 @@ async def legal_by_path(
         content_html=public.content_html,
         updated_at=doc.updated_at,
     )
+
+
+@router.get("/consent-status", response_model=LegalConsentStatusOut)
+async def legal_consent_status(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+):
+    pending = await get_pending_consents(db, user)
+    return LegalConsentStatusOut(
+        pending=[
+            PendingConsentOut(
+                slug=item.slug,
+                title=item.title,
+                public_path=item.public_path,
+                version_id=item.version_id,
+                version_number=item.version_number,
+            )
+            for item in pending
+        ]
+    )
+
+
+@router.post("/consent", status_code=status.HTTP_204_NO_CONTENT)
+async def legal_record_consent(
+    request: Request,
+    body: LegalConsentRequest,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+):
+    verify_allowed_origin(request)
+    ip_address, ua = consent_request_meta(request)
+    meta = ConsentMeta(
+        source=body.source,
+        consent_method=body.consent_method,
+        ip_address=ip_address,
+        user_agent=ua,
+    )
+    try:
+        for item in body.consents:
+            await record_consent(db, user, slug=item.slug, version_id=item.version_id, meta=meta)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    await db.commit()
 
 
 @router.get("/{slug}", response_model=LegalDocumentPublicOut)

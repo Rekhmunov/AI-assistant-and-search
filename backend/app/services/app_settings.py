@@ -68,7 +68,10 @@ ENV_DEFAULTS: dict[str, str] = {
     "global_yandex_requests_per_day": "global_yandex_requests_per_day",
     "maintenance_mode": "false",
     "pro_purchase_disabled": "false",
-    "bot_welcome_text": "Привет! Нажмите кнопку ниже, чтобы открыть Glosix.",
+    "bot_welcome_text": (
+        "Продолжая пользоваться ботом, вы принимаете Пользовательское соглашение.\n\n"
+        "Привет! Нажмите кнопку ниже, чтобы открыть Glosix."
+    ),
     "bot_welcome_media_type": "none",
     "bot_welcome_media_token": "",
     "bot_welcome_media_filename": "",
