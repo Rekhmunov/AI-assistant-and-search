@@ -1,6 +1,8 @@
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { apiFetch, apiUpload } from "../api";
 import { useAuth } from "../AuthContext";
+import { RichTextEditor } from "../components/RichTextEditor";
+import { isWelcomeHtmlEmpty, welcomeTextToEditorHtml } from "../lib/welcomeText";
 
 type Audience = "all" | "free" | "pro";
 type WelcomeMediaType = "none" | "image" | "video";
@@ -23,7 +25,6 @@ interface BotWelcome {
   media_type: WelcomeMediaType;
   media_token: string | null;
   media_filename: string | null;
-  webhook_url: string;
   max_text_length: number;
 }
 
@@ -85,7 +86,7 @@ export function BroadcastsPage() {
     apiFetch<BotWelcome>("/api/admin/broadcasts/welcome")
       .then((data) => {
         setWelcome(data);
-        setWelcomeText(data.text);
+        setWelcomeText(welcomeTextToEditorHtml(data.text));
         setWelcomeMediaType(data.media_type);
         setWelcomeMediaToken(data.media_token);
         setWelcomeMediaFilename(data.media_filename);
@@ -232,6 +233,7 @@ export function BroadcastsPage() {
         }),
       });
       setWelcome(updated);
+      setWelcomeText(welcomeTextToEditorHtml(updated.text));
       setMsg("Приветственное сообщение сохранено");
     } catch (e) {
       setError(String(e));
@@ -316,29 +318,23 @@ export function BroadcastsPage() {
       <section className="card broadcasts-section">
         <h2 className="broadcasts-section-title">Первое сообщение (/start)</h2>
         <p className="hint broadcasts-section-hint">
-          Отправляется один раз, когда пользователь нажимает «Старт» в боте. Поддерживаются текст, изображение или
-          видео.
+          Отправляется один раз, когда пользователь нажимает «Старт» в боте. Доступны форматирование текста, ссылки,
+          смайлы, а также изображение или видео.
         </p>
 
-        {welcome && (
-          <p className="hint broadcasts-webhook-hint">
-            Webhook MAX: <code>{welcome.webhook_url}</code>
-          </p>
-        )}
-
         <form className="broadcasts-welcome-form" onSubmit={saveWelcome}>
-          <label className="broadcasts-field broadcasts-field--wide">
+          <div className="broadcasts-field broadcasts-field--wide">
             <span className="broadcasts-field-label">Текст сообщения</span>
-            <textarea
-              rows={6}
+            <RichTextEditor
               value={welcomeText}
-              onChange={(e) => setWelcomeText(e.target.value)}
+              onChange={setWelcomeText}
               disabled={!canWrite || welcomeBusy}
-              maxLength={welcome?.max_text_length ?? 4000}
-              placeholder="Привет! Это Glosix — умный поиск с ответами и источниками."
             />
-            <span className="hint broadcasts-char-count">Осталось символов: {welcomeCharsLeft}</span>
-          </label>
+            <span className="hint broadcasts-char-count">
+              Осталось символов: {welcomeCharsLeft}
+              {welcomeCharsLeft < 0 && " — сократите текст"}
+            </span>
+          </div>
 
           <div className="broadcasts-welcome-media">
             <span className="broadcasts-field-label">Медиа</span>
@@ -374,7 +370,11 @@ export function BroadcastsPage() {
           </div>
 
           {canWrite && (
-            <button type="submit" className="btn-primary" disabled={welcomeBusy || !welcomeText.trim()}>
+            <button
+              type="submit"
+              className="btn-primary"
+              disabled={welcomeBusy || isWelcomeHtmlEmpty(welcomeText) || welcomeCharsLeft < 0}
+            >
               {welcomeBusy ? "Сохранение…" : "Сохранить приветствие"}
             </button>
           )}

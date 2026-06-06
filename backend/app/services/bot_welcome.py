@@ -6,6 +6,7 @@ from app.api.deps import get_redis
 from app.services.app_settings import get_setting
 from app.services.bot import MaxBotService
 from app.services.bot_media import max_bot_media_attachments
+from app.services.bot_message_format import detect_max_text_format
 
 
 async def send_bot_welcome(db: AsyncSession, max_user_id: int | None) -> bool:
@@ -26,7 +27,12 @@ async def send_bot_welcome(db: AsyncSession, max_user_id: int | None) -> bool:
     attachments = max_bot_media_attachments(media_type, media_token)
 
     bot = MaxBotService()
-    result = await bot.send_message(max_user_id, text, attachments)
+    result = await bot.send_message(
+        max_user_id,
+        text,
+        attachments,
+        text_format=detect_max_text_format(text),
+    )
     if not result.ok:
         logging.getLogger(__name__).warning(
             "bot welcome failed for max_user_id=%s: %s",

@@ -37,6 +37,7 @@ class MaxBotService:
         text: str,
         attachments: list[dict] | None = None,
         *,
+        text_format: str | None = None,
         max_attempts: int = 3,
     ) -> BotSendResult:
         if not self.settings.bot_token.strip():
@@ -45,6 +46,8 @@ class MaxBotService:
             return BotSendResult(ok=False, error="no max_user_id")
 
         body: dict = {"text": text}
+        if text_format in {"markdown", "html"}:
+            body["format"] = text_format
         if attachments:
             body["attachments"] = attachments
 

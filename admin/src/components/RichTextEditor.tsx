@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 type Props = {
   value: string;
@@ -13,9 +13,16 @@ const FONT_SIZES = [
   { label: "Заголовок", value: "5" },
 ];
 
+const EMOJIS = [
+  "😀", "😊", "👋", "🎉", "✅", "❤️", "🔥", "⭐", "💡", "📱",
+  "🚀", "✨", "👍", "🙏", "💬", "📎", "🔗", "😉", "🤝", "📣",
+];
+
 export function RichTextEditor({ value, onChange, disabled = false }: Props) {
   const editorRef = useRef<HTMLDivElement>(null);
+  const emojiWrapRef = useRef<HTMLDivElement>(null);
   const lastValue = useRef(value);
+  const [emojiOpen, setEmojiOpen] = useState(false);
 
   useEffect(() => {
     const el = editorRef.current;
@@ -55,6 +62,24 @@ export function RichTextEditor({ value, onChange, disabled = false }: Props) {
     emitChange();
   };
 
+  const insertEmoji = (emoji: string) => {
+    if (disabled) return;
+    editorRef.current?.focus();
+    document.execCommand("insertText", false, emoji);
+    emitChange();
+    setEmojiOpen(false);
+  };
+
+  useEffect(() => {
+    if (!emojiOpen) return;
+    const onDocClick = (e: MouseEvent) => {
+      if (emojiWrapRef.current?.contains(e.target as Node)) return;
+      setEmojiOpen(false);
+    };
+    document.addEventListener("mousedown", onDocClick);
+    return () => document.removeEventListener("mousedown", onDocClick);
+  }, [emojiOpen]);
+
   return (
     <div className={`rte${disabled ? " rte--disabled" : ""}`}>
       <div className="rte-toolbar" role="toolbar" aria-label="Форматирование">
@@ -70,6 +95,31 @@ export function RichTextEditor({ value, onChange, disabled = false }: Props) {
         <button type="button" className="rte-btn" onClick={insertLink} title="Ссылка">
           🔗
         </button>
+        <div className="rte-emoji-wrap" ref={emojiWrapRef}>
+          <button
+            type="button"
+            className="rte-btn"
+            title="Смайл"
+            disabled={disabled}
+            onClick={() => setEmojiOpen((open) => !open)}
+          >
+            😀
+          </button>
+          {emojiOpen && (
+            <div className="rte-emoji-panel" role="listbox" aria-label="Смайлы">
+              {EMOJIS.map((emoji) => (
+                <button
+                  key={emoji}
+                  type="button"
+                  className="rte-emoji-btn"
+                  onClick={() => insertEmoji(emoji)}
+                >
+                  {emoji}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
         <span className="rte-sep" aria-hidden />
         <button type="button" className="rte-btn" onClick={() => exec("formatBlock", "h2")} title="Заголовок">
           H
