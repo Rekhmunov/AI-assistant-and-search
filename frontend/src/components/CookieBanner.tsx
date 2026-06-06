@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { fetchLegalBySlug, fetchLegalRoutes, recordLegalConsent } from "../api/client";
 import { isCookieConsentCurrent, writeCookieConsent } from "../lib/cookieConsent";
+import { t } from "../i18n";
 import { LegalDocumentModal } from "./LegalDocumentModal";
 import { useAuthStore } from "../store/authStore";
 
