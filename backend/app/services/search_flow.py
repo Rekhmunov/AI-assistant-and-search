@@ -414,6 +414,7 @@ class SearchFlowService:
         )
 
         async def _pipeline() -> AsyncIterator[str]:
+            nonlocal llm_query
             history = thread_ctx.history
             llm_history = llm_history_for_turn(history, has_attachments=has_attachments)
             prior_sources_block = format_sources_for_prompt(thread_ctx.last_assistant_sources)
