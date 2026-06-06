@@ -158,12 +158,12 @@ export function Profile() {
   if (!token) {
     return (
       <AuthGate
-        title={t("profile")}
-        hint={inMax ? t("profileMaxLoginHint") : t("profileLoginHint")}
+        title={t("profileGuestGateTitle")}
         primaryTo="/login"
         primaryLabel={t("signIn")}
         showPrimary={!inMax}
         showSecondary
+        showBrand={false}
       />
     );
   }
