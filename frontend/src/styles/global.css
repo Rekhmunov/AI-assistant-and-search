@@ -5289,10 +5289,44 @@ body:has(.page-thread) {
   color: var(--muted);
 }
 
-.profile-support-hint {
+.profile-support-list-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   margin: 0 0 12px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  text-align: left;
+}
+
+.profile-support-list-toggle:hover {
+  text-decoration: underline;
+}
+
+.profile-support-list-chevron {
+  display: inline-block;
+  width: 0;
+  height: 0;
+  border-top: 5px solid transparent;
+  border-bottom: 5px solid transparent;
+  border-left: 6px solid currentColor;
+  transition: transform 0.2s ease;
+  transform: rotate(0deg);
+}
+
+.profile-support-list-toggle--open .profile-support-list-chevron {
+  transform: rotate(90deg);
+}
+
+.profile-support-empty {
+  margin: 0;
   font-size: 0.85rem;
-  line-height: 1.45;
   color: var(--muted);
 }
 
@@ -5307,30 +5341,44 @@ body:has(.page-thread) {
 }
 
 .profile-support-tickets {
-  margin-top: 8px;
+  margin-top: 4px;
   padding-top: 12px;
   border-top: 1px solid var(--border);
 }
 
-.profile-support-tickets-head {
+.profile-support-pager {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 10px;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 12px;
 }
 
-.profile-support-unread-badge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 1.25rem;
-  height: 1.25rem;
-  padding: 0 6px;
-  border-radius: 999px;
-  background: var(--accent-soft);
+.profile-support-pager-btn {
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+
+.profile-support-pager-btn:hover:not(:disabled) {
+  border-color: var(--accent);
   color: var(--accent);
-  font-size: 0.72rem;
-  font-weight: 700;
+}
+
+.profile-support-pager-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.profile-support-pager-info {
+  font-size: 0.82rem;
+  color: var(--muted);
+  min-width: 4.5rem;
+  text-align: center;
 }
 
 .profile-support-ticket-list {

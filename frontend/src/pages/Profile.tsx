@@ -72,6 +72,7 @@ export function Profile() {
   const [supportModalOpen, setSupportModalOpen] = useState(false);
   const [supportSource, setSupportSource] = useState<"general" | "pro_payment">("general");
   const [supportToast, setSupportToast] = useState(false);
+  const [supportListOpen, setSupportListOpen] = useState(false);
   const [proPaying, setProPaying] = useState(false);
   const [proPaymentError, setProPaymentError] = useState<string | null>(null);
   const [proPayHintVisible, setProPayHintVisible] = useState(false);
@@ -466,8 +467,18 @@ export function Profile() {
               {t("profileSupportWrite")}
             </button>
           </div>
-          <p className="profile-support-hint">{t("profileSupportHint")}</p>
-          {token && (supportTickets?.length ?? 0) > 0 && (
+          <button
+            type="button"
+            className={`profile-support-list-toggle${supportListOpen ? " profile-support-list-toggle--open" : ""}`}
+            aria-expanded={supportListOpen}
+            onClick={() => setSupportListOpen((open) => !open)}
+          >
+            <span className="profile-support-list-chevron" aria-hidden />
+            <span>
+              {supportListOpen ? t("profileSupportCloseList") : t("profileSupportOpenList")}
+            </span>
+          </button>
+          {supportListOpen && token && (
             <SupportTicketsPanel
               token={token}
               tickets={supportTickets ?? []}

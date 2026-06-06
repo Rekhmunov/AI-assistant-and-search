@@ -1,10 +1,13 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   markSupportTicketRead,
   replyToSupportTicket,
   type SupportTicketUser,
 } from "../api/client";
+import { sortSupportTickets } from "../lib/supportTicketsSort";
 import { t } from "../i18n";
+
+const PAGE_SIZE = 5;
 
 const SOURCE_LABELS: Record<string, string> = {
   pro_payment: "Оплата Pro",
@@ -38,8 +41,16 @@ export function SupportTicketsPanel({ token, tickets, onTicketsChange }: Props) 
   const [replyDrafts, setReplyDrafts] = useState<Record<string, string>>({});
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState("");
+  const [page, setPage] = useState(0);
 
-  const unreadCount = tickets.filter((ticket) => ticket.has_unread_reply).length;
+  const sortedTickets = useMemo(() => sortSupportTickets(tickets), [tickets]);
+  const totalPages = Math.max(1, Math.ceil(sortedTickets.length / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages - 1);
+  const pageTickets = sortedTickets.slice(safePage * PAGE_SIZE, safePage * PAGE_SIZE + PAGE_SIZE);
+
+  useEffect(() => {
+    if (page > totalPages - 1) setPage(Math.max(0, totalPages - 1));
+  }, [page, totalPages]);
 
   const openTicket = async (ticketId: string) => {
     if (expandedId === ticketId) {
@@ -73,21 +84,15 @@ export function SupportTicketsPanel({ token, tickets, onTicketsChange }: Props) 
     }
   };
 
-  if (!tickets.length) return null;
+  if (!tickets.length) {
+    return <p className="profile-support-empty">{t("profileSupportEmpty")}</p>;
+  }
 
   return (
     <div className="profile-support-tickets">
-      <div className="profile-support-tickets-head">
-        <h3 className="profile-support-replies-title">{t("profileSupportMyTickets")}</h3>
-        {unreadCount > 0 && (
-          <span className="profile-support-unread-badge" aria-label={t("profileSupportUnreadCount", { n: unreadCount })}>
-            {unreadCount}
-          </span>
-        )}
-      </div>
       {error && <p className="profile-support-error">{error}</p>}
       <ul className="profile-support-ticket-list">
-        {tickets.map((ticket) => {
+        {pageTickets.map((ticket) => {
           const expanded = expandedId === ticket.id;
           return (
             <li
@@ -120,7 +125,9 @@ export function SupportTicketsPanel({ token, tickets, onTicketsChange }: Props) 
               {expanded && (
                 <div className="profile-support-thread">
                   <div className="profile-support-thread-message profile-support-thread-message--user">
-                    <p className="profile-support-thread-meta">{t("profileSupportYou")} · {formatDate(ticket.created_at)}</p>
+                    <p className="profile-support-thread-meta">
+                      {t("profileSupportYou")} · {formatDate(ticket.created_at)}
+                    </p>
                     <p className="profile-support-thread-text">{ticket.message}</p>
                   </div>
                   {ticket.replies.map((reply) => (
@@ -174,6 +181,30 @@ export function SupportTicketsPanel({ token, tickets, onTicketsChange }: Props) 
           );
         })}
       </ul>
+
+      {sortedTickets.length > PAGE_SIZE && (
+        <nav className="profile-support-pager" aria-label={t("profileSupportPagerLabel")}>
+          <button
+            type="button"
+            className="profile-support-pager-btn"
+            disabled={safePage <= 0}
+            onClick={() => setPage((p) => Math.max(0, p - 1))}
+          >
+            {t("profileSupportPagerPrev")}
+          </button>
+          <span className="profile-support-pager-info">
+            {t("profileSupportPagerPage", { current: safePage + 1, total: totalPages })}
+          </span>
+          <button
+            type="button"
+            className="profile-support-pager-btn"
+            disabled={safePage >= totalPages - 1}
+            onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+          >
+            {t("profileSupportPagerNext")}
+          </button>
+        </nav>
+      )}
     </div>
   );
 }
