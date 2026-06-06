@@ -4956,7 +4956,6 @@ body:has(.page-thread) {
 
 .auth-consent-row > span {
   flex: 1;
-  min-width: 0;
 }
 
 .auth-consent-row input[type="checkbox"] {
@@ -4976,8 +4975,6 @@ body:has(.page-thread) {
   cursor: pointer;
   font: inherit;
   line-height: inherit;
-  text-align: left;
-  white-space: normal;
   vertical-align: baseline;
 }
 

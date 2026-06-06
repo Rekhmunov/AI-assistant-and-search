@@ -181,14 +181,22 @@ export function LoginPage() {
                     onChange={(e) => setAcceptPdConsent(e.target.checked)}
                   />
                   <span>
-                    {t("registerConsentPdPrefix")}{" "}
-                    <button
-                      type="button"
+                    {t("registerConsentPdPrefix")}
+                    {"\u00A0"}
+                    <span
+                      role="button"
+                      tabIndex={0}
                       className="auth-consent-link"
                       onClick={() => setLegalModalSlug("pd_consent")}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          setLegalModalSlug("pd_consent");
+                        }
+                      }}
                     >
                       {t("registerConsentPdLink")}
-                    </button>
+                    </span>
                   </span>
                 </label>
                 <label className="auth-consent-row">
@@ -198,14 +206,22 @@ export function LoginPage() {
                     onChange={(e) => setAcceptPrivacy(e.target.checked)}
                   />
                   <span>
-                    {t("registerConsentPrivacyPrefix")}{" "}
-                    <button
-                      type="button"
+                    {t("registerConsentPrivacyPrefix")}
+                    {"\u00A0"}
+                    <span
+                      role="button"
+                      tabIndex={0}
                       className="auth-consent-link"
                       onClick={() => setLegalModalSlug("privacy")}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          setLegalModalSlug("privacy");
+                        }
+                      }}
                     >
                       {t("registerConsentPrivacyLink")}
-                    </button>
+                    </span>
                   </span>
                 </label>
               </div>

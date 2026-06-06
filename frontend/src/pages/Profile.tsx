@@ -392,10 +392,22 @@ export function Profile() {
               }}
             />
             <span>
-              {t("proOfferConsentPrefix")}{" "}
-              <button type="button" className="auth-consent-link" onClick={() => setOfferModalOpen(true)}>
+              {t("proOfferConsentPrefix")}
+              {"\u00A0"}
+              <span
+                role="button"
+                tabIndex={0}
+                className="auth-consent-link"
+                onClick={() => setOfferModalOpen(true)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    setOfferModalOpen(true);
+                  }
+                }}
+              >
                 {t("proOfferConsentLink")}
-              </button>
+              </span>
             </span>
           </label>
           {(offerLoadError || (offerFetched && !offerLoading && !offerVersionId)) && (
