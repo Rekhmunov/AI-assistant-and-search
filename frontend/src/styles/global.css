@@ -4991,6 +4991,7 @@ body:has(.page-thread) {
   align-items: center;
   justify-content: center;
   padding: 16px;
+  overflow: hidden;
 }
 
 .legal-modal {
@@ -5001,12 +5002,14 @@ body:has(.page-thread) {
   display: flex;
   flex-direction: column;
   padding: 20px 20px 16px;
+  min-height: 0;
 }
 
 .legal-modal-close {
   position: absolute;
   top: 12px;
   right: 12px;
+  z-index: 1;
   width: 36px;
   height: 36px;
   border: none;
@@ -5019,17 +5022,50 @@ body:has(.page-thread) {
   justify-content: center;
 }
 
+.legal-modal-close:hover {
+  background: var(--surface-hover, rgba(0, 0, 0, 0.06));
+}
+
 .legal-modal-title {
   margin: 0 32px 12px 0;
   font-size: 1.125rem;
   font-weight: 600;
+  flex-shrink: 0;
 }
 
 .legal-modal-body {
+  overflow-x: hidden;
   overflow-y: auto;
   flex: 1;
+  min-height: 0;
   font-size: 0.9rem;
   line-height: 1.55;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.legal-doc-html {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  max-width: 100%;
+}
+
+.legal-doc-html img,
+.legal-doc-html video,
+.legal-doc-html iframe,
+.legal-doc-html table,
+.legal-doc-html pre {
+  max-width: 100%;
+}
+
+.legal-doc-html pre {
+  white-space: pre-wrap;
+  overflow-x: hidden;
+}
+
+.legal-doc-html table {
+  width: 100%;
+  table-layout: fixed;
 }
 
 .legal-doc-html h1,
@@ -5052,6 +5088,22 @@ body:has(.page-thread) {
 .legal-doc-html ol {
   margin: 0.5em 0;
   padding-left: 1.4em;
+}
+
+@media (min-width: 900px) {
+  .legal-modal {
+    width: 50vw;
+    height: 50vh;
+    max-width: 50vw;
+    max-height: 50vh;
+  }
+}
+
+@media (max-width: 899px) {
+  .legal-modal {
+    width: min(92%, 640px);
+    max-height: min(85vh, 720px);
+  }
 }
 
 .page-legal {
