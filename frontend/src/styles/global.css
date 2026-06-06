@@ -875,6 +875,54 @@ body:has(.page-thread) {
   margin-top: 0;
 }
 
+.profile-pro-pay-wrap {
+  position: relative;
+}
+
+.profile-pro-pay-wrap--disabled {
+  cursor: not-allowed;
+}
+
+.profile-pro-pay-wrap--disabled .btn-primary:disabled {
+  pointer-events: none;
+}
+
+.profile-pro-pay-wrap--needs-offer[data-hint]::after {
+  content: attr(data-hint);
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 8px);
+  transform: translateX(-50%);
+  z-index: 2;
+  max-width: min(280px, 100vw - 32px);
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: var(--text);
+  color: var(--bg);
+  font-size: 0.8rem;
+  line-height: 1.35;
+  text-align: center;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 0.15s ease, visibility 0.15s ease;
+}
+
+.profile-pro-pay-wrap--needs-offer[data-hint]:hover::after,
+.profile-pro-pay-wrap--needs-offer[data-hint]:focus-within::after,
+.profile-pro-pay-wrap--needs-offer.profile-pro-pay-wrap--hint-visible[data-hint]::after {
+  opacity: 1;
+  visibility: visible;
+}
+
+@media (hover: none) {
+  .profile-pro-pay-wrap--needs-offer[data-hint]:hover::after {
+    opacity: 0;
+    visibility: hidden;
+  }
+}
+
 .profile-pro-check-hint {
   margin: 12px 0 0;
   font-size: 0.8125rem;

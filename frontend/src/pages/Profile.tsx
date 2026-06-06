@@ -74,6 +74,8 @@ export function Profile() {
   const [supportToast, setSupportToast] = useState(false);
   const [proPaying, setProPaying] = useState(false);
   const [proPaymentError, setProPaymentError] = useState<string | null>(null);
+  const [proPayHintVisible, setProPayHintVisible] = useState(false);
+  const proPayHintTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const inMax = isMaxWebApp();
   const isDesktop = useDesktopLayout();
 
@@ -236,6 +238,23 @@ export function Profile() {
   const usagePercent = Math.round(usageRatio * 100);
 
   const hasPaymentEmail = Boolean(profileUser?.email?.trim());
+  const proPayDisabled =
+    !acceptOffer || offerLoading || !offerVersionId || !hasPaymentEmail || proPaying;
+  const proPayNeedsOfferConsent = !acceptOffer;
+
+  const showProPayBlockedHint = () => {
+    if (!proPayNeedsOfferConsent) return;
+    setProPaymentError(t("proOfferConsentRequired"));
+    setProPayHintVisible(true);
+    if (proPayHintTimerRef.current) clearTimeout(proPayHintTimerRef.current);
+    proPayHintTimerRef.current = setTimeout(() => setProPayHintVisible(false), 4000);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (proPayHintTimerRef.current) clearTimeout(proPayHintTimerRef.current);
+    };
+  }, []);
 
   const activatePro = async () => {
     if (proPurchaseDisabled) {
@@ -365,6 +384,7 @@ export function Profile() {
               onChange={(e) => {
                 setAcceptOffer(e.target.checked);
                 if (proPaymentError) setProPaymentError(null);
+                if (proPayHintVisible) setProPayHintVisible(false);
               }}
             />
             <span>
@@ -385,14 +405,35 @@ export function Profile() {
               {proPaymentError}
             </p>
           )}
-          <button
-            type="button"
-            className="btn-primary btn-block"
-            disabled={!acceptOffer || offerLoading || !offerVersionId || !hasPaymentEmail || proPaying}
-            onClick={() => void activatePro()}
+          <div
+            className={`profile-pro-pay-wrap${proPayDisabled ? " profile-pro-pay-wrap--disabled" : ""}${
+              proPayDisabled && proPayNeedsOfferConsent ? " profile-pro-pay-wrap--needs-offer" : ""
+            }${proPayHintVisible ? " profile-pro-pay-wrap--hint-visible" : ""}`}
+            data-hint={proPayDisabled && proPayNeedsOfferConsent ? t("proOfferConsentRequired") : undefined}
+            onClick={() => {
+              if (proPayDisabled) showProPayBlockedHint();
+            }}
+            onKeyDown={(e) => {
+              if (proPayDisabled && (e.key === "Enter" || e.key === " ")) {
+                e.preventDefault();
+                showProPayBlockedHint();
+              }
+            }}
+            role={proPayDisabled && proPayNeedsOfferConsent ? "button" : undefined}
+            tabIndex={proPayDisabled && proPayNeedsOfferConsent ? 0 : undefined}
+            aria-label={
+              proPayDisabled && proPayNeedsOfferConsent ? t("proOfferConsentRequired") : undefined
+            }
           >
-            {proPaying ? t("proPaymentCreating") : t("upgradePro")}
-          </button>
+            <button
+              type="button"
+              className="btn-primary btn-block"
+              disabled={proPayDisabled}
+              onClick={() => void activatePro()}
+            >
+              {proPaying ? t("proPaymentCreating") : t("upgradePro")}
+            </button>
+          </div>
           <p className="profile-pro-check-hint">
             {t("checkProPaymentHintPrefix")}{" "}
             <button type="button" className="profile-pro-check-link" onClick={() => void runPaymentConfirm()}>
