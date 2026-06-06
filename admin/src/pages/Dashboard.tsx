@@ -34,30 +34,6 @@ interface FeedbackDashboardBlock {
   recent_total: number;
 }
 
-interface ServiceIncidentStat {
-  service: string;
-  service_label: string;
-  count_24h: number;
-  count_7d: number;
-  last_message: string | null;
-  last_at: string | null;
-}
-
-interface ServiceIncidentRecentItem {
-  service: string;
-  service_label: string;
-  kind: string;
-  message: string;
-  status_code: number | null;
-  at: string | null;
-}
-
-interface ServiceIncidentsDashboard {
-  totals_24h: number;
-  by_service: ServiceIncidentStat[];
-  recent: ServiceIncidentRecentItem[];
-}
-
 interface DashboardMetrics {
   users_total: number;
   users_new_7d: number;
@@ -67,7 +43,6 @@ interface DashboardMetrics {
   messages_today: number;
   searches_today_estimate: number;
   answer_feedback: FeedbackDashboardBlock;
-  service_incidents?: ServiceIncidentsDashboard;
 }
 
 const RECENT_PAGE_SIZE = 30;
@@ -94,8 +69,6 @@ export function DashboardPage() {
   const [recentData, setRecentData] = useState<FeedbackRecentPage | null>(null);
   const [recentLoading, setRecentLoading] = useState(false);
   const [recentError, setRecentError] = useState("");
-  const [incidentsOpen, setIncidentsOpen] = useState(true);
-
   useEffect(() => {
     apiFetch<DashboardMetrics>("/api/admin/dashboard")
       .then(setData)
@@ -137,11 +110,6 @@ export function DashboardPage() {
     down_by_reason: [],
     recent_total: 0,
   };
-  const incidents = data.service_incidents ?? {
-    totals_24h: 0,
-    by_service: [],
-    recent: [],
-  };
   const downTotal = fb.thumbs_down || 0;
   const recentTotalPages = recentData
     ? Math.max(1, Math.ceil(recentData.total / recentData.page_size))
@@ -176,69 +144,6 @@ export function DashboardPage() {
           <strong>{data.broadcasts_total}</strong>
         </div>
       </div>
-
-      <section className="incidents-dashboard card" aria-labelledby="incidents-dashboard-title">
-        <div className="incidents-dashboard-header">
-          <h2 id="incidents-dashboard-title">Сбои сервисов</h2>
-          <p className="incidents-dashboard-sub">
-            Ошибки Yandex Search, генерации картинок, LLM и др. За 24 ч:{" "}
-            <strong>{incidents.totals_24h}</strong>
-          </p>
-        </div>
-        {incidents.by_service.length > 0 ? (
-          <div className="incidents-by-service">
-            {incidents.by_service.map((row) => (
-              <div key={row.service} className="incidents-service-row">
-                <span className="incidents-service-label">{row.service_label}</span>
-                <span className="incidents-service-counts">
-                  24 ч: {row.count_24h} · 7 д: {row.count_7d}
-                </span>
-                {row.last_message ? (
-                  <span className="incidents-service-last" title={row.last_message}>
-                    {row.last_at ? `${formatDate(row.last_at)} — ` : ""}
-                    {row.last_message.length > 120
-                      ? `${row.last_message.slice(0, 117)}…`
-                      : row.last_message}
-                  </span>
-                ) : null}
-              </div>
-            ))}
-          </div>
-        ) : (
-          <p className="incidents-empty">За последние дни сбоев не зафиксировано</p>
-        )}
-        {incidents.recent.length > 0 ? (
-          <div className="incidents-recent">
-            <button
-              type="button"
-              className="incidents-recent-toggle"
-              onClick={() => setIncidentsOpen((v) => !v)}
-              aria-expanded={incidentsOpen}
-            >
-              <span
-                className={`incidents-recent-chevron${incidentsOpen ? " incidents-recent-chevron--open" : ""}`}
-                aria-hidden
-              >
-                ▶
-              </span>
-              Последние события ({incidents.recent.length})
-            </button>
-            {incidentsOpen && (
-              <ul className="incidents-recent-list">
-                {incidents.recent.map((item, idx) => (
-                  <li key={`${item.at}-${idx}`} className="incidents-recent-item">
-                    <span className="incidents-recent-meta">
-                      {item.at ? formatDate(item.at) : "—"} · {item.service_label}
-                      {item.status_code ? ` · HTTP ${item.status_code}` : ""}
-                    </span>
-                    <span className="incidents-recent-msg">{item.message}</span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        ) : null}
-      </section>
 
       <section className="feedback-dashboard card" aria-labelledby="feedback-dashboard-title">
         <div className="feedback-dashboard-header">

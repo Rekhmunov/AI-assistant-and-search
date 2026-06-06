@@ -4,10 +4,12 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_db
+from app.api.deps import get_db, get_redis
 from app.core.admin_permissions import require_permission
 from app.models.admin_audit import AdminAuditLog
-from app.schemas.admin import AuditLogOut, AuditLogPage
+from app.schemas.admin import AuditLogOut, AuditLogPage, ServiceIncidentsDashboard
+from app.services.service_incidents import get_incidents_dashboard
+import redis.asyncio as redis
 
 router = APIRouter(prefix="/audit", tags=["admin-audit"])
 
@@ -29,3 +31,11 @@ async def list_audit(
     )
     items = [AuditLogOut.model_validate(row) for row in result.scalars().all()]
     return AuditLogPage(items=items, total=total, page=page, page_size=page_size)
+
+
+@router.get("/service-incidents", response_model=ServiceIncidentsDashboard)
+async def audit_service_incidents(
+    redis_client: Annotated[redis.Redis, Depends(get_redis)],
+    _admin=Depends(require_permission("audit:read")),
+):
+    return await get_incidents_dashboard(redis_client)
