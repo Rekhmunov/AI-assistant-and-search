@@ -1,7 +1,10 @@
+import logging
+from datetime import datetime, timezone
 from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_db, get_redis
@@ -13,9 +16,16 @@ from app.schemas.support import (
     SupportTicketReplyOut,
     SupportTicketUserOut,
 )
-from app.services.support_tickets import create_support_ticket, get_ticket_for_user, list_tickets_for_user
+from app.services.support_tickets import (
+    create_support_ticket,
+    get_ticket_for_user,
+    list_tickets_for_user,
+    notify_admins_new_ticket,
+)
 
 import redis.asyncio as redis
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/support", tags=["support"])
 
@@ -87,5 +97,19 @@ async def create_support_ticket_endpoint(
         )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=str(exc)) from exc
+    except SQLAlchemyError as exc:
+        logger.exception("support ticket create failed for user %s", user.id)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Сервис поддержки временно недоступен. Попробуйте позже.",
+        ) from exc
 
-    return SupportTicketCreateOut(id=ticket.id, created_at=ticket.created_at)
+    try:
+        await notify_admins_new_ticket(db, redis_client, ticket)
+    except Exception:
+        logger.exception("support admin notify failed for ticket %s", ticket.id)
+
+    return SupportTicketCreateOut(
+        id=ticket.id,
+        created_at=ticket.created_at or datetime.now(timezone.utc),
+    )

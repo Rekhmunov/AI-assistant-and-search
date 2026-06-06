@@ -26,12 +26,17 @@ SUPPORT_RATE_MAX_PER_DAY = 5
 
 
 async def check_support_rate_limit(redis_client: redis.Redis, user_id: uuid.UUID) -> None:
-    key = f"support_ticket_day:{user_id}"
-    count = await redis_client.incr(key)
-    if count == 1:
-        await redis_client.expire(key, SUPPORT_RATE_WINDOW_SEC)
-    if count > SUPPORT_RATE_MAX_PER_DAY:
-        raise ValueError("Слишком много обращений за сутки. Попробуйте позже.")
+    try:
+        key = f"support_ticket_day:{user_id}"
+        count = await redis_client.incr(key)
+        if count == 1:
+            await redis_client.expire(key, SUPPORT_RATE_WINDOW_SEC)
+        if count > SUPPORT_RATE_MAX_PER_DAY:
+            raise ValueError("Слишком много обращений за сутки. Попробуйте позже.")
+    except ValueError:
+        raise
+    except Exception:
+        logger.warning("support rate limit skipped: redis unavailable for user %s", user_id)
 
 
 async def find_recent_subscription(db: AsyncSession, user_id: uuid.UUID) -> Subscription | None:
@@ -132,14 +137,7 @@ async def create_support_ticket(
     db.add(ticket)
     await db.flush()
     await attach_payment_context(db, ticket, user, source=source)
-    await db.commit()
     await db.refresh(ticket)
-
-    try:
-        await notify_admins_new_ticket(db, redis_client, ticket)
-    except Exception:
-        logger.exception("support admin notify failed for ticket %s", ticket.id)
-
     return ticket
 
 

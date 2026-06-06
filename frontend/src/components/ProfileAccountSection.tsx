@@ -117,9 +117,7 @@ export function ProfileAccountSection({ user, token, onUserUpdated }: Props) {
   };
 
   return (
-    <section className="profile-card">
-      <h2 className="profile-card-title">{t("accountLinks")}</h2>
-
+    <section className="profile-card profile-account-card">
       <div className="profile-link-item">
         <div className="profile-link-main">
           <span className="profile-link-label">MAX</span>

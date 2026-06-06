@@ -5112,8 +5112,24 @@ body:has(.page-thread) {
   margin-bottom: 16px;
 }
 
+.profile-support-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
 .profile-support-card .profile-card-title {
-  margin: 0 0 8px;
+  margin: 0;
+}
+
+.profile-support-write-btn {
+  width: auto;
+  flex-shrink: 0;
+  padding: 6px 14px;
+  font-size: 0.8125rem;
+  line-height: 1.3;
 }
 
 .profile-support-replies {

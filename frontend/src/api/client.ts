@@ -570,7 +570,7 @@ export async function createSupportTicket(
       const body = await res.json();
       if (typeof body.detail === "string") msg = body.detail;
     } catch {
-      /* ignore */
+      if (res.status >= 500) msg = "Сервис поддержки временно недоступен. Попробуйте позже.";
     }
     throw new Error(msg);
   }

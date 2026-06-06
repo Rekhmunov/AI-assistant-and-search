@@ -144,7 +144,7 @@ export function SupportPage() {
   return (
     <div className="support-page">
       <header className="page-header">
-        <h1>Поддержка</h1>
+        <h1>Тикеты</h1>
         <div className="support-filters">
           <label>
             Статус{" "}

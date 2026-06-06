@@ -120,6 +120,8 @@ export function Profile() {
 
   const searchesToday = session?.searches_today ?? profileUser?.searches_today ?? 0;
   const searchesLimit = session?.searches_limit ?? profileUser?.searches_limit ?? 10;
+  const searchesRemaining = Math.max(0, searchesLimit - searchesToday);
+  const showSearchStats = searchesLimit > 0 && searchesRemaining < 5;
   const proPriceRub = appConfig?.pro_price_rub ?? profileUser?.pro_price_rub ?? session?.pro_price_rub ?? 299;
   const proPurchaseDisabled = Boolean(appConfig?.pro_purchase_disabled);
 
@@ -302,29 +304,34 @@ export function Profile() {
         </div>
       </div>
 
-      <section className="profile-card profile-stats-card">
-        <div className="profile-stats-head">
-          <span className="profile-stats-label">{t("searchesToday")}</span>
-          <strong className="profile-stats-value">
-            {searchesToday}
-            <span className="profile-stats-limit">/{searchesLimit}</span>
-          </strong>
-        </div>
-        <div
-          className="profile-usage-bar"
-          role="progressbar"
-          aria-valuenow={searchesToday}
-          aria-valuemin={0}
-          aria-valuemax={searchesLimit}
-          aria-label={t("searchesToday")}
-        >
+      {showSearchStats && (
+        <section className="profile-card profile-stats-card">
+          <div className="profile-stats-head">
+            <span className="profile-stats-label">{t("searchesToday")}</span>
+            <strong className="profile-stats-value">
+              {searchesToday}
+              <span className="profile-stats-limit">/{searchesLimit}</span>
+            </strong>
+          </div>
           <div
-            className={`profile-usage-fill${usagePercent >= 90 ? " profile-usage-fill--high" : ""}`}
-            style={{ width: `${usagePercent}%` }}
-          />
-        </div>
-        {session?.is_guest && <p className="profile-hint">{t("guestLimitsHint")}</p>}
-      </section>
+            className="profile-usage-bar"
+            role="progressbar"
+            aria-valuenow={searchesToday}
+            aria-valuemin={0}
+            aria-valuemax={searchesLimit}
+            aria-label={t("searchesToday")}
+          >
+            <div
+              className={`profile-usage-fill${usagePercent >= 90 ? " profile-usage-fill--high" : ""}`}
+              style={{ width: `${usagePercent}%` }}
+            />
+          </div>
+          {session?.is_guest && <p className="profile-hint">{t("guestLimitsHint")}</p>}
+          {!session?.is_guest && searchesRemaining === 0 && (
+            <p className="profile-hint">{t("searchesLimitReached")}</p>
+          )}
+        </section>
+      )}
 
       {!isPro && (
         <section className="profile-card profile-pro-card">
@@ -385,18 +392,19 @@ export function Profile() {
 
       {!session?.is_guest && (
         <section className="profile-card profile-support-card">
-          <h2 className="profile-card-title">{t("profileSupportTitle")}</h2>
-          <p className="profile-hint">{t("profileSupportHint")}</p>
-          <button
-            type="button"
-            className="btn-secondary btn-block"
-            onClick={() => {
-              setSupportSource("general");
-              setSupportModalOpen(true);
-            }}
-          >
-            {t("profileSupportWrite")}
-          </button>
+          <div className="profile-support-head">
+            <h2 className="profile-card-title">{t("profileSupportTitle")}</h2>
+            <button
+              type="button"
+              className="btn-secondary profile-support-write-btn"
+              onClick={() => {
+                setSupportSource("general");
+                setSupportModalOpen(true);
+              }}
+            >
+              {t("profileSupportWrite")}
+            </button>
+          </div>
           {ticketsWithReplies.length > 0 && (
             <div className="profile-support-replies">
               <h3 className="profile-support-replies-title">{t("profileSupportReplies")}</h3>

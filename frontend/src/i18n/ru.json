@@ -162,6 +162,7 @@
   "password": "Пароль",
   "passwordMinHint": "мин. 8 символов",
   "guestLimitsHint": "Гостевой лимит поисков в день",
+  "searchesLimitReached": "Дневной лимит поисков исчерпан. Лимит обновится завтра.",
   "guestSearchLimitIntro": "Гостевой поиск включает {requests} в день.",
   "guestSearchLimitRegister": "Зарегистрируйтесь",
   "guestSearchLimitSuffix": " для полного доступа.",

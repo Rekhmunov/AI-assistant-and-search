@@ -37,6 +37,8 @@ const PERMS: Record<AdminRole, Set<string>> = {
     "audit:read",
     "admins:read",
     "admins:write",
+    "support:read",
+    "support:write",
   ]),
   support: new Set([
     "dashboard:read",
@@ -44,6 +46,8 @@ const PERMS: Record<AdminRole, Set<string>> = {
     "users:write",
     "payments:read",
     "payments:write",
+    "support:read",
+    "support:write",
     "audit:read",
   ]),
   marketing: new Set(["dashboard:read", "broadcasts:read", "broadcasts:write", "audit:read"]),
