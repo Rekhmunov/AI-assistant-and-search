@@ -11,14 +11,14 @@ from app.api.deps import get_current_user, get_db, get_redis
 from app.core.request_meta import consent_request_meta
 from app.core.request_security import verify_allowed_origin
 from app.schemas.payments import ProPaymentCreateRequest
-from app.services.legal_documents import ConsentMeta, record_consent
+from app.services.legal_documents import ConsentMeta, ensure_default_documents, record_consent
 from app.core.config import get_settings
 from app.core.database import async_session_factory
 from app.models.subscription import Subscription, SubscriptionStatus
 from app.models.user import Plan, User
 from app.services.app_settings import get_setting
 from app.services.subscription_activation import activate_from_yookassa_payment, recover_pro_for_user
-from app.services.yookassa import YooKassaError, create_payment, get_payment
+from app.services.yookassa import YooKassaError, create_payment, format_yookassa_error, get_payment
 
 import redis.asyncio as redis
 
@@ -59,6 +59,7 @@ async def create_pro_payment(
     return_url = f"{settings.public_web_url.rstrip('/')}/profile?payment=success"
 
     ip_address, ua = consent_request_meta(request)
+    await ensure_default_documents(db)
     try:
         await record_consent(
             db,
@@ -142,7 +143,7 @@ async def create_pro_payment(
     except YooKassaError as e:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"Не удалось создать платёж: {e}",
+            detail=format_yookassa_error(str(e)),
         ) from e
 
     try:

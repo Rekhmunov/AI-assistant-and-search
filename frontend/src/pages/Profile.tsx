@@ -63,6 +63,8 @@ export function Profile() {
   const [supportModalOpen, setSupportModalOpen] = useState(false);
   const [supportSource, setSupportSource] = useState<"general" | "pro_payment">("general");
   const [supportToast, setSupportToast] = useState(false);
+  const [proPaying, setProPaying] = useState(false);
+  const [proPaymentError, setProPaymentError] = useState<string | null>(null);
   const inMax = isMaxWebApp();
   const isDesktop = useDesktopLayout();
 
@@ -109,7 +111,8 @@ export function Profile() {
     queryKey: ["legal-offer"],
     queryFn: () => fetchLegalBySlug("offer"),
     enabled: needsOfferForPro,
-    staleTime: 60_000,
+    staleTime: 0,
+    refetchOnMount: "always",
     retry: 1,
   });
 
@@ -221,17 +224,31 @@ export function Profile() {
   const usageRatio = searchesLimit > 0 ? Math.min(1, searchesToday / searchesLimit) : 0;
   const usagePercent = Math.round(usageRatio * 100);
 
+  const hasPaymentEmail = Boolean(profileUser?.email?.trim());
+
   const activatePro = async () => {
     if (proPurchaseDisabled) {
       setProBlockedOpen(true);
       return;
     }
-    if (!acceptOffer || !offerVersionId) {
-      alert(t("proOfferConsentRequired"));
+    if (!acceptOffer) {
+      setProPaymentError(t("proOfferConsentRequired"));
       return;
     }
+    if (!hasPaymentEmail) {
+      setProPaymentError(t("proPaymentEmailRequired"));
+      return;
+    }
+    setProPaymentError(null);
+    setProPaying(true);
     try {
-      const payment = await createProPayment(token!, offerVersionId);
+      const freshOffer = await fetchLegalBySlug("offer");
+      queryClient.setQueryData(["legal-offer"], freshOffer);
+      if (!freshOffer.version_id) {
+        setProPaymentError(t("legalDocumentUnavailable"));
+        return;
+      }
+      const payment = await createProPayment(token!, freshOffer.version_id);
       if (payment.dev_mode) {
         await devActivatePro(token!);
         const updated = await fetchMe(token!);
@@ -242,12 +259,14 @@ export function Profile() {
       }
       window.location.href = payment.confirmation_url;
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Ошибка оплаты";
+      const message = err instanceof Error ? err.message : t("proPaymentCreateError");
       if (message.includes("временно недоступна") || message.includes("недоступна")) {
         setProBlockedOpen(true);
         return;
       }
-      alert(message);
+      setProPaymentError(message);
+    } finally {
+      setProPaying(false);
     }
   };
 
@@ -321,7 +340,10 @@ export function Profile() {
             <input
               type="checkbox"
               checked={acceptOffer}
-              onChange={(e) => setAcceptOffer(e.target.checked)}
+              onChange={(e) => {
+                setAcceptOffer(e.target.checked);
+                if (proPaymentError) setProPaymentError(null);
+              }}
             />
             <span>
               {t("proOfferConsentPrefix")}{" "}
@@ -333,13 +355,21 @@ export function Profile() {
           {(offerLoadError || (offerFetched && !offerLoading && !offerVersionId)) && (
             <p className="profile-hint profile-pro-offer-error">{t("legalDocumentUnavailable")}</p>
           )}
+          {!hasPaymentEmail && (
+            <p className="profile-hint profile-pro-email-hint">{t("proPaymentEmailRequired")}</p>
+          )}
+          {proPaymentError && (
+            <p className="profile-hint profile-pro-offer-error" role="alert">
+              {proPaymentError}
+            </p>
+          )}
           <button
             type="button"
             className="btn-primary btn-block"
-            disabled={!acceptOffer || offerLoading || !offerVersionId}
-            onClick={activatePro}
+            disabled={!acceptOffer || offerLoading || !offerVersionId || !hasPaymentEmail || proPaying}
+            onClick={() => void activatePro()}
           >
-            {t("upgradePro")}
+            {proPaying ? t("proPaymentCreating") : t("upgradePro")}
           </button>
           <p className="profile-pro-check-hint">
             {t("checkProPaymentHintPrefix")}{" "}

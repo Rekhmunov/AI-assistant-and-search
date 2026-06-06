@@ -20,6 +20,31 @@ class YooKassaError(Exception):
     pass
 
 
+def format_yookassa_error(err: str) -> str:
+    """Human-readable message from YooKassaError / HTTP body."""
+    text = (err or "").strip()
+    if not text:
+        return "Не удалось создать платёж. Попробуйте позже или напишите в поддержку."
+    brace = text.find("{")
+    if brace >= 0:
+        import json
+
+        try:
+            data = json.loads(text[brace:])
+        except json.JSONDecodeError:
+            data = None
+        if isinstance(data, dict):
+            description = data.get("description")
+            if isinstance(description, str) and description.strip():
+                return description.strip()
+            code = data.get("code")
+            if isinstance(code, str) and code.strip():
+                return f"Ошибка ЮKassa: {code.strip()}"
+    if text.startswith("HTTP "):
+        return "Не удалось создать платёж. Попробуйте позже или напишите в поддержку."
+    return text
+
+
 def build_receipt(
     *,
     customer_email: str,
@@ -67,8 +92,9 @@ async def create_payment(
         raise YooKassaError("YOOKASSA_SHOP_ID или YOOKASSA_SECRET_KEY не заданы")
 
     tax_system_code: int | None = None
-    if settings.yookassa_tax_system_code:
-        tax_system_code = settings.yookassa_tax_system_code
+    code = int(settings.yookassa_tax_system_code or 0)
+    if 1 <= code <= 6:
+        tax_system_code = code
 
     payload: dict[str, Any] = {
         "amount": {"value": f"{int(amount_rub)}.00", "currency": "RUB"},

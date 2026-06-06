@@ -1,6 +1,6 @@
 import pytest
 
-from app.services.yookassa import YooKassaError, build_receipt
+from app.services.yookassa import YooKassaError, build_receipt, format_yookassa_error
 
 
 def test_build_receipt_basic():
@@ -37,3 +37,12 @@ def test_build_receipt_with_tax_system_code():
 def test_build_receipt_rejects_invalid_email():
     with pytest.raises(YooKassaError):
         build_receipt(customer_email="", amount_rub=299, description="Pro")
+
+
+def test_format_yookassa_error_parses_json_description():
+    raw = 'HTTP 400: {"type":"error","description":"Receipt is missing or illegal"}'
+    assert format_yookassa_error(raw) == "Receipt is missing or illegal"
+
+
+def test_format_yookassa_error_generic_http():
+    assert "поддержку" in format_yookassa_error("HTTP 502: bad gateway")
