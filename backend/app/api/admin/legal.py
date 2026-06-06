@@ -99,8 +99,10 @@ async def update_legal_document(
         db,
         admin=admin,
         action=f"legal.{slug}.update",
+        resource_type="legal_document",
+        resource_id=slug,
         details={"version": version.version_number, "public_path": body.public_path},
-        request=request,
+        ip_address=request.client.host if request.client else None,
     )
     await db.commit()
 

@@ -4815,6 +4815,11 @@ body:has(.page-thread) {
   cursor: pointer;
 }
 
+.auth-consent-row > span {
+  flex: 1;
+  min-width: 0;
+}
+
 .auth-consent-row input[type="checkbox"] {
   margin-top: 3px;
   flex-shrink: 0;
@@ -4822,13 +4827,19 @@ body:has(.page-thread) {
 }
 
 .auth-consent-link {
+  display: inline;
   border: none;
   padding: 0;
+  margin: 0;
   background: none;
   color: var(--accent);
   text-decoration: underline;
   cursor: pointer;
   font: inherit;
+  line-height: inherit;
+  text-align: left;
+  white-space: normal;
+  vertical-align: baseline;
 }
 
 /* Юридические документы */
