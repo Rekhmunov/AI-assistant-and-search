@@ -1,6 +1,7 @@
 import { FormEvent, useCallback, useEffect, useState } from "react";
-import { apiFetch } from "../api";
+import { ApiError, apiFetch } from "../api";
 import { useAuth } from "../AuthContext";
+import { AdminModal } from "../components/AdminModal";
 import { RichTextEditor } from "../components/RichTextEditor";
 
 type LegalVersion = {
@@ -9,7 +10,12 @@ type LegalVersion = {
   content_html: string;
   created_at: string;
   admin_email: string | null;
+  consent_count: number;
 };
+
+type VersionModal =
+  | { kind: "blocked"; version: LegalVersion }
+  | { kind: "confirm"; version: LegalVersion };
 
 type LegalDocument = {
   slug: string;
@@ -61,8 +67,10 @@ function DocumentSection({
   const [content, setContent] = useState(doc.current_version?.content_html ?? "<p></p>");
   const [publicPath, setPublicPath] = useState(doc.public_path);
   const [busy, setBusy] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [msg, setMsg] = useState("");
   const [previewVersionId, setPreviewVersionId] = useState<string | null>(null);
+  const [versionModal, setVersionModal] = useState<VersionModal | null>(null);
 
   useEffect(() => {
     setContent(doc.current_version?.content_html ?? "<p></p>");
@@ -93,6 +101,58 @@ function DocumentSection({
       setBusy(false);
     }
   };
+
+  const onlyVersion = doc.versions.length <= 1;
+
+  const requestDelete = (version: LegalVersion) => {
+    if (!canWrite) return;
+    if (onlyVersion) {
+      setVersionModal({ kind: "blocked", version });
+      return;
+    }
+    if (version.consent_count > 0) {
+      setVersionModal({ kind: "blocked", version });
+      return;
+    }
+    setVersionModal({ kind: "confirm", version });
+  };
+
+  const confirmDelete = async () => {
+    if (!versionModal || versionModal.kind !== "confirm") return;
+    const version = versionModal.version;
+    setDeletingId(version.id);
+    setMsg("");
+    try {
+      const updated = await apiFetch<LegalDocument>(
+        `/api/admin/legal/${doc.slug}/versions/${version.id}`,
+        { method: "DELETE" },
+      );
+      onSaved(updated);
+      if (previewVersionId === version.id) {
+        setPreviewVersionId(null);
+      }
+      setVersionModal(null);
+      setMsg(`Версия v${version.version_number} удалена`);
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 409) {
+        setVersionModal({ kind: "blocked", version });
+      } else {
+        setMsg(err instanceof Error ? err.message : "Ошибка удаления");
+        setVersionModal(null);
+      }
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  const blockedMessage =
+    versionModal?.kind === "blocked"
+      ? onlyVersion
+        ? "Нельзя удалить единственную версию документа."
+        : versionModal.version.consent_count > 0
+          ? `Нельзя удалить версию v${versionModal.version.version_number}: с ней ознакомился хотя бы один пользователь (${versionModal.version.consent_count}).`
+          : "Удалить данную версию нельзя."
+      : "";
 
   const label = SLUG_LABELS[doc.slug] ?? doc.title;
 
@@ -153,30 +213,89 @@ function DocumentSection({
               <ul className="documents-history-list">
                 {doc.versions.map((v) => (
                   <li key={v.id} className="documents-history-item">
-                    <button
-                      type="button"
-                      className={`documents-history-btn${
-                        previewVersionId === v.id ? " documents-history-btn--active" : ""
-                      }`}
-                      onClick={() =>
-                        setPreviewVersionId((cur) => (cur === v.id ? null : v.id))
-                      }
-                    >
-                      <span>
-                        v{v.version_number}
-                        {doc.current_version?.id === v.id ? " (актуальная)" : ""}
-                      </span>
-                      <span className="documents-history-meta">
-                        {formatDate(v.created_at)}
-                        {v.admin_email ? ` · ${v.admin_email}` : ""}
-                      </span>
-                    </button>
+                    <div className="documents-history-row">
+                      <button
+                        type="button"
+                        className={`documents-history-btn${
+                          previewVersionId === v.id ? " documents-history-btn--active" : ""
+                        }`}
+                        onClick={() =>
+                          setPreviewVersionId((cur) => (cur === v.id ? null : v.id))
+                        }
+                      >
+                        <span>
+                          v{v.version_number}
+                          {doc.current_version?.id === v.id ? " (актуальная)" : ""}
+                        </span>
+                        <span className="documents-history-meta">
+                          {formatDate(v.created_at)}
+                          {v.admin_email ? ` · ${v.admin_email}` : ""}
+                          {v.consent_count > 0 ? ` · согласий: ${v.consent_count}` : ""}
+                        </span>
+                      </button>
+                      {canWrite && (
+                        <button
+                          type="button"
+                          className="documents-history-delete"
+                          title="Удалить версию"
+                          disabled={deletingId === v.id}
+                          onClick={() => requestDelete(v)}
+                        >
+                          {deletingId === v.id ? "…" : "Удалить"}
+                        </button>
+                      )}
+                    </div>
                   </li>
                 ))}
               </ul>
             </div>
           )}
         </div>
+      )}
+
+      {versionModal?.kind === "blocked" && (
+        <AdminModal
+          title="Удаление недоступно"
+          onClose={() => setVersionModal(null)}
+          actions={
+            <button type="button" className="btn-primary" onClick={() => setVersionModal(null)}>
+              Понятно
+            </button>
+          }
+        >
+          <p>{blockedMessage}</p>
+        </AdminModal>
+      )}
+
+      {versionModal?.kind === "confirm" && (
+        <AdminModal
+          title="Удалить версию?"
+          onClose={() => setVersionModal(null)}
+          actions={
+            <>
+              <button
+                type="button"
+                className="btn-secondary btn-danger-outline"
+                disabled={deletingId != null}
+                onClick={() => void confirmDelete()}
+              >
+                {deletingId ? "Удаление…" : "Да, удалить"}
+              </button>
+              <button
+                type="button"
+                className="btn-secondary"
+                disabled={deletingId != null}
+                onClick={() => setVersionModal(null)}
+              >
+                Отмена
+              </button>
+            </>
+          }
+        >
+          <p>
+            Удалить версию v{versionModal.version.version_number}? Действие необратимо.
+          </p>
+        </AdminModal>
       )}
     </section>
   );

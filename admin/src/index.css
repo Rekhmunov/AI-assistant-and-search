@@ -2152,8 +2152,37 @@ pre.small {
   margin-bottom: 6px;
 }
 
+.documents-history-row {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+}
+
+.documents-history-delete {
+  flex-shrink: 0;
+  align-self: center;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--danger, #c0392b);
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.documents-history-delete:hover:not(:disabled) {
+  border-color: var(--danger, #c0392b);
+  background: rgba(192, 57, 43, 0.06);
+}
+
+.documents-history-delete:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
 .documents-history-btn {
-  width: 100%;
+  flex: 1;
+  min-width: 0;
   text-align: left;
   padding: 8px 10px;
   border: 1px solid var(--border);
@@ -2181,6 +2210,51 @@ pre.small {
 .legal-doc-html h3 {
   margin: 1em 0 0.5em;
   font-weight: 600;
+}
+
+.admin-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.admin-modal {
+  width: 100%;
+  max-width: 420px;
+  padding: 20px;
+  border-radius: 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.18);
+}
+
+.admin-modal-title {
+  margin: 0 0 10px;
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+
+.admin-modal-body {
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.admin-modal-body p {
+  margin: 0;
+}
+
+.admin-modal-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 16px;
 }
 
 .legal-doc-html p {

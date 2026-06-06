@@ -10,6 +10,7 @@ class LegalVersionOut(BaseModel):
     content_html: str
     created_at: datetime
     admin_email: str | None = None
+    consent_count: int = 0
 
 
 class LegalDocumentAdminOut(BaseModel):

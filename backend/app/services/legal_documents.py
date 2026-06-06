@@ -22,6 +22,13 @@ DEFAULT_DOCUMENTS: tuple[tuple[str, str, str], ...] = (
 
 REQUIRED_REGISTER_SLUGS = frozenset({"privacy", "pd_consent"})
 
+ONLY_VERSION_ERROR = "Нельзя удалить единственную версию документа"
+CONSENT_BLOCKED_ERROR = "Нельзя удалить версию: с ней ознакомился хотя бы один пользователь"
+
+
+class LegalVersionDeleteBlocked(Exception):
+    """Версию нельзя удалить из‑за согласий пользователей."""
+
 
 def normalize_public_path(path: str) -> str:
     p = (path or "").strip()
@@ -87,6 +94,60 @@ async def list_versions(db: AsyncSession, document_id: uuid.UUID) -> list[LegalD
         .order_by(LegalDocumentVersion.version_number.desc())
     )
     return list(result.scalars().all())
+
+
+async def consent_counts_for_versions(
+    db: AsyncSession,
+    version_ids: list[uuid.UUID],
+) -> dict[uuid.UUID, int]:
+    if not version_ids:
+        return {}
+    result = await db.execute(
+        select(UserLegalConsent.version_id, func.count())
+        .where(UserLegalConsent.version_id.in_(version_ids))
+        .group_by(UserLegalConsent.version_id)
+    )
+    return {row[0]: int(row[1]) for row in result.all()}
+
+
+async def delete_document_version(
+    db: AsyncSession,
+    *,
+    slug: str,
+    version_id: uuid.UUID,
+) -> LegalDocument:
+    doc = await get_document_by_slug(db, slug)
+    if not doc:
+        raise ValueError("Document not found")
+
+    ver_result = await db.execute(
+        select(LegalDocumentVersion).where(
+            LegalDocumentVersion.id == version_id,
+            LegalDocumentVersion.document_id == doc.id,
+        )
+    )
+    version = ver_result.scalar_one_or_none()
+    if not version:
+        raise ValueError("Version not found")
+
+    versions = await list_versions(db, doc.id)
+    if len(versions) <= 1:
+        raise ValueError(ONLY_VERSION_ERROR)
+
+    counts = await consent_counts_for_versions(db, [version_id])
+    if counts.get(version_id, 0) > 0:
+        raise LegalVersionDeleteBlocked(CONSENT_BLOCKED_ERROR)
+
+    was_current = doc.current_version_id == version_id
+    await db.delete(version)
+    await db.flush()
+
+    if was_current:
+        remaining = await list_versions(db, doc.id)
+        doc.current_version_id = remaining[0].id if remaining else None
+        await db.flush()
+
+    return doc
 
 
 async def save_document_version(
