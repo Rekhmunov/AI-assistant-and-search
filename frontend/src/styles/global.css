@@ -5177,6 +5177,22 @@ body:has(.page-thread) {
   color: var(--muted);
 }
 
+.reconsent-doc-list {
+  margin: 0 0 14px;
+  padding: 0 0 0 18px;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  color: var(--text);
+}
+
+.reconsent-doc-list li + li {
+  margin-top: 6px;
+}
+
+.reconsent-doc-list .reconsent-link {
+  text-align: left;
+}
+
 .reconsent-check {
   display: flex;
   align-items: flex-start;

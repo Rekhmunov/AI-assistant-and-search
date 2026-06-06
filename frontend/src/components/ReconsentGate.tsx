@@ -5,8 +5,8 @@ import {
   fetchLegalBySlug,
   fetchSession,
   recordLegalConsent,
-  type PendingConsent,
 } from "../api/client";
+import { t } from "../i18n";
 import { LegalDocumentModal } from "./LegalDocumentModal";
 import { useAuthStore } from "../store/authStore";
 
@@ -34,7 +34,6 @@ export function ReconsentGate({ cookiesResolved }: { cookiesResolved: boolean })
   });
 
   const pending = status?.pending ?? [];
-  const current: PendingConsent | undefined = pending[0];
 
   const { data: modalDoc, isLoading: modalLoading } = useQuery({
     queryKey: ["legal-reconsent-modal", docModalSlug],
@@ -43,44 +42,60 @@ export function ReconsentGate({ cookiesResolved }: { cookiesResolved: boolean })
   });
 
   if (!token || session?.is_guest || !cookiesResolved || isLoading) return null;
-  if (!current) return null;
+  if (!pending.length) return null;
 
   const accept = async () => {
-    if (!checked || busy || !current) return;
+    if (!checked || busy || !pending.length) return;
     setBusy(true);
     setError("");
     try {
       await recordLegalConsent(token, {
-        consents: [{ slug: current.slug, version_id: current.version_id }],
+        consents: pending.map((item) => ({
+          slug: item.slug,
+          version_id: item.version_id,
+        })),
         source: "reconsent",
         consent_method: "checkbox",
       });
       setChecked(false);
       await queryClient.invalidateQueries({ queryKey: ["legal-consent-status", token] });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Не удалось сохранить согласие");
+      setError(err instanceof Error ? err.message : t("reconsentSaveError"));
     } finally {
       setBusy(false);
     }
   };
 
+  const title =
+    pending.length === 1 ? t("reconsentTitleSingle") : t("reconsentTitleMultiple");
+
+  const introText =
+    pending.length === 1
+      ? t("reconsentTextSingle", { title: pending[0].title })
+      : t("reconsentTextMultiple");
+
   return (
     <>
       <div className="reconsent-overlay" role="presentation">
         <div className="reconsent-modal app-modal" role="dialog" aria-modal="true">
-          <h2 className="reconsent-title">Обновлён документ</h2>
-          <p className="reconsent-text">
-            Мы обновили «{current.title}». Чтобы продолжить пользоваться Glosix, подтвердите
-            ознакомление с новой версией.
-          </p>
+          <h2 className="reconsent-title">{title}</h2>
+          <p className="reconsent-text">{introText}</p>
+          <ul className="reconsent-doc-list">
+            {pending.map((item) => (
+              <li key={item.slug}>
+                <button
+                  type="button"
+                  className="reconsent-link"
+                  onClick={() => setDocModalSlug(item.slug)}
+                >
+                  {item.title}
+                </button>
+              </li>
+            ))}
+          </ul>
           <label className="reconsent-check">
             <input type="checkbox" checked={checked} onChange={(e) => setChecked(e.target.checked)} />
-            <span>
-              Я ознакомлен(а) с{" "}
-              <button type="button" className="reconsent-link" onClick={() => setDocModalSlug(current.slug)}>
-                {current.title.toLowerCase()}
-              </button>
-            </span>
+            <span>{t("reconsentCheckbox")}</span>
           </label>
           {error && <p className="reconsent-error">{error}</p>}
           <button
@@ -89,7 +104,7 @@ export function ReconsentGate({ cookiesResolved }: { cookiesResolved: boolean })
             disabled={!checked || busy}
             onClick={() => void accept()}
           >
-            {busy ? "…" : "Принять"}
+            {busy ? "…" : t("reconsentAccept")}
           </button>
         </div>
       </div>
