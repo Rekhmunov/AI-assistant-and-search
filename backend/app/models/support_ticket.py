@@ -36,13 +36,14 @@ class SupportTicket(Base):
     message: Mapped[str] = mapped_column(Text, nullable=False)
     status: Mapped[SupportTicketStatus] = mapped_column(
         ENUM(
-            SupportTicketStatus,
+            "open",
+            "in_progress",
+            "closed",
             name="support_ticket_status_enum",
             create_type=False,
-            values_callable=lambda enum_cls: [e.value for e in enum_cls],
         ),
         nullable=False,
-        default=SupportTicketStatus.OPEN,
+        default=SupportTicketStatus.OPEN.value,
         index=True,
     )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)

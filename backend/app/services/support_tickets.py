@@ -28,7 +28,7 @@ SUPPORT_RATE_MAX_PER_DAY = 5
 async def check_support_rate_limit(redis_client: redis.Redis, user_id: uuid.UUID) -> None:
     try:
         key = f"support_ticket_day:{user_id}"
-        count = await redis_client.incr(key)
+        count = int(await redis_client.incr(key))
         if count == 1:
             await redis_client.expire(key, SUPPORT_RATE_WINDOW_SEC)
         if count > SUPPORT_RATE_MAX_PER_DAY:
@@ -132,12 +132,12 @@ async def create_support_ticket(
         user_max_user_id=user.max_user_id,
         source=source,
         message=message,
-        status=SupportTicketStatus.OPEN,
+        status=SupportTicketStatus.OPEN.value,
+        created_at=datetime.now(timezone.utc),
     )
     db.add(ticket)
     await db.flush()
     await attach_payment_context(db, ticket, user, source=source)
-    await db.refresh(ticket)
     return ticket
 
 
@@ -189,8 +189,9 @@ async def add_admin_reply(
         message=message,
     )
     db.add(reply)
-    if ticket.status == SupportTicketStatus.OPEN:
-        ticket.status = SupportTicketStatus.IN_PROGRESS
+    current_status = ticket.status.value if isinstance(ticket.status, SupportTicketStatus) else str(ticket.status)
+    if current_status == SupportTicketStatus.OPEN.value:
+        ticket.status = SupportTicketStatus.IN_PROGRESS.value
     await db.flush()
 
     user_result = await db.execute(select(User).where(User.id == ticket.user_id))
@@ -212,7 +213,7 @@ async def set_ticket_status(
     *,
     admin: AdminUser | None = None,
 ) -> SupportTicket:
-    ticket.status = status
+    ticket.status = status.value if isinstance(status, SupportTicketStatus) else str(status)
     if status == SupportTicketStatus.CLOSED:
         ticket.closed_at = datetime.now(timezone.utc)
         ticket.closed_by_admin_id = admin.id if admin else ticket.closed_by_admin_id

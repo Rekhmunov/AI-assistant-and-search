@@ -4,11 +4,12 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.api.deps import get_current_user, get_db, get_redis
 from app.core.request_security import verify_allowed_origin
+from app.models.support_ticket import SupportTicketStatus
 from app.models.user import User
 from app.schemas.support import (
     SupportTicketCreate,
@@ -29,13 +30,21 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/support", tags=["support"])
 
+_SUPPORT_UNAVAILABLE = "Сервис поддержки временно недоступен. Попробуйте позже."
+
+
+def _ticket_status_value(status) -> str:
+    if isinstance(status, SupportTicketStatus):
+        return status.value
+    return str(status)
+
 
 def _ticket_user_out(ticket) -> SupportTicketUserOut:
     return SupportTicketUserOut(
         id=ticket.id,
         source=ticket.source,
         message=ticket.message,
-        status=ticket.status.value,
+        status=_ticket_status_value(ticket.status),
         created_at=ticket.created_at,
         closed_at=ticket.closed_at,
         replies=[
@@ -95,13 +104,19 @@ async def create_support_ticket_endpoint(
             message=message,
             source=source,
         )
+        await db.commit()
     except ValueError as exc:
+        await db.rollback()
         raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=str(exc)) from exc
-    except SQLAlchemyError as exc:
+    except StarletteHTTPException:
+        await db.rollback()
+        raise
+    except Exception as exc:
+        await db.rollback()
         logger.exception("support ticket create failed for user %s", user.id)
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Сервис поддержки временно недоступен. Попробуйте позже.",
+            detail=_SUPPORT_UNAVAILABLE,
         ) from exc
 
     try:

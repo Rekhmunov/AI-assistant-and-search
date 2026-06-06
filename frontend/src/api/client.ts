@@ -568,7 +568,10 @@ export async function createSupportTicket(
     let msg = "Не удалось отправить сообщение";
     try {
       const body = await res.json();
-      if (typeof body.detail === "string") msg = body.detail;
+      msg = formatApiErrorDetail(body, msg);
+      if (msg === "Internal server error") {
+        msg = "Сервис поддержки временно недоступен. Попробуйте позже.";
+      }
     } catch {
       if (res.status >= 500) msg = "Сервис поддержки временно недоступен. Попробуйте позже.";
     }

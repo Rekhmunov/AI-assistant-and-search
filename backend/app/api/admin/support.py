@@ -30,7 +30,7 @@ def _ticket_out(ticket: SupportTicket) -> SupportTicketAdminOut:
         user_max_user_id=ticket.user_max_user_id,
         source=ticket.source,
         message=ticket.message,
-        status=ticket.status.value,
+        status=ticket.status.value if hasattr(ticket.status, "value") else str(ticket.status),
         created_at=ticket.created_at,
         closed_at=ticket.closed_at,
         yookassa_payment_id=ticket.yookassa_payment_id,
