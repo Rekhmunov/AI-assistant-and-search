@@ -314,10 +314,6 @@ export function BroadcastsPage() {
 
       <section className="card broadcasts-section">
         <h2 className="broadcasts-section-title">Первое сообщение (/start)</h2>
-        <p className="hint broadcasts-section-hint">
-          Отправляется один раз, когда пользователь нажимает «Старт» в боте. Доступны форматирование текста, ссылки,
-          смайлы, а также изображение или видео.
-        </p>
 
         <form className="broadcasts-welcome-form" onSubmit={saveWelcome}>
           <div className="broadcasts-field broadcasts-field--wide">
