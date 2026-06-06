@@ -9,7 +9,6 @@ import {
   deleteAccount,
   fetchAppConfig,
   fetchLegalBySlug,
-  fetchLegalRoutes,
   fetchMe,
   fetchMySupportTickets,
   fetchSession,
@@ -89,14 +88,6 @@ export function Profile() {
     refetchOnMount: "always",
   });
 
-  const { data: legalRoutes } = useQuery({
-    queryKey: ["legal-routes"],
-    queryFn: fetchLegalRoutes,
-    staleTime: 60_000,
-  });
-
-  const offerMeta = legalRoutes?.find((r) => r.slug === "offer");
-
   const { data: supportTickets, refetch: refetchSupportTickets } = useQuery({
     queryKey: ["support-tickets", token],
     queryFn: () => fetchMySupportTickets(token!),
@@ -106,16 +97,23 @@ export function Profile() {
 
   const ticketsWithReplies = (supportTickets ?? []).filter((ticket) => ticket.replies.length > 0);
 
+  const profilePlan = profileUser?.plan;
+  const needsOfferForPro = !!token && profilePlan !== "pro";
+
   const {
     data: offerDoc,
     isLoading: offerLoading,
     isError: offerLoadError,
+    isFetched: offerFetched,
   } = useQuery({
-    queryKey: ["legal-offer-modal"],
+    queryKey: ["legal-offer"],
     queryFn: () => fetchLegalBySlug("offer"),
-    enabled: offerModalOpen,
-    retry: false,
+    enabled: needsOfferForPro,
+    staleTime: 60_000,
+    retry: 1,
   });
+
+  const offerVersionId = offerDoc?.version_id;
 
   const searchesToday = session?.searches_today ?? profileUser?.searches_today ?? 0;
   const searchesLimit = session?.searches_limit ?? profileUser?.searches_limit ?? 10;
@@ -228,12 +226,12 @@ export function Profile() {
       setProBlockedOpen(true);
       return;
     }
-    if (!acceptOffer || !offerMeta?.version_id) {
+    if (!acceptOffer || !offerVersionId) {
       alert(t("proOfferConsentRequired"));
       return;
     }
     try {
-      const payment = await createProPayment(token!, offerMeta.version_id);
+      const payment = await createProPayment(token!, offerVersionId);
       if (payment.dev_mode) {
         await devActivatePro(token!);
         const updated = await fetchMe(token!);
@@ -330,10 +328,13 @@ export function Profile() {
               </button>
             </span>
           </label>
+          {(offerLoadError || (offerFetched && !offerLoading && !offerVersionId)) && (
+            <p className="profile-hint profile-pro-offer-error">{t("legalDocumentUnavailable")}</p>
+          )}
           <button
             type="button"
             className="btn-primary btn-block"
-            disabled={!acceptOffer || !offerMeta?.version_id}
+            disabled={!acceptOffer || offerLoading || !offerVersionId}
             onClick={activatePro}
           >
             {t("upgradePro")}

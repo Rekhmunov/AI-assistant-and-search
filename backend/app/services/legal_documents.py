@@ -77,6 +77,19 @@ async def ensure_default_documents(db: AsyncSession) -> None:
         result = await db.execute(select(LegalDocument).where(LegalDocument.slug == slug))
         doc = result.scalar_one_or_none()
         if doc:
+            if not doc.current_version_id:
+                versions = await list_versions(db, doc.id)
+                if versions:
+                    doc.current_version_id = versions[0].id
+                else:
+                    version = LegalDocumentVersion(
+                        document_id=doc.id,
+                        version_number=1,
+                        content_html="<p></p>",
+                    )
+                    db.add(version)
+                    await db.flush()
+                    doc.current_version_id = version.id
             continue
         doc = LegalDocument(slug=slug, title=title, public_path=public_path)
         db.add(doc)

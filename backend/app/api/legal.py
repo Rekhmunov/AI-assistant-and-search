@@ -138,6 +138,7 @@ async def legal_by_slug(
     slug: str,
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
+    await ensure_default_documents(db)
     doc = await get_document_by_slug(db, slug)
     if not doc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
