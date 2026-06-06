@@ -483,15 +483,6 @@ label {
   flex-wrap: wrap;
 }
 
-.user-payment-recovery {
-  margin-bottom: 16px;
-}
-
-.user-payment-recovery .user-detail-section-title {
-  margin: 0 0 8px;
-  font-size: 1.05rem;
-}
-
 .admin-back-link {
   display: inline-block;
   margin-bottom: 10px;

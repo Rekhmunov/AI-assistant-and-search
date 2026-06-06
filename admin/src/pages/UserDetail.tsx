@@ -268,18 +268,6 @@ export function UserDetailPage() {
         </div>
       </section>
 
-      {can("payments:write") && user.plan !== "pro" && (
-        <section className="card user-detail-section-card user-payment-recovery">
-          <h2 className="user-detail-section-title">Оплата Pro</h2>
-          <p className="hint user-detail-section-hint">
-            Если пользователь оплатил, но тариф Free — синхронизируйте оплату через ЮKassa.
-          </p>
-          <button type="button" className="btn-primary" onClick={() => void syncProPayment()}>
-            Синхронизировать оплату ЮKassa
-          </button>
-        </section>
-      )}
-
       {can("users:write") && (
         <section className="card user-detail-section-card">
           <h2 className="user-detail-section-title">Управление аккаунтом</h2>
@@ -304,6 +292,11 @@ export function UserDetailPage() {
             )}
           </form>
           <div className="user-detail-actions-row">
+            {can("payments:write") && user.plan !== "pro" && (
+              <button type="button" className="btn-secondary" onClick={() => void syncProPayment()}>
+                Синхронизировать оплату ЮKassa
+              </button>
+            )}
             {user.email && (
               <button
                 type="button"
