@@ -61,7 +61,7 @@ async def ensure_default_documents(db: AsyncSession) -> None:
         db.add(version)
         await db.flush()
         doc.current_version_id = version.id
-    await db.commit()
+    await db.flush()
 
 
 async def list_documents_admin(db: AsyncSession) -> list[LegalDocument]:

@@ -81,11 +81,13 @@ def upgrade() -> None:
         """
     )
     op.execute(
-        """
-        UPDATE legal_documents SET current_version_id = '22222222-2222-4222-8222-222222222201' WHERE slug = 'privacy';
-        UPDATE legal_documents SET current_version_id = '22222222-2222-4222-8222-222222222202' WHERE slug = 'pd_consent';
-        UPDATE legal_documents SET current_version_id = '22222222-2222-4222-8222-222222222203' WHERE slug = 'cookies';
-        """
+        "UPDATE legal_documents SET current_version_id = '22222222-2222-4222-8222-222222222201' WHERE slug = 'privacy'"
+    )
+    op.execute(
+        "UPDATE legal_documents SET current_version_id = '22222222-2222-4222-8222-222222222202' WHERE slug = 'pd_consent'"
+    )
+    op.execute(
+        "UPDATE legal_documents SET current_version_id = '22222222-2222-4222-8222-222222222203' WHERE slug = 'cookies'"
     )
 
 

@@ -9,6 +9,7 @@ from app.models.admin_user import AdminUser
 from app.schemas.legal import LegalDocumentAdminOut, LegalDocumentUpdate, LegalVersionOut
 from app.services.admin_audit import log_admin_action
 from app.services.legal_documents import (
+    ensure_default_documents,
     get_document_by_slug,
     list_documents_admin,
     list_versions,
@@ -34,6 +35,9 @@ async def list_legal_documents(
     _admin=Depends(require_permission("legal:read")),
 ):
     docs = await list_documents_admin(db)
+    if not docs:
+        await ensure_default_documents(db)
+        docs = await list_documents_admin(db)
     out: list[LegalDocumentAdminOut] = []
     for doc in docs:
         await db.refresh(doc, attribute_names=["current_version"])
