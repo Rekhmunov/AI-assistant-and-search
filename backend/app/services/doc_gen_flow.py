@@ -31,6 +31,7 @@ from app.services.docx_builder import build_docx_bytes
 from app.services.file_share_token import create_file_share_token
 from app.services.providers.factory import resolve_runtime_providers
 from app.services.search_query import normalize_user_query
+from app.services.search_pending import clear_search_pending, set_search_pending, update_search_pending
 from app.services.sse import sse_event
 
 logger = logging.getLogger(__name__)
@@ -159,6 +160,16 @@ async def stream_document_generation_turn(
     await db.flush()
     await db.commit()
 
+    await set_search_pending(
+        redis_client,
+        thread.id,
+        user_message_id=user_msg.id,
+        phase="document_generating",
+        needs_search=False,
+        intent="generate_document",
+        custom_status=STATUS_MESSAGES[0],
+    )
+
     yield sse_event("thread", {"thread_id": str(thread.id)})
     yield sse_event(
         "route",
@@ -198,6 +209,7 @@ async def stream_document_generation_turn(
         while not structure_task.done():
             msg = STATUS_MESSAGES[1 + (tick % max(len(STATUS_MESSAGES) - 2, 1))]
             tick += 1
+            await update_search_pending(redis_client, thread.id, custom_status=msg)
             yield sse_event("doc_gen_status", {"status": msg})
             done, _ = await asyncio.wait({structure_task}, timeout=DOC_GEN_STATUS_PAUSE_SEC)
             if structure_task in done:
@@ -205,6 +217,7 @@ async def stream_document_generation_turn(
         structure = structure_task.result()
 
         for post_msg in STATUS_MESSAGES[-2:]:
+            await update_search_pending(redis_client, thread.id, custom_status=post_msg)
             yield sse_event("doc_gen_status", {"status": post_msg})
             await asyncio.sleep(DOC_GEN_STATUS_PAUSE_SEC)
 
@@ -236,6 +249,7 @@ async def stream_document_generation_turn(
         ]
     except DocumentStructureError:
         logger.warning("doc gen structure failed for user %s", user_id_str)
+        await clear_search_pending(redis_client, thread.id)
         yield sse_event(
             "error",
             {
@@ -246,6 +260,7 @@ async def stream_document_generation_turn(
         return
     except Exception:
         logger.exception("doc gen failed")
+        await clear_search_pending(redis_client, thread.id)
         yield sse_event(
             "error",
             {
@@ -300,3 +315,4 @@ async def stream_document_generation_turn(
             "doc_gens_limit": limit_after,
         },
     )
+    await clear_search_pending(redis_client, thread.id)

@@ -70,6 +70,7 @@ async def search_stream(
                     body.attachment_ids,
                     redis_client=redis,
                     client_ip=client_ip(request),
+                    retry_pending=body.retry_pending,
                 ):
                     yield event
             except YandexServiceError as e:

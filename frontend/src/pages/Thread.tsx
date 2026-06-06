@@ -2,10 +2,12 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
+  fetchAnswerStatus,
   fetchFileMeta,
   fetchThread,
   fetchSession,
   streamSearch,
+  type AnswerStatus,
   type GeneratedDocumentInfo,
   type MessageAttachment,
 } from "../api/client";
@@ -105,6 +107,48 @@ type ThreadLocationState = {
 
 const PENDING_ANSWER_POLL_MS = 4000;
 const PENDING_ANSWER_POLL_MAX_MS = 10 * 60 * 1000;
+
+function answerStatusPhaseToSearchPhase(
+  phase: string | null | undefined,
+  needsSearch?: boolean | null,
+): SearchPhase {
+  switch (phase) {
+    case "routing":
+      return "routing";
+    case "searching":
+      return "searching";
+    case "answering":
+      return "answering";
+    case "image_generating":
+      return "image_generating";
+    case "document_generating":
+      return "document_generating";
+    default:
+      return needsSearch ? "searching" : "preparing";
+  }
+}
+
+function preparingStatusDetail(phase: SearchPhase, needsSearch?: boolean): string {
+  if (phase === "routing") {
+    return t("answerPreparingDetail", {
+      step: t("thinking"),
+      next: needsSearch ? t("searchingWeb") : t("composingAnswer"),
+    });
+  }
+  if (phase === "searching") {
+    return t("answerPreparingDetail", {
+      step: needsSearch ? t("searchingWeb") : t("searchingSolution"),
+      next: t("composingAnswer"),
+    });
+  }
+  if (phase === "answering") {
+    return t("answerPreparingDetail", {
+      step: t("composingAnswer"),
+      next: t("composingAnswer"),
+    });
+  }
+  return t("answerPreparingPipeline");
+}
 
 function mapComposerAttachments(
   items: { id: string; filename: string; kind: "document" | "image"; previewUrl?: string }[],
@@ -223,6 +267,22 @@ export function Thread() {
     },
   });
 
+  const threadHasPending = Boolean(thread && threadHasPendingAnswer(thread.messages));
+
+  const { data: answerStatus } = useQuery({
+    queryKey: ["thread-answer-status", activeThreadKey],
+    queryFn: () => fetchAnswerStatus(token, activeThreadKey!),
+    enabled: !!activeThreadKey && threadHasPending && !streaming,
+    refetchInterval: (query) => {
+      if (streamingRef.current) return false;
+      const data = query.state.data;
+      if (!data?.pending || data.stale) return false;
+      if (pendingPollStartedAtRef.current === null) return PENDING_ANSWER_POLL_MS;
+      if (Date.now() - pendingPollStartedAtRef.current > PENDING_ANSWER_POLL_MAX_MS) return false;
+      return PENDING_ANSWER_POLL_MS;
+    },
+  });
+
   const syncTurnsFromThread = useCallback(() => {
     if (!thread) return;
     setTurns((prev) => mergeThreadTurns(prev, messagesToTurns(thread.messages)));
@@ -306,6 +366,7 @@ export function Thread() {
       existingThreadId: string | null,
       attachmentIds: string[],
       messageAttachments: MessageAttachment[] = [],
+      options?: { retryPending?: boolean; resumeTurnKey?: string },
     ) => {
       if (!text.trim() && !attachmentIds.length) return;
       if (streamingRef.current) return;
@@ -328,7 +389,9 @@ export function Thread() {
       }
 
       setActiveTab("answer");
-      const pendingKey = `stream-${Date.now()}`;
+      const retryPending = Boolean(options?.retryPending);
+      const resumeTurnKey = options?.resumeTurnKey;
+      const pendingKey = resumeTurnKey ?? `stream-${Date.now()}`;
       const imageGenQuery = !attachmentIds.length && wantsImageGeneration(text);
       imageGenActiveRef.current = imageGenQuery;
       docGenActiveRef.current = false;
@@ -337,21 +400,40 @@ export function Thread() {
       setStreaming(true);
       setNeedsSearch(!imageGenQuery);
       setSearchPhase(imageGenQuery ? "image_generating" : "routing");
-      setTurns((prev) => [
-        ...prev,
-        {
-          key: pendingKey,
-          query: text,
-          attachments: messageAttachments,
-          answer: "",
-          sources: [],
-          images: [],
-          followUps: [],
-          needsSearch: !imageGenQuery,
-          isImageGen: imageGenQuery,
-          streaming: true,
-        },
-      ]);
+      if (retryPending && resumeTurnKey) {
+        setTurns((prev) =>
+          prev.map((turn) =>
+            turn.key === resumeTurnKey
+              ? {
+                  ...turn,
+                  preparing: false,
+                  streaming: true,
+                  answer: "",
+                  sources: [],
+                  images: [],
+                  followUps: [],
+                  errorCode: undefined,
+                }
+              : turn,
+          ),
+        );
+      } else {
+        setTurns((prev) => [
+          ...prev,
+          {
+            key: pendingKey,
+            query: text,
+            attachments: messageAttachments,
+            answer: "",
+            sources: [],
+            images: [],
+            followUps: [],
+            needsSearch: !imageGenQuery,
+            isImageGen: imageGenQuery,
+            streaming: true,
+          },
+        ]);
+      }
 
       await streamSearch(token, text, existingThreadId, attachmentIds, {
         onThread: (tid) => {
@@ -476,7 +558,10 @@ export function Thread() {
           queryClient.invalidateQueries({ queryKey: ["session"] });
           queryClient.invalidateQueries({ queryKey: ["threads"] });
           const tid = activeThreadIdRef.current ?? existingThreadId ?? id ?? threadId;
-          if (tid) queryClient.invalidateQueries({ queryKey: ["thread", tid] });
+          if (tid) {
+            queryClient.invalidateQueries({ queryKey: ["thread", tid] });
+            queryClient.invalidateQueries({ queryKey: ["thread-answer-status", tid] });
+          }
         },
         onError: (msg, code) => {
           streamingRef.current = false;
@@ -563,9 +648,20 @@ export function Thread() {
             }),
           );
         },
-      });
+      }, { retryPending });
     },
     [token, id, navigate, queryClient, threadId, session?.is_guest],
+  );
+
+  const retryPendingTurn = useCallback(
+    (turn: ThreadTurn) => {
+      const attachmentIds = turn.attachments.map((a) => a.id);
+      void runSearch(turn.query, threadId, attachmentIds, turn.attachments, {
+        retryPending: true,
+        resumeTurnKey: turn.key,
+      });
+    },
+    [runSearch, threadId],
   );
 
   useEffect(() => {
@@ -681,10 +777,41 @@ export function Thread() {
             const sources = turn.sources ?? [];
             const isImageGenTurn = useChatGeneratedImageLayout(turn);
             const isDocumentGenTurn = Boolean(turn.isDocumentGen || turn.generatedDocument);
+            const isLastTurn = index === turns.length - 1;
+            const turnAnswerStatus: AnswerStatus | undefined =
+              isLastTurn && turn.preparing ? answerStatus : undefined;
+            const preparingStale = Boolean(
+              turn.preparing &&
+                !streaming &&
+                (turnAnswerStatus?.stale ||
+                  (pendingPollStartedAtRef.current !== null &&
+                    Date.now() - pendingPollStartedAtRef.current > PENDING_ANSWER_POLL_MAX_MS)),
+            );
             const showPreparing =
-              Boolean(turn.preparing && !streaming && !turn.errorCode && !answerHasText(turn.answer));
+              Boolean(
+                turn.preparing && !streaming && !turn.errorCode && !answerHasText(turn.answer),
+              ) && !preparingStale;
+            const showPreparingStale =
+              Boolean(
+                turn.preparing && !streaming && !turn.errorCode && !answerHasText(turn.answer),
+              ) && preparingStale;
+            const preparingPhase = turnAnswerStatus?.active
+              ? answerStatusPhaseToSearchPhase(
+                  turnAnswerStatus.phase,
+                  turnAnswerStatus.needs_search,
+                )
+              : "preparing";
+            const preparingNeedsSearch =
+              turnAnswerStatus?.needs_search ?? turn.needsSearch ?? needsSearch;
+            const preparingDetail =
+              showPreparing && preparingPhase !== "preparing"
+                ? preparingStatusDetail(preparingPhase, preparingNeedsSearch)
+                : showPreparing
+                  ? t("answerPreparingPipeline")
+                  : null;
             const showStatus =
               showPreparing ||
+              showPreparingStale ||
               (isActive &&
                 streaming &&
                 !turn.errorCode &&
@@ -715,8 +842,25 @@ export function Thread() {
                 <ThreadQuery query={turn.query} attachments={turn.attachments} />
 
                 {showStatus &&
-                  (showPreparing ? (
-                    <SearchStatusLine phase="preparing" />
+                  (showPreparingStale ? (
+                    <div className="search-status-interrupted" role="status" aria-live="polite">
+                      <p>{t("answerInterrupted")}</p>
+                      <button
+                        type="button"
+                        className="search-status-retry"
+                        disabled={streaming}
+                        onClick={() => retryPendingTurn(turn)}
+                      >
+                        {t("retrySearch")}
+                      </button>
+                    </div>
+                  ) : showPreparing ? (
+                    <SearchStatusLine
+                      phase={preparingPhase}
+                      needsSearch={preparingNeedsSearch}
+                      customStatus={turnAnswerStatus?.custom_status}
+                      detail={preparingDetail}
+                    />
                   ) : isDocumentGenTurn ? (
                     <DocGenStatusLine active={Boolean(isActive && streaming)} status={docGenStatus} />
                   ) : isImageGenTurn ? (

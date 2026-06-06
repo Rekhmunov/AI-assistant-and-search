@@ -83,3 +83,16 @@ class ThreadBulkDeleteIn(BaseModel):
 class ThreadBulkDeleteOut(BaseModel):
     deleted: int
     not_found: int
+
+
+class AnswerStatusOut(BaseModel):
+    """Состояние незавершённого ответа в треде (polling при возврате на страницу)."""
+
+    pending: bool
+    active: bool
+    stale: bool
+    phase: str | None = None
+    needs_search: bool | None = None
+    custom_status: str | None = None
+    user_message_id: UUID | None = None
+    query: str | None = None

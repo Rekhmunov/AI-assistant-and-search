@@ -9,6 +9,7 @@ class SearchRequest(BaseModel):
     query: str = Field(..., min_length=1, max_length=2000)
     thread_id: UUID | None = None
     attachment_ids: list[UUID] | None = None
+    retry_pending: bool = False
 
     @field_validator("query")
     @classmethod

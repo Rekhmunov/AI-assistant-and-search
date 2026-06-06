@@ -115,6 +115,17 @@ export interface ThreadDetail {
   messages: Message[];
 }
 
+export interface AnswerStatus {
+  pending: boolean;
+  active: boolean;
+  stale: boolean;
+  phase: string | null;
+  needs_search: boolean | null;
+  custom_status: string | null;
+  user_message_id: string | null;
+  query: string | null;
+}
+
 function apiHeaders(token: string | null, json = true): HeadersInit {
   const h: HeadersInit = { ...getGuestSessionHeader() };
   if (json) (h as Record<string, string>)["Content-Type"] = "application/json";
@@ -435,6 +446,18 @@ export async function fetchThread(token: string | null, id: string): Promise<Thr
     credentials: "include",
   });
   if (!res.ok) throw new Error("Failed to load thread");
+  return res.json();
+}
+
+export async function fetchAnswerStatus(
+  token: string | null,
+  threadId: string,
+): Promise<AnswerStatus> {
+  const res = await fetch(`${API_BASE}/api/threads/${threadId}/answer-status`, {
+    headers: apiHeaders(token),
+    credentials: "include",
+  });
+  if (!res.ok) throw new Error("Failed to load answer status");
   return res.json();
 }
 
@@ -977,14 +1000,20 @@ function networkErrorMessage(err: unknown): string {
   return "Нет связи с сервером. Попробуйте ещё раз.";
 }
 
+export type StreamSearchOptions = {
+  retryPending?: boolean;
+  signal?: AbortSignal;
+};
+
 export async function streamSearch(
   token: string | null,
   query: string,
   threadId: string | null,
   attachmentIds: string[],
   handlers: SSEHandlers,
-  signal?: AbortSignal
+  options?: StreamSearchOptions,
 ): Promise<void> {
+  const signal = options?.signal;
   let res: Response;
   try {
     res = await fetch(`${API_BASE}/api/search`, {
@@ -995,6 +1024,7 @@ export async function streamSearch(
         query,
         thread_id: threadId,
         attachment_ids: attachmentIds.length ? attachmentIds : null,
+        retry_pending: Boolean(options?.retryPending),
       }),
       signal,
     });

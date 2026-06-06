@@ -2294,7 +2294,7 @@ body:has(.page-thread) {
 
 .search-status {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 10px;
   margin: 0 0 20px;
   padding: 4px 0;
@@ -2302,9 +2302,53 @@ body:has(.page-thread) {
   font-size: 0.9rem;
 }
 
+.search-status-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.search-status-detail {
+  font-size: 0.82rem;
+  line-height: 1.35;
+  color: var(--muted);
+  opacity: 0.9;
+}
+
+.search-status-interrupted {
+  margin: 0 0 20px;
+  padding: 4px 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.search-status-retry {
+  margin-top: 10px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.88rem;
+  cursor: pointer;
+}
+
+.search-status-retry:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.search-status-retry:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .search-status-dot {
+  flex-shrink: 0;
   width: 7px;
   height: 7px;
+  margin-top: 6px;
   border-radius: 50%;
   background: var(--accent);
   animation: status-pulse 1.2s ease-in-out infinite;

@@ -6,6 +6,7 @@ export type SearchPhase =
   | "searching"
   | "answering"
   | "image_generating"
+  | "document_generating"
   | "preparing"
   | "idle";
 
@@ -14,11 +15,14 @@ type Props = {
   needsSearch?: boolean;
   /** Статус из SSE (GigaChat text2image): «Делаем шедевр…» */
   customStatus?: string | null;
+  /** Подсказка под строкой статуса (этапы «Ответ готовится»). */
+  detail?: string | null;
 };
 
 function statusLabel(phase: SearchPhase, needsSearch?: boolean, customStatus?: string | null): string {
   if (customStatus?.trim()) return customStatus.trim();
   if (phase === "preparing") return t("answerPreparing");
+  if (phase === "document_generating") return t("docGenPreparing");
   if (phase === "image_generating") return t("imageGenWorking");
   if (phase === "routing") return t("thinking");
   if (phase === "searching") {
@@ -28,7 +32,7 @@ function statusLabel(phase: SearchPhase, needsSearch?: boolean, customStatus?: s
   return t("searchingSolution");
 }
 
-export function SearchStatusLine({ phase, needsSearch, customStatus }: Props) {
+export function SearchStatusLine({ phase, needsSearch, customStatus, detail }: Props) {
   const active = phase !== "idle";
   const label = statusLabel(phase, needsSearch, customStatus);
   const { text, isTyping } = useTypewriterText(label, active);
@@ -38,12 +42,15 @@ export function SearchStatusLine({ phase, needsSearch, customStatus }: Props) {
   return (
     <div className="search-status" role="status" aria-live="polite" aria-label={label}>
       <span className="search-status-dot" />
-      <span
-        className={`search-status-text${isTyping ? " search-status-text--typing" : ""}`}
-        aria-hidden={isTyping}
-      >
-        {text}
-      </span>
+      <div className="search-status-body">
+        <span
+          className={`search-status-text${isTyping ? " search-status-text--typing" : ""}`}
+          aria-hidden={isTyping}
+        >
+          {text}
+        </span>
+        {detail?.trim() ? <span className="search-status-detail">{detail.trim()}</span> : null}
+      </div>
     </div>
   );
 }

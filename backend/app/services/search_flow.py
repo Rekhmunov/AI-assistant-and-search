@@ -47,6 +47,11 @@ from app.services.llm_flow_router import resolve_service_flow
 from app.services.yandex_image_search import YandexImageSearchService
 from app.services.perplexity import PERPLEXITY_PROVIDER_ID, PerplexityProvider
 from app.services.providers.factory import resolve_runtime_providers
+from app.services.search_pending import (
+    clear_search_pending,
+    set_search_pending,
+    update_search_pending,
+)
 import redis.asyncio as redis
 
 
@@ -120,6 +125,7 @@ class SearchFlowService:
         attachment_ids: list[uuid.UUID] | None = None,
         redis_client: redis.Redis | None = None,
         client_ip: str | None = None,
+        retry_pending: bool = False,
     ) -> AsyncIterator[str]:
         if redis_client is None:
             from app.api.deps import get_redis
@@ -361,16 +367,33 @@ class SearchFlowService:
         if has_attachments and bundle.uploaded_files:
             attachments_payload = attachments_json_from_files(bundle.uploaded_files)
 
-        user_msg = Message(
-            thread_id=thread.id,
-            role=MessageRole.USER,
-            content=display_content,
-            attachments=attachments_payload,
+        reuse_user_msg = (
+            retry_pending
+            and prior_messages
+            and prior_messages[-1].role == MessageRole.USER
         )
-        db.add(user_msg)
-        await db.flush()
-        # Сохраняем тред до долгого поиска: при сбое rollback не должен «стирать» уже отданный thread_id.
-        await db.commit()
+        if reuse_user_msg:
+            user_msg = prior_messages[-1]
+        else:
+            user_msg = Message(
+                thread_id=thread.id,
+                role=MessageRole.USER,
+                content=display_content,
+                attachments=attachments_payload,
+            )
+            db.add(user_msg)
+            await db.flush()
+            # Сохраняем тред до долгого поиска: при сбое rollback не должен «стирать» уже отданный thread_id.
+            await db.commit()
+
+        await set_search_pending(
+            redis_client,
+            thread.id,
+            user_message_id=user_msg.id,
+            phase="routing",
+            needs_search=route.needs_search,
+            intent=str(route.intent),
+        )
 
         yield sse_event("thread", {"thread_id": str(thread.id)})
         yield sse_event(
@@ -383,390 +406,350 @@ class SearchFlowService:
                 "policy_version": route.policy_version,
             },
         )
+        await update_search_pending(
+            redis_client,
+            thread.id,
+            phase="searching" if route.needs_search else "answering",
+            needs_search=route.needs_search,
+        )
 
-        history = thread_ctx.history
-        llm_history = llm_history_for_turn(history, has_attachments=has_attachments)
-        prior_sources_block = format_sources_for_prompt(thread_ctx.last_assistant_sources)
+        async def _pipeline() -> AsyncIterator[str]:
+            history = thread_ctx.history
+            llm_history = llm_history_for_turn(history, has_attachments=has_attachments)
+            prior_sources_block = format_sources_for_prompt(thread_ctx.last_assistant_sources)
 
-        sources: list[SearchSource] = []
-        sources_json: list[dict] = []
-        entity_images_json: list[dict] = []
-        search_q_sent: str | None = None
-        rewrite_trace: dict | None = None
-        search_attempts: list[dict] = []
-        retrieval_trace: dict | None = None
-        hint_clarify: str | None = None
-        fact_pack = None
-        query_url_trace: QueryUrlMemoryTrace | None = None
-        howto = False
-        fact_slots: list[str] = []
-        grounding_mode: str = "strict"
-        page_cache_trace: dict | None = None
-        full_answer = ""
+            sources: list[SearchSource] = []
+            sources_json: list[dict] = []
+            entity_images_json: list[dict] = []
+            search_q_sent: str | None = None
+            rewrite_trace: dict | None = None
+            search_attempts: list[dict] = []
+            retrieval_trace: dict | None = None
+            hint_clarify: str | None = None
+            fact_pack = None
+            query_url_trace: QueryUrlMemoryTrace | None = None
+            howto = False
+            fact_slots: list[str] = []
+            grounding_mode: str = "strict"
+            page_cache_trace: dict | None = None
+            full_answer = ""
 
-        try:
-            if hybrid_vision_search:
-                try:
-                    summary = await summarize_vision_for_search(
-                        llm_query,
-                        bundle.vision_images,
-                        llm_history,
-                        db=db,
-                        redis_client=redis_client,
-                        prior_sources_block=prior_sources_block,
-                        prompt_store=_prompt_store,
-                    )
-                    if summary.strip():
-                        llm_query = (
-                            f"{llm_query}\n\n--- Содержимое фото (vision) ---\n{summary.strip()}"
+            try:
+                if hybrid_vision_search:
+                    try:
+                        summary = await summarize_vision_for_search(
+                            llm_query,
+                            bundle.vision_images,
+                            llm_history,
+                            db=db,
+                            redis_client=redis_client,
+                            prior_sources_block=prior_sources_block,
+                            prompt_store=_prompt_store,
                         )
-                except VisionNotSupportedError as e:
-                    await db.rollback()
-                    await limiter.release_search(user_id_str)
-                    yield sse_event("error", {"code": "vision_unavailable", "message": str(e)})
-                    return
+                        if summary.strip():
+                            llm_query = (
+                                f"{llm_query}\n\n--- Содержимое фото (vision) ---\n{summary.strip()}"
+                            )
+                    except VisionNotSupportedError as e:
+                        await db.rollback()
+                        await limiter.release_search(user_id_str)
+                        yield sse_event("error", {"code": "vision_unavailable", "message": str(e)})
+                        return
 
-            if route.needs_search and llm_provider_id == PERPLEXITY_PROVIDER_ID:
-                rewrite_trace = {
-                    "provider": "perplexity",
-                    "yandex_search_skipped": True,
-                    "search_planner_skipped": True,
-                }
-                search_q_sent = llm_query[:400]
-                settings = get_settings()
-                _skip_image_intents = frozenset({"howto", "edit_prior", "vision_image"})
-                run_image_search = (
-                    settings.entity_images_enabled
-                    and settings.yandex_configured
-                    and not has_attachments
-                    and not vision_only_answer
-                    and str(route.intent) not in _skip_image_intents
-                    and wants_entity_images(user_text, intent=str(route.intent))
-                )
-                image_task: asyncio.Task | None = None
-                if run_image_search:
-                    image_query = resolve_entity_image_query(
-                        user_text,
-                        llm_query,
-                        search_queries=None,
-                        is_continuation=thread_ctx.is_continuation,
-                        topic_type="general",
+                if route.needs_search and llm_provider_id == PERPLEXITY_PROVIDER_ID:
+                    rewrite_trace = {
+                        "provider": "perplexity",
+                        "yandex_search_skipped": True,
+                        "search_planner_skipped": True,
+                    }
+                    search_q_sent = llm_query[:400]
+                    settings = get_settings()
+                    _skip_image_intents = frozenset({"howto", "edit_prior", "vision_image"})
+                    run_image_search = (
+                        settings.entity_images_enabled
+                        and settings.yandex_configured
+                        and not has_attachments
+                        and not vision_only_answer
+                        and str(route.intent) not in _skip_image_intents
+                        and wants_entity_images(user_text, intent=str(route.intent))
                     )
-                    image_svc = YandexImageSearchService(settings)
-                    image_task = asyncio.create_task(
-                        image_svc.search_validated(
-                            image_query,
-                            limit=settings.entity_images_max,
-                            candidate_limit=settings.entity_images_candidate_limit,
-                            validate_timeout=settings.entity_images_validate_timeout_sec,
+                    image_task: asyncio.Task | None = None
+                    if run_image_search:
+                        image_query = resolve_entity_image_query(
+                            user_text,
+                            llm_query,
+                            search_queries=None,
+                            is_continuation=thread_ctx.is_continuation,
+                            topic_type="general",
                         )
-                    )
-                if isinstance(llm, PerplexityProvider):
-                    images_emitted = False
-                    async for event in llm.stream_search_answer(
-                        llm_query,
-                        llm_history,
-                        model=route.answer_model,  # type: ignore[arg-type]
-                        prior_sources_block=prior_sources_block,
-                    ):
-                        if image_task is not None and not images_emitted and image_task.done():
-                            images_emitted = True
+                        image_svc = YandexImageSearchService(settings)
+                        image_task = asyncio.create_task(
+                            image_svc.search_validated(
+                                image_query,
+                                limit=settings.entity_images_max,
+                                candidate_limit=settings.entity_images_candidate_limit,
+                                validate_timeout=settings.entity_images_validate_timeout_sec,
+                            )
+                        )
+                    if isinstance(llm, PerplexityProvider):
+                        images_emitted = False
+                        async for event in llm.stream_search_answer(
+                            llm_query,
+                            llm_history,
+                            model=route.answer_model,  # type: ignore[arg-type]
+                            prior_sources_block=prior_sources_block,
+                        ):
+                            if image_task is not None and not images_emitted and image_task.done():
+                                images_emitted = True
+                                try:
+                                    imgs = entity_images_to_json(image_task.result())
+                                    if imgs:
+                                        entity_images_json = imgs
+                                        yield sse_event("images", {"images": imgs})
+                                except Exception:
+                                    logger.exception("Entity image search failed (non-fatal)")
+                            if event.sources and not sources:
+                                sources = diversify_sources_by_domain(
+                                    event.sources,
+                                    max_sources=12,
+                                    howto=route.intent == "howto" or route.answer_model == "pro",
+                                    prefer_official_docs=route.intent == "howto",
+                                )
+                                sources_json = sources_to_json(sources)
+                                if sources_json:
+                                    await update_search_pending(
+                                        redis_client, thread.id, phase="answering"
+                                    )
+                                    yield sse_event("sources", {"sources": sources_json})
+                            if event.text:
+                                full_answer += event.text
+                                yield sse_event("token", {"text": event.text})
+                        if image_task is not None and not images_emitted:
                             try:
-                                imgs = entity_images_to_json(image_task.result())
+                                raw = await asyncio.wait_for(
+                                    image_task,
+                                    timeout=settings.entity_images_total_timeout_sec,
+                                )
+                                imgs = entity_images_to_json(raw)
                                 if imgs:
                                     entity_images_json = imgs
                                     yield sse_event("images", {"images": imgs})
+                            except asyncio.TimeoutError:
+                                image_task.cancel()
+                                logger.info("Entity image search timed out")
                             except Exception:
                                 logger.exception("Entity image search failed (non-fatal)")
-                        if event.sources and not sources:
-                            sources = diversify_sources_by_domain(
-                                event.sources,
-                                max_sources=12,
-                                howto=route.intent == "howto" or route.answer_model == "pro",
-                                prefer_official_docs=route.intent == "howto",
-                            )
-                            sources_json = sources_to_json(sources)
-                            if sources_json:
-                                yield sse_event("sources", {"sources": sources_json})
-                        if event.text:
-                            full_answer += event.text
-                            yield sse_event("token", {"text": event.text})
-                    if image_task is not None and not images_emitted:
-                        try:
-                            raw = await asyncio.wait_for(
-                                image_task,
-                                timeout=settings.entity_images_total_timeout_sec,
-                            )
-                            imgs = entity_images_to_json(raw)
-                            if imgs:
-                                entity_images_json = imgs
-                                yield sse_event("images", {"images": imgs})
-                        except asyncio.TimeoutError:
-                            image_task.cancel()
-                            logger.info("Entity image search timed out")
-                        except Exception:
-                            logger.exception("Entity image search failed (non-fatal)")
-                retrieval_trace = {"ok": bool(sources), "provider": "perplexity"}
+                    retrieval_trace = {"ok": bool(sources), "provider": "perplexity"}
 
-            elif route.needs_search:
-                rewrite, (bootstrap_sources, query_url_trace) = await asyncio.gather(
-                    rewriter.rewrite(llm_query, thread_ctx),
-                    lookup_bootstrap_sources(db, llm_query, llm_query),
-                )
-                fact_slots = resolve_fact_slots(rewrite.fact_slots)
-                grounding_mode = rewrite.grounding or "hybrid"
-                rewrite_trace = {
-                    "search_queries": rewrite.search_queries,
-                    "needs_clarification": rewrite.needs_clarification,
-                    "clarification_question": rewrite.clarification_question,
-                    "intent": rewrite.intent,
-                    "fact_slots": fact_slots,
-                    "grounding": grounding_mode,
-                    "topic_type": rewrite.topic_type,
-                    "needs_second_search": rewrite.needs_second_search,
-                    "prefer_official_docs": rewrite.prefer_official_docs,
-                    "reason": rewrite.reason,
-                }
-                if rewrite.intent in _VALID_INTENTS:
-                    route.intent = rewrite.intent  # type: ignore[assignment]
-                if rewrite.intent == "howto":
-                    route.answer_model = "pro"
-
-                if rewrite.needs_clarification and rewrite.clarification_question:
-                    hint_clarify = rewrite.clarification_question
-
-                queries = list(rewrite.search_queries or [normalize_user_query(route.search_query)])
-                howto = rewrite.intent == "howto"
-                if howto or "course_program" in fact_slots:
-                    route.answer_model = "pro"
-
-                settings = get_settings()
-                image_intent = rewrite.intent if rewrite.intent in _VALID_INTENTS else route.intent
-                _skip_image_intents = frozenset({"howto", "edit_prior", "vision_image"})
-                run_image_search = (
-                    settings.entity_images_enabled
-                    and settings.yandex_configured
-                    and not has_attachments
-                    and not vision_only_answer
-                    and str(image_intent) not in _skip_image_intents
-                    and rewrite.topic_type not in ("product_tech", "numeric", "program")
-                    and wants_entity_images(
-                        user_text,
-                        intent=str(image_intent),
-                        topic_type=rewrite.topic_type,
+                elif route.needs_search:
+                    rewrite, (bootstrap_sources, query_url_trace) = await asyncio.gather(
+                        rewriter.rewrite(llm_query, thread_ctx),
+                        lookup_bootstrap_sources(db, llm_query, llm_query),
                     )
-                )
-                image_task: asyncio.Task | None = None
-                if run_image_search:
-                    image_query = resolve_entity_image_query(
-                        user_text,
-                        llm_query,
-                        search_queries=queries,
-                        is_continuation=thread_ctx.is_continuation,
-                        topic_type=rewrite.topic_type,
-                    )
-                    image_svc = YandexImageSearchService(settings)
-                    image_task = asyncio.create_task(
-                        image_svc.search_validated(
-                            image_query,
-                            limit=settings.entity_images_max,
-                            candidate_limit=settings.entity_images_candidate_limit,
-                            validate_timeout=settings.entity_images_validate_timeout_sec,
+                    fact_slots = resolve_fact_slots(rewrite.fact_slots)
+                    grounding_mode = rewrite.grounding or "hybrid"
+                    rewrite_trace = {
+                        "search_queries": rewrite.search_queries,
+                        "needs_clarification": rewrite.needs_clarification,
+                        "clarification_question": rewrite.clarification_question,
+                        "intent": rewrite.intent,
+                        "fact_slots": fact_slots,
+                        "grounding": grounding_mode,
+                        "topic_type": rewrite.topic_type,
+                        "needs_second_search": rewrite.needs_second_search,
+                        "prefer_official_docs": rewrite.prefer_official_docs,
+                        "reason": rewrite.reason,
+                    }
+                    if rewrite.intent in _VALID_INTENTS:
+                        route.intent = rewrite.intent  # type: ignore[assignment]
+                    if rewrite.intent == "howto":
+                        route.answer_model = "pro"
+
+                    if rewrite.needs_clarification and rewrite.clarification_question:
+                        hint_clarify = rewrite.clarification_question
+
+                    queries = list(rewrite.search_queries or [normalize_user_query(route.search_query)])
+                    howto = rewrite.intent == "howto"
+                    if howto or "course_program" in fact_slots:
+                        route.answer_model = "pro"
+
+                    settings = get_settings()
+                    image_intent = rewrite.intent if rewrite.intent in _VALID_INTENTS else route.intent
+                    _skip_image_intents = frozenset({"howto", "edit_prior", "vision_image"})
+                    run_image_search = (
+                        settings.entity_images_enabled
+                        and settings.yandex_configured
+                        and not has_attachments
+                        and not vision_only_answer
+                        and str(image_intent) not in _skip_image_intents
+                        and rewrite.topic_type not in ("product_tech", "numeric", "program")
+                        and wants_entity_images(
+                            user_text,
+                            intent=str(image_intent),
+                            topic_type=rewrite.topic_type,
                         )
                     )
-
-                def _enhance(q: str) -> str:
-                    return normalize_user_query(q)[:400]
-
-                extra_boot, extra_trace = await lookup_bootstrap_sources(
-                    db,
-                    llm_query,
-                    *(queries[:2]),
-                )
-                if extra_boot:
-                    seen = {(s.url or "").lower() for s in bootstrap_sources}
-                    for s in extra_boot:
-                        u = (s.url or "").lower()
-                        if u and u not in seen:
-                            bootstrap_sources.append(s)
-                            seen.add(u)
-                if extra_trace.lookup_keys:
-                    query_url_trace.lookup_keys = max(
-                        query_url_trace.lookup_keys,
-                        extra_trace.lookup_keys,
-                    )
-                    query_url_trace.bootstrap_count += extra_trace.bootstrap_count
-
-                pipeline_task = asyncio.create_task(
-                    fact_pipeline.run(
-                        llm_query,
-                        queries,
-                        enhance_fn=_enhance,
-                        fact_slots=fact_slots,
-                        howto=howto,
-                        answer_model=route.answer_model,
-                        bootstrap_sources=bootstrap_sources or None,
-                        prefer_official_docs=rewrite.prefer_official_docs,
-                        needs_second_search=rewrite.needs_second_search,
-                        redis_client=redis_client,
-                    )
-                )
-                pipeline_result = None
-                images_emitted = False
-                image_ready_task: asyncio.Task | None = None
-
-                if image_task is not None:
-
-                    async def _load_entity_images() -> list:
-                        try:
-                            return await asyncio.wait_for(
-                                image_task,
-                                timeout=settings.entity_images_total_timeout_sec,
-                            )
-                        except asyncio.TimeoutError:
-                            image_task.cancel()
-                            logger.info("Entity image search timed out")
-                            return []
-                        except Exception:
-                            logger.exception("Entity image search failed (non-fatal)")
-                            return []
-
-                    image_ready_task = asyncio.create_task(_load_entity_images())
-
-                pending_tasks: set[asyncio.Task] = {pipeline_task}
-                if image_ready_task is not None:
-                    pending_tasks.add(image_ready_task)
-
-                while pending_tasks:
-                    done, pending_tasks = await asyncio.wait(
-                        pending_tasks, return_when=asyncio.FIRST_COMPLETED
-                    )
-                    for task in done:
-                        if task is image_ready_task and not images_emitted:
-                            images_emitted = True
-                            entity_images_json = entity_images_to_json(task.result())
-                            if entity_images_json:
-                                yield sse_event("images", {"images": entity_images_json})
-                        elif task is pipeline_task:
-                            pipeline_result = task.result()
-
-                if pipeline_result is None:
-                    pipeline_result = await pipeline_task
-
-                sources = pipeline_result.sources
-                fact_pack = pipeline_result.fact_pack
-                search_attempts = pipeline_result.search_attempts
-                retrieval_trace = pipeline_result.retrieval_trace
-                search_q_sent = pipeline_result.last_search_query
-                page_cache_trace = pipeline_result.page_cache
-
-                sources_json = sources_to_json(sources)
-                if sources_json:
-                    yield sse_event("sources", {"sources": sources_json})
-
-            gpt_preview: list[dict[str, str]] = []
-            try:
-                gpt_preview = await build_gpt_messages_preview(
-                    llm,
-                    llm_query=llm_query,
-                    sources=sources,
-                    history=llm_history,
-                    prior_sources_block=prior_sources_block,
-                    needs_search=route.needs_search,
-                    model=route.answer_model,
-                    hint_clarify=hint_clarify,
-                    fact_pack=fact_pack,
-                )
-            except Exception:
-                logger.exception("GPT messages preview failed (non-fatal)")
-
-            if llm_provider_id != PERPLEXITY_PROVIDER_ID:
-                full_answer = ""
-            answer_hint = hint_clarify
-            if free_vision_blocked:
-                answer_hint = f"{answer_hint or ''}{free_vision_pro_addon()}"
-            if image_display_request:
-                answer_hint = f"{answer_hint or ''}{image_display_answer_addon()}"
-            if vision_only_answer:
-                try:
-                    async for chunk in stream_vision_answer(
-                        llm_query,
-                        bundle.vision_images,
-                        llm_history,
-                        model=route.answer_model,
-                        prior_sources_block=prior_sources_block,
-                        prompt_store=_prompt_store,
-                        db=db,
-                        redis_client=redis_client,
-                    ):
-                        full_answer += chunk
-                        yield sse_event("token", {"text": chunk})
-                except VisionNotSupportedError as e:
-                    await db.rollback()
-                    await limiter.release_search(user_id_str)
-                    yield sse_event("error", {"code": "vision_unavailable", "message": str(e)})
-                    return
-            elif route.needs_search and llm_provider_id != PERPLEXITY_PROVIDER_ID:
-                weak_retrieval = bool(retrieval_trace and not retrieval_trace.get("ok"))
-                grounding_mode = adjust_grounding_for_retrieval(
-                    grounding_mode,  # type: ignore[arg-type]
-                    weak_retrieval=weak_retrieval,
-                    fact_slots=fact_slots,
-                )
-                use_strict_facts = False
-
-                full_answer = ""
-                async for chunk in llm.stream_answer(
-                    llm_query,
-                    sources,
-                    llm_history,
-                    model=route.answer_model,
-                    prior_sources_block=prior_sources_block,
-                    hint_clarify=answer_hint,
-                    strict_facts=use_strict_facts,
-                    fact_pack=fact_pack,
-                    intent_howto=howto,
-                    grounding_mode=grounding_mode,
-                ):
-                    full_answer += chunk
-                    yield sse_event("token", {"text": chunk})
-
-                if (
-                    fact_pack
-                    and fact_pack.facts
-                    and grounding_mode == "strict"
-                ):
-                    ok, unsupported = verify_answer_against_facts(
-                        full_answer,
-                        fact_pack,
-                        fact_slots=fact_slots,
-                        grounding=grounding_mode,
-                    )
-                    if not ok:
-                        logger.info("Answer verify failed, unsupported numbers: %s", unsupported)
-                        yield sse_event("reset_answer", {})
-                        full_answer = ""
-                        async for chunk in llm.stream_answer(
+                    image_task: asyncio.Task | None = None
+                    if run_image_search:
+                        image_query = resolve_entity_image_query(
+                            user_text,
                             llm_query,
-                            sources,
+                            search_queries=queries,
+                            is_continuation=thread_ctx.is_continuation,
+                            topic_type=rewrite.topic_type,
+                        )
+                        image_svc = YandexImageSearchService(settings)
+                        image_task = asyncio.create_task(
+                            image_svc.search_validated(
+                                image_query,
+                                limit=settings.entity_images_max,
+                                candidate_limit=settings.entity_images_candidate_limit,
+                                validate_timeout=settings.entity_images_validate_timeout_sec,
+                            )
+                        )
+
+                    def _enhance(q: str) -> str:
+                        return normalize_user_query(q)[:400]
+
+                    extra_boot, extra_trace = await lookup_bootstrap_sources(
+                        db,
+                        llm_query,
+                        *(queries[:2]),
+                    )
+                    if extra_boot:
+                        seen = {(s.url or "").lower() for s in bootstrap_sources}
+                        for s in extra_boot:
+                            u = (s.url or "").lower()
+                            if u and u not in seen:
+                                bootstrap_sources.append(s)
+                                seen.add(u)
+                    if extra_trace.lookup_keys:
+                        query_url_trace.lookup_keys = max(
+                            query_url_trace.lookup_keys,
+                            extra_trace.lookup_keys,
+                        )
+                        query_url_trace.bootstrap_count += extra_trace.bootstrap_count
+
+                    pipeline_task = asyncio.create_task(
+                        fact_pipeline.run(
+                            llm_query,
+                            queries,
+                            enhance_fn=_enhance,
+                            fact_slots=fact_slots,
+                            howto=howto,
+                            answer_model=route.answer_model,
+                            bootstrap_sources=bootstrap_sources or None,
+                            prefer_official_docs=rewrite.prefer_official_docs,
+                            needs_second_search=rewrite.needs_second_search,
+                            redis_client=redis_client,
+                        )
+                    )
+                    pipeline_result = None
+                    images_emitted = False
+                    image_ready_task: asyncio.Task | None = None
+
+                    if image_task is not None:
+
+                        async def _load_entity_images() -> list:
+                            try:
+                                return await asyncio.wait_for(
+                                    image_task,
+                                    timeout=settings.entity_images_total_timeout_sec,
+                                )
+                            except asyncio.TimeoutError:
+                                image_task.cancel()
+                                logger.info("Entity image search timed out")
+                                return []
+                            except Exception:
+                                logger.exception("Entity image search failed (non-fatal)")
+                                return []
+
+                        image_ready_task = asyncio.create_task(_load_entity_images())
+
+                    pending_tasks: set[asyncio.Task] = {pipeline_task}
+                    if image_ready_task is not None:
+                        pending_tasks.add(image_ready_task)
+
+                    while pending_tasks:
+                        done, pending_tasks = await asyncio.wait(
+                            pending_tasks, return_when=asyncio.FIRST_COMPLETED
+                        )
+                        for task in done:
+                            if task is image_ready_task and not images_emitted:
+                                images_emitted = True
+                                entity_images_json = entity_images_to_json(task.result())
+                                if entity_images_json:
+                                    yield sse_event("images", {"images": entity_images_json})
+                            elif task is pipeline_task:
+                                pipeline_result = task.result()
+
+                    if pipeline_result is None:
+                        pipeline_result = await pipeline_task
+
+                    sources = pipeline_result.sources
+                    fact_pack = pipeline_result.fact_pack
+                    search_attempts = pipeline_result.search_attempts
+                    retrieval_trace = pipeline_result.retrieval_trace
+                    search_q_sent = pipeline_result.last_search_query
+                    page_cache_trace = pipeline_result.page_cache
+
+                    sources_json = sources_to_json(sources)
+                    if sources_json:
+                        await update_search_pending(redis_client, thread.id, phase="answering")
+                        yield sse_event("sources", {"sources": sources_json})
+
+                gpt_preview: list[dict[str, str]] = []
+                try:
+                    gpt_preview = await build_gpt_messages_preview(
+                        llm,
+                        llm_query=llm_query,
+                        sources=sources,
+                        history=llm_history,
+                        prior_sources_block=prior_sources_block,
+                        needs_search=route.needs_search,
+                        model=route.answer_model,
+                        hint_clarify=hint_clarify,
+                        fact_pack=fact_pack,
+                    )
+                except Exception:
+                    logger.exception("GPT messages preview failed (non-fatal)")
+
+                if llm_provider_id != PERPLEXITY_PROVIDER_ID:
+                    full_answer = ""
+                answer_hint = hint_clarify
+                if free_vision_blocked:
+                    answer_hint = f"{answer_hint or ''}{free_vision_pro_addon()}"
+                if image_display_request:
+                    answer_hint = f"{answer_hint or ''}{image_display_answer_addon()}"
+                if vision_only_answer:
+                    try:
+                        async for chunk in stream_vision_answer(
+                            llm_query,
+                            bundle.vision_images,
                             llm_history,
                             model=route.answer_model,
                             prior_sources_block=prior_sources_block,
-                            hint_clarify=answer_hint,
-                            strict_facts=True,
-                            fact_pack=fact_pack,
-                            intent_howto=howto,
-                            grounding_mode=grounding_mode,
+                            prompt_store=_prompt_store,
+                            db=db,
+                            redis_client=redis_client,
                         ):
                             full_answer += chunk
                             yield sse_event("token", {"text": chunk})
-                if is_template_evasion(full_answer):
-                    logger.info("Answer template/refusal detected, regenerating")
-                    yield sse_event("reset_answer", {})
+                    except VisionNotSupportedError as e:
+                        await db.rollback()
+                        await limiter.release_search(user_id_str)
+                        yield sse_event("error", {"code": "vision_unavailable", "message": str(e)})
+                        return
+                elif route.needs_search and llm_provider_id != PERPLEXITY_PROVIDER_ID:
+                    weak_retrieval = bool(retrieval_trace and not retrieval_trace.get("ok"))
+                    grounding_mode = adjust_grounding_for_retrieval(
+                        grounding_mode,  # type: ignore[arg-type]
+                        weak_retrieval=weak_retrieval,
+                        fact_slots=fact_slots,
+                    )
+                    use_strict_facts = False
+
                     full_answer = ""
-                    regen_grounding = grounding_mode
-                    if not any(s in STRICT_NUMERIC_SLOTS for s in fact_slots):
-                        regen_grounding = "hybrid"
                     async for chunk in llm.stream_answer(
                         llm_query,
                         sources,
@@ -774,144 +757,175 @@ class SearchFlowService:
                         model=route.answer_model,
                         prior_sources_block=prior_sources_block,
                         hint_clarify=answer_hint,
-                        strict_facts=False,
+                        strict_facts=use_strict_facts,
                         fact_pack=fact_pack,
                         intent_howto=howto,
-                        grounding_mode=regen_grounding,
+                        grounding_mode=grounding_mode,
                     ):
                         full_answer += chunk
                         yield sse_event("token", {"text": chunk})
-            else:
-                async for chunk in llm.stream_answer_direct(
-                    llm_query,
-                    llm_history,
-                    model=route.answer_model,
-                    prior_sources_block=prior_sources_block,
-                ):
-                    full_answer += chunk
-                    yield sse_event("token", {"text": chunk})
-        except YandexServiceError as e:
-            from app.services.service_incidents import (
-                DEGRADABLE_SEARCH_SERVICES,
-                record_service_incident,
-            )
 
-            await record_service_incident(
-                redis_client,
-                service=e.service,
-                kind="user_error",
-                message=str(e),
-                status_code=e.status_code,
-            )
-            if e.service in DEGRADABLE_SEARCH_SERVICES and not full_answer.strip():
-                logger.warning("Search service error, falling back to direct LLM: %s", e)
-                async for chunk in llm.stream_answer_direct(
-                    llm_query,
-                    llm_history,
-                    model=route.answer_model,
-                    prior_sources_block=prior_sources_block,
-                ):
-                    full_answer += chunk
-                    yield sse_event("token", {"text": chunk})
-            else:
-                await db.rollback()
-                await limiter.release_search(user_id_str)
-                yield sse_event(
-                    "error",
-                    {"code": "yandex_error", "message": str(e)},
-                )
-                return
-
-        settings = get_settings()
-        follow_ups: list[str] = []
-        follow_up_task: asyncio.Task[list[str]] | None = None
-        if full_answer.strip():
-            if settings.follow_ups_deferred:
-                follow_up_task = asyncio.create_task(
-                    llm.generate_follow_ups(llm_query, full_answer)
-                )
-            else:
-                try:
-                    follow_ups = (await llm.generate_follow_ups(llm_query, full_answer))[:3]
-                except Exception:
-                    logger.exception("Follow-up suggestions failed (sync)")
-
-        if (
-            route.needs_search
-            and sources
-            and query_url_trace is not None
-            and full_answer.strip()
-            and not is_template_evasion(full_answer)
-        ):
-            retrieval_ok = bool(retrieval_trace and retrieval_trace.get("ok"))
-            has_facts = bool(fact_pack and fact_pack.facts)
-            if retrieval_ok or has_facts:
-                score = float((retrieval_trace or {}).get("score") or 0.35)
-                try:
-                    query_url_trace.recorded_count = await record_successful_urls(
-                        db,
+                    if (
+                        fact_pack
+                        and fact_pack.facts
+                        and grounding_mode == "strict"
+                    ):
+                        ok, unsupported = verify_answer_against_facts(
+                            full_answer,
+                            fact_pack,
+                            fact_slots=fact_slots,
+                            grounding=grounding_mode,
+                        )
+                        if not ok:
+                            logger.info("Answer verify failed, unsupported numbers: %s", unsupported)
+                            yield sse_event("reset_answer", {})
+                            full_answer = ""
+                            async for chunk in llm.stream_answer(
+                                llm_query,
+                                sources,
+                                llm_history,
+                                model=route.answer_model,
+                                prior_sources_block=prior_sources_block,
+                                hint_clarify=answer_hint,
+                                strict_facts=True,
+                                fact_pack=fact_pack,
+                                intent_howto=howto,
+                                grounding_mode=grounding_mode,
+                            ):
+                                full_answer += chunk
+                                yield sse_event("token", {"text": chunk})
+                    if is_template_evasion(full_answer):
+                        logger.info("Answer template/refusal detected, regenerating")
+                        yield sse_event("reset_answer", {})
+                        full_answer = ""
+                        regen_grounding = grounding_mode
+                        if not any(s in STRICT_NUMERIC_SLOTS for s in fact_slots):
+                            regen_grounding = "hybrid"
+                        async for chunk in llm.stream_answer(
+                            llm_query,
+                            sources,
+                            llm_history,
+                            model=route.answer_model,
+                            prior_sources_block=prior_sources_block,
+                            hint_clarify=answer_hint,
+                            strict_facts=False,
+                            fact_pack=fact_pack,
+                            intent_howto=howto,
+                            grounding_mode=regen_grounding,
+                        ):
+                            full_answer += chunk
+                            yield sse_event("token", {"text": chunk})
+                else:
+                    async for chunk in llm.stream_answer_direct(
                         llm_query,
-                        sources,
-                        retrieval_score=score,
-                    )
-                except Exception:
-                    logger.exception("query_url_memory record failed")
-                    await db.rollback()
+                        llm_history,
+                        model=route.answer_model,
+                        prior_sources_block=prior_sources_block,
+                    ):
+                        full_answer += chunk
+                        yield sse_event("token", {"text": chunk})
+            except YandexServiceError as e:
+                from app.services.service_incidents import (
+                    DEGRADABLE_SEARCH_SERVICES,
+                    record_service_incident,
+                )
 
-        try:
-            debug_trace = build_debug_trace(
-                llm=llm,
-                llm_provider_id=llm_provider_id,
-                display_content=display_content,
-                llm_query=llm_query,
-                route=route,
-                search_query_sent=search_q_sent,
-                sources=sources,
-                sources_json=sources_json,
-                needs_search=route.needs_search,
-                answer_model=route.answer_model,
-                gpt_messages_preview=gpt_preview,
-                rewrite=rewrite_trace,
-                search_attempts=search_attempts or None,
-                retrieval=retrieval_trace,
-                fact_pack=fact_pack.to_dict() if fact_pack else None,
-                page_cache=page_cache_trace,
-                query_url_memory=query_url_trace.to_dict() if query_url_trace else None,
-            )
-            trace_payload = debug_trace if _debug_trace_column_ok else None
-            images_payload = (
-                entity_images_json
-                if entity_images_json and await messages_have_images_column(db)
-                else None
-            )
-            assistant_msg = Message(
-                thread_id=thread.id,
-                role=MessageRole.ASSISTANT,
-                content=full_answer.strip(),
-                sources=sources_json if sources_json else None,
-                images=images_payload,
-                follow_up_questions=follow_ups or None,
-                debug_trace=trace_payload,
-            )
-            db.add(assistant_msg)
-            thread.message_count = (thread.message_count or 0) + 2
-            thread.last_message_at = datetime.now(timezone.utc)
-            if not thread_id:
-                thread.title = display_content[:200]
-            await db.commit()
-        except Exception:
-            logger.exception("Search finalize failed (persist assistant message)")
-            await db.rollback()
-            assistant_msg = None
+                await record_service_incident(
+                    redis_client,
+                    service=e.service,
+                    kind="user_error",
+                    message=str(e),
+                    status_code=e.status_code,
+                )
+                if e.service in DEGRADABLE_SEARCH_SERVICES and not full_answer.strip():
+                    logger.warning("Search service error, falling back to direct LLM: %s", e)
+                    async for chunk in llm.stream_answer_direct(
+                        llm_query,
+                        llm_history,
+                        model=route.answer_model,
+                        prior_sources_block=prior_sources_block,
+                    ):
+                        full_answer += chunk
+                        yield sse_event("token", {"text": chunk})
+                else:
+                    await db.rollback()
+                    await limiter.release_search(user_id_str)
+                    yield sse_event(
+                        "error",
+                        {"code": "yandex_error", "message": str(e)},
+                    )
+                    return
+
+            settings = get_settings()
+            follow_ups: list[str] = []
+            follow_up_task: asyncio.Task[list[str]] | None = None
+            if full_answer.strip():
+                if settings.follow_ups_deferred:
+                    follow_up_task = asyncio.create_task(
+                        llm.generate_follow_ups(llm_query, full_answer)
+                    )
+                else:
+                    try:
+                        follow_ups = (await llm.generate_follow_ups(llm_query, full_answer))[:3]
+                    except Exception:
+                        logger.exception("Follow-up suggestions failed (sync)")
+
+            if (
+                route.needs_search
+                and sources
+                and query_url_trace is not None
+                and full_answer.strip()
+                and not is_template_evasion(full_answer)
+            ):
+                retrieval_ok = bool(retrieval_trace and retrieval_trace.get("ok"))
+                has_facts = bool(fact_pack and fact_pack.facts)
+                if retrieval_ok or has_facts:
+                    score = float((retrieval_trace or {}).get("score") or 0.35)
+                    try:
+                        query_url_trace.recorded_count = await record_successful_urls(
+                            db,
+                            llm_query,
+                            sources,
+                            retrieval_score=score,
+                        )
+                    except Exception:
+                        logger.exception("query_url_memory record failed")
+                        await db.rollback()
+
             try:
+                debug_trace = build_debug_trace(
+                    llm=llm,
+                    llm_provider_id=llm_provider_id,
+                    display_content=display_content,
+                    llm_query=llm_query,
+                    route=route,
+                    search_query_sent=search_q_sent,
+                    sources=sources,
+                    sources_json=sources_json,
+                    needs_search=route.needs_search,
+                    answer_model=route.answer_model,
+                    gpt_messages_preview=gpt_preview,
+                    rewrite=rewrite_trace,
+                    search_attempts=search_attempts or None,
+                    retrieval=retrieval_trace,
+                    fact_pack=fact_pack.to_dict() if fact_pack else None,
+                    page_cache=page_cache_trace,
+                    query_url_memory=query_url_trace.to_dict() if query_url_trace else None,
+                )
+                trace_payload = debug_trace if _debug_trace_column_ok else None
+                images_payload = (
+                    entity_images_json
+                    if entity_images_json and await messages_have_images_column(db)
+                    else None
+                )
                 assistant_msg = Message(
                     thread_id=thread.id,
                     role=MessageRole.ASSISTANT,
                     content=full_answer.strip(),
                     sources=sources_json if sources_json else None,
-                    images=None,
+                    images=images_payload,
                     follow_up_questions=follow_ups or None,
-                    debug_trace=None,
+                    debug_trace=trace_payload,
                 )
                 db.add(assistant_msg)
                 thread.message_count = (thread.message_count or 0) + 2
@@ -919,63 +933,89 @@ class SearchFlowService:
                 if not thread_id:
                     thread.title = display_content[:200]
                 await db.commit()
-                logger.info("Assistant message saved without images/debug_trace after retry")
             except Exception:
-                logger.exception("Search finalize minimal persist failed")
+                logger.exception("Search finalize failed (persist assistant message)")
                 await db.rollback()
-                await limiter.release_search(user_id_str)
-                if full_answer.strip():
+                assistant_msg = None
+                try:
+                    assistant_msg = Message(
+                        thread_id=thread.id,
+                        role=MessageRole.ASSISTANT,
+                        content=full_answer.strip(),
+                        sources=sources_json if sources_json else None,
+                        images=None,
+                        follow_up_questions=follow_ups or None,
+                        debug_trace=None,
+                    )
+                    db.add(assistant_msg)
+                    thread.message_count = (thread.message_count or 0) + 2
+                    thread.last_message_at = datetime.now(timezone.utc)
+                    if not thread_id:
+                        thread.title = display_content[:200]
+                    await db.commit()
+                    logger.info("Assistant message saved without images/debug_trace after retry")
+                except Exception:
+                    logger.exception("Search finalize minimal persist failed")
+                    await db.rollback()
+                    await limiter.release_search(user_id_str)
+                    if full_answer.strip():
+                        yield sse_event(
+                            "done",
+                            {
+                                "message_id": None,
+                                "searches_today": used,
+                                "searches_limit": limit,
+                                "needs_search": route.needs_search,
+                                "answer_model": route.answer_model,
+                            },
+                        )
+                        return
+                    msg = "Ошибка сервера. Попробуйте ещё раз."
+                    if not await messages_have_images_column(db):
+                        msg = (
+                            "База не обновлена (нет колонки images). "
+                            "На сервере: bash scripts/migrate.sh"
+                        )
                     yield sse_event(
-                        "done",
-                        {
-                            "message_id": None,
-                            "searches_today": used,
-                            "searches_limit": limit,
-                            "needs_search": route.needs_search,
-                            "answer_model": route.answer_model,
-                        },
+                        "error",
+                        {"code": "server_error", "message": msg},
                     )
                     return
-                msg = "Ошибка сервера. Попробуйте ещё раз."
-                if not await messages_have_images_column(db):
-                    msg = (
-                        "База не обновлена (нет колонки images). "
-                        "На сервере: bash scripts/migrate.sh"
-                    )
-                yield sse_event(
-                    "error",
-                    {"code": "server_error", "message": msg},
-                )
-                return
 
-        yield sse_event(
-            "done",
-            {
-                "message_id": str(assistant_msg.id),
-                "searches_today": used,
-                "searches_limit": limit,
-                "needs_search": route.needs_search,
-                "answer_model": route.answer_model,
-            },
-        )
+            yield sse_event(
+                "done",
+                {
+                    "message_id": str(assistant_msg.id),
+                    "searches_today": used,
+                    "searches_limit": limit,
+                    "needs_search": route.needs_search,
+                    "answer_model": route.answer_model,
+                },
+            )
 
-        if follow_up_task is not None:
-            timeout = max(0.5, settings.follow_ups_post_done_timeout_sec)
-            try:
-                follow_ups = (await asyncio.wait_for(follow_up_task, timeout=timeout))[:3]
-            except asyncio.TimeoutError:
-                logger.info("Follow-ups still generating after done (timeout=%.1fs)", timeout)
-                follow_ups = []
-            except Exception:
-                logger.exception("Follow-up suggestions failed (deferred)")
-                follow_ups = []
-            if follow_ups:
-                assistant_msg.follow_up_questions = follow_ups
+            if follow_up_task is not None:
+                timeout = max(0.5, settings.follow_ups_post_done_timeout_sec)
                 try:
-                    await db.commit()
-                    yield sse_event("follow_ups", {"questions": follow_ups})
+                    follow_ups = (await asyncio.wait_for(follow_up_task, timeout=timeout))[:3]
+                except asyncio.TimeoutError:
+                    logger.info("Follow-ups still generating after done (timeout=%.1fs)", timeout)
+                    follow_ups = []
                 except Exception:
-                    logger.exception("Follow-up persist failed")
-                    await db.rollback()
-        elif follow_ups:
-            yield sse_event("follow_ups", {"questions": follow_ups})
+                    logger.exception("Follow-up suggestions failed (deferred)")
+                    follow_ups = []
+                if follow_ups:
+                    assistant_msg.follow_up_questions = follow_ups
+                    try:
+                        await db.commit()
+                        yield sse_event("follow_ups", {"questions": follow_ups})
+                    except Exception:
+                        logger.exception("Follow-up persist failed")
+                        await db.rollback()
+            elif follow_ups:
+                yield sse_event("follow_ups", {"questions": follow_ups})
+
+        try:
+            async for event in _pipeline():
+                yield event
+        finally:
+            await clear_search_pending(redis_client, thread.id)

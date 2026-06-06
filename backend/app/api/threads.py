@@ -8,7 +8,7 @@ from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.api.deps import SearchUserResult, get_current_user, get_db, get_existing_search_user
+from app.api.deps import SearchUserResult, get_current_user, get_db, get_existing_search_user, get_redis
 from app.models.message import Message, MessageRole
 from app.models.message_feedback import MessageFeedback
 from app.models.thread import Thread
@@ -16,6 +16,7 @@ from app.schemas.feedback import MessageFeedbackOut, reason_label
 from app.models.user import Plan, User
 from app.core.config import get_settings
 from app.schemas.thread import (
+    AnswerStatusOut,
     EntityImageOut,
     MessageAttachmentOut,
     MessageOut,
@@ -26,6 +27,8 @@ from app.schemas.thread import (
     ThreadListItem,
     ThreadUpdate,
 )
+from app.services.search_pending import STALE_AFTER_SEC, get_search_pending
+import redis.asyncio as redis
 from app.services.message_attachments import message_attachments_out
 
 router = APIRouter(prefix="/threads", tags=["threads"])
@@ -109,6 +112,53 @@ async def bulk_delete_threads(
         thread.deleted_at = now
     deleted = len(threads)
     return ThreadBulkDeleteOut(deleted=deleted, not_found=len(unique_ids) - deleted)
+
+
+@router.get("/{thread_id}/answer-status", response_model=AnswerStatusOut)
+async def get_thread_answer_status(
+    thread_id: UUID,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    actor: Annotated[SearchUserResult, Depends(get_existing_search_user)],
+    redis_client: Annotated[redis.Redis, Depends(get_redis)],
+):
+    user = actor.user
+    result = await db.execute(
+        select(Thread)
+        .where(Thread.id == thread_id, Thread.user_id == user.id, Thread.deleted_at.is_(None))
+        .options(selectinload(Thread.messages))
+    )
+    thread = result.scalar_one_or_none()
+    if not thread:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Thread not found")
+
+    if not thread.messages:
+        return AnswerStatusOut(pending=False, active=False, stale=False)
+
+    sorted_msgs = sorted(thread.messages, key=lambda m: m.created_at)
+    last = sorted_msgs[-1]
+    if last.role != MessageRole.USER:
+        return AnswerStatusOut(pending=False, active=False, stale=False)
+
+    pending_raw = await get_search_pending(redis_client, thread_id)
+    active = pending_raw is not None
+    age_sec = (datetime.now(timezone.utc) - last.created_at).total_seconds()
+    stale = not active and age_sec >= STALE_AFTER_SEC
+
+    phase = pending_raw.get("phase") if pending_raw else None
+    needs_search = pending_raw.get("needs_search") if pending_raw else None
+    custom_status = pending_raw.get("custom_status") if pending_raw else None
+    user_message_id_raw = pending_raw.get("user_message_id") if pending_raw else str(last.id)
+
+    return AnswerStatusOut(
+        pending=True,
+        active=active,
+        stale=stale,
+        phase=str(phase) if phase else ("routing" if not stale else None),
+        needs_search=bool(needs_search) if needs_search is not None else None,
+        custom_status=str(custom_status) if custom_status else None,
+        user_message_id=UUID(str(user_message_id_raw)),
+        query=last.content,
+    )
 
 
 @router.get("/{thread_id}", response_model=ThreadDetail)
