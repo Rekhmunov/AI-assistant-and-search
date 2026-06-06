@@ -47,6 +47,7 @@ class SupportTicket(Base):
         index=True,
     )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)
+    user_last_read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     closed_by_admin_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),

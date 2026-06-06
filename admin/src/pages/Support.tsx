@@ -68,6 +68,11 @@ export function SupportPage() {
     void load();
   }, [load]);
 
+  useEffect(() => {
+    const timer = window.setInterval(() => void load(), 30_000);
+    return () => window.clearInterval(timer);
+  }, [load]);
+
   const setStatus = async (id: string, status: "open" | "in_progress" | "closed") => {
     if (!canWrite) return;
     setBusyId(id);
@@ -169,9 +174,18 @@ export function SupportPage() {
               <div className="support-ticket-replies">
                 <h3 className="support-ticket-replies-title">Ответы</h3>
                 {ticket.replies.map((r) => (
-                  <div key={r.id} className="support-ticket-reply">
+                  <div
+                    key={r.id}
+                    className={`support-ticket-reply${
+                      r.author_type === "user" ? " support-ticket-reply--user" : ""
+                    }`}
+                  >
                     <p className="support-ticket-reply-meta">
-                      {r.admin_email ?? "Поддержка"} · {formatDate(r.created_at)}
+                      {r.author_type === "user"
+                        ? "Пользователь"
+                        : r.admin_email ?? "Поддержка"}
+                      {" · "}
+                      {formatDate(r.created_at)}
                     </p>
                     <p className="support-ticket-reply-text">{r.message}</p>
                   </div>

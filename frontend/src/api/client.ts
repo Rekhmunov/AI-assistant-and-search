@@ -556,6 +556,8 @@ export type SupportTicketUser = {
   status: string;
   created_at: string;
   closed_at: string | null;
+  has_unread_reply: boolean;
+  can_reply: boolean;
   replies: Array<{
     id: string;
     author_type: string;
@@ -571,6 +573,48 @@ export async function fetchMySupportTickets(token: string): Promise<SupportTicke
     credentials: "include",
   });
   if (!res.ok) return [];
+  const data = (await res.json()) as SupportTicketUser[];
+  return data.map((ticket) => ({
+    ...ticket,
+    has_unread_reply: ticket.has_unread_reply ?? false,
+    can_reply: ticket.can_reply ?? ticket.status !== "closed",
+  }));
+}
+
+export async function replyToSupportTicket(
+  token: string,
+  ticketId: string,
+  message: string,
+): Promise<SupportTicketUser> {
+  const res = await fetch(`${API_BASE}/api/support/tickets/${ticketId}/replies`, {
+    method: "POST",
+    headers: apiHeaders(token),
+    credentials: "include",
+    body: JSON.stringify({ message }),
+  });
+  if (!res.ok) {
+    let msg = "Не удалось отправить сообщение";
+    try {
+      const body = await res.json();
+      msg = formatApiErrorDetail(body, msg);
+    } catch {
+      /* ignore */
+    }
+    throw new Error(msg);
+  }
+  return res.json();
+}
+
+export async function markSupportTicketRead(
+  token: string,
+  ticketId: string,
+): Promise<SupportTicketUser> {
+  const res = await fetch(`${API_BASE}/api/support/tickets/${ticketId}/read`, {
+    method: "POST",
+    headers: apiHeaders(token),
+    credentials: "include",
+  });
+  if (!res.ok) throw new Error("Failed to mark ticket read");
   return res.json();
 }
 

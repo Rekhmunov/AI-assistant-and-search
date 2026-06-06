@@ -14,10 +14,16 @@ from app.schemas.support import (
     SupportTicketAdminOut,
     SupportTicketReplyCreate,
     SupportTicketReplyOut,
+    SupportTicketStatsOut,
     SupportTicketStatusUpdate,
 )
 from app.services.admin_audit import log_admin_action
-from app.services.support_tickets import add_admin_reply, get_ticket_admin, set_ticket_status
+from app.services.support_tickets import (
+    add_admin_reply,
+    count_open_support_tickets,
+    get_ticket_admin,
+    set_ticket_status,
+)
 
 router = APIRouter(prefix="/support", tags=["admin-support"])
 
@@ -47,6 +53,15 @@ def _ticket_out(ticket: SupportTicket) -> SupportTicketAdminOut:
             for r in ticket.replies
         ],
     )
+
+
+@router.get("/stats", response_model=SupportTicketStatsOut)
+async def support_ticket_stats(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    _admin=Depends(require_permission("support:read")),
+):
+    open_count = await count_open_support_tickets(db)
+    return SupportTicketStatsOut(open_count=open_count)
 
 
 @router.get("/tickets", response_model=list[SupportTicketAdminOut])

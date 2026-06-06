@@ -29,7 +29,13 @@ class SupportTicketUserOut(BaseModel):
     status: str
     created_at: datetime
     closed_at: datetime | None = None
+    has_unread_reply: bool = False
+    can_reply: bool = True
     replies: list[SupportTicketReplyOut] = Field(default_factory=list)
+
+
+class SupportTicketStatsOut(BaseModel):
+    open_count: int
 
 
 class SupportTicketAdminOut(BaseModel):

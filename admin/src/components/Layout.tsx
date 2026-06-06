@@ -1,4 +1,6 @@
+import { useEffect, useState } from "react";
 import { NavLink, Outlet } from "react-router-dom";
+import { apiFetch } from "../api";
 import { useAuth } from "../AuthContext";
 
 const NAV: { to: string; label: string; perm: string }[] = [
@@ -15,6 +17,29 @@ const NAV: { to: string; label: string; perm: string }[] = [
 
 export function Layout() {
   const { admin, logout, can } = useAuth();
+  const [openTicketCount, setOpenTicketCount] = useState(0);
+  const showSupportBadge = can("support:read");
+
+  useEffect(() => {
+    if (!showSupportBadge) return;
+
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const data = await apiFetch<{ open_count: number }>("/api/admin/support/stats");
+        if (!cancelled) setOpenTicketCount(data.open_count);
+      } catch {
+        if (!cancelled) setOpenTicketCount(0);
+      }
+    };
+
+    void load();
+    const timer = window.setInterval(() => void load(), 30_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [showSupportBadge]);
 
   return (
     <div className="admin-shell">
@@ -31,7 +56,12 @@ export function Layout() {
               end={item.to === "/"}
               className={({ isActive }) => (isActive ? "active" : undefined)}
             >
-              {item.label}
+              <span className="admin-sidebar-nav-label">{item.label}</span>
+              {item.to === "/support" && openTicketCount > 0 && (
+                <span className="admin-sidebar-nav-badge" aria-label={`Новых тикетов: ${openTicketCount}`}>
+                  {openTicketCount > 99 ? "99+" : openTicketCount}
+                </span>
+              )}
             </NavLink>
           ))}
         </nav>

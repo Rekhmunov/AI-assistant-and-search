@@ -93,7 +93,10 @@ a:hover {
 }
 
 .admin-sidebar-nav a {
-  display: block;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   color: var(--text);
   text-decoration: none;
   padding: 10px 12px;
@@ -101,6 +104,26 @@ a:hover {
   font-size: 0.9rem;
   font-weight: 500;
   transition: background 0.15s, color 0.15s;
+}
+
+.admin-sidebar-nav-label {
+  min-width: 0;
+}
+
+.admin-sidebar-nav-badge {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.35rem;
+  height: 1.35rem;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1;
 }
 
 .admin-sidebar-nav a:hover {
@@ -2381,6 +2404,10 @@ pre.small {
 .support-ticket-replies-title {
   margin: 0 0 8px;
   font-size: 0.85rem;
+}
+
+.support-ticket-reply--user {
+  background: color-mix(in srgb, var(--accent) 6%, var(--surface));
 }
 
 .support-ticket-reply + .support-ticket-reply {

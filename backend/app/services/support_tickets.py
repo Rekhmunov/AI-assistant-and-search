@@ -7,7 +7,7 @@ import uuid
 from datetime import datetime, timezone
 
 import redis.asyncio as redis
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -23,6 +23,36 @@ logger = logging.getLogger(__name__)
 
 SUPPORT_RATE_WINDOW_SEC = 86400
 SUPPORT_RATE_MAX_PER_DAY = 5
+SUPPORT_REPLY_RATE_MAX_PER_DAY = 30
+
+
+def ticket_has_unread_for_user(ticket: SupportTicket) -> bool:
+    admin_replies = [r for r in ticket.replies if r.author_type == "admin"]
+    if not admin_replies:
+        return False
+    last_admin = max(admin_replies, key=lambda r: r.created_at)
+    if ticket.user_last_read_at is None:
+        return True
+    return last_admin.created_at > ticket.user_last_read_at
+
+
+def ticket_can_reply(ticket: SupportTicket) -> bool:
+    status = ticket.status.value if isinstance(ticket.status, SupportTicketStatus) else str(ticket.status)
+    return status != SupportTicketStatus.CLOSED.value
+
+
+async def check_support_reply_rate_limit(redis_client: redis.Redis, user_id: uuid.UUID) -> None:
+    try:
+        key = f"support_reply_day:{user_id}"
+        count = int(await redis_client.incr(key))
+        if count == 1:
+            await redis_client.expire(key, SUPPORT_RATE_WINDOW_SEC)
+        if count > SUPPORT_REPLY_RATE_MAX_PER_DAY:
+            raise ValueError("Слишком много сообщений за сутки. Попробуйте позже.")
+    except ValueError:
+        raise
+    except Exception:
+        logger.warning("support reply rate limit skipped: redis unavailable for user %s", user_id)
 
 
 async def check_support_rate_limit(redis_client: redis.Redis, user_id: uuid.UUID) -> None:
@@ -107,6 +137,30 @@ async def notify_admins_new_ticket(
             logger.warning("support notify failed for max_user_id=%s: %s", max_user_id, result.error)
 
 
+async def notify_admins_user_followup(
+    db: AsyncSession,
+    redis_client: redis.Redis,
+    ticket: SupportTicket,
+    message: str,
+) -> None:
+    raw = str(await get_setting("support_notify_max_user_ids", db, redis_client) or "").strip()
+    max_ids = _parse_notify_max_ids(raw)
+    if not max_ids:
+        return
+
+    text = (
+        f"Дополнение к тикету ({ticket.source})\n"
+        f"От: {ticket.user_email or 'без email'}"
+        f"{f' · MAX {ticket.user_max_user_id}' if ticket.user_max_user_id else ''}\n"
+        f"{message[:500]}"
+    )
+    bot = MaxBotService()
+    for max_user_id in max_ids:
+        result = await bot.send_message(max_user_id, text)
+        if not result.ok:
+            logger.warning("support followup notify failed for max_user_id=%s: %s", max_user_id, result.error)
+
+
 async def notify_user_ticket_reply(user: User, reply_text: str) -> None:
     if not user.max_user_id:
         return
@@ -138,7 +192,60 @@ async def create_support_ticket(
     db.add(ticket)
     await db.flush()
     await attach_payment_context(db, ticket, user, source=source)
+    ticket.user_last_read_at = datetime.now(timezone.utc)
     return ticket
+
+
+async def count_open_support_tickets(db: AsyncSession) -> int:
+    result = await db.execute(
+        select(func.count())
+        .select_from(SupportTicket)
+        .where(SupportTicket.status == SupportTicketStatus.OPEN.value)
+    )
+    return int(result.scalar_one() or 0)
+
+
+async def mark_ticket_read_for_user(
+    db: AsyncSession,
+    ticket: SupportTicket,
+) -> SupportTicket:
+    ticket.user_last_read_at = datetime.now(timezone.utc)
+    await db.flush()
+    return ticket
+
+
+async def add_user_reply(
+    db: AsyncSession,
+    redis_client: redis.Redis,
+    *,
+    ticket: SupportTicket,
+    user: User,
+    message: str,
+) -> SupportTicketReply:
+    await check_support_reply_rate_limit(redis_client, user.id)
+    reply = SupportTicketReply(
+        ticket_id=ticket.id,
+        author_type="user",
+        admin_id=None,
+        admin_email=None,
+        message=message,
+    )
+    db.add(reply)
+    current_status = ticket.status.value if isinstance(ticket.status, SupportTicketStatus) else str(ticket.status)
+    if current_status != SupportTicketStatus.CLOSED.value:
+        ticket.status = SupportTicketStatus.OPEN.value
+        ticket.closed_at = None
+        ticket.closed_by_admin_id = None
+    ticket.user_last_read_at = datetime.now(timezone.utc)
+    await db.flush()
+
+    try:
+        await notify_admins_user_followup(db, redis_client, ticket, message)
+    except Exception:
+        logger.exception("support admin followup notify failed ticket=%s", ticket.id)
+
+    await db.flush()
+    return reply
 
 
 async def get_ticket_for_user(

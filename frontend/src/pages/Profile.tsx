@@ -20,6 +20,7 @@ import { MobilePageHeader } from "../components/MobilePageHeader";
 import { ProPurchaseBlockedModal } from "../components/ProPurchaseBlockedModal";
 import { ProPaymentStatusModal, type ProPaymentModalState } from "../components/ProPaymentStatusModal";
 import { SupportFormModal } from "../components/SupportFormModal";
+import { SupportTicketsPanel } from "../components/SupportTicketsPanel";
 import { SupportToast } from "../components/SupportToast";
 import { ProfileAccountSection } from "../components/ProfileAccountSection";
 import { useDesktopLayout } from "../hooks/useDesktopLayout";
@@ -103,9 +104,9 @@ export function Profile() {
     queryFn: () => fetchMySupportTickets(token!),
     enabled: !!token && !session?.is_guest,
     staleTime: 30_000,
+    refetchOnWindowFocus: true,
+    refetchInterval: 60_000,
   });
-
-  const ticketsWithReplies = (supportTickets ?? []).filter((ticket) => ticket.replies.length > 0);
 
   const profilePlan = profileUser?.plan;
   const needsOfferForPro = !!token && profilePlan !== "pro";
@@ -407,7 +408,12 @@ export function Profile() {
       {!session?.is_guest && (
         <section className="profile-card profile-support-card">
           <div className="profile-support-head">
-            <h2 className="profile-card-title">{t("profileSupportTitle")}</h2>
+            <h2 className="profile-card-title">
+              {t("profileSupportTitle")}
+              {(supportTickets ?? []).some((ticket) => ticket.has_unread_reply) && (
+                <span className="profile-support-title-badge" aria-hidden />
+              )}
+            </h2>
             <button
               type="button"
               className="btn-secondary profile-support-write-btn"
@@ -419,21 +425,13 @@ export function Profile() {
               {t("profileSupportWrite")}
             </button>
           </div>
-          {ticketsWithReplies.length > 0 && (
-            <div className="profile-support-replies">
-              <h3 className="profile-support-replies-title">{t("profileSupportReplies")}</h3>
-              {ticketsWithReplies.slice(0, 3).map((ticket) => {
-                const lastReply = ticket.replies[ticket.replies.length - 1];
-                return (
-                  <div key={ticket.id} className="profile-support-reply-item">
-                    <p className="profile-support-reply-text">{lastReply.message}</p>
-                    <p className="profile-support-reply-meta">
-                      {new Date(lastReply.created_at).toLocaleString("ru-RU")}
-                    </p>
-                  </div>
-                );
-              })}
-            </div>
+          <p className="profile-support-hint">{t("profileSupportHint")}</p>
+          {token && (supportTickets?.length ?? 0) > 0 && (
+            <SupportTicketsPanel
+              token={token}
+              tickets={supportTickets ?? []}
+              onTicketsChange={() => void refetchSupportTickets()}
+            />
           )}
         </section>
       )}
