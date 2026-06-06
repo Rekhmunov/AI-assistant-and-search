@@ -310,11 +310,13 @@ export function Profile() {
       {!isPro && (
         <section className="profile-card profile-pro-card">
           <div className="profile-card-head">
-            <h2 className="profile-card-title">{t("upgradePro")}</h2>
+            <div className="profile-pro-headline">
+              <h2 className="profile-card-title">{t("upgradePro")}</h2>
+              <span className="profile-pro-benefits">{t("proBenefits")}</span>
+            </div>
             <span className="profile-pro-badge">Pro</span>
           </div>
           <p className="profile-pro-price">{t("proPrice", { price: proPriceRub })}</p>
-          <p className="profile-pro-benefits">{t("proBenefits")}</p>
           <label className="auth-consent-row profile-pro-offer">
             <input
               type="checkbox"

@@ -793,6 +793,19 @@ body:has(.page-thread) {
   background: linear-gradient(160deg, var(--accent-soft) 0%, var(--surface) 55%);
 }
 
+.profile-pro-headline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.35em 0.5em;
+  flex: 1;
+  min-width: 0;
+}
+
+.profile-pro-headline .profile-card-title {
+  flex-shrink: 0;
+}
+
 .profile-pro-badge {
   flex-shrink: 0;
   padding: 4px 10px;
@@ -807,7 +820,7 @@ body:has(.page-thread) {
 }
 
 .profile-pro-price {
-  margin: 0 0 8px;
+  margin: 0 0 16px;
   font-size: 1.25rem;
   font-weight: 700;
   color: var(--accent);
@@ -815,8 +828,9 @@ body:has(.page-thread) {
 }
 
 .profile-pro-benefits {
-  margin: 0 0 16px;
-  font-size: 0.875rem;
+  margin: 0;
+  font-size: 0.8125rem;
+  font-weight: 400;
   color: var(--muted);
   line-height: 1.45;
 }
