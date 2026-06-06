@@ -306,9 +306,6 @@ export function BroadcastsPage() {
       <header className="admin-page-header">
         <div>
           <h1>Рассылки</h1>
-          <p className="admin-page-subtitle">
-            Приветствие при /start в боте MAX и массовые сообщения подписчикам с привязанным MAX.
-          </p>
         </div>
       </header>
 
