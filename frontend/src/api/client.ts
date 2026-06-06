@@ -528,6 +528,31 @@ export async function createProPayment(
   return res.json();
 }
 
+export type SupportTicketUser = {
+  id: string;
+  source: string;
+  message: string;
+  status: string;
+  created_at: string;
+  closed_at: string | null;
+  replies: Array<{
+    id: string;
+    author_type: string;
+    admin_email: string | null;
+    message: string;
+    created_at: string;
+  }>;
+};
+
+export async function fetchMySupportTickets(token: string): Promise<SupportTicketUser[]> {
+  const res = await fetch(`${API_BASE}/api/support/tickets`, {
+    headers: apiHeaders(token),
+    credentials: "include",
+  });
+  if (!res.ok) return [];
+  return res.json();
+}
+
 export async function createSupportTicket(
   token: string,
   message: string,

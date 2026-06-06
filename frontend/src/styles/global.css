@@ -5093,3 +5093,40 @@ body:has(.page-thread) {
   max-width: 420px;
   padding: 20px;
 }
+
+.profile-support-card {
+  margin-bottom: 16px;
+}
+
+.profile-support-card .profile-card-title {
+  margin: 0 0 8px;
+}
+
+.profile-support-replies {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.profile-support-replies-title {
+  margin: 0 0 8px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.profile-support-reply-item + .profile-support-reply-item {
+  margin-top: 10px;
+}
+
+.profile-support-reply-text {
+  margin: 0;
+  font-size: 0.875rem;
+  line-height: 1.45;
+}
+
+.profile-support-reply-meta {
+  margin: 4px 0 0;
+  font-size: 0.75rem;
+  color: var(--muted);
+}

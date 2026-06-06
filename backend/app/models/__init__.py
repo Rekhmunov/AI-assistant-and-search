@@ -9,6 +9,7 @@ from app.models.thread import Thread
 from app.models.uploaded_file import UploadedFile
 from app.models.legal_document import LegalDocument, LegalDocumentVersion, UserLegalConsent
 from app.models.support_ticket import SupportTicket, SupportTicketStatus
+from app.models.support_ticket_reply import SupportTicketReply
 from app.models.user import User
 
 __all__ = [
@@ -29,4 +30,5 @@ __all__ = [
     "UserLegalConsent",
     "SupportTicket",
     "SupportTicketStatus",
+    "SupportTicketReply",
 ]

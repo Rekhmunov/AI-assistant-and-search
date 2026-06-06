@@ -36,6 +36,7 @@ BASE_SETTING_KEYS: dict[str, type] = {
     "bot_welcome_media_type": str,
     "bot_welcome_media_token": str,
     "bot_welcome_media_filename": str,
+    "support_notify_max_user_ids": str,
     "llm_provider": str,
     "free_llm_provider": str,
     "search_provider": str,
@@ -75,6 +76,7 @@ ENV_DEFAULTS: dict[str, str] = {
     "bot_welcome_media_type": "none",
     "bot_welcome_media_token": "",
     "bot_welcome_media_filename": "",
+    "support_notify_max_user_ids": "",
 }
 
 

@@ -2343,6 +2343,83 @@ pre.small {
   padding: 20px;
 }
 
+.support-notify-form {
+  margin-bottom: 16px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.support-notify-title {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.support-notify-form input {
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+}
+
+.support-ticket-status--in_progress {
+  background: rgba(255, 152, 0, 0.12);
+  color: #e65100;
+}
+
+.support-ticket-payment {
+  margin: 0 0 8px;
+}
+
+.support-ticket-replies {
+  margin: 12px 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--bg);
+}
+
+.support-ticket-replies-title {
+  margin: 0 0 8px;
+  font-size: 0.85rem;
+}
+
+.support-ticket-reply + .support-ticket-reply {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.support-ticket-reply-meta {
+  margin: 0 0 4px;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.support-ticket-reply-text {
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+.support-reply-input {
+  width: 100%;
+  margin-bottom: 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  font: inherit;
+  resize: vertical;
+}
+
+.support-ticket-actions {
+  margin-top: 12px;
+}
+
+.support-ticket-action-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .legal-doc-html p {
   margin: 0.5em 0;
 }

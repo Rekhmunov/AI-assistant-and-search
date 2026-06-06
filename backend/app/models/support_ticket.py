@@ -4,13 +4,19 @@ from datetime import datetime
 
 from sqlalchemy import BigInteger, DateTime, ForeignKey, String, Text, func
 from sqlalchemy.dialects.postgresql import ENUM, UUID
-from sqlalchemy.orm import Mapped, mapped_column
+from typing import TYPE_CHECKING
+
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
+
+if TYPE_CHECKING:
+    from app.models.support_ticket_reply import SupportTicketReply
 
 
 class SupportTicketStatus(str, enum.Enum):
     OPEN = "open"
+    IN_PROGRESS = "in_progress"
     CLOSED = "closed"
 
 
@@ -45,4 +51,16 @@ class SupportTicket(Base):
         UUID(as_uuid=True),
         ForeignKey("admin_users.id", ondelete="SET NULL"),
         nullable=True,
+    )
+    yookassa_payment_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    payment_amount_rub: Mapped[int | None] = mapped_column(nullable=True)
+    subscription_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("subscriptions.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+
+    replies: Mapped[list["SupportTicketReply"]] = relationship(
+        back_populates="ticket",
+        order_by="SupportTicketReply.created_at",
     )

@@ -11,6 +11,7 @@ import {
   fetchLegalBySlug,
   fetchLegalRoutes,
   fetchMe,
+  fetchMySupportTickets,
   fetchSession,
 } from "../api/client";
 import { AuthGate } from "../components/AuthGate";
@@ -20,6 +21,7 @@ import { MobilePageHeader } from "../components/MobilePageHeader";
 import { ProPurchaseBlockedModal } from "../components/ProPurchaseBlockedModal";
 import { ProPaymentStatusModal, type ProPaymentModalState } from "../components/ProPaymentStatusModal";
 import { SupportFormModal } from "../components/SupportFormModal";
+import { SupportToast } from "../components/SupportToast";
 import { ProfileAccountSection } from "../components/ProfileAccountSection";
 import { useDesktopLayout } from "../hooks/useDesktopLayout";
 import { useSignOut } from "../hooks/useSignOut";
@@ -60,6 +62,8 @@ export function Profile() {
   const [acceptOffer, setAcceptOffer] = useState(false);
   const [offerModalOpen, setOfferModalOpen] = useState(false);
   const [supportModalOpen, setSupportModalOpen] = useState(false);
+  const [supportSource, setSupportSource] = useState<"general" | "pro_payment">("general");
+  const [supportToast, setSupportToast] = useState(false);
   const inMax = isMaxWebApp();
   const isDesktop = useDesktopLayout();
 
@@ -92,6 +96,15 @@ export function Profile() {
   });
 
   const offerMeta = legalRoutes?.find((r) => r.slug === "offer");
+
+  const { data: supportTickets, refetch: refetchSupportTickets } = useQuery({
+    queryKey: ["support-tickets", token],
+    queryFn: () => fetchMySupportTickets(token!),
+    enabled: !!token && !session?.is_guest,
+    staleTime: 30_000,
+  });
+
+  const ticketsWithReplies = (supportTickets ?? []).filter((ticket) => ticket.replies.length > 0);
 
   const { data: offerDoc, isLoading: offerLoading } = useQuery({
     queryKey: ["legal-offer-modal"],
@@ -332,6 +345,39 @@ export function Profile() {
 
       {profileUser && <ProfileAccountSection user={profileUser} token={token} onUserUpdated={onUserUpdated} />}
 
+      {!session?.is_guest && (
+        <section className="profile-card profile-support-card">
+          <h2 className="profile-card-title">{t("profileSupportTitle")}</h2>
+          <p className="profile-hint">{t("profileSupportHint")}</p>
+          <button
+            type="button"
+            className="btn-secondary btn-block"
+            onClick={() => {
+              setSupportSource("general");
+              setSupportModalOpen(true);
+            }}
+          >
+            {t("profileSupportWrite")}
+          </button>
+          {ticketsWithReplies.length > 0 && (
+            <div className="profile-support-replies">
+              <h3 className="profile-support-replies-title">{t("profileSupportReplies")}</h3>
+              {ticketsWithReplies.slice(0, 3).map((ticket) => {
+                const lastReply = ticket.replies[ticket.replies.length - 1];
+                return (
+                  <div key={ticket.id} className="profile-support-reply-item">
+                    <p className="profile-support-reply-text">{lastReply.message}</p>
+                    <p className="profile-support-reply-meta">
+                      {new Date(lastReply.created_at).toLocaleString("ru-RU")}
+                    </p>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </section>
+      )}
+
       <div className="profile-actions">
         {profileUser?.email && (
           <button
@@ -362,6 +408,7 @@ export function Profile() {
         onRetry={() => void runPaymentConfirm()}
         onOpenSupport={() => {
           setPaymentModal({ open: false });
+          setSupportSource("pro_payment");
           setSupportModalOpen(true);
         }}
       />
@@ -370,9 +417,13 @@ export function Profile() {
         open={supportModalOpen}
         onClose={() => setSupportModalOpen(false)}
         onSubmit={async (message) => {
-          await createSupportTicket(token!, message, "pro_payment");
+          await createSupportTicket(token!, message, supportSource);
+          setSupportToast(true);
+          void refetchSupportTickets();
         }}
       />
+
+      {supportToast && <SupportToast message={t("supportFormSent")} onDone={() => setSupportToast(false)} />}
 
       {offerModalOpen && (
         <LegalDocumentModal
