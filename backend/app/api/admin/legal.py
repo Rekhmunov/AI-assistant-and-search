@@ -54,10 +54,8 @@ async def list_legal_documents(
     db: Annotated[AsyncSession, Depends(get_db)],
     _admin=Depends(require_permission("legal:read")),
 ):
+    await ensure_default_documents(db)
     docs = await list_documents_admin(db)
-    if not docs:
-        await ensure_default_documents(db)
-        docs = await list_documents_admin(db)
     out: list[LegalDocumentAdminOut] = []
     for doc in docs:
         out.append(await _document_admin_out(db, doc))

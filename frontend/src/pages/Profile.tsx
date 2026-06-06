@@ -106,10 +106,15 @@ export function Profile() {
 
   const ticketsWithReplies = (supportTickets ?? []).filter((ticket) => ticket.replies.length > 0);
 
-  const { data: offerDoc, isLoading: offerLoading } = useQuery({
+  const {
+    data: offerDoc,
+    isLoading: offerLoading,
+    isError: offerLoadError,
+  } = useQuery({
     queryKey: ["legal-offer-modal"],
     queryFn: () => fetchLegalBySlug("offer"),
     enabled: offerModalOpen,
+    retry: false,
   });
 
   const searchesToday = session?.searches_today ?? profileUser?.searches_today ?? 0;
@@ -428,7 +433,9 @@ export function Profile() {
       {offerModalOpen && (
         <LegalDocumentModal
           title={offerDoc?.title ?? t("proOfferConsentLink")}
-          contentHtml={offerDoc?.content_html ?? ""}
+          contentHtml={
+            offerLoadError ? `<p>${t("legalDocumentUnavailable")}</p>` : (offerDoc?.content_html ?? "")
+          }
           loading={offerLoading}
           onClose={() => setOfferModalOpen(false)}
         />

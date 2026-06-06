@@ -81,6 +81,7 @@
   "profileSupportHint": "Вопрос по оплате, аккаунту или работе сервиса — напишите нам.",
   "profileSupportWrite": "Написать в поддержку",
   "profileSupportReplies": "Ответы поддержки",
+  "legalDocumentUnavailable": "Документ временно недоступен. Попробуйте позже.",
   "proPrice": "{price} ₽ в месяц",
   "proBenefits": "Безлимитный поиск • Полная история • Приоритет",
   "proOfferConsentPrefix": "Я согласен(на) с",

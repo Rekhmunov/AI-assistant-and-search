@@ -11,14 +11,14 @@ export function LegalDocumentPage() {
     retry: false,
   });
 
-  if (isError) {
+  if (!isLoading && (isError || !data)) {
     return <Navigate to="/" replace />;
   }
 
   return (
     <div className="page page-legal">
       <article className="legal-page-card">
-        {isLoading || !data ? (
+        {isLoading ? (
           <p className="muted-text">{t("pageLoading")}</p>
         ) : (
           <>

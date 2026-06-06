@@ -18,6 +18,7 @@ from app.schemas.legal import (
 from app.services.legal_documents import (
     ConsentMeta,
     document_to_public,
+    ensure_default_documents,
     get_document_by_path,
     get_document_by_slug,
     get_pending_consents,
@@ -30,6 +31,7 @@ router = APIRouter(prefix="/legal", tags=["legal"])
 
 @router.get("/routes", response_model=list[LegalRouteOut])
 async def legal_routes(db: Annotated[AsyncSession, Depends(get_db)]):
+    await ensure_default_documents(db)
     docs = await list_documents_admin(db)
     out: list[LegalRouteOut] = []
     for doc in docs:
@@ -48,6 +50,7 @@ async def legal_routes(db: Annotated[AsyncSession, Depends(get_db)]):
 
 @router.get("/register-meta", response_model=LegalRegisterMetaOut)
 async def legal_register_meta(db: Annotated[AsyncSession, Depends(get_db)]):
+    await ensure_default_documents(db)
     docs = await list_documents_admin(db)
     items: list[LegalRouteOut] = []
     for doc in docs:
