@@ -7,6 +7,7 @@ import { BroadcastsPage } from "./pages/Broadcasts";
 import { DashboardPage } from "./pages/Dashboard";
 import { LoginPage } from "./pages/Login";
 import { PaymentsPage } from "./pages/Payments";
+import { DocumentsPage } from "./pages/Documents";
 import { SettingsPage } from "./pages/Settings";
 import { UserDetailPage } from "./pages/UserDetail";
 import { UsersPage } from "./pages/Users";
@@ -24,6 +25,7 @@ function ProtectedApp() {
         <Route path="users/:id" element={<UserDetailPage />} />
         <Route path="payments" element={<PaymentsPage />} />
         <Route path="settings" element={<SettingsPage />} />
+        <Route path="documents" element={<DocumentsPage />} />
         <Route path="audit" element={<AuditPage />} />
         <Route path="admins" element={<AdminsPage />} />
       </Route>

@@ -9,6 +9,7 @@ import { Home } from "./pages/Home";
 import { LoginPage } from "./pages/Login";
 import { Profile } from "./pages/Profile";
 import { SourceViewPage } from "./pages/SourceViewPage";
+import { LegalPathCatch } from "./components/LegalPathCatch";
 import { Thread } from "./pages/Thread";
 
 const queryClient = new QueryClient();
@@ -31,7 +32,7 @@ function AppRoutes() {
             <Route path="/history" element={<History />} />
             <Route path="/profile" element={<Profile />} />
             <Route path="/source-view" element={<SourceViewPage />} />
-            <Route path="*" element={<Navigate to="/" replace />} />
+            <Route path="*" element={<LegalPathCatch />} />
           </Routes>
         ) : (
           <div className="app-boot-placeholder" aria-busy="true" aria-label={t("pageLoading")}>

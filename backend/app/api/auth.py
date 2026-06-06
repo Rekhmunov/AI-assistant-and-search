@@ -51,6 +51,7 @@ from app.schemas.auth import (
     TokenResponse,
 )
 from app.schemas.user import UserProfile
+from app.services.legal_documents import record_user_consents
 from app.services.max_bind_token import BIND_TOKEN_TTL_SEC, consume_max_bind_token, create_max_bind_token
 
 import redis.asyncio as redis
@@ -311,6 +312,24 @@ async def register_email(
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Не удалось завершить регистрацию. Проверьте данные или войдите в аккаунт.",
+            ) from exc
+
+        if not body.privacy_version_id or not body.pd_consent_version_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Подтвердите согласие на обработку данных и политику конфиденциальности.",
+            )
+        try:
+            await record_user_consents(
+                db,
+                user,
+                privacy_version_id=body.privacy_version_id,
+                pd_consent_version_id=body.pd_consent_version_id,
+            )
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Подтвердите актуальные версии политики и согласия на обработку данных.",
             ) from exc
 
         await clear_auth_rate_limit(redis_client, "register", ip)

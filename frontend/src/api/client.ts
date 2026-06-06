@@ -179,16 +179,66 @@ export async function loginEmail(
   return res.json();
 }
 
+export type LegalRoute = {
+  slug: string;
+  title: string;
+  public_path: string;
+  version_id: string;
+};
+
+export type LegalDocumentPublic = {
+  slug: string;
+  title: string;
+  public_path: string;
+  version_id: string;
+  version_number: number;
+  content_html: string;
+};
+
+export async function fetchLegalRoutes(): Promise<LegalRoute[]> {
+  const res = await fetch(`${API_BASE}/api/legal/routes`, { credentials: "include" });
+  if (!res.ok) return [];
+  return res.json();
+}
+
+export async function fetchLegalRegisterMeta(): Promise<{ documents: LegalRoute[] }> {
+  const res = await fetch(`${API_BASE}/api/legal/register-meta`, { credentials: "include" });
+  if (!res.ok) return { documents: [] };
+  return res.json();
+}
+
+export async function fetchLegalBySlug(slug: string): Promise<LegalDocumentPublic> {
+  const res = await fetch(`${API_BASE}/api/legal/${encodeURIComponent(slug)}`, {
+    credentials: "include",
+  });
+  if (!res.ok) throw new Error("Document not found");
+  return res.json();
+}
+
+export async function fetchLegalByPath(path: string): Promise<LegalDocumentPublic> {
+  const params = new URLSearchParams({ path });
+  const res = await fetch(`${API_BASE}/api/legal/by-path?${params}`, { credentials: "include" });
+  if (!res.ok) throw new Error("Document not found");
+  return res.json();
+}
+
 export async function registerEmail(
   email: string,
   password: string,
-  firstName?: string
+  firstName: string | undefined,
+  consents: { privacy_version_id: string; pd_consent_version_id: string },
 ): Promise<{ access_token: string; user: UserProfile }> {
   const res = await fetch(`${API_BASE}/api/auth/register`, {
     method: "POST",
     headers: apiHeaders(null),
     credentials: "include",
-    body: JSON.stringify({ email, password, first_name: firstName || null }),
+    body: JSON.stringify({
+      email,
+      password,
+      first_name: firstName || null,
+      privacy_version_id: consents.privacy_version_id,
+      pd_consent_version_id: consents.pd_consent_version_id,
+    }),
   });
   if (!res.ok) await throwHttpError(res, parseAuthError);
   return res.json();

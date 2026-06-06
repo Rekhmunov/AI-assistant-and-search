@@ -32,6 +32,8 @@ const PERMS: Record<AdminRole, Set<string>> = {
     "payments:write",
     "settings:read",
     "settings:write",
+    "legal:read",
+    "legal:write",
     "audit:read",
     "admins:read",
     "admins:write",

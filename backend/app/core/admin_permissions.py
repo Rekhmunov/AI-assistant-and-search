@@ -17,6 +17,8 @@ ROLE_PERMISSIONS: dict[str, set[str]] = {
         "payments:write",
         "settings:read",
         "settings:write",
+        "legal:read",
+        "legal:write",
         "audit:read",
         "admins:read",
         "admins:write",

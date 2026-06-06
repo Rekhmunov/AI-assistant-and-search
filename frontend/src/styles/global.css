@@ -4796,3 +4796,144 @@ body:has(.page-thread) {
   cursor: pointer;
   font-size: 0.9rem;
 }
+
+/* Регистрация: согласия */
+.auth-consents {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 4px 0 12px;
+}
+
+.auth-consent-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 0.875rem;
+  line-height: 1.45;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.auth-consent-row input[type="checkbox"] {
+  margin-top: 3px;
+  flex-shrink: 0;
+  accent-color: var(--accent);
+}
+
+.auth-consent-link {
+  border: none;
+  padding: 0;
+  background: none;
+  color: var(--accent);
+  text-decoration: underline;
+  cursor: pointer;
+  font: inherit;
+}
+
+/* Юридические документы */
+.legal-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+.legal-modal {
+  position: relative;
+  width: min(640px, 100%);
+  max-height: min(85vh, 720px);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  padding: 20px 20px 16px;
+}
+
+.legal-modal-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 36px;
+  height: 36px;
+  border: none;
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.legal-modal-title {
+  margin: 0 32px 12px 0;
+  font-size: 1.125rem;
+  font-weight: 600;
+}
+
+.legal-modal-body {
+  overflow-y: auto;
+  flex: 1;
+  font-size: 0.9rem;
+  line-height: 1.55;
+}
+
+.legal-doc-html h1,
+.legal-doc-html h2,
+.legal-doc-html h3 {
+  margin: 1em 0 0.5em;
+  font-weight: 600;
+}
+
+.legal-doc-html p {
+  margin: 0.5em 0;
+}
+
+.legal-doc-html a {
+  color: var(--accent);
+  text-decoration: underline;
+}
+
+.legal-doc-html ul,
+.legal-doc-html ol {
+  margin: 0.5em 0;
+  padding-left: 1.4em;
+}
+
+.page-legal {
+  display: flex;
+  justify-content: center;
+  padding: 24px 16px 48px;
+}
+
+.legal-page-card {
+  width: min(720px, 100%);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 24px 20px;
+  box-shadow: var(--shadow-sm);
+}
+
+.legal-page-title {
+  margin: 0 0 16px;
+  font-size: 1.35rem;
+  font-weight: 600;
+}
+
+.legal-page-body {
+  font-size: 0.95rem;
+}
+
+.legal-page-back {
+  margin: 20px 0 0;
+  font-size: 0.9rem;
+}
+
+.legal-page-back a {
+  color: var(--accent);
+}

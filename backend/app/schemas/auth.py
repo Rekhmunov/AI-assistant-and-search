@@ -1,3 +1,5 @@
+from uuid import UUID
+
 from pydantic import BaseModel, EmailStr, Field
 
 from app.schemas.user import UserProfile
@@ -21,6 +23,8 @@ class EmailRegisterRequest(BaseModel):
     email: EmailStr
     password: str = Field(..., min_length=8, max_length=128)
     first_name: str | None = Field(default=None, max_length=255)
+    privacy_version_id: UUID | None = None
+    pd_consent_version_id: UUID | None = None
 
 
 class EmailLoginRequest(BaseModel):

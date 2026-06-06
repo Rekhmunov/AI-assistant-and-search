@@ -7,6 +7,7 @@ const NAV: { to: string; label: string; perm: string }[] = [
   { to: "/users", label: "Пользователи", perm: "users:read" },
   { to: "/payments", label: "Платежи", perm: "payments:read" },
   { to: "/settings", label: "Настройки", perm: "settings:read" },
+  { to: "/documents", label: "Документы", perm: "legal:read" },
   { to: "/audit", label: "Аудит", perm: "audit:read" },
   { to: "/admins", label: "Админы", perm: "admins:read" },
 ];
