@@ -42,6 +42,14 @@ function getProfileTierLabel(tier: ProfileTier): string {
   return "FREE";
 }
 
+const PRO_BENEFIT_KEYS = [
+  "proBenefitAiModels",
+  "proBenefitMoreLimits",
+  "proBenefitFullHistory",
+  "proBenefitSearchPriority",
+  "proBenefitCoffeePrice",
+] as const;
+
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => {
     window.setTimeout(resolve, ms);
@@ -335,14 +343,20 @@ export function Profile() {
 
       {!isPro && (
         <section className="profile-card profile-pro-card">
-          <div className="profile-card-head">
-            <div className="profile-pro-headline">
-              <h2 className="profile-card-title">{t("upgradePro")}</h2>
-              <span className="profile-pro-benefits">{t("proBenefits")}</span>
-            </div>
+          <div className="profile-pro-top">
             <span className="profile-pro-badge">Pro</span>
+            <p className="profile-pro-price">{t("proPrice", { price: proPriceRub })}</p>
           </div>
-          <p className="profile-pro-price">{t("proPrice", { price: proPriceRub })}</p>
+          <ul className="profile-pro-benefits-list">
+            {PRO_BENEFIT_KEYS.map((key) => (
+              <li key={key} className="profile-pro-benefit-item">
+                <span className="profile-pro-benefit-icon" aria-hidden>
+                  ✓
+                </span>
+                <span>{t(key)}</span>
+              </li>
+            ))}
+          </ul>
           <label className="auth-consent-row profile-pro-offer">
             <input
               type="checkbox"

@@ -39,40 +39,28 @@ def upgrade() -> None:
             END $$;
             """
         )
-        op.create_table(
-            "support_tickets",
-            sa.Column("id", UUID(as_uuid=True), primary_key=True),
-            sa.Column("user_id", UUID(as_uuid=True), sa.ForeignKey("users.id", ondelete="CASCADE"), nullable=False),
-            sa.Column("user_email", sa.String(length=255), nullable=True),
-            sa.Column("user_max_user_id", sa.BigInteger(), nullable=True),
-            sa.Column("source", sa.String(length=64), nullable=False, server_default="general"),
-            sa.Column("message", sa.Text(), nullable=False),
-            sa.Column(
-                "status",
-                sa.Enum("open", "closed", name="support_ticket_status_enum", create_type=False),
-                nullable=False,
-                server_default="open",
-            ),
-            sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
-            sa.Column("closed_at", sa.DateTime(timezone=True), nullable=True),
-            sa.Column(
-                "closed_by_admin_id",
-                UUID(as_uuid=True),
-                sa.ForeignKey("admin_users.id", ondelete="SET NULL"),
-                nullable=True,
-            ),
-            sa.Column("yookassa_payment_id", sa.String(length=128), nullable=True),
-            sa.Column("payment_amount_rub", sa.Integer(), nullable=True),
-            sa.Column(
-                "subscription_id",
-                UUID(as_uuid=True),
-                sa.ForeignKey("subscriptions.id", ondelete="SET NULL"),
-                nullable=True,
-            ),
+        op.execute(
+            """
+            CREATE TABLE IF NOT EXISTS support_tickets (
+                id UUID PRIMARY KEY,
+                user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                user_email VARCHAR(255),
+                user_max_user_id BIGINT,
+                source VARCHAR(64) NOT NULL DEFAULT 'general',
+                message TEXT NOT NULL,
+                status support_ticket_status_enum NOT NULL DEFAULT 'open',
+                created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+                closed_at TIMESTAMPTZ,
+                closed_by_admin_id UUID REFERENCES admin_users(id) ON DELETE SET NULL,
+                yookassa_payment_id VARCHAR(128),
+                payment_amount_rub INTEGER,
+                subscription_id UUID REFERENCES subscriptions(id) ON DELETE SET NULL
+            )
+            """
         )
-        op.create_index("ix_support_tickets_user_id", "support_tickets", ["user_id"])
-        op.create_index("ix_support_tickets_status", "support_tickets", ["status"])
-        op.create_index("ix_support_tickets_created_at", "support_tickets", ["created_at"])
+        op.execute("CREATE INDEX IF NOT EXISTS ix_support_tickets_user_id ON support_tickets (user_id)")
+        op.execute("CREATE INDEX IF NOT EXISTS ix_support_tickets_status ON support_tickets (status)")
+        op.execute("CREATE INDEX IF NOT EXISTS ix_support_tickets_created_at ON support_tickets (created_at)")
     else:
         op.execute(
             """
