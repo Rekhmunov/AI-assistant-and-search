@@ -6,6 +6,7 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.api.deps import get_current_user, get_db, get_redis
 from app.core.request_meta import consent_request_meta
@@ -26,6 +27,8 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/payments", tags=["payments"])
 
+_PAYMENT_UNAVAILABLE = "Не удалось создать платёж. Попробуйте позже или напишите в поддержку."
+
 
 async def _save_pending_subscription(
     *,
@@ -38,7 +41,7 @@ async def _save_pending_subscription(
         sub = Subscription(
             user_id=user_id,
             yookassa_payment_id=payment_id,
-            status=SubscriptionStatus.PENDING,
+            status=SubscriptionStatus.PENDING.value,
             amount_rub=amount_rub,
         )
         db.add(sub)
@@ -58,9 +61,9 @@ async def create_pro_payment(
     settings = get_settings()
     return_url = f"{settings.public_web_url.rstrip('/')}/profile?payment=success"
 
-    ip_address, ua = consent_request_meta(request)
-    await ensure_default_documents(db)
     try:
+        ip_address, ua = consent_request_meta(request)
+        await ensure_default_documents(db)
         await record_consent(
             db,
             user,
@@ -73,16 +76,27 @@ async def create_pro_payment(
                 user_agent=ua,
             ),
         )
-        await db.commit()
+        await db.flush()
+
+        pro_price_rub = int(await get_setting("pro_price_rub", db, redis_client, settings))
+        pro_purchase_disabled = bool(await get_setting("pro_purchase_disabled", db, redis_client, settings))
     except ValueError as exc:
+        await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Подтвердите актуальную публичную оферту.",
         ) from exc
+    except StarletteHTTPException:
+        await db.rollback()
+        raise
+    except Exception as exc:
+        await db.rollback()
+        logger.exception("Pro payment setup failed for user %s", user.id)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=_PAYMENT_UNAVAILABLE,
+        ) from exc
 
-    async with async_session_factory() as db:
-        pro_price_rub = int(await get_setting("pro_price_rub", db, redis_client, settings))
-        pro_purchase_disabled = bool(await get_setting("pro_purchase_disabled", db, redis_client, settings))
     if pro_purchase_disabled:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -96,6 +110,7 @@ async def create_pro_payment(
 
     customer_email = (user.email or "").strip()
     if not customer_email:
+        await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Для оплаты Pro укажите email в профиле",
@@ -120,11 +135,21 @@ async def create_pro_payment(
                 amount_rub=pro_price_rub,
             )
         except SQLAlchemyError as e:
+            await db.rollback()
             logger.exception("Failed to save dev subscription")
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Не удалось сохранить подписку. Проверьте миграции БД (subscriptions).",
             ) from e
+        try:
+            await db.commit()
+        except Exception as exc:
+            await db.rollback()
+            logger.exception("Pro payment consent commit failed for user %s", user.id)
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=_PAYMENT_UNAVAILABLE,
+            ) from exc
         return {
             "payment_id": payment_id,
             "confirmation_url": f"{return_url}&dev=1",
@@ -141,6 +166,7 @@ async def create_pro_payment(
             settings=settings,
         )
     except YooKassaError as e:
+        await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=format_yookassa_error(str(e)),
@@ -164,6 +190,16 @@ async def create_pro_payment(
                 "После оплаты откройте профиль — тариф активируется автоматически."
             ),
         ) from e
+
+    try:
+        await db.commit()
+    except Exception as exc:
+        await db.rollback()
+        logger.exception("Pro payment consent commit failed for user %s", user.id)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=_PAYMENT_UNAVAILABLE,
+        ) from exc
 
     return {
         "payment_id": result["payment_id"],

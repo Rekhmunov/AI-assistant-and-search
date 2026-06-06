@@ -25,12 +25,14 @@ class Subscription(Base):
     yookassa_payment_id: Mapped[str | None] = mapped_column(String(128), unique=True, nullable=True)
     status: Mapped[SubscriptionStatus] = mapped_column(
         ENUM(
-            SubscriptionStatus,
+            "pending",
+            "active",
+            "canceled",
+            "failed",
             name="subscription_status_enum",
             create_type=False,
-            values_callable=lambda enum_cls: [member.value for member in enum_cls],
         ),
-        default=SubscriptionStatus.PENDING,
+        default=SubscriptionStatus.PENDING.value,
     )
     amount_rub: Mapped[int] = mapped_column(default=299)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

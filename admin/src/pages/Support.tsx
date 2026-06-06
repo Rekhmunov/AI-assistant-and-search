@@ -1,4 +1,4 @@
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { apiFetch } from "../api";
 import { useAuth } from "../AuthContext";
@@ -50,10 +50,7 @@ export function SupportPage() {
   const [msg, setMsg] = useState("");
   const [busyId, setBusyId] = useState<string | null>(null);
   const [replyDrafts, setReplyDrafts] = useState<Record<string, string>>({});
-  const [notifyIds, setNotifyIds] = useState("");
-  const [notifyBusy, setNotifyBusy] = useState(false);
   const canWrite = can("support:write");
-  const canSettings = can("settings:write");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -70,13 +67,6 @@ export function SupportPage() {
   useEffect(() => {
     void load();
   }, [load]);
-
-  useEffect(() => {
-    if (!canSettings) return;
-    apiFetch<{ settings: Record<string, string | number | boolean> }>("/api/admin/settings")
-      .then((r) => setNotifyIds(String(r.settings.support_notify_max_user_ids ?? "")))
-      .catch(() => {});
-  }, [canSettings]);
 
   const setStatus = async (id: string, status: "open" | "in_progress" | "closed") => {
     if (!canWrite) return;
@@ -117,26 +107,6 @@ export function SupportPage() {
     }
   };
 
-  const saveNotifyIds = async (e: FormEvent) => {
-    e.preventDefault();
-    if (!canSettings) return;
-    setNotifyBusy(true);
-    setMsg("");
-    try {
-      await apiFetch("/api/admin/settings", {
-        method: "PATCH",
-        body: JSON.stringify({
-          settings: { support_notify_max_user_ids: notifyIds.trim() },
-        }),
-      });
-      setMsg("Настройки уведомлений сохранены");
-    } catch (err) {
-      setMsg(err instanceof Error ? err.message : "Ошибка");
-    } finally {
-      setNotifyBusy(false);
-    }
-  };
-
   if (!can("support:read")) {
     return <p>Нет доступа</p>;
   }
@@ -158,24 +128,6 @@ export function SupportPage() {
           </label>
         </div>
       </header>
-
-      {canSettings && (
-        <form className="card support-notify-form" onSubmit={(e) => void saveNotifyIds(e)}>
-          <h2 className="support-notify-title">Уведомления в MAX</h2>
-          <p className="hint">
-            MAX user_id админов через запятую — им придёт сообщение о новом тикете.
-          </p>
-          <input
-            type="text"
-            value={notifyIds}
-            onChange={(e) => setNotifyIds(e.target.value)}
-            placeholder="123456, 789012"
-          />
-          <button type="submit" className="btn-secondary" disabled={notifyBusy}>
-            {notifyBusy ? "Сохранение…" : "Сохранить"}
-          </button>
-        </form>
-      )}
 
       {msg && <p className="hint">{msg}</p>}
       {loading && <p className="hint">Загрузка…</p>}

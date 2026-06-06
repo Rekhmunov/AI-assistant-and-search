@@ -512,16 +512,14 @@ export async function createProPayment(
     let msg = "Не удалось создать платёж";
     try {
       const body = await res.json();
-      const detail = (body as { detail?: unknown }).detail;
-      if (typeof detail === "string") {
-        msg = detail;
-      } else if (Array.isArray(detail)) {
-        msg = detail
-          .map((item) => (typeof item === "object" && item && "msg" in item ? String((item as { msg?: string }).msg) : String(item)))
-          .join("; ");
+      msg = formatApiErrorDetail(body, msg);
+      if (msg === "Internal server error") {
+        msg = "Не удалось создать платёж. Попробуйте позже или напишите в поддержку.";
       }
     } catch {
-      /* ignore */
+      if (res.status >= 500) {
+        msg = "Не удалось создать платёж. Попробуйте позже или напишите в поддержку.";
+      }
     }
     throw new Error(msg);
   }

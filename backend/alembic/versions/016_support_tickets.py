@@ -17,7 +17,21 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    op.execute("CREATE TYPE support_ticket_status_enum AS ENUM ('open', 'closed')")
+    op.execute(
+        """
+        DO $$ BEGIN
+            CREATE TYPE support_ticket_status_enum AS ENUM ('open', 'closed');
+        EXCEPTION
+            WHEN duplicate_object THEN NULL;
+        END $$;
+        """
+    )
+
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+    if "support_tickets" in inspector.get_table_names():
+        return
+
     op.create_table(
         "support_tickets",
         sa.Column("id", UUID(as_uuid=True), primary_key=True),
