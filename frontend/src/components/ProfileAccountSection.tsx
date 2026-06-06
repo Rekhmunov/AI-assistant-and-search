@@ -7,6 +7,7 @@ import {
   isMaxWebApp,
   takeMaxBindError,
 } from "../lib/maxApp";
+import { openExternalUrl } from "../lib/openExternalUrl";
 import { t } from "../i18n";
 
 interface Props {
@@ -108,7 +109,10 @@ export function ProfileAccountSection({ user, token, onUserUpdated }: Props) {
     try {
       const { bind_token: bindToken } = await startBindMax(token);
       setBindInfo(t("openInMaxPending"));
-      window.location.assign(buildMaxDeepLink(`bind_${bindToken}`));
+      const deepLink = buildMaxDeepLink(`bind_${bindToken}`);
+      if (!openExternalUrl(deepLink)) {
+        window.location.assign(deepLink);
+      }
     } catch (err) {
       setBindError(err instanceof Error ? err.message : t("profileMaxBindError"));
     } finally {

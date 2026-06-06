@@ -26,6 +26,7 @@ import { ProfileAccountSection } from "../components/ProfileAccountSection";
 import { useDesktopLayout } from "../hooks/useDesktopLayout";
 import { useSignOut } from "../hooks/useSignOut";
 import { isMaxWebApp } from "../lib/maxApp";
+import { openExternalUrl } from "../lib/openExternalUrl";
 import { t } from "../i18n";
 import { useAuthStore } from "../store/authStore";
 
@@ -288,7 +289,9 @@ export function Profile() {
         queryClient.invalidateQueries({ queryKey: ["session"] });
         return;
       }
-      window.location.href = payment.confirmation_url;
+      if (!openExternalUrl(payment.confirmation_url)) {
+        window.location.assign(payment.confirmation_url);
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : t("proPaymentCreateError");
       if (message.includes("временно недоступна") || message.includes("недоступна")) {
