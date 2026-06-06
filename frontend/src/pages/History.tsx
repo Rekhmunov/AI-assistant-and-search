@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { deleteThreadsBulk, fetchThreads, searchThreads } from "../api/client";
-import { AuthGate, HistoryGateIcon } from "../components/AuthGate";
+import { AuthGate } from "../components/AuthGate";
 import { HistoryBulkBar } from "../components/HistoryBulkBar";
 import { HistoryBulkDeleteModal } from "../components/HistoryBulkDeleteModal";
 import { MobileNewThreadButton } from "../components/MobileNewThreadButton";
@@ -132,13 +132,12 @@ export function History() {
   if (!token) {
     return (
       <AuthGate
-        title={t("history")}
-        hint={t("historyLoginHint")}
+        title={t("historyGuestGateTitle")}
         primaryTo={inMax ? "/profile" : "/login"}
         primaryLabel={inMax ? t("navProfile") : t("signIn")}
         showPrimary
         showSecondary
-        icon={<HistoryGateIcon />}
+        showBrand={false}
       />
     );
   }

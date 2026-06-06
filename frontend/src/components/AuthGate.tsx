@@ -5,11 +5,12 @@ import { AuthModalCard, AuthShell } from "./AuthModalCard";
 
 type Props = {
   title: string;
-  hint: string;
+  hint?: string;
   primaryTo?: string;
   primaryLabel?: string;
   showPrimary?: boolean;
   showSecondary?: boolean;
+  showBrand?: boolean;
   icon?: ReactNode;
 };
 
@@ -62,9 +63,10 @@ export function AuthGate({
   primaryLabel,
   showPrimary = true,
   showSecondary = true,
+  showBrand = true,
   icon,
 }: Props) {
-  const gateIcon = icon ?? <ProfileGateIcon />;
+  const gateIcon = icon === undefined && showBrand ? <ProfileGateIcon /> : icon;
 
   return (
     <div className="page page-auth-gate">
@@ -72,6 +74,7 @@ export function AuthGate({
         <AuthModalCard
           title={title}
           subtitle={hint}
+          showBrand={showBrand}
           icon={gateIcon}
           footer={
             showSecondary ? (
