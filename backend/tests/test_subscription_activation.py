@@ -10,6 +10,7 @@ from app.services.subscription_activation import (
     payment_amount_is_valid,
     payment_matches_user,
     recover_pro_for_user,
+    revoke_pro_for_user,
 )
 
 
@@ -283,6 +284,32 @@ class TestSubscriptionActivation(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(result["ok"])
         self.assertEqual(result.get("source"), "subscription_record")
         self.assertEqual(sub.status, SubscriptionStatus.ACTIVE)
+
+    @patch("app.services.subscription_activation.find_user_subscriptions", new_callable=AsyncMock)
+    async def test_revoke_pro_cancels_subscriptions_and_downgrades_user(self, mock_find_subs):
+        user_id = uuid.uuid4()
+        user = User(
+            id=user_id,
+            plan=Plan.PRO,
+            email="a@b.c",
+            plan_expires_at=datetime.now(timezone.utc) + timedelta(days=30),
+        )
+        active_sub = Subscription(user_id=user_id, status=SubscriptionStatus.ACTIVE, amount_rub=299)
+        pending_sub = Subscription(user_id=user_id, status=SubscriptionStatus.PENDING, amount_rub=299)
+        failed_sub = Subscription(user_id=user_id, status=SubscriptionStatus.FAILED, amount_rub=299)
+        mock_find_subs.return_value = [active_sub, pending_sub, failed_sub]
+
+        db = self._mock_db()
+        result = await revoke_pro_for_user(db, user)
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["plan"], "free")
+        self.assertEqual(result["canceled_subscriptions"], 2)
+        self.assertEqual(user.plan, Plan.FREE)
+        self.assertIsNone(user.plan_expires_at)
+        self.assertEqual(active_sub.status, SubscriptionStatus.CANCELED)
+        self.assertEqual(pending_sub.status, SubscriptionStatus.CANCELED)
+        self.assertEqual(failed_sub.status, SubscriptionStatus.FAILED)
 
 
 if __name__ == "__main__":

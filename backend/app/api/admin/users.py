@@ -28,7 +28,7 @@ from app.schemas.admin import (
 from app.core.security import hash_password
 from app.services.admin_audit import log_admin_action
 from app.services.refresh_tokens import revoke_refresh_tokens
-from app.services.subscription_activation import recover_pro_for_user
+from app.services.subscription_activation import recover_pro_for_user, revoke_pro_for_user
 
 router = APIRouter(prefix="/users", tags=["admin-users"])
 logger = logging.getLogger(__name__)
@@ -358,3 +358,33 @@ async def grant_pro(
         ip_address=request.client.host if request.client else None,
     )
     return {"ok": True, "plan": "pro", "expires_at": user.plan_expires_at.isoformat()}
+
+
+@router.post("/{user_id}/revoke-pro")
+async def revoke_pro(
+    user_id: UUID,
+    request: Request,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    admin: Annotated[AdminUser, Depends(require_permission("payments:write"))],
+):
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    if user.plan != Plan.PRO:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="У пользователя нет активного тарифа Pro",
+        )
+
+    payload = await revoke_pro_for_user(db, user)
+    await log_admin_action(
+        db,
+        admin=admin,
+        action="user.revoke_pro",
+        resource_type="user",
+        resource_id=str(user_id),
+        details={"canceled_subscriptions": payload["canceled_subscriptions"]},
+        ip_address=request.client.host if request.client else None,
+    )
+    return payload

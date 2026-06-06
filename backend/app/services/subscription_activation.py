@@ -109,6 +109,20 @@ async def find_user_subscriptions(
     return list(result.scalars().all())
 
 
+async def revoke_pro_for_user(db: AsyncSession, user: User) -> dict[str, Any]:
+    """Downgrade user to Free and cancel active/pending subscriptions."""
+    canceled = 0
+    for sub in await find_user_subscriptions(db, user.id):
+        if sub.status in (SubscriptionStatus.ACTIVE, SubscriptionStatus.PENDING):
+            sub.status = SubscriptionStatus.CANCELED
+            canceled += 1
+
+    user.plan = Plan.FREE
+    user.plan_expires_at = None
+    await db.flush()
+    return {"ok": True, "plan": Plan.FREE.value, "canceled_subscriptions": canceled}
+
+
 async def find_pending_subscriptions(
     db: AsyncSession,
     user_id: uuid.UUID,

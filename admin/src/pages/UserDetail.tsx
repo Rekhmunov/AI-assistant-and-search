@@ -119,6 +119,20 @@ export function UserDetailPage() {
     }
   };
 
+  const revokePro = async () => {
+    if (!id || user?.plan !== "pro") return;
+    if (!window.confirm("Отменить подписку Pro у этого пользователя?")) return;
+    setMsg("");
+    setError("");
+    try {
+      await apiFetch(`/api/admin/users/${id}/revoke-pro`, { method: "POST" });
+      setMsg("Pro отменён");
+      load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Не удалось отменить Pro");
+    }
+  };
+
   const syncProPayment = async () => {
     if (!id) return;
     setMsg("");
@@ -283,6 +297,11 @@ export function UserDetailPage() {
             <button type="submit" className="btn-primary">
               Выдать Pro
             </button>
+            {user.plan === "pro" && (
+              <button type="button" className="btn-danger-outline" onClick={() => void revokePro()}>
+                Отменить Pro
+              </button>
+            )}
           </form>
           <div className="user-detail-actions-row">
             {user.email && (
