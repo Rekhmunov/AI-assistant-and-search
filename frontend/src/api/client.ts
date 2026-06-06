@@ -528,6 +528,30 @@ export async function createProPayment(
   return res.json();
 }
 
+export async function createSupportTicket(
+  token: string,
+  message: string,
+  source = "general",
+): Promise<{ id: string; created_at: string }> {
+  const res = await fetch(`${API_BASE}/api/support/tickets`, {
+    method: "POST",
+    headers: apiHeaders(token),
+    credentials: "include",
+    body: JSON.stringify({ message, source }),
+  });
+  if (!res.ok) {
+    let msg = "Не удалось отправить сообщение";
+    try {
+      const body = await res.json();
+      if (typeof body.detail === "string") msg = body.detail;
+    } catch {
+      /* ignore */
+    }
+    throw new Error(msg);
+  }
+  return res.json();
+}
+
 export async function confirmProPayment(
   token: string
 ): Promise<{

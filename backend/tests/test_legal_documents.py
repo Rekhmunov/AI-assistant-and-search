@@ -1,6 +1,11 @@
 """Юридические документы — правила удаления версий."""
 
-from app.services.legal_documents import CONSENT_BLOCKED_ERROR, ONLY_VERSION_ERROR, LegalVersionDeleteBlocked
+from app.services.legal_documents import (
+    CONSENT_BLOCKED_ERROR,
+    ONLY_VERSION_ERROR,
+    RECONSENT_SLUGS,
+    LegalVersionDeleteBlocked,
+)
 
 
 def test_only_version_error_message():

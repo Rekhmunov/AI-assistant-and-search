@@ -19,6 +19,8 @@ ROLE_PERMISSIONS: dict[str, set[str]] = {
         "settings:write",
         "legal:read",
         "legal:write",
+        "support:read",
+        "support:write",
         "audit:read",
         "admins:read",
         "admins:write",
@@ -29,6 +31,8 @@ ROLE_PERMISSIONS: dict[str, set[str]] = {
         "users:write",
         "payments:read",
         "payments:write",
+        "support:read",
+        "support:write",
         "audit:read",
     },
     AdminRole.MARKETING.value: {

@@ -9,6 +9,7 @@ import { LoginPage } from "./pages/Login";
 import { PaymentsPage } from "./pages/Payments";
 import { DocumentsPage } from "./pages/Documents";
 import { SettingsPage } from "./pages/Settings";
+import { SupportPage } from "./pages/Support";
 import { UserDetailPage } from "./pages/UserDetail";
 import { UsersPage } from "./pages/Users";
 
@@ -26,6 +27,7 @@ function ProtectedApp() {
         <Route path="payments" element={<PaymentsPage />} />
         <Route path="settings" element={<SettingsPage />} />
         <Route path="documents" element={<DocumentsPage />} />
+        <Route path="support" element={<SupportPage />} />
         <Route path="audit" element={<AuditPage />} />
         <Route path="admins" element={<AdminsPage />} />
       </Route>

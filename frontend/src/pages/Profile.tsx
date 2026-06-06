@@ -4,6 +4,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   confirmProPayment,
   createProPayment,
+  createSupportTicket,
   devActivatePro,
   deleteAccount,
   fetchAppConfig,
@@ -18,6 +19,7 @@ import { MobileNewThreadButton } from "../components/MobileNewThreadButton";
 import { MobilePageHeader } from "../components/MobilePageHeader";
 import { ProPurchaseBlockedModal } from "../components/ProPurchaseBlockedModal";
 import { ProPaymentStatusModal, type ProPaymentModalState } from "../components/ProPaymentStatusModal";
+import { SupportFormModal } from "../components/SupportFormModal";
 import { ProfileAccountSection } from "../components/ProfileAccountSection";
 import { useDesktopLayout } from "../hooks/useDesktopLayout";
 import { useSignOut } from "../hooks/useSignOut";
@@ -57,6 +59,7 @@ export function Profile() {
   const [paymentModal, setPaymentModal] = useState<ProPaymentModalState>({ open: false });
   const [acceptOffer, setAcceptOffer] = useState(false);
   const [offerModalOpen, setOfferModalOpen] = useState(false);
+  const [supportModalOpen, setSupportModalOpen] = useState(false);
   const inMax = isMaxWebApp();
   const isDesktop = useDesktopLayout();
 
@@ -144,15 +147,23 @@ export function Profile() {
           continue;
         }
 
+        const paymentNotFound =
+          !isPending &&
+          Boolean(
+            result.message?.includes("Успешная оплата не найдена") ||
+              result.message?.includes("Оплата не завершена"),
+          );
+
         setPaymentModal({
           open: true,
           kind: isPending ? "pending" : "error",
           message:
             result.message ||
             (isPending
-              ? "Оплата ещё обрабатывается. Подождите 1–2 минуты и нажмите «Проверить оплату»."
-              : "Успешная оплата не найдена."),
-          canRetry: true,
+              ? t("proPaymentPendingHint")
+              : t("proPaymentNotFoundPrefix")),
+          canRetry: !paymentNotFound,
+          showSupportLink: paymentNotFound,
         });
         return;
       }
@@ -309,14 +320,13 @@ export function Profile() {
           >
             {t("upgradePro")}
           </button>
-          <p className="profile-pro-check-hint">{t("checkProPaymentHint")}</p>
-          <button
-            type="button"
-            className="btn-secondary btn-block profile-pro-check-btn"
-            onClick={() => void runPaymentConfirm()}
-          >
-            {t("checkProPayment")}
-          </button>
+          <p className="profile-pro-check-hint">
+            {t("checkProPaymentHintPrefix")}{" "}
+            <button type="button" className="profile-pro-check-link" onClick={() => void runPaymentConfirm()}>
+              {t("checkProPaymentLink")}
+            </button>
+            {t("checkProPaymentHintSuffix")}
+          </p>
         </section>
       )}
 
@@ -350,6 +360,18 @@ export function Profile() {
         state={paymentModal}
         onClose={() => setPaymentModal({ open: false })}
         onRetry={() => void runPaymentConfirm()}
+        onOpenSupport={() => {
+          setPaymentModal({ open: false });
+          setSupportModalOpen(true);
+        }}
+      />
+
+      <SupportFormModal
+        open={supportModalOpen}
+        onClose={() => setSupportModalOpen(false)}
+        onSubmit={async (message) => {
+          await createSupportTicket(token!, message, "pro_payment");
+        }}
       />
 
       {offerModalOpen && (

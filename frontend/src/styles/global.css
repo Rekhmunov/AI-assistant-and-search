@@ -826,6 +826,10 @@ body:has(.page-thread) {
 }
 
 .profile-pro-check-hint {
+  line-height: 1.45;
+}
+
+.profile-pro-check-hint--legacy {
   margin: 12px 0 8px;
   font-size: 0.8125rem;
   color: var(--muted);
@@ -5074,4 +5078,41 @@ body:has(.page-thread) {
 
 .profile-pro-offer {
   margin: 0 0 12px;
+}
+
+.profile-pro-check-link {
+  display: inline;
+  border: none;
+  padding: 0;
+  margin: 0;
+  background: none;
+  color: var(--accent);
+  text-decoration: underline;
+  cursor: pointer;
+  font: inherit;
+}
+
+.support-form-textarea {
+  width: 100%;
+  min-height: 120px;
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg);
+  color: inherit;
+  font: inherit;
+  line-height: 1.45;
+  resize: vertical;
+}
+
+.support-form-textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-soft, rgba(32, 128, 141, 0.16));
+}
+
+.support-form-modal {
+  max-width: 420px;
+  padding: 20px;
 }

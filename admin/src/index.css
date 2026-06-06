@@ -2257,6 +2257,92 @@ pre.small {
   margin-top: 16px;
 }
 
+.support-page .page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.support-filters select {
+  margin-left: 6px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+}
+
+.support-ticket-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.support-ticket {
+  padding: 14px 16px;
+}
+
+.support-ticket--closed {
+  opacity: 0.82;
+}
+
+.support-ticket-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.support-ticket-status {
+  display: inline-block;
+  margin-right: 8px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.support-ticket-status--open {
+  background: rgba(46, 125, 50, 0.12);
+  color: #2e7d32;
+}
+
+.support-ticket-status--closed {
+  background: rgba(120, 120, 120, 0.12);
+  color: var(--muted);
+}
+
+.support-ticket-source {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.support-ticket-date {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.support-ticket-user {
+  margin: 0 0 8px;
+  font-size: 0.85rem;
+}
+
+.support-ticket-max {
+  color: var(--muted);
+}
+
+.support-ticket-message {
+  margin: 0 0 12px;
+  white-space: pre-wrap;
+  line-height: 1.45;
+}
+
+.support-empty {
+  padding: 20px;
+}
+
 .legal-doc-html p {
   margin: 0.5em 0;
 }

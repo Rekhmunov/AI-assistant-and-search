@@ -5,15 +5,22 @@ export type ProPaymentModalState =
   | { open: false }
   | { open: true; kind: "loading" }
   | { open: true; kind: "success" }
-  | { open: true; kind: "pending" | "error"; message: string; canRetry?: boolean };
+  | {
+      open: true;
+      kind: "pending" | "error";
+      message: string;
+      canRetry?: boolean;
+      showSupportLink?: boolean;
+    };
 
 type Props = {
   state: ProPaymentModalState;
   onClose: () => void;
   onRetry?: () => void;
+  onOpenSupport?: () => void;
 };
 
-export function ProPaymentStatusModal({ state, onClose, onRetry }: Props) {
+export function ProPaymentStatusModal({ state, onClose, onRetry, onOpenSupport }: Props) {
   useBodyScrollLock(state.open);
 
   if (!state.open) return null;
@@ -52,12 +59,25 @@ export function ProPaymentStatusModal({ state, onClose, onRetry }: Props) {
         <h2 id="pro-payment-status-title" className="feedback-modal-title">
           {title}
         </h2>
-        {hint ? <p className="feedback-modal-hint">{hint}</p> : null}
+        {state.kind === "error" && state.showSupportLink ? (
+          <p className="feedback-modal-hint">
+            {t("proPaymentNotFoundPrefix")}{" "}
+            <button type="button" className="auth-consent-link" onClick={onOpenSupport}>
+              {t("supportLinkLabel")}
+            </button>
+            .
+          </p>
+        ) : hint ? (
+          <p className="feedback-modal-hint">{hint}</p>
+        ) : null}
         {state.kind === "loading" ? (
           <p className="feedback-modal-hint">{t("proPaymentConfirmPleaseWait")}</p>
         ) : null}
         <div className="feedback-modal-actions">
-          {state.kind !== "loading" && (state.kind === "pending" || state.kind === "error") && state.canRetry && onRetry ? (
+          {state.kind !== "loading" &&
+          (state.kind === "pending" || (state.kind === "error" && !state.showSupportLink)) &&
+          state.canRetry &&
+          onRetry ? (
             <button type="button" className="btn-primary btn-block" onClick={onRetry}>
               {t("proPaymentConfirmRetry")}
             </button>
