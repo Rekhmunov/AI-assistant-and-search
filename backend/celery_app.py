@@ -23,5 +23,9 @@ celery.conf.update(
             "task": "cleanup_expired_uploads",
             "schedule": crontab(hour=4, minute=15),
         },
+        "purge-deleted-accounts": {
+            "task": "purge_deleted_accounts",
+            "schedule": crontab(hour=4, minute=45),
+        },
     },
 )

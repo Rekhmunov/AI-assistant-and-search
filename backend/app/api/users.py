@@ -1,16 +1,17 @@
 from datetime import datetime, timezone
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Request, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user, get_db, get_rate_limiter, get_redis
+from app.api.deps import clear_guest_cookie, clear_refresh_cookie, get_current_user, get_db, get_rate_limiter, get_redis
 from app.core.request_security import verify_allowed_origin
 from app.core.config import get_settings
 from app.core.limiter import RateLimiter
 from app.models.user import User
 from app.schemas.user import UserProfile
 from app.services.app_settings import get_setting
+from app.services.refresh_tokens import revoke_refresh_tokens
 
 import redis.asyncio as redis
 
@@ -47,9 +48,15 @@ async def get_me(
 @router.delete("/me")
 async def delete_account(
     request: Request,
+    response: Response,
     db: Annotated[AsyncSession, Depends(get_db)],
+    redis_client: Annotated[redis.Redis, Depends(get_redis)],
     user: Annotated[User, Depends(get_current_user)],
 ):
     verify_allowed_origin(request)
     user.deleted_at = datetime.now(timezone.utc)
+    await revoke_refresh_tokens(redis_client, str(user.id))
+    clear_refresh_cookie(response)
+    clear_guest_cookie(response)
+    await db.commit()
     return {"ok": True}

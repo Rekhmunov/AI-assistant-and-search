@@ -36,6 +36,8 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 15
     refresh_token_expire_days: int = 30
+    # После удаления аккаунта (deleted_at) — срок до окончательного удаления данных из БД
+    deleted_account_retention_days: int = 90
     init_data_max_age_seconds: int = 86400
 
     # Dev: skip MAX initData HMAC when true (never in production)
