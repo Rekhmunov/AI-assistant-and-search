@@ -6,6 +6,7 @@ from dataclasses import dataclass
 import httpx
 
 from app.core.config import Settings, get_settings
+from app.services.bot_message_format import prepare_max_message
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +46,7 @@ class MaxBotService:
         if user_id is None:
             return BotSendResult(ok=False, error="no max_user_id")
 
+        text, text_format = prepare_max_message(text, text_format)
         body: dict = {"text": text}
         if text_format in {"markdown", "html"}:
             body["format"] = text_format
