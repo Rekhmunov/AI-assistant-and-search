@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -14,12 +15,95 @@ from app.core.config import Settings, get_settings
 from app.models.subscription import Subscription, SubscriptionStatus
 from app.models.user import Plan, User
 from app.services.bot import MaxBotService
-from app.services.yookassa import YooKassaError, get_payment, list_all_payments
+from app.services.yookassa import (
+    YooKassaError,
+    get_payment,
+    get_receipt_url_for_payment,
+    list_all_payments,
+)
 
 logger = logging.getLogger(__name__)
 
 PAYMENT_PROCESSING_STATUSES = frozenset({"pending", "waiting_for_capture"})
 RECENT_PENDING_WINDOW = timedelta(hours=2)
+_MAX_PRO_NOTIFY_TTL_SEC = 30 * 86400
+
+
+async def _max_pro_notify_lock(payment_id: str) -> bool:
+    from app.api.deps import get_redis
+
+    redis = await get_redis()
+    key = f"max_pro_notify:{payment_id}"
+    return bool(await redis.set(key, "1", nx=True, ex=_MAX_PRO_NOTIFY_TTL_SEC))
+
+
+async def _max_pro_receipt_lock(payment_id: str) -> bool:
+    from app.api.deps import get_redis
+
+    redis = await get_redis()
+    key = f"max_pro_receipt:{payment_id}"
+    return bool(await redis.set(key, "1", nx=True, ex=_MAX_PRO_NOTIFY_TTL_SEC))
+
+
+async def _send_max_receipt_link(
+    max_user_id: int,
+    payment_id: str,
+    *,
+    settings: Settings,
+) -> None:
+    receipt_url = await get_receipt_url_for_payment(
+        payment_id,
+        max_attempts=20,
+        delay_sec=5.0,
+        settings=settings,
+    )
+    if not receipt_url:
+        logger.warning("Receipt URL not found for payment %s — skip MAX receipt message", payment_id)
+        return
+
+    bot = MaxBotService(settings)
+    result = await bot.send_message(
+        max_user_id,
+        f"[Чек об оплате]({receipt_url})",
+        text_format="markdown",
+    )
+    if not result.ok:
+        logger.warning(
+            "Failed to send receipt to MAX user %s for payment %s: %s",
+            max_user_id,
+            payment_id,
+            result.error,
+        )
+
+
+async def notify_max_pro_payment_success(
+    user: User,
+    *,
+    payment_id: str | None = None,
+    settings: Settings | None = None,
+) -> None:
+    """Notify MAX user about Pro activation and send fiscal receipt link when ready."""
+    settings = settings or get_settings()
+    if not user.max_user_id:
+        return
+
+    payment_id = (payment_id or "").strip()
+    if payment_id and not payment_id.startswith("stub-"):
+        if not await _max_pro_notify_lock(payment_id):
+            logger.info("MAX Pro notify already sent for payment %s", payment_id)
+            return
+
+    bot = MaxBotService(settings)
+    await bot.send_message(user.max_user_id, "Подписка Pro активирована 🎉")
+
+    if not payment_id or payment_id.startswith("stub-"):
+        return
+    if not await _max_pro_receipt_lock(payment_id):
+        return
+
+    asyncio.create_task(
+        _send_max_receipt_link(user.max_user_id, payment_id, settings=settings)
+    )
 
 
 async def activate_pro_for_user(
@@ -28,14 +112,18 @@ async def activate_pro_for_user(
     *,
     settings: Settings | None = None,
     notify_max: bool = True,
+    payment_id: str | None = None,
 ) -> None:
     settings = settings or get_settings()
     user.plan = Plan.PRO
     user.plan_expires_at = datetime.now(timezone.utc) + timedelta(days=settings.pro_duration_days)
     await db.flush()
     if notify_max and user.max_user_id:
-        bot = MaxBotService()
-        await bot.send_message(user.max_user_id, "Подписка Pro активирована 🎉")
+        if payment_id:
+            await notify_max_pro_payment_success(user, payment_id=payment_id, settings=settings)
+        else:
+            bot = MaxBotService(settings)
+            await bot.send_message(user.max_user_id, "Подписка Pro активирована 🎉")
 
 
 async def _reload_user_plan(db: AsyncSession, user: User) -> None:
@@ -75,14 +163,27 @@ async def activate_subscription_record(
     user: User,
     *,
     settings: Settings | None = None,
+    payment_id: str | None = None,
 ) -> bool:
     """Mark subscription active and upgrade user plan to Pro."""
     if sub.status != SubscriptionStatus.ACTIVE:
         sub.status = SubscriptionStatus.ACTIVE
         sub.activated_at = datetime.now(timezone.utc)
 
+    resolved_payment_id = (payment_id or sub.yookassa_payment_id or "").strip() or None
     if user.plan != Plan.PRO:
-        await activate_pro_for_user(db, user, settings=settings)
+        await activate_pro_for_user(
+            db,
+            user,
+            settings=settings,
+            payment_id=resolved_payment_id,
+        )
+    elif user.max_user_id and resolved_payment_id and not resolved_payment_id.startswith("stub-"):
+        await notify_max_pro_payment_success(
+            user,
+            payment_id=resolved_payment_id,
+            settings=settings,
+        )
 
     return user.plan == Plan.PRO
 
@@ -294,7 +395,13 @@ async def activate_from_yookassa_payment(
             )
             return False
 
-    upgraded = await activate_subscription_record(db, sub, target_user, settings=settings)
+    upgraded = await activate_subscription_record(
+        db,
+        sub,
+        target_user,
+        settings=settings,
+        payment_id=payment_id,
+    )
     await _reload_user_plan(db, target_user)
     return upgraded and target_user.plan == Plan.PRO
 
@@ -473,7 +580,12 @@ async def recover_pro_for_user(
         payment = payments_by_id.get(payment_id) if payment_id else None
         if payment is not None and payment.get("status") not in (None, "succeeded"):
             continue
-        await activate_pro_for_user(db, user, settings=settings)
+        await activate_pro_for_user(
+            db,
+            user,
+            settings=settings,
+            payment_id=payment_id or None,
+        )
         if sub.activated_at is None:
             sub.activated_at = datetime.now(timezone.utc)
         activated = await _activation_success(

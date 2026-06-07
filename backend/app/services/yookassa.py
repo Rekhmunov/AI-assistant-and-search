@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import uuid
 from datetime import datetime
@@ -14,10 +15,28 @@ from app.core.config import Settings, get_settings
 logger = logging.getLogger(__name__)
 
 YOOKASSA_API = "https://api.yookassa.ru/v3/payments"
+YOOKASSA_RECEIPTS_API = "https://api.yookassa.ru/v3/receipts"
 
 
 class YooKassaError(Exception):
     pass
+
+
+def _yookassa_credentials(settings: Settings) -> tuple[str, str]:
+    shop_id = settings.yookassa_shop_id.strip()
+    secret = settings.yookassa_secret_key.strip()
+    if not shop_id or not secret:
+        raise YooKassaError("YOOKASSA_SHOP_ID или YOOKASSA_SECRET_KEY не заданы")
+    return shop_id, secret
+
+
+def extract_receipt_url(receipt: dict[str, Any]) -> str | None:
+    """Return fiscal receipt URL from a YooKassa receipt object."""
+    for key in ("fiscal_document_url", "ofd_receipt_url"):
+        url = str(receipt.get(key) or "").strip()
+        if url.startswith("http"):
+            return url
+    return None
 
 
 def format_yookassa_error(err: str) -> str:
@@ -86,10 +105,7 @@ async def create_payment(
     settings: Settings | None = None,
 ) -> dict[str, Any]:
     settings = settings or get_settings()
-    shop_id = settings.yookassa_shop_id.strip()
-    secret = settings.yookassa_secret_key.strip()
-    if not shop_id or not secret:
-        raise YooKassaError("YOOKASSA_SHOP_ID или YOOKASSA_SECRET_KEY не заданы")
+    shop_id, secret = _yookassa_credentials(settings)
 
     tax_system_code: int | None = None
     code = int(settings.yookassa_tax_system_code or 0)
@@ -154,10 +170,7 @@ async def get_payment(
     settings: Settings | None = None,
 ) -> dict[str, Any]:
     settings = settings or get_settings()
-    shop_id = settings.yookassa_shop_id.strip()
-    secret = settings.yookassa_secret_key.strip()
-    if not shop_id or not secret:
-        raise YooKassaError("YOOKASSA_SHOP_ID или YOOKASSA_SECRET_KEY не заданы")
+    shop_id, secret = _yookassa_credentials(settings)
 
     url = f"{YOOKASSA_API}/{payment_id}"
     try:
@@ -189,10 +202,7 @@ async def list_payments(
 ) -> tuple[list[dict[str, Any]], str | None]:
     """List YooKassa payments (newest first). Returns (items, next_cursor)."""
     settings = settings or get_settings()
-    shop_id = settings.yookassa_shop_id.strip()
-    secret = settings.yookassa_secret_key.strip()
-    if not shop_id or not secret:
-        raise YooKassaError("YOOKASSA_SHOP_ID или YOOKASSA_SECRET_KEY не заданы")
+    shop_id, secret = _yookassa_credentials(settings)
 
     params: dict[str, Any] = {
         "limit": min(max(limit, 1), 100),
@@ -258,3 +268,126 @@ async def list_all_payments(
         if not cursor:
             break
     return all_items
+
+
+async def list_receipts(
+    *,
+    payment_id: str | None = None,
+    limit: int = 10,
+    cursor: str | None = None,
+    settings: Settings | None = None,
+) -> tuple[list[dict[str, Any]], str | None]:
+    """List YooKassa receipts. Returns (items, next_cursor)."""
+    settings = settings or get_settings()
+    shop_id, secret = _yookassa_credentials(settings)
+
+    params: dict[str, Any] = {"limit": min(max(limit, 1), 100)}
+    if payment_id:
+        params["payment_id"] = payment_id.strip()
+    if cursor:
+        params["cursor"] = cursor
+
+    try:
+        async with httpx.AsyncClient(timeout=45.0) as client:
+            resp = await client.get(
+                YOOKASSA_RECEIPTS_API,
+                params=params,
+                auth=(shop_id, secret),
+            )
+    except httpx.HTTPError as e:
+        logger.exception("YooKassa list receipts network error")
+        raise YooKassaError(f"Сеть: {e}") from e
+
+    if resp.status_code >= 400:
+        detail = (resp.text or "")[:400]
+        raise YooKassaError(f"HTTP {resp.status_code}: {detail}")
+
+    try:
+        data = resp.json()
+    except ValueError as e:
+        snippet = (resp.text or "")[:200]
+        raise YooKassaError(f"Некорректный ответ YooKassa: {snippet}") from e
+
+    items = data.get("items")
+    next_cursor = data.get("next_cursor")
+    return (items if isinstance(items, list) else [], str(next_cursor) if next_cursor else None)
+
+
+async def get_receipt(
+    receipt_id: str,
+    settings: Settings | None = None,
+) -> dict[str, Any]:
+    settings = settings or get_settings()
+    shop_id, secret = _yookassa_credentials(settings)
+
+    url = f"{YOOKASSA_RECEIPTS_API}/{receipt_id.strip()}"
+    try:
+        async with httpx.AsyncClient(timeout=45.0) as client:
+            resp = await client.get(url, auth=(shop_id, secret))
+    except httpx.HTTPError as e:
+        logger.exception("YooKassa get receipt network error")
+        raise YooKassaError(f"Сеть: {e}") from e
+
+    if resp.status_code >= 400:
+        detail = (resp.text or "")[:400]
+        raise YooKassaError(f"HTTP {resp.status_code}: {detail}")
+
+    try:
+        return resp.json()
+    except ValueError as e:
+        snippet = (resp.text or "")[:200]
+        raise YooKassaError(f"Некорректный ответ YooKassa: {snippet}") from e
+
+
+async def get_receipt_url_for_payment(
+    payment_id: str,
+    *,
+    max_attempts: int = 10,
+    delay_sec: float = 3.0,
+    settings: Settings | None = None,
+) -> str | None:
+    """
+    Poll YooKassa receipts API until fiscal receipt URL is available.
+    Receipt registration may lag behind payment.succeeded webhook.
+    """
+    payment_id = payment_id.strip()
+    if not payment_id or payment_id.startswith("stub-"):
+        return None
+
+    settings = settings or get_settings()
+    attempts = max(1, int(max_attempts))
+
+    for attempt in range(attempts):
+        try:
+            receipts, _ = await list_receipts(payment_id=payment_id, settings=settings)
+        except YooKassaError as exc:
+            logger.warning("YooKassa list receipts for %s failed: %s", payment_id, exc)
+            receipts = []
+
+        for receipt in receipts:
+            if receipt.get("type") not in (None, "payment"):
+                continue
+
+            url = extract_receipt_url(receipt)
+            if url:
+                return url
+
+            receipt_id = str(receipt.get("id") or "").strip()
+            if not receipt_id:
+                continue
+            if receipt.get("status") not in (None, "succeeded", "pending"):
+                continue
+
+            try:
+                full_receipt = await get_receipt(receipt_id, settings=settings)
+            except YooKassaError:
+                continue
+
+            url = extract_receipt_url(full_receipt)
+            if url:
+                return url
+
+        if attempt + 1 < attempts:
+            await asyncio.sleep(delay_sec)
+
+    return None

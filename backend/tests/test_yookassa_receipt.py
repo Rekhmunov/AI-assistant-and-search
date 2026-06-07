@@ -1,6 +1,11 @@
 import pytest
 
-from app.services.yookassa import YooKassaError, build_receipt, format_yookassa_error
+from app.services.yookassa import (
+    YooKassaError,
+    build_receipt,
+    extract_receipt_url,
+    format_yookassa_error,
+)
 
 
 def test_build_receipt_basic():
@@ -46,3 +51,17 @@ def test_format_yookassa_error_parses_json_description():
 
 def test_format_yookassa_error_generic_http():
     assert "поддержку" in format_yookassa_error("HTTP 502: bad gateway")
+
+
+def test_extract_receipt_url_prefers_fiscal_document_url():
+    receipt = {"fiscal_document_url": "https://ofd.example/receipt/1"}
+    assert extract_receipt_url(receipt) == "https://ofd.example/receipt/1"
+
+
+def test_extract_receipt_url_falls_back_to_ofd_receipt_url():
+    receipt = {"ofd_receipt_url": "https://ofd.example/receipt/2"}
+    assert extract_receipt_url(receipt) == "https://ofd.example/receipt/2"
+
+
+def test_extract_receipt_url_none_when_missing():
+    assert extract_receipt_url({}) is None
