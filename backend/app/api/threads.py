@@ -32,6 +32,7 @@ from app.services.search_pending import (
     clear_search_pending,
     get_search_pending,
     is_pending_zombie,
+    pending_active_seconds,
 )
 from app.services.service_incidents import record_service_incident
 import redis.asyncio as redis
@@ -161,6 +162,7 @@ async def get_thread_answer_status(
 
     active = pending_raw is not None
     stale = not active and age_sec >= STALE_AFTER_SEC
+    active_age_sec = pending_active_seconds(pending_raw) if pending_raw else None
 
     phase = pending_raw.get("phase") if pending_raw else None
     needs_search = pending_raw.get("needs_search") if pending_raw else None
@@ -171,6 +173,7 @@ async def get_thread_answer_status(
         pending=True,
         active=active,
         stale=stale,
+        active_age_sec=active_age_sec,
         phase=str(phase) if phase else ("routing" if not stale else None),
         needs_search=bool(needs_search) if needs_search is not None else None,
         custom_status=str(custom_status) if custom_status else None,

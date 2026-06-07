@@ -111,7 +111,7 @@ const PENDING_ANSWER_POLL_MAX_MS = 10 * 60 * 1000;
 const AUTO_RESUME_GRACE_MS = 1500;
 const AUTO_RESUME_MAX_ATTEMPTS = 3;
 /** Если active слишком долго — принудительно возобновляем (зависший Redis pending). */
-const PENDING_ACTIVE_FORCE_RESUME_MS = 75_000;
+const PENDING_ACTIVE_FORCE_RESUME_SEC = 8;
 
 function answerStatusPhaseToSearchPhase(
   phase: string | null | undefined,
@@ -697,14 +697,15 @@ export function Thread() {
   const pendingTurn = turns[turns.length - 1];
   const pendingTurnKey = pendingTurn?.preparing ? pendingTurn.key : null;
 
-  const pendingPollAgeMs =
+  const pendingPollAgeSec =
     pendingPollStartedAtRef.current !== null
-      ? Date.now() - pendingPollStartedAtRef.current
+      ? (Date.now() - pendingPollStartedAtRef.current) / 1000
       : 0;
+  const pendingActiveAgeSec = answerStatus?.active_age_sec ?? pendingPollAgeSec;
   const forceResumeActive =
     answerStatusActive &&
     !answerStatusStale &&
-    pendingPollAgeMs >= PENDING_ACTIVE_FORCE_RESUME_MS;
+    pendingActiveAgeSec >= PENDING_ACTIVE_FORCE_RESUME_SEC;
 
   useEffect(() => {
     if (streaming || !threadHasPending || !activeThreadKey || !pendingTurnKey) return;

@@ -91,6 +91,7 @@ class AnswerStatusOut(BaseModel):
     pending: bool
     active: bool
     stale: bool
+    active_age_sec: float | None = None
     phase: str | None = None
     needs_search: bool | None = None
     custom_status: str | None = None

@@ -16,7 +16,7 @@ PENDING_KEY_PREFIX = "search:pending:"
 PENDING_TTL_SEC = 15 * 60
 STALE_AFTER_SEC = 45
 # Макс. время «живого» pending без завершения — иначе зависший (reload / обрыв SSE).
-PENDING_ZOMBIE_SEC = 75
+PENDING_ZOMBIE_SEC = 20
 
 SearchPhase = str  # routing | searching | answering | image_generating | document_generating
 

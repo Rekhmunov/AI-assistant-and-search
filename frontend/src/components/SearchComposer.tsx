@@ -22,7 +22,7 @@ import {
   MAX_ATTACHMENTS,
   MAX_FILE_BYTES_FREE,
   MAX_FILE_BYTES_PRO,
-  fileKind,
+  resolveFileKind,
   type FileKind,
   validateFile,
 } from "../constants/files";
@@ -227,20 +227,19 @@ export function SearchComposer({
 
     for (const raw of batch) {
       const file = await prepareFileForUpload(raw);
-      const err = validateFile(file, maxBytes, plan, expected);
+      const kind = (await resolveFileKind(file, expected)) ?? "document";
+      const err = validateFile(file, maxBytes, plan, expected, kind);
       if (err) {
         setUploadFailure(err.message, err.suggestPro);
         continue;
       }
-
-      const kind = expected ?? fileKind(file) ?? "document";
       const localKey = `up-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
       const previewUrl = kind === "image" ? URL.createObjectURL(file) : undefined;
       const pending: UploadingItem = { localKey, filename: file.name, kind, previewUrl };
       setUploading((prev) => [...prev, pending]);
 
       try {
-        const uploaded = await uploadFile(token ?? null, file);
+        const uploaded = await uploadFile(token ?? null, file, kind);
         if (cancelledUploadsRef.current.delete(localKey)) {
           if (previewUrl) URL.revokeObjectURL(previewUrl);
           continue;

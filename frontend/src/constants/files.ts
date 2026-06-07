@@ -35,13 +35,52 @@ export function fileKind(file: File): FileKind | null {
   return null;
 }
 
+/** Sniff image format from magic bytes (MAX WebView often omits name/MIME). */
+export function sniffImageExt(data: Uint8Array): string | null {
+  if (data.length >= 3 && data[0] === 0xff && data[1] === 0xd8 && data[2] === 0xff) return "jpg";
+  if (
+    data.length >= 8 &&
+    data[0] === 0x89 &&
+    data[1] === 0x50 &&
+    data[2] === 0x4e &&
+    data[3] === 0x47
+  ) {
+    return "png";
+  }
+  if (data.length >= 12 && data[0] === 0x52 && data[1] === 0x49 && data[2] === 0x46 && data[3] === 0x46) {
+    if (data[8] === 0x57 && data[9] === 0x45 && data[10] === 0x42 && data[11] === 0x50) return "webp";
+  }
+  if (data.length >= 12 && data[4] === 0x66 && data[5] === 0x74 && data[6] === 0x79 && data[7] === 0x70) {
+    const brand = String.fromCharCode(data[8], data[9], data[10], data[11]);
+    if (["heic", "heix", "hevc", "mif1", "msf1", "heif"].includes(brand)) return "heic";
+  }
+  return null;
+}
+
+export async function sniffFileKind(file: File): Promise<FileKind | null> {
+  if (file.size < 4) return null;
+  const buf = await file.slice(0, 16).arrayBuffer();
+  return sniffImageExt(new Uint8Array(buf)) ? "image" : null;
+}
+
+/** Resolve kind from name/MIME, byte sniff, or picker hint (MAX). */
+export async function resolveFileKind(file: File, expected?: FileKind): Promise<FileKind | null> {
+  const fromMeta = fileKind(file);
+  if (fromMeta) return fromMeta;
+  const fromSniff = await sniffFileKind(file);
+  if (fromSniff) return fromSniff;
+  if (expected) return expected;
+  return null;
+}
+
 export function validateFile(
   file: File,
   maxBytes: number,
   plan: "free" | "pro" | undefined,
   expected?: FileKind,
+  resolvedKind?: FileKind | null,
 ): FileValidationResult | null {
-  const kind = fileKind(file);
+  const kind = resolvedKind ?? fileKind(file);
   if (!kind) {
     return {
       message:

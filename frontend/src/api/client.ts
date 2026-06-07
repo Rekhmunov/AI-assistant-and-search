@@ -121,6 +121,7 @@ export interface AnswerStatus {
   pending: boolean;
   active: boolean;
   stale: boolean;
+  active_age_sec: number | null;
   phase: string | null;
   needs_search: boolean | null;
   custom_status: string | null;
@@ -788,19 +789,28 @@ function parseUploadErrorDetail(detail: UploadErrorDetail | undefined): FileUplo
   return new FileUploadError(message, Boolean(detail.suggest_pro));
 }
 
-function uploadFilename(file: File): string {
+async function uploadFilename(file: File, kind?: "document" | "image"): Promise<string> {
   const name = file.name?.trim();
-  if (name) return name;
-  if (file.type?.startsWith("image/")) {
-    const ext = file.type.split("/")[1]?.replace("jpeg", "jpg") || "jpg";
-    return `photo.${ext}`;
+  if (name && name !== "blob" && name.includes(".")) return name;
+  if (file.type?.startsWith("image/") || kind === "image") {
+    const ext = file.type?.split("/")[1]?.replace("jpeg", "jpg");
+    if (ext && ext !== "octet-stream") return `photo.${ext}`;
+    const { sniffImageExt } = await import("../constants/files");
+    const buf = await file.slice(0, 16).arrayBuffer();
+    const sniffed = sniffImageExt(new Uint8Array(buf));
+    return `photo.${sniffed ?? "jpg"}`;
   }
+  if (name && name !== "blob") return name;
   return "document.bin";
 }
 
-export async function uploadFile(token: string | null, file: File): Promise<UploadedFile> {
+export async function uploadFile(
+  token: string | null,
+  file: File,
+  kind?: "document" | "image",
+): Promise<UploadedFile> {
   const form = new FormData();
-  form.append("file", file, uploadFilename(file));
+  form.append("file", file, await uploadFilename(file, kind));
   let res: Response;
   try {
     res = await fetch(`${API_BASE}/api/files/upload`, {
@@ -815,6 +825,11 @@ export async function uploadFile(token: string | null, file: File): Promise<Uplo
     throw new FileUploadError("Не удалось загрузить файл. Проверьте соединение и попробуйте снова.");
   }
   if (!res.ok) {
+    if (res.status === 413) {
+      throw new FileUploadError(
+        "Файл слишком большой для загрузки. Попробуйте уменьшить фото или перейдите на Pro.",
+      );
+    }
     const err = await res.json().catch(() => ({}));
     const detail = (err as { detail?: UploadErrorDetail }).detail;
     throw parseUploadErrorDetail(detail);

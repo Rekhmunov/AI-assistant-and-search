@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 from app.api.threads import get_thread_answer_status
 from app.models.message import MessageRole
-from app.services.search_pending import PENDING_ZOMBIE_SEC, STALE_AFTER_SEC
+from app.services.search_pending import PENDING_ZOMBIE_SEC, STALE_AFTER_SEC, pending_active_seconds
 
 
 def _msg(role, content: str, *, age_sec: int = 0):
@@ -44,6 +44,40 @@ def test_answer_status_stale_orphan_user_message():
     assert out.active is False
     assert out.stale is True
     assert out.query == "вопрос без ответа"
+
+
+def test_answer_status_returns_active_age_sec():
+    thread_id = uuid.uuid4()
+    user = MagicMock()
+    user.id = uuid.uuid4()
+
+    thread = MagicMock()
+    thread.id = thread_id
+    thread.messages = [_msg(MessageRole.USER, "активный поиск", age_sec=5)]
+
+    db = AsyncMock()
+    db.execute = AsyncMock(
+        return_value=MagicMock(
+            scalar_one_or_none=MagicMock(return_value=thread),
+        ),
+    )
+
+    started = (datetime.now(timezone.utc) - timedelta(seconds=12)).isoformat()
+    pending_json = (
+        f'{{"user_message_id": "{uuid.uuid4()}", "phase": "answering", '
+        f'"started_at": "{started}", "needs_search": true}}'
+    )
+
+    redis = AsyncMock()
+    redis.get = AsyncMock(return_value=pending_json)
+
+    actor = MagicMock()
+    actor.user = user
+
+    out = asyncio.run(get_thread_answer_status(thread_id, db, actor, redis))
+    assert out.active is True
+    assert out.active_age_sec is not None
+    assert out.active_age_sec >= 10
 
 
 def test_answer_status_clears_zombie_pending():

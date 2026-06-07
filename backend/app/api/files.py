@@ -295,13 +295,31 @@ async def upload_file(
     file_id = uuid4()
 
     if ext in IMAGE_EXT:
+        ocr_data = data
+        ocr_ext = ext
         try:
             ocr_data, ocr_ext = prepare_image_for_ocr(data, ext)
             if ocr_ext != ext:
                 filename = normalize_filename(filename, ocr_ext)
                 ext = ocr_ext
         except ValueError as e:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+            if ext in ("heic", "heif"):
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+            # MAX / WebView: иногда битые метаданные — пробуем открыть как JPEG/PNG по сигнатуре.
+            from app.services.file_format import sniff_ext_from_bytes
+
+            sniffed = sniff_ext_from_bytes(data)
+            if sniffed in IMAGE_EXT:
+                try:
+                    ocr_data, ocr_ext = prepare_image_for_ocr(data, sniffed)
+                    filename = normalize_filename(filename, ocr_ext)
+                    ext = ocr_ext
+                except ValueError:
+                    ocr_data, ocr_ext = data, sniffed
+                    filename = normalize_filename(filename, ocr_ext)
+                    ext = ocr_ext
+            else:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
 
         storage_key = save_upload_bytes(user.id, file_id, ocr_data, ext)
         ocr_text = ocr_image_bytes(ocr_data)
