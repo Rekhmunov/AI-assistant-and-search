@@ -504,8 +504,8 @@ export function Profile() {
       </div>
 
       {!isDesktop && (
-        <div className="mobile-new-thread-bar">
-          <MobileNewThreadButton onClick={() => navigate("/")} />
+        <div className="mobile-new-thread-bar mobile-new-thread-bar--docked">
+          <MobileNewThreadButton variant="labeled" onClick={() => navigate("/")} />
         </div>
       )}
 

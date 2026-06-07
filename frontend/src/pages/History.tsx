@@ -258,7 +258,7 @@ export function History() {
       </div>
 
       {!isDesktop && selectionMode && (
-        <div className="history-bulk-bar-wrap">
+        <div className="history-bulk-bar-wrap history-bulk-bar-wrap--docked">
           <HistoryBulkBar
             selectedCount={selectedCount}
             totalVisible={visibleThreads.length}
@@ -279,8 +279,8 @@ export function History() {
       />
 
       {!isDesktop && !selectionMode && (
-        <div className="mobile-new-thread-bar">
-          <MobileNewThreadButton onClick={() => navigate("/")} />
+        <div className="mobile-new-thread-bar mobile-new-thread-bar--docked">
+          <MobileNewThreadButton variant="labeled" onClick={() => navigate("/")} />
         </div>
       )}
     </div>
