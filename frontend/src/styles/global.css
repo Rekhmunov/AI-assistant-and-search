@@ -23,8 +23,9 @@
   --desktop-search-max-width: min(2160px, calc(100vw - var(--sidebar-width) - 48px));
   /* Веб: колонка треда по центру (вопрос / ответ / composer) */
   --desktop-thread-column-width: 70%;
-  /* Composer: на ~20% уже прежней ширины (80% → 64%) */
-  --desktop-thread-composer-width: 64%;
+  /* Тред: composer визуально совпадает с колонкой ответа (с учётом padding .page) */
+  --desktop-thread-composer-width: 80%;
+  /* Главная: поле ввода уже на ~20% */
   --desktop-composer-inline-width: 80%;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   color: var(--text);
