@@ -18,10 +18,9 @@
   --mobile-header-side-width: calc(var(--mobile-header-btn-size) * 2 + var(--mobile-header-btn-gap));
   --mobile-header-x-padding: 12px;
   --composer-nav-gap: 10px;
-  /* MAX/мобилка тред: composer по содержимому; при фокусе — доли под шапкой */
-  --thread-mobile-conversation-pct-focused: 62%;
-  --thread-mobile-composer-pct-focused: 38%;
+  /* MAX/мобилка тред: composer по содержимому (без пустого футера при фокусе) */
   --thread-mobile-composer-bottom-inset: max(12px, env(safe-area-inset-bottom, 0px));
+  --thread-mobile-composer-input-max-h: min(30dvh, 168px);
   --sidebar-width: 220px;
   --desktop-nav-min: 900px;
   --desktop-search-max-width: min(2160px, calc(100vw - var(--sidebar-width) - 48px));
@@ -385,12 +384,6 @@ body:has(.page-thread) {
     padding-bottom: 8px;
   }
 
-  .page-thread--mobile .thread-mobile-body:has(.composer-wrap--focused) .thread-conversation {
-    flex: 1 1 var(--thread-mobile-conversation-pct-focused);
-    min-height: 0;
-    max-height: var(--thread-mobile-conversation-pct-focused);
-  }
-
   .page-thread--mobile .thread-conversation--mobile-tabs {
     height: 100%;
   }
@@ -407,7 +400,7 @@ body:has(.page-thread) {
     position: static;
     display: flex;
     flex-direction: column;
-    justify-content: flex-end;
+    justify-content: flex-start;
     width: 100%;
     max-width: none;
     margin: 0;
@@ -415,13 +408,6 @@ body:has(.page-thread) {
     background: var(--bg);
     border-top: 1px solid var(--border-subtle);
     overflow: visible;
-  }
-
-  .page-thread--mobile .thread-mobile-body:has(.composer-wrap--focused) .composer-wrap--thread-mobile {
-    flex: 0 0 var(--thread-mobile-composer-pct-focused);
-    min-height: 0;
-    max-height: var(--thread-mobile-composer-pct-focused);
-    overflow: hidden;
   }
 
   .page-thread--mobile .composer-wrap--docked.composer-wrap--thread-mobile .composer-outer-row--thread-mobile {
@@ -480,27 +466,71 @@ body:has(.page-thread) {
     border-radius: 14px;
   }
 
-  .page-thread--mobile .search-composer--thread-mobile.search-composer--focused {
-    flex: 1 1 auto;
+  .page-thread--mobile .composer-wrap--thread-mobile.composer-wrap--focused .composer-outer-row--thread-mobile {
+    flex: 0 0 auto;
   }
 
+  .page-thread--mobile .search-composer--thread-mobile.search-composer--focused {
+    flex: 0 0 auto;
+    padding: 8px 10px 6px;
+  }
+
+  .page-thread--mobile .search-composer--thread-mobile.search-composer--focused .composer-row,
   .page-thread--mobile .search-composer--thread-mobile.search-composer--focused .composer-row--text-only {
-    flex: 1;
+    flex: 0 0 auto;
+    align-items: flex-start;
     min-height: 0;
   }
 
   .page-thread--mobile .search-composer--thread-mobile.search-composer--focused .composer-input-wrap {
-    flex: 1;
-    min-height: 0;
-    display: flex;
-    flex-direction: column;
+    flex: 1 1 auto;
+    min-width: 0;
+    align-items: stretch;
   }
 
   .page-thread--mobile .search-composer--thread-mobile.search-composer--focused .composer-input {
-    flex: 1;
+    flex: 0 1 auto;
+    width: 100%;
     min-height: 44px;
-    max-height: 100%;
+    max-height: var(--thread-mobile-composer-input-max-h);
     -webkit-overflow-scrolling: touch;
+    overflow-y: auto;
+  }
+
+  .page-thread--mobile .search-composer--thread-mobile.search-composer--focused .composer-toolbar {
+    flex-shrink: 0;
+    align-items: center;
+    min-height: 40px;
+    margin-top: 4px;
+    padding-top: 0;
+  }
+
+  .page-thread--mobile .search-composer--thread-mobile.search-composer--focused .composer-attach-menu,
+  .page-thread--mobile .search-composer--thread-mobile.search-composer--focused .composer-toolbar-actions {
+    display: inline-flex;
+    align-items: center;
+    align-self: center;
+    height: 36px;
+  }
+
+  .page-thread--mobile .search-composer--thread-mobile.search-composer--focused .composer-icon,
+  .page-thread--mobile .search-composer--thread-mobile.search-composer--focused .composer-send {
+    width: 36px;
+    height: 36px;
+    align-self: center;
+    margin: 0;
+  }
+
+  .page-thread--mobile .search-composer--thread-mobile.search-composer--focused .composer-icon--attach {
+    width: 36px;
+    height: 36px;
+  }
+
+  .page-thread--mobile .search-composer--thread-mobile.search-composer--focused .composer-model-trigger {
+    height: 36px;
+    display: inline-flex;
+    align-items: center;
+    align-self: center;
   }
 
   .page-thread--mobile .search-composer--thread-mobile:not(.search-composer--focused) .composer-input {
@@ -515,7 +545,7 @@ body:has(.page-thread) {
   }
 
   .page-thread--mobile .thread-mobile-body:has(.composer-wrap--focused) > .thread-scroll-down {
-    bottom: calc(var(--thread-mobile-composer-pct-focused) + 12px);
+    bottom: calc(112px + var(--thread-mobile-composer-bottom-inset));
   }
 
   .page-thread--mobile .composer-wrap--docked {
@@ -3999,11 +4029,6 @@ body:has(.page-thread) {
 }
 
 .search-composer--thread-mobile .composer-input-wrap {
-  align-items: flex-start;
-}
-
-.page-thread--mobile .search-composer--thread-mobile.search-composer--focused .composer-row--text-only,
-.page-thread--mobile .search-composer--thread-mobile.search-composer--focused .composer-input-wrap {
   align-items: flex-start;
 }
 
