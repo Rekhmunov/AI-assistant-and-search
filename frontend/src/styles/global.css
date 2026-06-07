@@ -5766,19 +5766,50 @@ body:has(.page-thread) {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  flex-wrap: wrap;
 }
 
 .profile-support-card .profile-card-title {
   margin: 0;
+  flex: 1;
+  min-width: 0;
 }
 
-.profile-support-write-btn {
-  width: auto;
+.profile-support-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   flex-shrink: 0;
-  padding: 6px 14px;
-  font-size: 0.8125rem;
-  line-height: 1.3;
+}
+
+.profile-support-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.profile-support-icon-btn svg {
+  display: block;
+  flex-shrink: 0;
+}
+
+.profile-support-icon-btn:hover {
+  background: var(--surface-hover);
+  border-color: var(--border-subtle);
+}
+
+.profile-support-icon-btn--active {
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+  border-color: rgba(32, 128, 141, 0.25);
+  color: var(--accent);
 }
 
 .profile-support-replies {
@@ -5810,41 +5841,6 @@ body:has(.page-thread) {
   color: var(--muted);
 }
 
-.profile-support-list-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  margin: 0 0 12px;
-  padding: 0;
-  border: none;
-  background: none;
-  color: var(--accent);
-  font: inherit;
-  font-size: 0.875rem;
-  font-weight: 500;
-  cursor: pointer;
-  text-align: left;
-}
-
-.profile-support-list-toggle:hover {
-  text-decoration: underline;
-}
-
-.profile-support-list-chevron {
-  display: inline-block;
-  width: 0;
-  height: 0;
-  border-top: 5px solid transparent;
-  border-bottom: 5px solid transparent;
-  border-left: 6px solid currentColor;
-  transition: transform 0.2s ease;
-  transform: rotate(0deg);
-}
-
-.profile-support-list-toggle--open .profile-support-list-chevron {
-  transform: rotate(90deg);
-}
-
 .profile-support-empty {
   margin: 0;
   font-size: 0.85rem;
@@ -5862,7 +5858,7 @@ body:has(.page-thread) {
 }
 
 .profile-support-tickets {
-  margin-top: 4px;
+  margin-top: 12px;
   padding-top: 12px;
   border-top: 1px solid var(--border);
 }

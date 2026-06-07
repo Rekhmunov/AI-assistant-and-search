@@ -16,6 +16,7 @@ import { AuthGate } from "../components/AuthGate";
 import { LegalDocumentModal } from "../components/LegalDocumentModal";
 import { MobileNewThreadButton } from "../components/MobileNewThreadButton";
 import { MobilePageHeader } from "../components/MobilePageHeader";
+import { SupportListIcon, SupportWriteIcon } from "../components/MobileNavIcons";
 import { ProPurchaseBlockedModal } from "../components/ProPurchaseBlockedModal";
 import { ProPaymentStatusModal, type ProPaymentModalState } from "../components/ProPaymentStatusModal";
 import { SupportFormModal } from "../components/SupportFormModal";
@@ -457,28 +458,31 @@ export function Profile() {
                 <span className="profile-support-title-badge" aria-hidden />
               )}
             </h2>
-            <button
-              type="button"
-              className="btn-secondary profile-support-write-btn"
-              onClick={() => {
-                setSupportSource("general");
-                setSupportModalOpen(true);
-              }}
-            >
-              {t("profileSupportWrite")}
-            </button>
+            <div className="profile-support-actions">
+              <button
+                type="button"
+                className="profile-support-icon-btn"
+                onClick={() => {
+                  setSupportSource("general");
+                  setSupportModalOpen(true);
+                }}
+                aria-label={t("profileSupportWrite")}
+                title={t("profileSupportWrite")}
+              >
+                <SupportWriteIcon />
+              </button>
+              <button
+                type="button"
+                className={`profile-support-icon-btn${supportListOpen ? " profile-support-icon-btn--active" : ""}`}
+                aria-expanded={supportListOpen}
+                aria-label={supportListOpen ? t("profileSupportCloseList") : t("profileSupportOpenList")}
+                title={supportListOpen ? t("profileSupportCloseList") : t("profileSupportOpenList")}
+                onClick={() => setSupportListOpen((open) => !open)}
+              >
+                <SupportListIcon />
+              </button>
+            </div>
           </div>
-          <button
-            type="button"
-            className={`profile-support-list-toggle${supportListOpen ? " profile-support-list-toggle--open" : ""}`}
-            aria-expanded={supportListOpen}
-            onClick={() => setSupportListOpen((open) => !open)}
-          >
-            <span className="profile-support-list-chevron" aria-hidden />
-            <span>
-              {supportListOpen ? t("profileSupportCloseList") : t("profileSupportOpenList")}
-            </span>
-          </button>
           {supportListOpen && token && (
             <SupportTicketsPanel
               token={token}

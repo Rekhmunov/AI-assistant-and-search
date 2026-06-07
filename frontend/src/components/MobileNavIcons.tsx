@@ -67,3 +67,38 @@ export function SearchIcon() {
     </svg>
   );
 }
+
+export function SupportWriteIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        d="M5 6.5h14a1.5 1.5 0 011.5 1.5v9a1.5 1.5 0 01-1.5 1.5H9l-4 2.5V8a1.5 1.5 0 011.5-1.5z"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M8 10h8M8 13h5"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+export function SupportListIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        d="M8 7h12M8 12h12M8 17h12"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+      />
+      <circle cx="4" cy="7" r="1.25" fill="currentColor" />
+      <circle cx="4" cy="12" r="1.25" fill="currentColor" />
+      <circle cx="4" cy="17" r="1.25" fill="currentColor" />
+    </svg>
+  );
+}
