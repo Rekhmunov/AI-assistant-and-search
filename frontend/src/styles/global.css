@@ -1350,6 +1350,66 @@ body:has(.page-thread) {
   color: var(--text);
 }
 
+.composer-attachment--image {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 0;
+  border: none;
+  background: transparent;
+}
+
+.composer-attachment-image-wrap {
+  position: relative;
+  display: inline-flex;
+  flex-shrink: 0;
+}
+
+.composer-attachment--image .composer-attachment-thumb {
+  width: 52px;
+  height: 52px;
+  border-radius: 10px;
+  border: 1px solid var(--border-subtle);
+  display: block;
+}
+
+.composer-attachment-remove--image {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
+}
+
+.composer-attachment-remove--image:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.composer-attachment-status {
+  font-size: 0.75rem;
+  color: var(--muted);
+  line-height: 1.2;
+  max-width: 52px;
+  text-align: center;
+}
+
+@media (min-width: 900px) {
+  .composer-attachment--image .composer-attachment-thumb {
+    width: 64px;
+    height: 64px;
+  }
+
+  .composer-attachment-status {
+    max-width: 64px;
+  }
+}
+
 .composer-input-wrap {
   position: relative;
   flex: 1;

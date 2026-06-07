@@ -97,6 +97,7 @@ export function SearchComposer({
   const [attachMenuOpen, setAttachMenuOpen] = useState(false);
   const blurTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const attachMenuOpenRef = useRef(false);
+  const cancelledUploadsRef = useRef<Set<string>>(new Set());
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const COMPOSER_MAX_HEIGHT_RATIO = 0.3;
@@ -181,6 +182,13 @@ export function SearchComposer({
     onAttachmentsChange(attachments.filter((x) => x.id !== id));
   };
 
+  const removeUploading = (localKey: string) => {
+    const removed = uploading.find((u) => u.localKey === localKey);
+    if (removed?.previewUrl) URL.revokeObjectURL(removed.previewUrl);
+    cancelledUploadsRef.current.add(localKey);
+    setUploading((prev) => prev.filter((u) => u.localKey !== localKey));
+  };
+
   const onFilesPicked = async (files: FileList | null, expected?: FileKind) => {
     if (!files?.length || !token) return;
 
@@ -211,6 +219,10 @@ export function SearchComposer({
 
       try {
         const uploaded = await uploadFile(token, file);
+        if (cancelledUploadsRef.current.delete(localKey)) {
+          if (previewUrl) URL.revokeObjectURL(previewUrl);
+          continue;
+        }
         onAttachmentsChange((prev) => [
           ...prev,
           {
@@ -386,6 +398,7 @@ export function SearchComposer({
                 kind={u.kind}
                 previewUrl={u.previewUrl}
                 processing
+                onRemove={() => removeUploading(u.localKey)}
               />
             ))}
           </div>
@@ -560,15 +573,47 @@ function AttachmentChip({
   processing?: boolean;
   onRemove?: () => void;
 }) {
+  const isImagePreview = kind === "image" && Boolean(previewUrl);
+
+  if (isImagePreview) {
+    return (
+      <div
+        className={`composer-attachment composer-attachment--image${processing ? " composer-attachment--processing" : ""}`}
+      >
+        <div className="composer-attachment-image-wrap">
+          <img src={previewUrl} alt="" className="composer-attachment-thumb" />
+          {onRemove && (
+            <button
+              type="button"
+              className="composer-attachment-remove composer-attachment-remove--image"
+              aria-label={t("attachRemove")}
+              onPointerDown={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+              }}
+              onClick={(e) => {
+                e.stopPropagation();
+                onRemove();
+              }}
+            >
+              <CloseIcon />
+            </button>
+          )}
+        </div>
+        {processing && (
+          <span className="composer-attachment-status" aria-live="polite">
+            {t("attachProcessing")}
+          </span>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div
       className={`composer-attachment${processing ? " composer-attachment--processing" : ""}`}
     >
-      {kind === "image" && previewUrl ? (
-        <img src={previewUrl} alt="" className="composer-attachment-thumb" />
-      ) : (
-        <FileDocIcon />
-      )}
+      <FileDocIcon />
       <span className="composer-attachment-name" title={filename}>
         {processing ? t("attachProcessing") : filename}
       </span>
