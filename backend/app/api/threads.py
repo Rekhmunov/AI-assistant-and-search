@@ -27,7 +27,13 @@ from app.schemas.thread import (
     ThreadListItem,
     ThreadUpdate,
 )
-from app.services.search_pending import STALE_AFTER_SEC, get_search_pending
+from app.services.search_pending import (
+    STALE_AFTER_SEC,
+    clear_search_pending,
+    get_search_pending,
+    is_pending_zombie,
+)
+from app.services.service_incidents import record_service_incident
 import redis.asyncio as redis
 from app.services.message_attachments import message_attachments_out
 
@@ -140,8 +146,20 @@ async def get_thread_answer_status(
         return AnswerStatusOut(pending=False, active=False, stale=False)
 
     pending_raw = await get_search_pending(redis_client, thread_id)
-    active = pending_raw is not None
     age_sec = (datetime.now(timezone.utc) - last.created_at).total_seconds()
+
+    if pending_raw and is_pending_zombie(pending_raw):
+        preview = (last.content or "")[:120]
+        await record_service_incident(
+            redis_client,
+            service="glosix_search",
+            kind="stale_pending",
+            message=f"Зависший поиск сброшен (thread={thread_id}, query={preview!r})",
+        )
+        await clear_search_pending(redis_client, thread_id)
+        pending_raw = None
+
+    active = pending_raw is not None
     stale = not active and age_sec >= STALE_AFTER_SEC
 
     phase = pending_raw.get("phase") if pending_raw else None

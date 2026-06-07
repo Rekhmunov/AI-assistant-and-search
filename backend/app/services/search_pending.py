@@ -15,6 +15,8 @@ logger = logging.getLogger(__name__)
 PENDING_KEY_PREFIX = "search:pending:"
 PENDING_TTL_SEC = 15 * 60
 STALE_AFTER_SEC = 45
+# Макс. время «живого» pending без завершения — иначе зависший (reload / обрыв SSE).
+PENDING_ZOMBIE_SEC = 75
 
 SearchPhase = str  # routing | searching | answering | image_generating | document_generating
 
@@ -69,6 +71,7 @@ async def update_search_pending(
             data["needs_search"] = needs_search
         if custom_status is not None:
             data["custom_status"] = custom_status
+        data["updated_at"] = datetime.now(timezone.utc).isoformat()
         await redis_client.set(_key(thread_id), json.dumps(data), ex=PENDING_TTL_SEC)
     except Exception:
         logger.warning("update_search_pending failed for thread %s", thread_id, exc_info=True)
@@ -79,6 +82,29 @@ async def clear_search_pending(redis_client: redis.Redis, thread_id: uuid.UUID) 
         await redis_client.delete(_key(thread_id))
     except Exception:
         logger.warning("clear_search_pending failed for thread %s", thread_id, exc_info=True)
+
+
+def pending_active_seconds(pending_raw: dict[str, Any]) -> float | None:
+    started = pending_raw.get("updated_at") or pending_raw.get("started_at")
+    if not started:
+        return None
+    try:
+        raw = str(started).replace("Z", "+00:00")
+        dt = datetime.fromisoformat(raw)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return (datetime.now(timezone.utc) - dt).total_seconds()
+    except (TypeError, ValueError):
+        return None
+
+
+def is_pending_zombie(pending_raw: dict[str, Any] | None) -> bool:
+    if not pending_raw:
+        return False
+    age = pending_active_seconds(pending_raw)
+    if age is None:
+        return False
+    return age >= PENDING_ZOMBIE_SEC
 
 
 async def get_search_pending(redis_client: redis.Redis, thread_id: uuid.UUID) -> dict[str, Any] | None:

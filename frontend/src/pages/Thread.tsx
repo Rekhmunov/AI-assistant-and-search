@@ -110,6 +110,8 @@ const PENDING_ANSWER_POLL_MS = 4000;
 const PENDING_ANSWER_POLL_MAX_MS = 10 * 60 * 1000;
 const AUTO_RESUME_GRACE_MS = 1500;
 const AUTO_RESUME_MAX_ATTEMPTS = 3;
+/** Если active слишком долго — принудительно возобновляем (зависший Redis pending). */
+const PENDING_ACTIVE_FORCE_RESUME_MS = 75_000;
 
 function answerStatusPhaseToSearchPhase(
   phase: string | null | undefined,
@@ -697,10 +699,20 @@ export function Thread() {
   const pendingTurn = turns[turns.length - 1];
   const pendingTurnKey = pendingTurn?.preparing ? pendingTurn.key : null;
 
+  const pendingPollAgeMs =
+    pendingPollStartedAtRef.current !== null
+      ? Date.now() - pendingPollStartedAtRef.current
+      : 0;
+  const forceResumeActive =
+    answerStatusActive &&
+    !answerStatusStale &&
+    pendingPollAgeMs >= PENDING_ACTIVE_FORCE_RESUME_MS;
+
   useEffect(() => {
     if (streaming || !threadHasPending || !activeThreadKey || !pendingTurnKey) return;
     if (!pendingTurn?.preparing || pendingTurn.errorCode || answerHasText(pendingTurn.answer)) return;
-    if (!answerStatus || answerStatusActive) return;
+    if (!answerStatus) return;
+    if (answerStatusActive && !answerStatusStale && !forceResumeActive) return;
 
     const turnKey = pendingTurnKey;
     const priorAttempts =
@@ -719,12 +731,14 @@ export function Thread() {
       return;
     }
 
-    const scheduleKey = `${turnKey}:${priorAttempts}:${answerStatusStale ? "stale" : "wait"}`;
+    const scheduleKey = `${turnKey}:${priorAttempts}:${
+      answerStatusStale || forceResumeActive ? "stale" : "wait"
+    }`;
     if (autoResumeScheduledRef.current === scheduleKey) return;
     autoResumeScheduledRef.current = scheduleKey;
 
     const turnSnapshot = pendingTurn;
-    const delay = answerStatusStale ? 0 : AUTO_RESUME_GRACE_MS;
+    const delay = answerStatusStale || forceResumeActive ? 0 : AUTO_RESUME_GRACE_MS;
     const timer = window.setTimeout(() => {
       void (async () => {
         if (streamingRef.current) return;
@@ -767,6 +781,7 @@ export function Thread() {
     answerStatus,
     answerStatusActive,
     answerStatusStale,
+    forceResumeActive,
     activeThreadKey,
     token,
     queryClient,
