@@ -37,8 +37,10 @@ from app.core.security import (
     validate_max_init_data,
     verify_password,
 )
+from app.models.uploaded_file import UploadedFile
 from app.models.user import Plan, User
 from app.models.thread import Thread
+from app.services.upload_storage import delete_upload_file, load_upload_bytes, save_upload_bytes
 from app.schemas.auth import (
     AuthResponse,
     BindMaxCompleteRequest,
@@ -105,6 +107,24 @@ async def _limits_for_user(user: User, limiter: RateLimiter) -> tuple[int, int]:
     return await limiter.usage_and_limit(user)
 
 
+async def _migrate_guest_uploads(db: AsyncSession, guest: User, user: User) -> None:
+    result = await db.execute(select(UploadedFile).where(UploadedFile.user_id == guest.id))
+    for row in result.scalars().all():
+        row.user_id = user.id
+        if not row.storage_key:
+            continue
+        guest_prefix = f"{guest.id}/"
+        if not row.storage_key.startswith(guest_prefix):
+            continue
+        data = load_upload_bytes(row.storage_key)
+        if data is None:
+            continue
+        ext = row.storage_key.rsplit(".", 1)[-1]
+        new_key = save_upload_bytes(user.id, row.id, data, ext)
+        delete_upload_file(row.storage_key)
+        row.storage_key = new_key
+
+
 async def _merge_guest_session(
     db: AsyncSession,
     guest_key: str | None,
@@ -124,6 +144,7 @@ async def _merge_guest_session(
     if not guest:
         return
     await db.execute(update(Thread).where(Thread.user_id == guest.id).values(user_id=user.id))
+    await _migrate_guest_uploads(db, guest, user)
     await db.delete(guest)
 
 

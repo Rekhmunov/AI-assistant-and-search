@@ -133,6 +133,7 @@ export function SearchComposer({
   });
   const plan = me?.plan === "pro" || session?.user?.plan === "pro" ? "pro" : "free";
   const isGuest = session?.is_guest === true;
+  const canAttachFiles = Boolean(token) || isGuest;
   const voiceBlockedForNonPro = plan !== "pro";
   const maxBytes = plan === "pro" ? MAX_FILE_BYTES_PRO : MAX_FILE_BYTES_FREE;
 
@@ -183,7 +184,7 @@ export function SearchComposer({
   };
 
   const openPicker = (ref: React.RefObject<HTMLInputElement | null>) => {
-    if (!token) {
+    if (!canAttachFiles) {
       setUploadFailure(t("loginForFiles"));
       return;
     }
@@ -209,7 +210,7 @@ export function SearchComposer({
   };
 
   const onFilesPicked = async (files: FileList | null, expected?: FileKind) => {
-    if (!files?.length || !token) return;
+    if (!files?.length || !canAttachFiles) return;
 
     let slots = MAX_ATTACHMENTS - attachments.length - uploading.length;
     if (slots <= 0) {
@@ -237,7 +238,7 @@ export function SearchComposer({
       setUploading((prev) => [...prev, pending]);
 
       try {
-        const uploaded = await uploadFile(token, file);
+        const uploaded = await uploadFile(token ?? null, file);
         if (cancelledUploadsRef.current.delete(localKey)) {
           if (previewUrl) URL.revokeObjectURL(previewUrl);
           continue;
@@ -298,7 +299,7 @@ export function SearchComposer({
       if (!images.length) return;
 
       e.preventDefault();
-      if (!token) {
+      if (!canAttachFiles) {
         setUploadFailure(t("loginForFiles"));
         return;
       }
@@ -309,7 +310,7 @@ export function SearchComposer({
       clearUploadFailure();
       void onFilesPicked(filesToFileList(images), "image");
     },
-    [atLimit, clearUploadFailure, onFilesPicked, setUploadFailure, token],
+    [atLimit, canAttachFiles, clearUploadFailure, onFilesPicked, setUploadFailure],
   );
 
   const handleAttachMenuOpenChange = useCallback((open: boolean) => {

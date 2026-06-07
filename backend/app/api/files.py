@@ -9,7 +9,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import (
     SearchUserResult,
-    get_current_user,
     get_db,
     get_file_access_user,
     get_rate_limiter,
@@ -244,10 +243,15 @@ async def export_docx_from_answer_block(
 
 @router.post("/upload", response_model=UploadedFileOut)
 async def upload_file(
+    response: Response,
     db: Annotated[AsyncSession, Depends(get_db)],
-    user: Annotated[User, Depends(get_current_user)],
+    actor: Annotated[SearchUserResult, Depends(get_search_user)],
     file: UploadFile = File(...),
 ):
+    if actor.new_guest_key:
+        set_guest_cookie(response, actor.new_guest_key)
+
+    user = actor.user
     max_bytes = max_upload_bytes(user.plan)
     now = datetime.now(timezone.utc)
 

@@ -786,7 +786,7 @@ function parseUploadErrorDetail(detail: UploadErrorDetail | undefined): FileUplo
   return new FileUploadError(message, Boolean(detail.suggest_pro));
 }
 
-export async function uploadFile(token: string, file: File): Promise<UploadedFile> {
+export async function uploadFile(token: string | null, file: File): Promise<UploadedFile> {
   const form = new FormData();
   form.append("file", file);
   const res = await fetch(`${API_BASE}/api/files/upload`, {

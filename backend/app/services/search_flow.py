@@ -143,13 +143,6 @@ class SearchFlowService:
         await messages_have_images_column(db)
         rewriter = QueryRewriter(llm)
         fact_pipeline = FactPipeline(search, llm)
-        if attachment_ids and self._is_guest(user):
-            yield sse_event(
-                "error",
-                {"code": "auth_required", "message": "Войдите, чтобы прикреплять файлы"},
-            )
-            return
-
         user_text_preview = normalize_user_query(query)
 
         early_prior: list[Message] = []
