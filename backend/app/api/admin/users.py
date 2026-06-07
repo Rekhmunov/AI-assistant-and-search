@@ -69,7 +69,7 @@ async def _user_out(
     *,
     include_threads_count: bool = False,
 ) -> UserAdminOut:
-    used = await limiter.get_search_usage(str(user.id))
+    used = await limiter.get_search_usage(str(user.id), user)
     try:
         _, limit = await limiter.usage_and_limit(user)
     except Exception:

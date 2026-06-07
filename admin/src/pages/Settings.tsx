@@ -347,14 +347,14 @@ export function SettingsPage() {
           {limitsOpen && (
             <div id="settings-limits-panel" className="settings-section-panel">
               <label>
-                Гостевых поисков / день
+                Гостевых поисков всего
                 <input
                   type="number"
                   value={String(settings.guest_searches_per_day ?? "")}
                   onChange={(e) => setSettings({ ...settings, guest_searches_per_day: e.target.value })}
                   disabled={!can("settings:write")}
                 />
-                <span className="hint-inline">Анонимные пользователи без регистрации</span>
+                <span className="hint-inline">Анонимные пользователи без регистрации (за всё время гостевой сессии)</span>
               </label>
               <label>
                 Free поисков / день

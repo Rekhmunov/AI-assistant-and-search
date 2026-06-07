@@ -1802,6 +1802,17 @@ body:has(.page-thread) {
 
 .composer-model-option--locked {
   color: var(--muted);
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.composer-model-option--locked:hover {
+  background: var(--surface-hover);
+  color: var(--muted);
+}
+
+.composer-model-option--locked .composer-model-lock {
+  color: var(--muted);
 }
 
 .composer-model-option--upgrade {

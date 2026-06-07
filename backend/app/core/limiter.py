@@ -32,16 +32,22 @@ class RateLimiter:
             return int(cached)
         return default
 
+    async def _guest_search_limit(self) -> int:
+        cached = await self.redis.get("setting:guest_searches_per_day")
+        if cached is not None:
+            return int(cached)
+        return self.settings.guest_searches_per_day
+
     async def _limit_for_user(self, user: User) -> int:
         if user.guest_key and not user.email:
-            cached = await self.redis.get("setting:guest_searches_per_day")
-            if cached is not None:
-                return int(cached)
-            return self.settings.guest_searches_per_day
+            return await self._guest_search_limit()
         return await self._search_limit_for_plan(user.plan)
 
     def _is_guest_user(self, user: User | None) -> bool:
         return user is not None and bool(user.guest_key) and not user.email
+
+    def _guest_search_key(self, user_id: str) -> str:
+        return f"search_guest:{user_id}"
 
     async def check_guest_creation_limit(self, client_ip: str) -> None:
         from fastapi import HTTPException, status
@@ -60,12 +66,8 @@ class RateLimiter:
             )
 
     async def _check_guest_ip_search_limit(self, client_ip: str, limit: int) -> tuple[bool, int, int]:
-        key = _day_key("guest_ip_search", client_ip)
+        key = f"guest_ip_search_lifetime:{client_ip}"
         count = await self.redis.incr(key)
-        if count == 1:
-            now = datetime.now(MSK)
-            midnight = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
-            await self.redis.expireat(key, int(midnight.timestamp()))
         if count > limit:
             await self.redis.decr(key)
             return False, max(0, limit), limit
@@ -83,6 +85,22 @@ class RateLimiter:
             limit = await self._limit_for_user(user)
         else:
             limit = await self._search_limit_for_plan(plan)
+
+        if self._is_guest_user(user):
+            key = self._guest_search_key(user_id)
+            count = await self.redis.incr(key)
+            if count > limit:
+                await self.redis.decr(key)
+                return False, max(0, count - 1), limit
+
+            if client_ip:
+                ip_ok, ip_used, ip_limit = await self._check_guest_ip_search_limit(client_ip, limit)
+                if not ip_ok:
+                    await self.redis.decr(key)
+                    return False, ip_used, ip_limit
+
+            return True, count, limit
+
         key = _day_key("search", user_id)
         count = await self.redis.incr(key)
         if count == 1:
@@ -94,27 +112,27 @@ class RateLimiter:
             await self.redis.decr(key)
             return False, limit - max(0, count - 1), limit
 
-        if client_ip and self._is_guest_user(user):
-            ip_ok, ip_used, ip_limit = await self._check_guest_ip_search_limit(client_ip, limit)
-            if not ip_ok:
-                await self.redis.decr(key)
-                return False, ip_used, ip_limit
-
         return True, count, limit
 
-    async def release_search(self, user_id: str) -> None:
-        key = _day_key("search", user_id)
+    async def release_search(self, user_id: str, user: User | None = None) -> None:
+        if self._is_guest_user(user):
+            key = self._guest_search_key(user_id)
+        else:
+            key = _day_key("search", user_id)
         val = await self.redis.get(key)
         if val and int(val) > 0:
             await self.redis.decr(key)
 
-    async def get_search_usage(self, user_id: str) -> int:
-        key = _day_key("search", user_id)
+    async def get_search_usage(self, user_id: str, user: User | None = None) -> int:
+        if self._is_guest_user(user):
+            key = self._guest_search_key(user_id)
+        else:
+            key = _day_key("search", user_id)
         val = await self.redis.get(key)
         return int(val) if val else 0
 
     async def usage_and_limit(self, user: User) -> tuple[int, int]:
-        used = await self.get_search_usage(str(user.id))
+        used = await self.get_search_usage(str(user.id), user)
         limit = await self._limit_for_user(user)
         return used, limit
 

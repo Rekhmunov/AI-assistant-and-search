@@ -306,7 +306,9 @@ export function Profile() {
       {showSearchStats && (
         <section className="profile-card profile-stats-card">
           <div className="profile-stats-head">
-            <span className="profile-stats-label">{t("searchesToday")}</span>
+            <span className="profile-stats-label">
+              {session?.is_guest ? t("guestSearchesUsed") : t("searchesToday")}
+            </span>
             <strong className="profile-stats-value">
               {searchesToday}
               <span className="profile-stats-limit">/{searchesLimit}</span>

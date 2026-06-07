@@ -85,12 +85,12 @@ async def search_stream(
                     status_code=e.status_code,
                 )
                 await db.rollback()
-                await limiter.release_search(str(user_id))
+                await limiter.release_search(str(user_id), user)
                 yield sse_event("error", {"code": "yandex_error", "message": str(e)})
             except Exception:
                 logger.exception("Search SSE stream failed for user %s", user_id)
                 await db.rollback()
-                await limiter.release_search(str(user_id))
+                await limiter.release_search(str(user_id), user)
                 yield sse_event(
                     "error",
                     {"code": "server_error", "message": "Ошибка сервера. Попробуйте ещё раз."},
