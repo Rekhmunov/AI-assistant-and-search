@@ -159,8 +159,6 @@ export function Thread() {
     queryKey: ["session", token],
     queryFn: () => fetchSession(token),
   });
-  const guestSearchLimit = session?.searches_limit ?? 5;
-
   const [threadId, setThreadId] = useState<string | null>(id ?? null);
   const [turns, setTurns] = useState<ThreadTurn[]>([]);
   const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
@@ -989,7 +987,7 @@ export function Thread() {
                           </div>
                         </div>
                       ) : showGuestLimit ? (
-                        <GuestLimitNotice limit={guestSearchLimit} />
+                        <GuestLimitNotice />
                       ) : showFreeLimit ? (
                         <FreeLimitNotice />
                       ) : showImageGenPro ? (

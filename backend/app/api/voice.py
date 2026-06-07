@@ -22,8 +22,8 @@ VOICE_PRO_ONLY_MESSAGE = "Распознавание речи доступно �
 
 
 def voice_transcription_allowed(user) -> bool:
-    """Guests may try voice input; logged-in Free users need Pro."""
-    return bool(user.guest_key) or user.plan == Plan.PRO
+    """Voice input is available on Pro only."""
+    return user.plan == Plan.PRO
 
 
 class VoiceTranscribeOut(BaseModel):

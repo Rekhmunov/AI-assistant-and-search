@@ -31,6 +31,7 @@ import {
   refreshUserAfterProPayment,
   runProPaymentConfirm,
 } from "../lib/proPaymentReturn";
+import { PRO_BENEFIT_KEYS } from "../constants/proBenefits";
 import { t } from "../i18n";
 import { useAuthStore } from "../store/authStore";
 
@@ -47,15 +48,6 @@ function getProfileTierLabel(tier: ProfileTier): string {
   if (tier === "guest") return "GUEST";
   return "FREE";
 }
-
-const PRO_BENEFIT_KEYS = [
-  "proBenefitAiModels",
-  "proBenefitMoreLimits",
-  "proBenefitFullHistory",
-  "proBenefitSearchPriority",
-  "proBenefitVoiceInput",
-  "proBenefitCoffeePrice",
-] as const;
 
 export function Profile() {
   const token = useAuthStore((s) => s.token);

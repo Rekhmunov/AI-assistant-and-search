@@ -5,9 +5,9 @@ from app.models.user import Plan, User
 from app.services.yandex_stt import resolve_audio_content_type
 
 
-def test_voice_transcription_allowed_for_guest():
+def test_voice_transcription_blocked_for_guest():
     user = User(id=uuid.uuid4(), guest_key="guest-key", plan=Plan.FREE)
-    assert voice_transcription_allowed(user) is True
+    assert voice_transcription_allowed(user) is False
 
 
 def test_voice_transcription_allowed_for_pro():

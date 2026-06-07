@@ -1,13 +1,21 @@
 import { Link } from "react-router-dom";
 import { useBodyScrollLock } from "../hooks/useBodyScrollLock";
 import { t } from "../i18n";
+import { ProBenefitsList } from "./ProBenefitsList";
 
 type Props = {
   open: boolean;
   onClose: () => void;
+  title?: string;
+  hint?: string;
 };
 
-export function VoiceProModal({ open, onClose }: Props) {
+export function ProUpgradeModal({
+  open,
+  onClose,
+  title = t("proUpgradeModalTitle"),
+  hint = t("proUpgradeModalHint"),
+}: Props) {
   useBodyScrollLock(open);
 
   if (!open) return null;
@@ -19,17 +27,18 @@ export function VoiceProModal({ open, onClose }: Props) {
       onClick={onClose}
     >
       <div
-        className="feedback-modal app-modal"
+        className="feedback-modal app-modal pro-upgrade-modal"
         role="dialog"
         aria-modal="true"
-        aria-labelledby="voice-pro-modal-title"
+        aria-labelledby="pro-upgrade-modal-title"
         onClick={(e) => e.stopPropagation()}
       >
-        <h2 id="voice-pro-modal-title" className="feedback-modal-title">
-          {t("voiceProModalTitle")}
+        <h2 id="pro-upgrade-modal-title" className="feedback-modal-title">
+          {title}
         </h2>
-        <p className="feedback-modal-hint">{t("voiceProModalHint")}</p>
-        <div className="feedback-modal-actions voice-pro-modal-actions">
+        <p className="feedback-modal-hint">{hint}</p>
+        <ProBenefitsList className="profile-pro-benefits-list pro-upgrade-modal-benefits" />
+        <div className="feedback-modal-actions pro-upgrade-modal-actions">
           <Link to="/profile" className="btn-primary btn-block" onClick={onClose}>
             {t("upgradePro")}
           </Link>

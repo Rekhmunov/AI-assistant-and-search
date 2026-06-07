@@ -12,8 +12,9 @@ import {
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { FileUploadError, uploadFile, fetchMe, fetchSession } from "../api/client";
-import { VoiceProModal } from "./VoiceProModal";
+import { ComposerModelSelector } from "./ComposerModelSelector";
 import { ComposerAttachMenu } from "./ComposerAttachMenu";
+import { ProUpgradeModal } from "./ProUpgradeModal";
 import { MobileNewThreadButton } from "./MobileNewThreadButton";
 import {
   ACCEPT_FILE_INPUT,
@@ -96,7 +97,7 @@ export function SearchComposer({
   const [uploading, setUploading] = useState<UploadingItem[]>([]);
   const [inputFocused, setInputFocused] = useState(false);
   const [attachMenuOpen, setAttachMenuOpen] = useState(false);
-  const [voiceProModalOpen, setVoiceProModalOpen] = useState(false);
+  const [proUpgradeModalOpen, setProUpgradeModalOpen] = useState(false);
   const blurTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const attachMenuOpenRef = useRef(false);
   const cancelledUploadsRef = useRef<Set<string>>(new Set());
@@ -132,7 +133,7 @@ export function SearchComposer({
   });
   const plan = me?.plan === "pro" || session?.user?.plan === "pro" ? "pro" : "free";
   const isGuest = session?.is_guest === true;
-  const voiceBlockedForFree = !!token && !isGuest && plan !== "pro";
+  const voiceBlockedForNonPro = plan !== "pro";
   const maxBytes = plan === "pro" ? MAX_FILE_BYTES_PRO : MAX_FILE_BYTES_FREE;
 
   const setUploadFailure = (message: string, suggestPro = false) => {
@@ -150,9 +151,11 @@ export function SearchComposer({
     token,
   );
 
+  const openProUpgradeModal = () => setProUpgradeModalOpen(true);
+
   const handleVoiceToggle = () => {
-    if (voiceBlockedForFree && voice.state === "idle") {
-      setVoiceProModalOpen(true);
+    if (voiceBlockedForNonPro && voice.state === "idle") {
+      openProUpgradeModal();
       return;
     }
     voice.toggle();
@@ -543,6 +546,11 @@ export function SearchComposer({
               {attachMenu}
               <div className="composer-toolbar-actions">
                 {clearButton}
+                <ComposerModelSelector
+                  plan={plan}
+                  isGuest={isGuest}
+                  onOpenProModal={openProUpgradeModal}
+                />
                 {micButton}
                 {sendButton}
               </div>
@@ -618,7 +626,10 @@ export function SearchComposer({
         <MobileNewThreadButton onClick={onNewChat} />
       )}
       </div>
-      <VoiceProModal open={voiceProModalOpen} onClose={() => setVoiceProModalOpen(false)} />
+      <ProUpgradeModal
+        open={proUpgradeModalOpen}
+        onClose={() => setProUpgradeModalOpen(false)}
+      />
     </div>
   );
 }
