@@ -18,7 +18,10 @@
   --mobile-header-side-width: calc(var(--mobile-header-btn-size) * 2 + var(--mobile-header-btn-gap));
   --mobile-header-x-padding: 12px;
   --composer-nav-gap: 10px;
-  /* MAX/мобилка тред: composer по содержимому (без пустого футера при фокусе) */
+  /* MAX/мобилка: отступы composer (как на главной) */
+  --mobile-composer-pad-x: 12px;
+  --mobile-composer-pad-y: 10px;
+  --mobile-composer-toolbar-gap: 8px;
   --thread-mobile-composer-bottom-inset: max(12px, env(safe-area-inset-bottom, 0px));
   --thread-mobile-composer-input-max-h: min(30dvh, 168px);
   --sidebar-width: 220px;
@@ -404,7 +407,7 @@ body:has(.page-thread) {
     width: 100%;
     max-width: none;
     margin: 0;
-    padding: 4px 16px calc(10px + var(--thread-mobile-composer-bottom-inset));
+    padding: 8px 16px calc(12px + var(--thread-mobile-composer-bottom-inset));
     background: var(--bg);
     border-top: 1px solid var(--border-subtle);
     overflow: visible;
@@ -413,7 +416,7 @@ body:has(.page-thread) {
   .page-thread--mobile .composer-wrap--docked.composer-wrap--thread-mobile .composer-outer-row--thread-mobile {
     flex: 0 0 auto;
     align-items: center;
-    gap: 8px;
+    gap: 10px;
   }
 
   .page-thread--mobile .composer-wrap--docked.composer-wrap--thread-mobile .search-composer {
@@ -429,7 +432,7 @@ body:has(.page-thread) {
 
   .page-thread--mobile .search-composer--thread-mobile:not(.search-composer--focused) {
     flex: 0 0 auto;
-    padding: 6px 10px;
+    padding: var(--mobile-composer-pad-y) var(--mobile-composer-pad-x);
   }
 
   .page-thread--mobile .search-composer--thread-mobile:not(.search-composer--focused) .composer-row {
@@ -472,7 +475,7 @@ body:has(.page-thread) {
 
   .page-thread--mobile .search-composer--thread-mobile.search-composer--focused {
     flex: 0 0 auto;
-    padding: 8px 10px 6px;
+    padding: var(--mobile-composer-pad-y) var(--mobile-composer-pad-x) var(--mobile-composer-pad-y);
   }
 
   .page-thread--mobile .search-composer--thread-mobile.search-composer--focused .composer-row,
@@ -480,6 +483,7 @@ body:has(.page-thread) {
     flex: 0 0 auto;
     align-items: flex-start;
     min-height: 0;
+    margin-bottom: var(--mobile-composer-toolbar-gap);
   }
 
   .page-thread--mobile .search-composer--thread-mobile.search-composer--focused .composer-input-wrap {
@@ -493,6 +497,8 @@ body:has(.page-thread) {
     width: 100%;
     min-height: 44px;
     max-height: var(--thread-mobile-composer-input-max-h);
+    padding-top: 8px;
+    padding-bottom: 4px;
     -webkit-overflow-scrolling: touch;
     overflow-y: auto;
   }
@@ -501,8 +507,9 @@ body:has(.page-thread) {
     flex-shrink: 0;
     align-items: center;
     min-height: 40px;
-    margin-top: 4px;
-    padding-top: 0;
+    margin-top: 0;
+    padding-top: 2px;
+    padding-bottom: 2px;
   }
 
   .page-thread--mobile .search-composer--thread-mobile.search-composer--focused .composer-attach-menu,
@@ -673,6 +680,16 @@ body:has(.page-thread) {
 
   .home-mobile-composer-wrap .search-composer {
     width: 100%;
+  }
+
+  .home-mobile-composer-wrap .search-composer--thread-mobile.search-composer--focused .composer-row--text-only {
+    margin-bottom: var(--mobile-composer-toolbar-gap);
+  }
+
+  .home-mobile-composer-wrap .search-composer--thread-mobile.search-composer--focused .composer-toolbar {
+    margin-top: 0;
+    padding-top: 2px;
+    padding-bottom: 2px;
   }
 }
 
