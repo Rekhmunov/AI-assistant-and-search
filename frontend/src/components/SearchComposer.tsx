@@ -1,4 +1,5 @@
 import {
+  ClipboardEvent,
   FormEvent,
   useCallback,
   useEffect,
@@ -27,6 +28,7 @@ import { useDesktopLayout } from "../hooks/useDesktopLayout";
 import { useTypingPlaceholder } from "../hooks/useTypingPlaceholder";
 import { useVoiceInput } from "../hooks/useVoiceInput";
 import { t } from "../i18n";
+import { extractClipboardImages, filesToFileList } from "../lib/clipboardImages";
 import { prepareFileForUpload } from "../lib/compressImage";
 import { useAuthStore } from "../store/authStore";
 
@@ -259,6 +261,26 @@ export function SearchComposer({
     }, 200);
   };
 
+  const handlePaste = useCallback(
+    (e: ClipboardEvent<HTMLTextAreaElement>) => {
+      const images = extractClipboardImages(e.clipboardData);
+      if (!images.length) return;
+
+      e.preventDefault();
+      if (!token) {
+        setUploadFailure(t("loginForFiles"));
+        return;
+      }
+      if (atLimit) {
+        setUploadFailure(t("attachLimit", { n: MAX_ATTACHMENTS }));
+        return;
+      }
+      clearUploadFailure();
+      void onFilesPicked(filesToFileList(images), "image");
+    },
+    [atLimit, clearUploadFailure, onFilesPicked, setUploadFailure, token],
+  );
+
   const handleAttachMenuOpenChange = useCallback((open: boolean) => {
     attachMenuOpenRef.current = open;
     setAttachMenuOpen(open);
@@ -434,6 +456,7 @@ export function SearchComposer({
                 onChange(e.target.value);
                 requestAnimationFrame(adjustTextareaHeight);
               }}
+              onPaste={handlePaste}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();
