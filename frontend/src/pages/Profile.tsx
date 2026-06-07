@@ -294,6 +294,7 @@ export function Profile() {
       )}
 
       <div className="profile-mobile-scroll">
+      <div className="profile-mobile-scroll-inner">
       <div className="profile-hero">
         <div className={`profile-avatar profile-avatar--${profileTier}`} aria-label={profileTierLabel}>
           {profileTierLabel}
@@ -503,13 +504,14 @@ export function Profile() {
           {t("deleteAccount")}
         </button>
       </div>
-      </div>
 
       {!isDesktop && (
-        <div className="mobile-new-thread-bar mobile-new-thread-bar--docked">
+        <div className="mobile-new-thread-bar mobile-new-thread-bar--end">
           <MobileNewThreadButton variant="labeled" onClick={() => navigate("/")} />
         </div>
       )}
+      </div>
+      </div>
 
       <ProPurchaseBlockedModal open={proBlockedOpen} onClose={() => setProBlockedOpen(false)} />
       <ProPaymentStatusModal
