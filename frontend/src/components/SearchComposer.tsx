@@ -115,6 +115,18 @@ export function SearchComposer({
   const adjustTextareaHeight = useCallback(() => {
     const el = textareaRef.current;
     if (!el) return;
+    const collapsedThreadBar =
+      layoutMode === "threadMobile" &&
+      !inputFocused &&
+      !attachMenuOpenRef.current &&
+      !modelMenuOpenRef.current &&
+      !value.trim();
+    if (collapsedThreadBar) {
+      el.style.height = "44px";
+      el.style.maxHeight = "44px";
+      el.style.overflowY = "hidden";
+      return;
+    }
     const maxPx = getComposerMaxHeightPx();
     el.style.height = "0px";
     const scroll = el.scrollHeight;
@@ -122,7 +134,7 @@ export function SearchComposer({
     el.style.height = `${next}px`;
     el.style.maxHeight = `${maxPx}px`;
     el.style.overflowY = scroll > maxPx ? "auto" : "hidden";
-  }, [getComposerMaxHeightPx]);
+  }, [getComposerMaxHeightPx, inputFocused, layoutMode, value]);
 
   const { data: session } = useQuery({
     queryKey: ["session", token],
@@ -471,7 +483,7 @@ export function SearchComposer({
       )}
       <div className={`composer-outer-row${isMobileFocusLayout ? " composer-outer-row--thread-mobile" : ""}`}>
       <form
-        className={`search-composer${hasAttachment ? " search-composer--with-attachment" : ""}${isMobileFocusLayout ? " search-composer--thread-mobile" : ""}${composerExpanded && isMobileFocusLayout ? " search-composer--focused" : ""}${useDesktopStackedLayout ? " search-composer--desktop-stacked" : ""}`}
+        className={`search-composer${hasAttachment ? " search-composer--with-attachment" : ""}${isMobileFocusLayout ? " search-composer--thread-mobile" : ""}${composerExpanded && isMobileFocusLayout ? " search-composer--focused" : ""}${isMobileFocusLayout && !composerExpanded ? " search-composer--collapsed" : ""}${useDesktopStackedLayout ? " search-composer--desktop-stacked" : ""}`}
         onSubmit={handleSubmit}
       >
         {hasAttachment && (
