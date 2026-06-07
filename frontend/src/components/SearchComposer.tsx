@@ -376,6 +376,58 @@ export function SearchComposer({
   const showSendInToolbar = showComposerToolbar;
   const showInlineMic = isMobileFocusLayout && !composerExpanded;
   const showDefaultRow = !isMobileFocusLayout;
+  const useDesktopStackedLayout = isDesktop && showDefaultRow;
+
+  const attachMenu = (
+    <ComposerAttachMenu
+      disabled={disabled || isBusy || atLimit}
+      directPick={isDesktop}
+      onDirectPick={() => openPicker(allFilesRef)}
+      onPickGallery={() => openPicker(photoRef)}
+      onPickCamera={() => openPicker(cameraRef)}
+      onPickFiles={() => openPicker(allFilesRef)}
+      keepFocusOnPress={isMobileFocusLayout}
+      onOpenChange={useDesktopStackedLayout ? undefined : handleAttachMenuOpenChange}
+    />
+  );
+
+  const micButton = (
+    <button
+      type="button"
+      className={`composer-icon${voice.state === "recording" ? " recording" : ""}`}
+      aria-label={t("voiceInput")}
+      aria-pressed={voice.state === "recording"}
+      disabled={disabled || voice.state === "transcribing"}
+      onPointerDown={useDesktopStackedLayout ? undefined : keepComposerFocus}
+      onClick={handleVoiceToggle}
+    >
+      <MicIcon recording={voice.state === "recording"} />
+    </button>
+  );
+
+  const sendButton = (
+    <button
+      type="submit"
+      className="composer-send"
+      disabled={!canSend}
+      aria-label={t("send")}
+      onPointerDown={useDesktopStackedLayout ? undefined : keepComposerFocus}
+    >
+      <SendIcon />
+    </button>
+  );
+
+  const clearButton = hasComposerText ? (
+    <button
+      type="button"
+      className="composer-icon composer-icon--clear"
+      aria-label={t("composerClearInput")}
+      disabled={disabled}
+      onClick={() => onChange("")}
+    >
+      <CloseIcon />
+    </button>
+  ) : null;
 
   return (
     <div
@@ -393,7 +445,7 @@ export function SearchComposer({
       )}
       <div className={`composer-outer-row${isMobileFocusLayout ? " composer-outer-row--thread-mobile" : ""}`}>
       <form
-        className={`search-composer${hasAttachment ? " search-composer--with-attachment" : ""}${isMobileFocusLayout ? " search-composer--thread-mobile" : ""}${composerExpanded && isMobileFocusLayout ? " search-composer--focused" : ""}`}
+        className={`search-composer${hasAttachment ? " search-composer--with-attachment" : ""}${isMobileFocusLayout ? " search-composer--thread-mobile" : ""}${composerExpanded && isMobileFocusLayout ? " search-composer--focused" : ""}${useDesktopStackedLayout ? " search-composer--desktop-stacked" : ""}`}
         onSubmit={handleSubmit}
       >
         {hasAttachment && (
@@ -420,19 +472,7 @@ export function SearchComposer({
           </div>
         )}
 
-        <div className={`composer-row${showComposerToolbar ? " composer-row--text-only" : ""}`}>
-          {showDefaultRow && (
-            <ComposerAttachMenu
-                disabled={disabled || isBusy || atLimit}
-                directPick={isDesktop}
-                onDirectPick={() => openPicker(allFilesRef)}
-                onPickGallery={() => openPicker(photoRef)}
-                onPickCamera={() => openPicker(cameraRef)}
-                onPickFiles={() => openPicker(allFilesRef)}
-                keepFocusOnPress={isMobileFocusLayout}
-              />
-          )}
-          <input
+        <input
             ref={allFilesRef}
             type="file"
             accept={ACCEPT_FILE_INPUT}
@@ -465,106 +505,112 @@ export function SearchComposer({
               resetInput(cameraRef);
             }}
           />
-          <div className="composer-input-wrap">
-            {showTypingOverlay && typingPlaceholder && (
-              <span className="composer-placeholder-typing" aria-hidden>
-                {typingPlaceholder}
-                <span className="composer-placeholder-caret" />
-              </span>
-            )}
-            <textarea
-              ref={textareaRef}
-              className="composer-input"
-              rows={1}
-              value={value}
-              placeholder={textareaPlaceholder}
-              disabled={disabled}
-              onFocus={handleInputFocus}
-              onBlur={handleInputBlur}
-              onChange={(e) => {
-                onChange(e.target.value);
-                requestAnimationFrame(adjustTextareaHeight);
-              }}
-              onPaste={handlePaste}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  if (canSend) handleSubmit(e as unknown as FormEvent);
-                }
-              }}
-            />
-          </div>
-          {showInlineMic && (
-            <button
-              type="button"
-              className={`composer-icon${voice.state === "recording" ? " recording" : ""}`}
-              aria-label={t("voiceInput")}
-              aria-pressed={voice.state === "recording"}
-              disabled={disabled || voice.state === "transcribing"}
-              onClick={handleVoiceToggle}
-            >
-              <MicIcon recording={voice.state === "recording"} />
-            </button>
-          )}
-          {showDefaultRow && (
-            <>
-              <button
-                type="button"
-                className={`composer-icon${voice.state === "recording" ? " recording" : ""}`}
-                aria-label={t("voiceInput")}
-                aria-pressed={voice.state === "recording"}
-                disabled={disabled || voice.state === "transcribing"}
-                onPointerDown={keepComposerFocus}
-                onClick={handleVoiceToggle}
-              >
-                <MicIcon recording={voice.state === "recording"} />
-              </button>
-              <button type="submit" className="composer-send" disabled={!canSend} aria-label={t("send")}>
-                <SendIcon />
-              </button>
-            </>
-          )}
-        </div>
 
-        {showComposerToolbar && (
-          <div className="composer-toolbar">
-            {showAttachInToolbar && (
-              <ComposerAttachMenu
-                disabled={disabled || isBusy || atLimit}
-                directPick={isDesktop}
-                onDirectPick={() => openPicker(allFilesRef)}
-                onPickGallery={() => openPicker(photoRef)}
-                onPickCamera={() => openPicker(cameraRef)}
-                onPickFiles={() => openPicker(allFilesRef)}
-                keepFocusOnPress={isMobileFocusLayout}
-                onOpenChange={handleAttachMenuOpenChange}
-              />
-            )}
-            <div className="composer-toolbar-actions">
-              <button
-                type="button"
-                className={`composer-icon${voice.state === "recording" ? " recording" : ""}`}
-                aria-label={t("voiceInput")}
-                aria-pressed={voice.state === "recording"}
-                disabled={disabled || voice.state === "transcribing"}
-                onPointerDown={keepComposerFocus}
-                onClick={handleVoiceToggle}
-              >
-                <MicIcon recording={voice.state === "recording"} />
-              </button>
-              {showSendInToolbar && (
-                <button
-                  type="submit"
-                  className="composer-send"
-                  disabled={!canSend}
-                  aria-label={t("send")}
-                  onPointerDown={keepComposerFocus}
-                >
-                  <SendIcon />
-                </button>
+        {useDesktopStackedLayout ? (
+          <>
+            <div className="composer-row composer-row--text-only composer-row--desktop-input">
+              <div className="composer-input-wrap">
+                {showTypingOverlay && typingPlaceholder && (
+                  <span className="composer-placeholder-typing" aria-hidden>
+                    {typingPlaceholder}
+                    <span className="composer-placeholder-caret" />
+                  </span>
+                )}
+                <textarea
+                  ref={textareaRef}
+                  className="composer-input"
+                  rows={2}
+                  value={value}
+                  placeholder={textareaPlaceholder}
+                  disabled={disabled}
+                  onFocus={handleInputFocus}
+                  onBlur={handleInputBlur}
+                  onChange={(e) => {
+                    onChange(e.target.value);
+                    requestAnimationFrame(adjustTextareaHeight);
+                  }}
+                  onPaste={handlePaste}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      if (canSend) handleSubmit(e as unknown as FormEvent);
+                    }
+                  }}
+                />
+              </div>
+            </div>
+            <div className="composer-toolbar composer-toolbar--desktop">
+              {attachMenu}
+              <div className="composer-toolbar-actions">
+                {clearButton}
+                {micButton}
+                {sendButton}
+              </div>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className={`composer-row${showComposerToolbar ? " composer-row--text-only" : ""}`}>
+              {showDefaultRow && attachMenu}
+              <div className="composer-input-wrap">
+                {showTypingOverlay && typingPlaceholder && (
+                  <span className="composer-placeholder-typing" aria-hidden>
+                    {typingPlaceholder}
+                    <span className="composer-placeholder-caret" />
+                  </span>
+                )}
+                <textarea
+                  ref={textareaRef}
+                  className="composer-input"
+                  rows={1}
+                  value={value}
+                  placeholder={textareaPlaceholder}
+                  disabled={disabled}
+                  onFocus={handleInputFocus}
+                  onBlur={handleInputBlur}
+                  onChange={(e) => {
+                    onChange(e.target.value);
+                    requestAnimationFrame(adjustTextareaHeight);
+                  }}
+                  onPaste={handlePaste}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      if (canSend) handleSubmit(e as unknown as FormEvent);
+                    }
+                  }}
+                />
+              </div>
+              {showInlineMic && micButton}
+              {showDefaultRow && (
+                <>
+                  {micButton}
+                  {sendButton}
+                </>
               )}
             </div>
-          </div>
+
+            {showComposerToolbar && (
+              <div className="composer-toolbar">
+                {showAttachInToolbar && (
+                  <ComposerAttachMenu
+                    disabled={disabled || isBusy || atLimit}
+                    directPick={isDesktop}
+                    onDirectPick={() => openPicker(allFilesRef)}
+                    onPickGallery={() => openPicker(photoRef)}
+                    onPickCamera={() => openPicker(cameraRef)}
+                    onPickFiles={() => openPicker(allFilesRef)}
+                    keepFocusOnPress={isMobileFocusLayout}
+                    onOpenChange={handleAttachMenuOpenChange}
+                  />
+                )}
+                <div className="composer-toolbar-actions">
+                  {micButton}
+                  {showSendInToolbar && sendButton}
+                </div>
+              </div>
+            )}
+          </>
         )}
       </form>
 

@@ -23,8 +23,9 @@
   --desktop-search-max-width: min(2160px, calc(100vw - var(--sidebar-width) - 48px));
   /* Веб: колонка треда по центру (вопрос / ответ / composer) */
   --desktop-thread-column-width: 70%;
-  /* Composer: fixed-бар чуть уже области .page из‑за padding — 80% визуально совпадает с колонкой 70% */
-  --desktop-thread-composer-width: 80%;
+  /* Composer: на ~20% уже прежней ширины (80% → 64%) */
+  --desktop-thread-composer-width: 64%;
+  --desktop-composer-inline-width: 80%;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   color: var(--text);
   background: var(--bg);
@@ -3604,6 +3605,49 @@ body:has(.page-thread) {
   margin-left: auto;
 }
 
+@media (min-width: 900px) {
+  .search-composer--desktop-stacked {
+    padding: 14px 16px 12px;
+  }
+
+  .search-composer--desktop-stacked .composer-row--desktop-input {
+    align-items: stretch;
+    min-height: 0;
+  }
+
+  .search-composer--desktop-stacked .composer-input-wrap {
+    align-items: flex-start;
+    width: 100%;
+  }
+
+  .search-composer--desktop-stacked .composer-placeholder-typing {
+    top: 10px;
+    transform: none;
+  }
+
+  .search-composer--desktop-stacked .composer-input {
+    min-height: 56px;
+    padding: 10px 4px 8px;
+    max-height: 220px;
+  }
+
+  .search-composer--desktop-stacked .composer-toolbar--desktop {
+    margin-top: 6px;
+    padding-top: 4px;
+  }
+
+  .page-home .composer-wrap--inline {
+    width: var(--desktop-composer-inline-width);
+    max-width: var(--desktop-composer-inline-width);
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  .page-home .composer-wrap--inline .composer-error-wrap {
+    width: 100%;
+  }
+}
+
 .composer-new-chat {
   flex: 0 0 auto;
   align-self: stretch;
@@ -4616,11 +4660,6 @@ body:has(.page-thread) {
 
   .page-home {
     min-height: 100dvh;
-    max-width: var(--desktop-search-max-width);
-  }
-
-  .page-home .composer-wrap--inline {
-    width: 100%;
     max-width: var(--desktop-search-max-width);
   }
 

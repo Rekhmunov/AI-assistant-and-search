@@ -53,6 +53,7 @@ const PRO_BENEFIT_KEYS = [
   "proBenefitMoreLimits",
   "proBenefitFullHistory",
   "proBenefitSearchPriority",
+  "proBenefitVoiceInput",
   "proBenefitCoffeePrice",
 ] as const;
 
