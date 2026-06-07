@@ -97,9 +97,11 @@ export function SearchComposer({
   const [uploading, setUploading] = useState<UploadingItem[]>([]);
   const [inputFocused, setInputFocused] = useState(false);
   const [attachMenuOpen, setAttachMenuOpen] = useState(false);
+  const [modelMenuOpen, setModelMenuOpen] = useState(false);
   const [proUpgradeModalOpen, setProUpgradeModalOpen] = useState(false);
   const blurTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const attachMenuOpenRef = useRef(false);
+  const modelMenuOpenRef = useRef(false);
   const cancelledUploadsRef = useRef<Set<string>>(new Set());
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -284,10 +286,10 @@ export function SearchComposer({
   };
 
   const handleInputBlur = () => {
-    if (attachMenuOpenRef.current) return;
+    if (attachMenuOpenRef.current || modelMenuOpenRef.current) return;
     if (blurTimerRef.current) clearTimeout(blurTimerRef.current);
     blurTimerRef.current = setTimeout(() => {
-      if (attachMenuOpenRef.current) return;
+      if (attachMenuOpenRef.current || modelMenuOpenRef.current) return;
       setInputFocused(false);
       blurTimerRef.current = null;
     }, 200);
@@ -325,6 +327,18 @@ export function SearchComposer({
     }
   }, []);
 
+  const handleModelMenuOpenChange = useCallback((open: boolean) => {
+    modelMenuOpenRef.current = open;
+    setModelMenuOpen(open);
+    if (open) {
+      if (blurTimerRef.current) {
+        clearTimeout(blurTimerRef.current);
+        blurTimerRef.current = null;
+      }
+      setInputFocused(true);
+    }
+  }, []);
+
   useEffect(
     () => () => {
       if (blurTimerRef.current) clearTimeout(blurTimerRef.current);
@@ -338,7 +352,7 @@ export function SearchComposer({
     !isBusy;
   const hasComposerText = value.trim().length > 0;
   const hasAttachment = totalCount > 0;
-  const composerExpanded = inputFocused || attachMenuOpen || hasComposerText;
+  const composerExpanded = inputFocused || attachMenuOpen || modelMenuOpen || hasComposerText;
 
   useLayoutEffect(() => {
     adjustTextareaHeight();
@@ -426,6 +440,7 @@ export function SearchComposer({
       plan={plan}
       onOpenProModal={openProUpgradeModal}
       keepFocusOnPress={isMobileFocusLayout}
+      onOpenChange={isMobileFocusLayout ? handleModelMenuOpenChange : undefined}
     />
   );
 

@@ -8,12 +8,14 @@ type Props = {
   plan: "free" | "pro";
   onOpenProModal: () => void;
   keepFocusOnPress?: boolean;
+  onOpenChange?: (open: boolean) => void;
 };
 
 export function ComposerModelSelector({
   plan,
   onOpenProModal,
   keepFocusOnPress = false,
+  onOpenChange,
 }: Props) {
   const rootRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
@@ -47,34 +49,48 @@ export function ComposerModelSelector({
     };
   }, [open, positionMenu]);
 
+  const setMenuOpen = useCallback(
+    (next: boolean) => {
+      onOpenChange?.(next);
+      setOpen(next);
+    },
+    [onOpenChange],
+  );
+
   useEffect(() => {
     if (!open) return;
     const onPointerDown = (e: MouseEvent | TouchEvent) => {
       const target = e.target as Node;
       if (rootRef.current?.contains(target)) return;
       if (menuRef.current?.contains(target)) return;
-      setOpen(false);
+      setMenuOpen(false);
     };
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false);
+      if (e.key === "Escape") setMenuOpen(false);
     };
     const timer = window.setTimeout(() => {
       document.addEventListener("mousedown", onPointerDown);
       document.addEventListener("touchstart", onPointerDown, { passive: true });
       document.addEventListener("keydown", onKey);
-    }, 0);
+    }, 250);
     return () => {
       clearTimeout(timer);
       document.removeEventListener("mousedown", onPointerDown);
       document.removeEventListener("touchstart", onPointerDown);
       document.removeEventListener("keydown", onKey);
     };
-  }, [open]);
+  }, [open, setMenuOpen]);
 
   const handleProClick = () => {
-    setOpen(false);
+    setMenuOpen(false);
     if (isPro) return;
     onOpenProModal();
+  };
+
+  const onTriggerClick = (e: React.MouseEvent | React.TouchEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setMenuOpen(!open);
   };
 
   const dropdown =
@@ -95,7 +111,7 @@ export function ComposerModelSelector({
               <ModelOption
                 label={t("modelSelectorLite")}
                 active
-                onClick={() => setOpen(false)}
+                onClick={() => setMenuOpen(false)}
               />
             )}
             {showLitePro ? (
@@ -108,7 +124,7 @@ export function ComposerModelSelector({
               <ModelOption
                 label={t("modelSelectorPro")}
                 active
-                onClick={() => setOpen(false)}
+                onClick={() => setMenuOpen(false)}
               />
             )}
           </div>,
@@ -127,7 +143,7 @@ export function ComposerModelSelector({
         aria-haspopup="menu"
         aria-controls={DROPDOWN_ID}
         onPointerDown={keepFocusOnPress ? (e) => e.preventDefault() : undefined}
-        onClick={() => setOpen((value) => !value)}
+        onClick={onTriggerClick}
       >
         <span className="composer-model-trigger-label">{t("modelSelectorLabel")}</span>
         <ChevronIcon />
@@ -153,6 +169,7 @@ function ModelOption({
       type="button"
       className={`composer-model-option${active ? " composer-model-option--active" : ""}${locked ? " composer-model-option--locked" : ""}`}
       role="menuitem"
+      onPointerDown={(e) => e.preventDefault()}
       onClick={onClick}
     >
       <span className="composer-model-option-label">{label}</span>
