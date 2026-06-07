@@ -1,9 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
+type EditorMode = "visual" | "html";
+
 type Props = {
   value: string;
   onChange: (html: string) => void;
   disabled?: boolean;
+  /** Режим редактирования исходного HTML (для юридических документов). */
+  allowHtmlSource?: boolean;
 };
 
 const FONT_SIZES = [
@@ -18,20 +22,27 @@ const EMOJIS = [
   "🚀", "✨", "👍", "🙏", "💬", "📎", "🔗", "😉", "🤝", "📣",
 ];
 
-export function RichTextEditor({ value, onChange, disabled = false }: Props) {
+export function RichTextEditor({
+  value,
+  onChange,
+  disabled = false,
+  allowHtmlSource = false,
+}: Props) {
   const editorRef = useRef<HTMLDivElement>(null);
   const emojiWrapRef = useRef<HTMLDivElement>(null);
   const lastValue = useRef(value);
   const [emojiOpen, setEmojiOpen] = useState(false);
+  const [mode, setMode] = useState<EditorMode>("visual");
 
   useEffect(() => {
+    if (mode !== "visual") return;
     const el = editorRef.current;
     if (!el) return;
     if (value !== lastValue.current && el.innerHTML !== value) {
       el.innerHTML = value || "<p></p>";
       lastValue.current = value;
     }
-  }, [value]);
+  }, [value, mode]);
 
   const emitChange = useCallback(() => {
     const el = editorRef.current;
@@ -40,6 +51,30 @@ export function RichTextEditor({ value, onChange, disabled = false }: Props) {
     lastValue.current = html;
     onChange(html);
   }, [onChange]);
+
+  const switchMode = (next: EditorMode) => {
+    if (disabled || next === mode) return;
+    if (next === "html") {
+      const el = editorRef.current;
+      const html = (el?.innerHTML.trim() || value || "<p></p>").trim() || "<p></p>";
+      lastValue.current = html;
+      onChange(html);
+      setMode("html");
+      return;
+    }
+    const el = editorRef.current;
+    if (el) {
+      el.innerHTML = value || "<p></p>";
+      lastValue.current = value || "<p></p>";
+    }
+    setMode("visual");
+  };
+
+  const onHtmlSourceChange = (raw: string) => {
+    const html = raw.trim() || "<p></p>";
+    lastValue.current = html;
+    onChange(html);
+  };
 
   const exec = (command: string, arg?: string) => {
     if (disabled) return;
@@ -81,7 +116,32 @@ export function RichTextEditor({ value, onChange, disabled = false }: Props) {
   }, [emojiOpen]);
 
   return (
-    <div className={`rte${disabled ? " rte--disabled" : ""}`}>
+    <div className={`rte${disabled ? " rte--disabled" : ""}${mode === "html" ? " rte--html" : ""}`}>
+      {allowHtmlSource && (
+        <div className="rte-mode-tabs" role="tablist" aria-label="Режим редактора">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={mode === "visual"}
+            className={`rte-mode-tab${mode === "visual" ? " rte-mode-tab--active" : ""}`}
+            disabled={disabled}
+            onClick={() => switchMode("visual")}
+          >
+            Визуально
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={mode === "html"}
+            className={`rte-mode-tab${mode === "html" ? " rte-mode-tab--active" : ""}`}
+            disabled={disabled}
+            onClick={() => switchMode("html")}
+          >
+            HTML
+          </button>
+        </div>
+      )}
+      {mode === "visual" && (
       <div className="rte-toolbar" role="toolbar" aria-label="Форматирование">
         <button type="button" className="rte-btn" onClick={() => exec("bold")} title="Жирный">
           <b>B</b>
@@ -151,16 +211,32 @@ export function RichTextEditor({ value, onChange, disabled = false }: Props) {
           ⌫
         </button>
       </div>
-      <div
-        ref={editorRef}
-        className="rte-editor"
-        contentEditable={!disabled}
-        suppressContentEditableWarning
-        role="textbox"
-        aria-multiline="true"
-        onInput={emitChange}
-        onBlur={emitChange}
-      />
+      )}
+      {mode === "visual" ? (
+        <div
+          ref={editorRef}
+          className="rte-editor"
+          contentEditable={!disabled}
+          suppressContentEditableWarning
+          role="textbox"
+          aria-multiline="true"
+          onInput={emitChange}
+          onBlur={emitChange}
+        />
+      ) : (
+        <textarea
+          className="rte-html-source"
+          value={value === "<p></p>" ? "" : value}
+          placeholder="<h2>Заголовок</h2>&#10;<p>Текст…</p>"
+          disabled={disabled}
+          spellCheck={false}
+          aria-label="HTML-код документа"
+          onChange={(e) => onHtmlSourceChange(e.target.value)}
+          onPaste={(e) => {
+            e.stopPropagation();
+          }}
+        />
+      )}
     </div>
   );
 }

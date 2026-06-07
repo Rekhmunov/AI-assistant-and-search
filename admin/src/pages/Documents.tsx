@@ -188,7 +188,12 @@ function DocumentSection({
 
             <div className="documents-editor-wrap">
               <span className="documents-field-label">Текст документа</span>
-              <RichTextEditor value={content} onChange={setContent} disabled={!canWrite} />
+              <RichTextEditor
+                value={content}
+                onChange={setContent}
+                disabled={!canWrite}
+                allowHtmlSource
+              />
             </div>
 
             {previewHtml && (
