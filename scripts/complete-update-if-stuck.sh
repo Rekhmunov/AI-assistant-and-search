@@ -54,7 +54,8 @@ echo "==> Миграции"
 $COMPOSE exec -T backend alembic upgrade head
 
 echo "==> Frontend + admin + nginx"
-$COMPOSE build frontend admin
+$COMPOSE build --no-cache frontend
+$COMPOSE build admin
 $COMPOSE up -d --force-recreate frontend admin nginx
 
 echo "==> Health (127.0.0.1:${PROXY_PORT})"

@@ -54,21 +54,22 @@ export function CookieBanner({ onAccepted }: Props) {
 
   return (
     <>
-      <div className="cookie-banner" role="dialog" aria-label="Уведомление о cookie">
+      <div className="cookie-banner" role="dialog" aria-label={t("cookieBannerAriaLabel")}>
         <p className="cookie-banner-text">
-          Сайт использует cookie для работы сервиса.{" "}
+          {t("cookieBannerPrefix")}
           <button type="button" className="cookie-banner-link" onClick={() => setModalOpen(true)}>
-            Политика cookie
+            {t("cookieBannerLink")}
           </button>
+          {t("cookieBannerSuffix")}
         </p>
         <button type="button" className="btn-primary cookie-banner-btn" disabled={busy} onClick={() => void accept()}>
-          {busy ? "…" : "Принять"}
+          {busy ? "…" : t("cookieBannerOk")}
         </button>
       </div>
 
       {modalOpen && (
         <LegalDocumentModal
-          title={cookiesDoc?.title ?? "Политика cookie"}
+          title={cookiesDoc?.title ?? t("cookiePolicyTitle")}
           contentHtml={cookiesDoc?.content_html ?? ""}
           loading={cookiesLoading}
           onClose={() => setModalOpen(false)}

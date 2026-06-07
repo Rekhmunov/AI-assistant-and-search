@@ -171,20 +171,35 @@ APP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "http://127.0.0.1:${PROXY_PORT
 ADMIN_CODE=$(curl -s -o /dev/null -w "%{http_code}" "http://127.0.0.1:${PROXY_PORT}/login" -H "Host: ${ADMIN_HOST_CHECK}" || echo "000")
 ADMIN_TITLE=$(curl -s "http://127.0.0.1:${PROXY_PORT}/login" -H "Host: ${ADMIN_HOST_CHECK}" | grep -oi '<title>[^<]*</title>' | head -1 || true)
 
-APP_HTML=$(curl -sf "http://127.0.0.1:${PROXY_PORT}/" -H "Host: ${APP_HOST_CHECK}" 2>/dev/null || true)
-APP_JS=$(echo "$APP_HTML" | grep -oE '/assets/index-[^"[:space:]]+\.js' | head -1 || true)
-if [ -n "$APP_JS" ]; then
-  if curl -sf "http://127.0.0.1:${PROXY_PORT}${APP_JS}" -H "Host: ${APP_HOST_CHECK}" | grep -q 'composer-attach-dropdown'; then
-    echo "    app bundle: attach menu OK (${APP_JS})"
-  else
-    echo "ERROR: app JS без меню вложений (старый frontend). Выполните:"
+_check_frontend_bundle() {
+  local app_html app_js
+  app_html=$(curl -sf "http://127.0.0.1:${PROXY_PORT}/" -H "Host: ${APP_HOST_CHECK}" 2>/dev/null || true)
+  app_js=$(echo "$app_html" | grep -oE '/assets/index-[^"[:space:]]+\.js' | head -1 || true)
+  if [ -z "$app_js" ]; then
+    echo "ERROR: не удалось найти /assets/index-*.js в index.html"
+    return 1
+  fi
+  if curl -sf "http://127.0.0.1:${PROXY_PORT}${app_js}" -H "Host: ${APP_HOST_CHECK}" | grep -q 'composer-attach-dropdown'; then
+    echo "    app bundle: attach menu OK (${app_js})"
+    return 0
+  fi
+  echo "    app bundle: старый JS (${app_js}) — нет composer-attach-dropdown"
+  return 1
+}
+
+if ! _check_frontend_bundle; then
+  echo "==> Пересборка frontend --no-cache (устаревший Docker layer cache)"
+  $COMPOSE build --no-cache frontend
+  $COMPOSE up -d --force-recreate frontend nginx
+  sleep 3
+  if ! _check_frontend_bundle; then
+    echo "ERROR: app JS без меню вложений после --no-cache. Проверьте git pull и образ frontend:"
+    echo "       git rev-parse --short HEAD"
     echo "       $COMPOSE build --no-cache frontend"
     echo "       $COMPOSE up -d --force-recreate frontend nginx"
+    echo "       bash scripts/verify-prod-frontend.sh"
     exit 1
   fi
-else
-  echo "ERROR: не удалось найти /assets/index-*.js в index.html"
-  exit 1
 fi
 
 echo "    app (${APP_HOST_CHECK}): HTTP ${APP_CODE}"
