@@ -4985,21 +4985,22 @@ body:has(.page-thread) {
   z-index: 1200;
   background: rgba(0, 0, 0, 0.45);
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
   padding: 16px;
-  overflow: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
 }
 
 .legal-modal {
   position: relative;
   width: min(640px, 100%);
-  max-height: min(85vh, 720px);
-  overflow: hidden;
+  margin: auto;
+  overflow: visible;
   display: flex;
   flex-direction: column;
   padding: 20px 20px 16px;
-  min-height: 0;
 }
 
 .legal-modal-close {
@@ -5031,14 +5032,9 @@ body:has(.page-thread) {
 }
 
 .legal-modal-body {
-  overflow-x: hidden;
-  overflow-y: auto;
-  flex: 1;
-  min-height: 0;
+  overflow: visible;
   font-size: 0.9rem;
   line-height: 1.55;
-  overscroll-behavior: contain;
-  -webkit-overflow-scrolling: touch;
 }
 
 .legal-doc-html {
@@ -5057,7 +5053,7 @@ body:has(.page-thread) {
 
 .legal-doc-html pre {
   white-space: pre-wrap;
-  overflow-x: hidden;
+  overflow: visible;
 }
 
 .legal-doc-html table {
@@ -5089,17 +5085,24 @@ body:has(.page-thread) {
 
 @media (min-width: 900px) {
   .legal-modal {
-    width: 50vw;
-    height: 50vh;
-    max-width: 50vw;
-    max-height: 50vh;
+    width: min(960px, calc(100vw - 48px));
+    max-width: min(960px, calc(100vw - 48px));
+  }
+
+  .page-legal.page {
+    max-width: min(960px, 100%);
+    width: 100%;
+  }
+
+  .legal-page-card {
+    width: 100%;
+    padding: 32px 40px;
   }
 }
 
 @media (max-width: 899px) {
   .legal-modal {
     width: min(92%, 640px);
-    max-height: min(85vh, 720px);
   }
 }
 
@@ -5126,6 +5129,7 @@ body:has(.page-thread) {
 
 .legal-page-body {
   font-size: 0.95rem;
+  overflow: visible;
 }
 
 .legal-page-back {
