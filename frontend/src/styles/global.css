@@ -1747,6 +1747,19 @@ body:has(.page-thread) {
   color: var(--muted);
 }
 
+.composer-model-option--upgrade {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.composer-model-option--upgrade:hover {
+  background: var(--accent-soft);
+}
+
+.composer-model-option--upgrade .composer-model-upsell-arrow {
+  color: var(--accent);
+}
+
 .composer-model-lock,
 .composer-model-check {
   flex-shrink: 0;

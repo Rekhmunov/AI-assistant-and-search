@@ -420,6 +420,15 @@ export function SearchComposer({
     </button>
   );
 
+  const modelSelector = (
+    <ComposerModelSelector
+      plan={plan}
+      isGuest={isGuest}
+      onOpenProModal={openProUpgradeModal}
+      keepFocusOnPress={isMobileFocusLayout}
+    />
+  );
+
   const clearButton = hasComposerText ? (
     <button
       type="button"
@@ -546,11 +555,7 @@ export function SearchComposer({
               {attachMenu}
               <div className="composer-toolbar-actions">
                 {clearButton}
-                <ComposerModelSelector
-                  plan={plan}
-                  isGuest={isGuest}
-                  onOpenProModal={openProUpgradeModal}
-                />
+                {modelSelector}
                 {micButton}
                 {sendButton}
               </div>
@@ -589,9 +594,15 @@ export function SearchComposer({
                   }}
                 />
               </div>
-              {showInlineMic && micButton}
+              {showInlineMic && (
+                <>
+                  {modelSelector}
+                  {micButton}
+                </>
+              )}
               {showDefaultRow && (
                 <>
+                  {modelSelector}
                   {micButton}
                   {sendButton}
                 </>
@@ -613,6 +624,7 @@ export function SearchComposer({
                   />
                 )}
                 <div className="composer-toolbar-actions">
+                  {modelSelector}
                   {micButton}
                   {showSendInToolbar && sendButton}
                 </div>

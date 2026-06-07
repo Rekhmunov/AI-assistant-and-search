@@ -1,27 +1,32 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { t } from "../i18n";
 
 const DROPDOWN_ID = "composer-model-dropdown";
-
-type ModelTier = "lite" | "pro";
 
 type Props = {
   plan: "free" | "pro";
   isGuest: boolean;
   onOpenProModal: () => void;
+  keepFocusOnPress?: boolean;
 };
 
-export function ComposerModelSelector({ plan, isGuest, onOpenProModal }: Props) {
+export function ComposerModelSelector({
+  plan,
+  isGuest,
+  onOpenProModal,
+  keepFocusOnPress = false,
+}: Props) {
+  const navigate = useNavigate();
   const rootRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
   const [menuStyle, setMenuStyle] = useState<{ top: number; left: number } | null>(null);
 
-  const activeModel: ModelTier = plan === "pro" ? "pro" : "lite";
-  const showUpsell = plan !== "pro";
+  const isPro = plan === "pro";
+  const isFreeLoggedIn = !isGuest && !isPro;
 
   const positionMenu = useCallback(() => {
     const btn = buttonRef.current;
@@ -70,42 +75,28 @@ export function ComposerModelSelector({ plan, isGuest, onOpenProModal }: Props) 
     };
   }, [open]);
 
-  const handleLockedProClick = () => {
+  const handleProClick = () => {
     setOpen(false);
-    if (!isGuest) {
-      onOpenProModal();
+    if (isPro) return;
+    if (isGuest) {
+      navigate("/profile");
+      return;
     }
+    onOpenProModal();
   };
 
-  const upsellRow = showUpsell ? (
-    isGuest ? (
-      <Link
-        to="/profile"
-        className="composer-model-upsell"
-        role="menuitem"
-        onClick={() => setOpen(false)}
-      >
-        {t("modelSelectorUpsell")}
-        <span className="composer-model-upsell-arrow" aria-hidden>
-          →
-        </span>
-      </Link>
-    ) : (
-      <button
-        type="button"
-        className="composer-model-upsell"
-        role="menuitem"
-        onClick={() => {
-          setOpen(false);
-          onOpenProModal();
-        }}
-      >
-        {t("modelSelectorUpsell")}
-        <span className="composer-model-upsell-arrow" aria-hidden>
-          →
-        </span>
-      </button>
-    )
+  const guestUpsellRow = isGuest ? (
+    <Link
+      to="/profile"
+      className="composer-model-upsell"
+      role="menuitem"
+      onClick={() => setOpen(false)}
+    >
+      {t("modelSelectorUpsell")}
+      <span className="composer-model-upsell-arrow" aria-hidden>
+        →
+      </span>
+    </Link>
   ) : null;
 
   const dropdown =
@@ -122,19 +113,29 @@ export function ComposerModelSelector({ plan, isGuest, onOpenProModal }: Props) 
               transform: "translateY(-100%)",
             }}
           >
-            {upsellRow}
-            <ModelOption
-              label={t("modelSelectorLite")}
-              active={activeModel === "lite"}
-              locked={isGuest}
-              onClick={() => setOpen(false)}
-            />
-            <ModelOption
-              label={t("modelSelectorPro")}
-              active={activeModel === "pro"}
-              locked={showUpsell}
-              onClick={showUpsell ? handleLockedProClick : () => setOpen(false)}
-            />
+            {guestUpsellRow}
+            {!isPro && (
+              <ModelOption
+                label={t("modelSelectorLite")}
+                active
+                locked={isGuest}
+                onClick={() => setOpen(false)}
+              />
+            )}
+            {!isPro ? (
+              <ModelOption
+                label={t("modelSelectorPro")}
+                upgrade={isFreeLoggedIn}
+                locked={isGuest}
+                onClick={handleProClick}
+              />
+            ) : (
+              <ModelOption
+                label={t("modelSelectorPro")}
+                active
+                onClick={() => setOpen(false)}
+              />
+            )}
           </div>,
           document.body,
         )
@@ -150,6 +151,7 @@ export function ComposerModelSelector({ plan, isGuest, onOpenProModal }: Props) 
         aria-expanded={open}
         aria-haspopup="menu"
         aria-controls={DROPDOWN_ID}
+        onPointerDown={keepFocusOnPress ? (e) => e.preventDefault() : undefined}
         onClick={() => setOpen((value) => !value)}
       >
         <span className="composer-model-trigger-label">{t("modelSelectorLabel")}</span>
@@ -162,24 +164,26 @@ export function ComposerModelSelector({ plan, isGuest, onOpenProModal }: Props) 
 
 function ModelOption({
   label,
-  active,
-  locked,
+  active = false,
+  locked = false,
+  upgrade = false,
   onClick,
 }: {
   label: string;
-  active: boolean;
-  locked: boolean;
+  active?: boolean;
+  locked?: boolean;
+  upgrade?: boolean;
   onClick: () => void;
 }) {
   return (
     <button
       type="button"
-      className={`composer-model-option${active ? " composer-model-option--active" : ""}${locked ? " composer-model-option--locked" : ""}`}
+      className={`composer-model-option${active ? " composer-model-option--active" : ""}${locked ? " composer-model-option--locked" : ""}${upgrade ? " composer-model-option--upgrade" : ""}`}
       role="menuitem"
       onClick={onClick}
     >
       <span className="composer-model-option-label">{label}</span>
-      {locked ? <LockIcon /> : active ? <CheckIcon /> : null}
+      {locked ? <LockIcon /> : upgrade ? <UpgradeArrowIcon /> : active ? <CheckIcon /> : null}
     </button>
   );
 }
@@ -222,5 +226,13 @@ function CheckIcon() {
         strokeLinejoin="round"
       />
     </svg>
+  );
+}
+
+function UpgradeArrowIcon() {
+  return (
+    <span className="composer-model-upsell-arrow" aria-hidden>
+      →
+    </span>
   );
 }
