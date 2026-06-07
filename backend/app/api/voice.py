@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 
 from app.api.deps import SearchUserResult, get_search_user
 from app.core.config import get_settings
+from app.models.user import Plan
 from app.services.yandex_stt import SpeechTranscriptionError, resolve_audio_content_type, transcribe_audio
 
 logger = logging.getLogger(__name__)
@@ -17,6 +18,12 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/voice", tags=["voice"])
 
 MAX_VOICE_BYTES = 5 * 1024 * 1024
+VOICE_PRO_ONLY_MESSAGE = "Распознавание речи доступно только в Pro"
+
+
+def voice_transcription_allowed(user) -> bool:
+    """Guests may try voice input; logged-in Free users need Pro."""
+    return bool(user.guest_key) or user.plan == Plan.PRO
 
 
 class VoiceTranscribeOut(BaseModel):
@@ -58,6 +65,11 @@ async def transcribe_voice(
     search_user: Annotated[SearchUserResult, Depends(get_search_user)],
 ):
     user = search_user.user
+    if not voice_transcription_allowed(user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=VOICE_PRO_ONLY_MESSAGE,
+        )
     raw = await file.read()
     if len(raw) > MAX_VOICE_BYTES:
         raise HTTPException(

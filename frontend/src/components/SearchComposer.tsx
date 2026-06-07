@@ -11,7 +11,8 @@ import {
 } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
-import { FileUploadError, uploadFile, fetchMe } from "../api/client";
+import { FileUploadError, uploadFile, fetchMe, fetchSession } from "../api/client";
+import { VoiceProModal } from "./VoiceProModal";
 import { ComposerAttachMenu } from "./ComposerAttachMenu";
 import { MobileNewThreadButton } from "./MobileNewThreadButton";
 import {
@@ -95,6 +96,7 @@ export function SearchComposer({
   const [uploading, setUploading] = useState<UploadingItem[]>([]);
   const [inputFocused, setInputFocused] = useState(false);
   const [attachMenuOpen, setAttachMenuOpen] = useState(false);
+  const [voiceProModalOpen, setVoiceProModalOpen] = useState(false);
   const blurTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const attachMenuOpenRef = useRef(false);
   const cancelledUploadsRef = useRef<Set<string>>(new Set());
@@ -119,12 +121,18 @@ export function SearchComposer({
     el.style.overflowY = scroll > maxPx ? "auto" : "hidden";
   }, [getComposerMaxHeightPx]);
 
+  const { data: session } = useQuery({
+    queryKey: ["session", token],
+    queryFn: () => fetchSession(token),
+  });
   const { data: me } = useQuery({
     queryKey: ["me"],
     queryFn: () => fetchMe(token!),
     enabled: !!token,
   });
-  const plan = me?.plan === "pro" ? "pro" : "free";
+  const plan = me?.plan === "pro" || session?.user?.plan === "pro" ? "pro" : "free";
+  const isGuest = session?.is_guest === true;
+  const voiceBlockedForFree = !!token && !isGuest && plan !== "pro";
   const maxBytes = plan === "pro" ? MAX_FILE_BYTES_PRO : MAX_FILE_BYTES_FREE;
 
   const setUploadFailure = (message: string, suggestPro = false) => {
@@ -141,6 +149,14 @@ export function SearchComposer({
     (text) => onChange(value ? `${value} ${text}` : text),
     token,
   );
+
+  const handleVoiceToggle = () => {
+    if (voiceBlockedForFree && voice.state === "idle") {
+      setVoiceProModalOpen(true);
+      return;
+    }
+    voice.toggle();
+  };
 
   const totalCount = attachments.length + uploading.length;
   const isBusy = uploading.length > 0;
@@ -485,7 +501,7 @@ export function SearchComposer({
               aria-label={t("voiceInput")}
               aria-pressed={voice.state === "recording"}
               disabled={disabled || voice.state === "transcribing"}
-              onClick={voice.toggle}
+              onClick={handleVoiceToggle}
             >
               <MicIcon recording={voice.state === "recording"} />
             </button>
@@ -499,7 +515,7 @@ export function SearchComposer({
                 aria-pressed={voice.state === "recording"}
                 disabled={disabled || voice.state === "transcribing"}
                 onPointerDown={keepComposerFocus}
-                onClick={voice.toggle}
+                onClick={handleVoiceToggle}
               >
                 <MicIcon recording={voice.state === "recording"} />
               </button>
@@ -532,7 +548,7 @@ export function SearchComposer({
                 aria-pressed={voice.state === "recording"}
                 disabled={disabled || voice.state === "transcribing"}
                 onPointerDown={keepComposerFocus}
-                onClick={voice.toggle}
+                onClick={handleVoiceToggle}
               >
                 <MicIcon recording={voice.state === "recording"} />
               </button>
@@ -556,6 +572,7 @@ export function SearchComposer({
         <MobileNewThreadButton onClick={onNewChat} />
       )}
       </div>
+      <VoiceProModal open={voiceProModalOpen} onClose={() => setVoiceProModalOpen(false)} />
     </div>
   );
 }
