@@ -187,7 +187,6 @@ export function History() {
       )}
 
       <div className="history-scroll">
-        <div className="history-scroll-inner">
         {!isDesktop && historySearchOpen && !selectionMode && (
           <label className="history-search-bar">
             <SearchFieldIcon />
@@ -256,27 +255,20 @@ export function History() {
             </ul>
           </div>
         ))}
-
-        {!isDesktop && selectionMode && (
-          <div className="history-bulk-bar-wrap history-bulk-bar-wrap--end">
-            <HistoryBulkBar
-              selectedCount={selectedCount}
-              totalVisible={visibleThreads.length}
-              deleting={bulkDeleteMutation.isPending}
-              onSelectAll={selectAllVisible}
-              onClearSelection={() => setSelectedIds(new Set())}
-              onDelete={() => setConfirmBulkDelete(true)}
-            />
-          </div>
-        )}
-
-        {!isDesktop && !selectionMode && (
-          <div className="mobile-new-thread-bar mobile-new-thread-bar--end">
-            <MobileNewThreadButton variant="labeled" onClick={() => navigate("/")} />
-          </div>
-        )}
-        </div>
       </div>
+
+      {!isDesktop && selectionMode && (
+        <div className="history-bulk-bar-wrap">
+          <HistoryBulkBar
+            selectedCount={selectedCount}
+            totalVisible={visibleThreads.length}
+            deleting={bulkDeleteMutation.isPending}
+            onSelectAll={selectAllVisible}
+            onClearSelection={() => setSelectedIds(new Set())}
+            onDelete={() => setConfirmBulkDelete(true)}
+          />
+        </div>
+      )}
 
       <HistoryBulkDeleteModal
         open={confirmBulkDelete}
@@ -285,6 +277,12 @@ export function History() {
         onConfirm={() => bulkDeleteMutation.mutate([...selectedIds])}
         onCancel={() => setConfirmBulkDelete(false)}
       />
+
+      {!isDesktop && !selectionMode && (
+        <div className="mobile-new-thread-bar">
+          <MobileNewThreadButton onClick={() => navigate("/")} />
+        </div>
+      )}
     </div>
   );
 }

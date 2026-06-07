@@ -27,9 +27,6 @@
   --desktop-thread-composer-width: 80%;
   /* Главная: поле ввода уже на ~20% */
   --desktop-composer-inline-width: 80%;
-  --mobile-new-chat-btn-width: 48px;
-  --mobile-new-search-bar-height: calc(72px + env(safe-area-inset-bottom, 0px));
-  --mobile-thread-composer-bar-height: calc(76px + env(safe-area-inset-bottom, 0px));
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   color: var(--text);
   background: var(--bg);
@@ -51,12 +48,12 @@ body {
 /* Тред: один скролл только у переписки, не у всей страницы */
 body:has(.page-thread) {
   overflow: hidden;
-  height: 100svh;
+  height: 100dvh;
 }
 
 #root:has(.page-thread) {
-  height: 100svh;
-  max-height: 100svh;
+  height: 100dvh;
+  max-height: 100dvh;
   overflow: hidden;
 }
 
@@ -73,8 +70,8 @@ body:has(.page-thread) {
 }
 
 .app-shell:has(.page-thread) {
-  height: 100svh;
-  max-height: 100svh;
+  height: 100dvh;
+  max-height: 100dvh;
   min-height: 0;
   overflow: hidden;
   padding-bottom: 0;
@@ -264,9 +261,8 @@ body:has(.page-thread) {
   .page-profile--mobile {
     display: flex;
     flex-direction: column;
-    height: 100svh;
-    max-height: 100svh;
-    min-height: 0;
+    min-height: 100dvh;
+    max-height: 100dvh;
     overflow: hidden;
   }
 
@@ -275,13 +271,7 @@ body:has(.page-thread) {
     min-height: 0;
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
-    padding-bottom: 0;
-  }
-
-  .profile-mobile-scroll-inner {
-    min-height: 100%;
-    display: flex;
-    flex-direction: column;
+    padding-bottom: calc(28px + 88px + env(safe-area-inset-bottom));
   }
 
   .page-profile--mobile > .profile-mobile-scroll {
@@ -292,9 +282,8 @@ body:has(.page-thread) {
   .page-history--mobile {
     display: flex;
     flex-direction: column;
-    height: 100svh;
-    max-height: 100svh;
-    min-height: 0;
+    min-height: 100dvh;
+    max-height: 100dvh;
     overflow: hidden;
   }
 
@@ -303,13 +292,11 @@ body:has(.page-thread) {
     min-height: 0;
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
-    padding-bottom: 0;
+    padding-bottom: calc(28px + 88px + env(safe-area-inset-bottom));
   }
 
-  .history-scroll-inner {
-    min-height: 100%;
-    display: flex;
-    flex-direction: column;
+  .page-history--mobile.page-history--selecting .history-scroll {
+    padding-bottom: calc(28px + 120px + env(safe-area-inset-bottom));
   }
 
   .page-history--mobile .history-list {
@@ -1847,8 +1834,8 @@ body:has(.page-thread) {
 .page-thread {
   display: flex;
   flex-direction: column;
-  height: 100svh;
-  max-height: 100svh;
+  height: 100dvh;
+  max-height: 100dvh;
   min-height: 0;
   padding-bottom: 0;
   overflow: hidden;
@@ -2254,7 +2241,7 @@ body:has(.page-thread) {
     overflow-x: hidden;
     -webkit-overflow-scrolling: touch;
     overscroll-behavior: contain;
-    padding-bottom: calc(var(--mobile-thread-composer-bar-height) + 12px);
+    padding-bottom: calc(28px + 88px + env(safe-area-inset-bottom));
   }
 }
 
@@ -3933,8 +3920,8 @@ body:has(.page-thread) {
   left: 0;
   right: 0;
   max-width: none;
-  padding: 0 16px calc(8px + env(safe-area-inset-bottom, 0px));
-  bottom: 0;
+  padding: 0 16px;
+  bottom: calc(28px + env(safe-area-inset-bottom));
 }
 
 .history-new-thread-bar,
@@ -3957,102 +3944,17 @@ body:has(.page-thread) {
   height: 60px;
 }
 
-.mobile-new-thread-bar--docked {
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  flex-shrink: 0;
-  justify-content: flex-end;
-  align-items: center;
-  padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px));
-  background: var(--bg);
-  border-top: 1px solid var(--border-subtle);
-  pointer-events: auto;
-  z-index: 95;
-}
-
-.mobile-new-thread-bar--end {
-  position: sticky;
-  bottom: 0;
-  margin-top: auto;
-  flex-shrink: 0;
-  display: flex;
-  justify-content: flex-end;
-  align-items: center;
-  padding: 12px 0 calc(12px + env(safe-area-inset-bottom, 0px));
-  background: linear-gradient(to top, var(--bg) 78%, color-mix(in srgb, var(--bg) 88%, transparent));
-  border-top: 1px solid var(--border-subtle);
-  z-index: 10;
-}
-
-.mobile-new-search-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 48px;
-  padding: 10px 18px 10px 20px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  background: var(--surface);
-  color: var(--text);
-  font-size: 0.9375rem;
-  font-weight: 600;
-  font-family: inherit;
-  line-height: 1.2;
-  white-space: nowrap;
-  box-shadow: var(--shadow-sm);
-  cursor: pointer;
-  transition: background 0.15s, border-color 0.15s;
-}
-
-.mobile-new-search-btn:hover {
-  background: var(--surface-hover);
-}
-
-.mobile-new-search-btn-label {
-  line-height: 1.2;
-}
-
-.mobile-new-search-btn-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  color: var(--accent);
-}
-
-.mobile-new-search-btn-icon svg {
-  display: block;
-  width: 20px;
-  height: 20px;
-}
-
 .page-thread .thread-conversation {
-  padding-bottom: calc(var(--mobile-thread-composer-bar-height) + 12px);
+  padding-bottom: calc(28px + 88px + env(safe-area-inset-bottom));
 }
 
 .page-thread .thread-scroll-down {
-  bottom: calc(var(--mobile-thread-composer-bar-height) + 10px);
-}
-
-@media (max-width: 899px) {
-  .page-thread .thread-scroll-down {
-    left: 16px;
-    right: auto;
-    bottom: calc(var(--mobile-thread-composer-bar-height) + 8px);
-    z-index: 85;
-  }
-
-  .page-thread .composer-wrap--thread-mobile .composer-new-chat {
-    position: relative;
-    z-index: 92;
-  }
+  bottom: calc(28px + 96px + env(safe-area-inset-bottom));
 }
 
 .thread-scroll-down {
   position: fixed;
-  z-index: 80;
+  z-index: 105;
   right: 16px;
   bottom: calc(
     var(--bottom-nav-height) + var(--composer-nav-gap) + 96px + env(safe-area-inset-bottom)
@@ -4299,18 +4201,6 @@ body:has(.page-thread) {
   bottom: 0;
   flex-shrink: 0;
   z-index: 95;
-  background: var(--bg);
-  border-top: 1px solid var(--border-subtle);
-  justify-content: flex-start;
-}
-
-.history-bulk-bar-wrap--end {
-  position: sticky;
-  bottom: 0;
-  margin-top: auto;
-  flex-shrink: 0;
-  z-index: 10;
-  padding: 12px 0 calc(12px + env(safe-area-inset-bottom, 0px));
   background: var(--bg);
   border-top: 1px solid var(--border-subtle);
   justify-content: flex-start;
