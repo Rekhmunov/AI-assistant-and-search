@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 type EditorMode = "visual" | "html";
 
@@ -34,14 +34,18 @@ export function RichTextEditor({
   const [emojiOpen, setEmojiOpen] = useState(false);
   const [mode, setMode] = useState<EditorMode>("visual");
 
-  useEffect(() => {
-    if (mode !== "visual") return;
+  /** Визуальный редактор всегда в DOM; синхронизируем с value, кроме активного набора в visual. */
+  useLayoutEffect(() => {
     const el = editorRef.current;
     if (!el) return;
-    if (value !== lastValue.current && el.innerHTML !== value) {
-      el.innerHTML = value || "<p></p>";
-      lastValue.current = value;
+    const html = value || "<p></p>";
+    const inSync =
+      mode === "visual" && value === lastValue.current && el.innerHTML === html;
+    if (inSync) return;
+    if (el.innerHTML !== html) {
+      el.innerHTML = html;
     }
+    lastValue.current = html;
   }, [value, mode]);
 
   const emitChange = useCallback(() => {
@@ -141,7 +145,9 @@ export function RichTextEditor({
           </button>
         </div>
       )}
-      {mode === "visual" && (
+      <div
+        className={`rte-visual-pane${mode !== "visual" ? " rte-visual-pane--hidden" : ""}`}
+      >
       <div className="rte-toolbar" role="toolbar" aria-label="Форматирование">
         <button type="button" className="rte-btn" onClick={() => exec("bold")} title="Жирный">
           <b>B</b>
@@ -211,25 +217,26 @@ export function RichTextEditor({
           ⌫
         </button>
       </div>
-      )}
-      {mode === "visual" ? (
         <div
           ref={editorRef}
           className="rte-editor"
-          contentEditable={!disabled}
+          contentEditable={!disabled && mode === "visual"}
           suppressContentEditableWarning
           role="textbox"
           aria-multiline="true"
+          aria-hidden={mode !== "visual"}
           onInput={emitChange}
           onBlur={emitChange}
         />
-      ) : (
+      </div>
+      {allowHtmlSource && (
         <textarea
-          className="rte-html-source"
+          className={`rte-html-source${mode !== "html" ? " rte-html-source--hidden" : ""}`}
           value={value === "<p></p>" ? "" : value}
           placeholder="<h2>Заголовок</h2>&#10;<p>Текст…</p>"
           disabled={disabled}
           spellCheck={false}
+          aria-hidden={mode !== "html"}
           aria-label="HTML-код документа"
           onChange={(e) => onHtmlSourceChange(e.target.value)}
           onPaste={(e) => {

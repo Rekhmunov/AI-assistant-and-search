@@ -71,19 +71,12 @@ function DocumentSection({
   const [busy, setBusy] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [msg, setMsg] = useState("");
-  const [previewVersionId, setPreviewVersionId] = useState<string | null>(null);
   const [versionModal, setVersionModal] = useState<VersionModal | null>(null);
 
   useEffect(() => {
     setContent(doc.current_version?.content_html ?? "<p></p>");
     setPublicPath(doc.public_path);
-    setPreviewVersionId(null);
   }, [doc]);
-
-  const previewHtml =
-    previewVersionId != null
-      ? doc.versions.find((v) => v.id === previewVersionId)?.content_html
-      : content;
 
   const save = async (e: FormEvent) => {
     e.preventDefault();
@@ -130,9 +123,6 @@ function DocumentSection({
         { method: "DELETE" },
       );
       onSaved(updated);
-      if (previewVersionId === version.id) {
-        setPreviewVersionId(null);
-      }
       setVersionModal(null);
       setMsg(`Версия v${version.version_number} удалена`);
     } catch (err) {
@@ -196,16 +186,6 @@ function DocumentSection({
               />
             </div>
 
-            {previewHtml && (
-              <div className="documents-preview">
-                <h4 className="documents-preview-title">Предпросмотр</h4>
-                <div
-                  className="documents-preview-body legal-doc-html"
-                  dangerouslySetInnerHTML={{ __html: previewHtml }}
-                />
-              </div>
-            )}
-
             {canWrite && (
               <button type="submit" className="btn-primary" disabled={busy}>
                 {busy ? "Сохранение…" : "Сохранить новую версию"}
@@ -224,11 +204,9 @@ function DocumentSection({
                       <button
                         type="button"
                         className={`documents-history-btn${
-                          previewVersionId === v.id ? " documents-history-btn--active" : ""
+                          doc.current_version?.id === v.id ? " documents-history-btn--active" : ""
                         }`}
-                        onClick={() =>
-                          setPreviewVersionId((cur) => (cur === v.id ? null : v.id))
-                        }
+                        onClick={() => setContent(v.content_html)}
                       >
                         <span>
                           v{v.version_number}
