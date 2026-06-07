@@ -1,16 +1,22 @@
-"""Оплата Pro: email для пользователей MAX без привязанного email."""
+"""Оплата Pro: email для чека без ввода пользователем в MAX."""
 
-from pathlib import Path
+from uuid import uuid4
 
-
-def test_create_payment_accepts_customer_email_in_schema():
-    src = Path(__file__).resolve().parents[1] / "app/schemas/payments.py"
-    text = src.read_text(encoding="utf-8")
-    assert "customer_email" in text
+from app.api.payments import _receipt_email_for_user
+from app.core.config import Settings
+from app.models.user import User
 
 
-def test_create_payment_saves_email_for_max_user():
-    src = Path(__file__).resolve().parents[1] / "app/api/payments.py"
-    text = src.read_text(encoding="utf-8")
-    assert "body.customer_email" in text
-    assert "user.max_user_id is None" in text
+def test_receipt_email_uses_profile_email():
+    user = User(id=uuid4(), email="User@Example.com", max_user_id=12345)
+    assert _receipt_email_for_user(user, Settings()) == "user@example.com"
+
+
+def test_receipt_email_auto_for_max_without_email():
+    user = User(id=uuid4(), email=None, max_user_id=987654321)
+    assert _receipt_email_for_user(user, Settings()) == "max987654321@glosix.ru"
+
+
+def test_receipt_email_none_without_email_and_max():
+    user = User(id=uuid4(), email=None, max_user_id=None)
+    assert _receipt_email_for_user(user, Settings()) is None

@@ -69,7 +69,6 @@ export function Profile() {
   const [proBlockedOpen, setProBlockedOpen] = useState(false);
   const [paymentModal, setPaymentModal] = useState<ProPaymentModalState>({ open: false });
   const [acceptOffer, setAcceptOffer] = useState(false);
-  const [paymentEmail, setPaymentEmail] = useState("");
   const [offerModalOpen, setOfferModalOpen] = useState(false);
   const [supportModalOpen, setSupportModalOpen] = useState(false);
   const [supportSource, setSupportSource] = useState<"general" | "pro_payment">("general");
@@ -240,22 +239,21 @@ export function Profile() {
   const usageRatio = searchesLimit > 0 ? Math.min(1, searchesToday / searchesLimit) : 0;
   const usagePercent = Math.round(usageRatio * 100);
 
-  const profileEmail = profileUser?.email?.trim() ?? "";
-  const hasPaymentEmail = Boolean(profileEmail);
-  const paymentEmailTrimmed = paymentEmail.trim();
-  const canUseInlinePaymentEmail = inMax && !hasPaymentEmail;
-  const effectivePaymentEmail = hasPaymentEmail ? profileEmail : paymentEmailTrimmed;
-  const hasEffectivePaymentEmail = Boolean(effectivePaymentEmail) && effectivePaymentEmail.includes("@");
+  const hasPaymentEmail = Boolean(profileUser?.email?.trim());
+  const needsProfileEmailForPro = !inMax && !hasPaymentEmail;
   const proPayDisabled =
-    !acceptOffer || offerLoading || !offerVersionId || !hasEffectivePaymentEmail || proPaying;
+    !acceptOffer ||
+    offerLoading ||
+    !offerVersionId ||
+    needsProfileEmailForPro ||
+    proPaying;
   const proPayNeedsOfferConsent = !acceptOffer;
-  const proPayNeedsEmail = !hasEffectivePaymentEmail;
 
   const showProPayBlockedHint = () => {
     if (proPayNeedsOfferConsent) {
       setProPaymentError(t("proOfferConsentRequired"));
-    } else if (proPayNeedsEmail) {
-      setProPaymentError(t("proPaymentEmailRequired"));
+    } else if (needsProfileEmailForPro) {
+      setProPaymentError(t("proPaymentEmailHintWeb"));
     } else {
       return;
     }
@@ -279,8 +277,8 @@ export function Profile() {
       setProPaymentError(t("proOfferConsentRequired"));
       return;
     }
-    if (!hasEffectivePaymentEmail) {
-      setProPaymentError(t("proPaymentEmailRequired"));
+    if (needsProfileEmailForPro) {
+      setProPaymentError(t("proPaymentEmailHintWeb"));
       return;
     }
     setProPaymentError(null);
@@ -292,11 +290,7 @@ export function Profile() {
         setProPaymentError(t("legalDocumentUnavailable"));
         return;
       }
-      const payment = await createProPayment(
-        token!,
-        freshOffer.version_id,
-        canUseInlinePaymentEmail ? effectivePaymentEmail : undefined,
-      );
+      const payment = await createProPayment(token!, freshOffer.version_id);
       if (payment.dev_mode) {
         await devActivatePro(token!);
         const updated = await fetchMe(token!);
@@ -429,24 +423,7 @@ export function Profile() {
           {(offerLoadError || (offerFetched && !offerLoading && !offerVersionId)) && (
             <p className="profile-hint profile-pro-offer-error">{t("legalDocumentUnavailable")}</p>
           )}
-          {canUseInlinePaymentEmail && (
-            <label className="auth-field profile-pro-email-field">
-              <span className="auth-field-label">{t("proPaymentEmailLabel")}</span>
-              <input
-                className="auth-field-input"
-                type="email"
-                value={paymentEmail}
-                onChange={(e) => {
-                  setPaymentEmail(e.target.value);
-                  if (proPaymentError) setProPaymentError(null);
-                }}
-                autoComplete="email"
-                placeholder={t("proPaymentEmailPlaceholder")}
-                inputMode="email"
-              />
-            </label>
-          )}
-          {!hasPaymentEmail && !canUseInlinePaymentEmail && (
+          {needsProfileEmailForPro && (
             <p className="profile-hint profile-pro-email-hint">{t("proPaymentEmailHintWeb")}</p>
           )}
           {proPaymentError && (
@@ -456,15 +433,15 @@ export function Profile() {
           )}
           <div
             className={`profile-pro-pay-wrap${proPayDisabled ? " profile-pro-pay-wrap--disabled" : ""}${
-              proPayDisabled && (proPayNeedsOfferConsent || proPayNeedsEmail)
+              proPayDisabled && (proPayNeedsOfferConsent || needsProfileEmailForPro)
                 ? " profile-pro-pay-wrap--needs-offer"
                 : ""
             }${proPayHintVisible ? " profile-pro-pay-wrap--hint-visible" : ""}`}
             data-hint={
               proPayDisabled && proPayNeedsOfferConsent
                 ? t("proOfferConsentRequired")
-                : proPayDisabled && proPayNeedsEmail
-                  ? t("proPaymentEmailRequired")
+                : proPayDisabled && needsProfileEmailForPro
+                  ? t("proPaymentEmailHintWeb")
                   : undefined
             }
             onClick={() => {
@@ -476,13 +453,17 @@ export function Profile() {
                 showProPayBlockedHint();
               }
             }}
-            role={proPayDisabled && (proPayNeedsOfferConsent || proPayNeedsEmail) ? "button" : undefined}
-            tabIndex={proPayDisabled && (proPayNeedsOfferConsent || proPayNeedsEmail) ? 0 : undefined}
+            role={
+              proPayDisabled && (proPayNeedsOfferConsent || needsProfileEmailForPro) ? "button" : undefined
+            }
+            tabIndex={
+              proPayDisabled && (proPayNeedsOfferConsent || needsProfileEmailForPro) ? 0 : undefined
+            }
             aria-label={
               proPayDisabled && proPayNeedsOfferConsent
                 ? t("proOfferConsentRequired")
-                : proPayDisabled && proPayNeedsEmail
-                  ? t("proPaymentEmailRequired")
+                : proPayDisabled && needsProfileEmailForPro
+                  ? t("proPaymentEmailHintWeb")
                   : undefined
             }
           >

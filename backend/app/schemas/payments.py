@@ -1,8 +1,7 @@
 from uuid import UUID
 
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel
 
 
 class ProPaymentCreateRequest(BaseModel):
     offer_version_id: UUID
-    customer_email: EmailStr | None = None

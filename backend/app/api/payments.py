@@ -4,7 +4,6 @@ from datetime import datetime, timedelta, timezone
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.exceptions import HTTPException as StarletteHTTPException
@@ -29,6 +28,17 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/payments", tags=["payments"])
 
 _PAYMENT_UNAVAILABLE = "Не удалось создать платёж. Попробуйте позже или напишите в поддержку."
+
+
+def _receipt_email_for_user(user: User, settings) -> str | None:
+    """Email для фискального чека ЮKassa."""
+    email = (user.email or "").strip().lower()
+    if email:
+        return email
+    if user.max_user_id is not None:
+        host = settings.public_web_url.replace("https://", "").replace("http://", "").split("/")[0]
+        return f"max{user.max_user_id}@{host}"
+    return None
 
 
 async def _save_pending_subscription(
@@ -109,32 +119,13 @@ async def create_pro_payment(
             detail="Некорректная цена Pro в настройках админки",
         )
 
-    customer_email = (user.email or "").strip().lower()
+    customer_email = _receipt_email_for_user(user, settings)
     if not customer_email:
-        body_email = str(body.customer_email or "").strip().lower()
-        if not body_email:
-            await db.rollback()
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Для оплаты Pro укажите email для чека",
-            )
-        if user.max_user_id is None:
-            await db.rollback()
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Для оплаты Pro укажите email в профиле",
-            )
-        existing = await db.execute(
-            select(User).where(User.email == body_email, User.id != user.id, User.deleted_at.is_(None))
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Для оплаты Pro укажите email в профиле",
         )
-        if existing.scalar_one_or_none():
-            await db.rollback()
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Этот email уже используется. Укажите другой адрес.",
-            )
-        user.email = body_email
-        customer_email = body_email
 
     payment_description = f"Glosix Pro — {settings.pro_duration_days} дней"
     yookassa_configured = bool(
