@@ -3,12 +3,15 @@ import {
   IMAGE_MAX_EDGE_PX,
   isImageFile,
 } from "../constants/files";
+import { isMaxWebApp } from "./maxApp";
 
 /**
  * Downscale large photos before upload to stay within size limits and speed up OCR.
  */
 export async function prepareFileForUpload(file: File): Promise<File> {
   if (!isImageFile(file)) return file;
+  // MAX WebView: canvas/toBlob часто ломает загрузку — отправляем оригинал.
+  if (isMaxWebApp()) return file;
   if (file.size <= IMAGE_COMPRESS_THRESHOLD_BYTES) return file;
   if (typeof createImageBitmap !== "function") return file;
 

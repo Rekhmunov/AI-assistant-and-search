@@ -8,6 +8,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import (
+    GUEST_HEADER,
     SearchUserResult,
     get_db,
     get_file_access_user,
@@ -250,6 +251,7 @@ async def upload_file(
 ):
     if actor.new_guest_key:
         set_guest_cookie(response, actor.new_guest_key)
+        response.headers[GUEST_HEADER] = actor.new_guest_key
 
     user = actor.user
     max_bytes = max_upload_bytes(user.plan)

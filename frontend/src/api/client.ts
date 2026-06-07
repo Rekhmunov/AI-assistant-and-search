@@ -380,6 +380,8 @@ export async function fetchSession(token: string | null): Promise<SessionStatus>
     const msg = serverUnavailableMessage(res.status) ?? "Failed to load session";
     throw new HttpResponseError(msg, res.status);
   }
+  const guestKey = res.headers.get("X-Guest-Session");
+  if (guestKey) saveGuestSession(guestKey);
   return res.json();
 }
 
@@ -786,22 +788,39 @@ function parseUploadErrorDetail(detail: UploadErrorDetail | undefined): FileUplo
   return new FileUploadError(message, Boolean(detail.suggest_pro));
 }
 
+function uploadFilename(file: File): string {
+  const name = file.name?.trim();
+  if (name) return name;
+  if (file.type?.startsWith("image/")) {
+    const ext = file.type.split("/")[1]?.replace("jpeg", "jpg") || "jpg";
+    return `photo.${ext}`;
+  }
+  return "document.bin";
+}
+
 export async function uploadFile(token: string | null, file: File): Promise<UploadedFile> {
   const form = new FormData();
-  form.append("file", file);
-  const res = await fetch(`${API_BASE}/api/files/upload`, {
-    method: "POST",
-    headers: token
-      ? { Authorization: `Bearer ${token}`, ...getGuestSessionHeader() }
-      : getGuestSessionHeader(),
-    credentials: "include",
-    body: form,
-  });
+  form.append("file", file, uploadFilename(file));
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}/api/files/upload`, {
+      method: "POST",
+      headers: token
+        ? { Authorization: `Bearer ${token}`, ...getGuestSessionHeader() }
+        : getGuestSessionHeader(),
+      credentials: "include",
+      body: form,
+    });
+  } catch {
+    throw new FileUploadError("Не удалось загрузить файл. Проверьте соединение и попробуйте снова.");
+  }
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     const detail = (err as { detail?: UploadErrorDetail }).detail;
     throw parseUploadErrorDetail(detail);
   }
+  const guestKey = res.headers.get("X-Guest-Session");
+  if (guestKey) saveGuestSession(guestKey);
   return res.json();
 }
 
