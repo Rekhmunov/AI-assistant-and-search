@@ -886,6 +886,7 @@ export function Thread() {
         />
       )}
 
+      <div className={`thread-mobile-body${isDesktop ? " thread-mobile-body--desktop" : ""}`}>
       <div
         className={`thread-conversation${isDesktop ? "" : " thread-conversation--mobile-tabs"}`}
         ref={conversationRef}
@@ -1099,6 +1100,7 @@ export function Thread() {
         layoutMode={isDesktop ? "default" : "threadMobile"}
         onNewChat={isDesktop ? undefined : () => navigate("/")}
       />
+      </div>
     </div>
   );
 }

@@ -18,6 +18,11 @@
   --mobile-header-side-width: calc(var(--mobile-header-btn-size) * 2 + var(--mobile-header-btn-gap));
   --mobile-header-x-padding: 12px;
   --composer-nav-gap: 10px;
+  /* MAX/мобилка тред: доли экрана под шапкой (в сумме 100%) */
+  --thread-mobile-conversation-pct: 72%;
+  --thread-mobile-composer-pct: 28%;
+  --thread-mobile-conversation-pct-focused: 55%;
+  --thread-mobile-composer-pct-focused: 45%;
   --sidebar-width: 220px;
   --desktop-nav-min: 900px;
   --desktop-search-max-width: min(2160px, calc(100vw - var(--sidebar-width) - 48px));
@@ -356,61 +361,129 @@ body:has(.page-thread) {
     padding: 0;
   }
 
-  /* Тред MAX/мобилка: шапка + переписка (1fr) + composer = 100dvh, без fixed-зазора снизу */
+  /* Тред MAX/мобилка: шапка auto, ниже — переписка + composer в % (100% под шапкой) */
   .page-thread--mobile {
-    display: grid;
-    grid-template-rows: auto minmax(0, 1fr) auto;
+    display: flex;
+    flex-direction: column;
     height: 100dvh;
     max-height: 100dvh;
   }
 
-  .page-thread--mobile .thread-mobile-header {
-    grid-row: 1;
+  .page-thread--mobile .thread-mobile-body {
+    position: relative;
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
   }
 
   .page-thread--mobile .thread-conversation {
-    grid-row: 2;
-    flex: none;
+    flex: 0 0 var(--thread-mobile-conversation-pct);
+    min-height: 0;
+    height: var(--thread-mobile-conversation-pct);
     padding-left: 16px;
     padding-right: 16px;
-    padding-bottom: 12px;
+    padding-bottom: 8px;
+  }
+
+  .page-thread--mobile .thread-mobile-body:has(.composer-wrap--focused) .thread-conversation {
+    flex-basis: var(--thread-mobile-conversation-pct-focused);
+    height: var(--thread-mobile-conversation-pct-focused);
+  }
+
+  .page-thread--mobile .thread-conversation--mobile-tabs {
+    height: 100%;
   }
 
   .page-thread--mobile .thread-conversation--mobile-tabs .thread-panel--answer,
   .page-thread--mobile .thread-conversation--mobile-tabs .thread-panel--images {
-    padding-bottom: 12px;
+    height: 100%;
+    padding-bottom: 8px;
   }
 
   .page-thread--mobile .composer-wrap--docked.composer-wrap--thread-mobile {
-    grid-row: 3;
+    flex: 0 0 var(--thread-mobile-composer-pct);
+    min-height: 0;
+    height: var(--thread-mobile-composer-pct);
     position: static;
-    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
     width: 100%;
     max-width: none;
     margin: 0;
-    padding: 8px 16px calc(8px + env(safe-area-inset-bottom, 0px));
+    padding: 6px 16px calc(6px + env(safe-area-inset-bottom, 0px));
     background: var(--bg);
     border-top: 1px solid var(--border-subtle);
+    overflow: hidden;
+  }
+
+  .page-thread--mobile .thread-mobile-body:has(.composer-wrap--focused) .composer-wrap--thread-mobile {
+    flex-basis: var(--thread-mobile-composer-pct-focused);
+    height: var(--thread-mobile-composer-pct-focused);
+  }
+
+  .page-thread--mobile .composer-wrap--docked.composer-wrap--thread-mobile .composer-outer-row--thread-mobile {
+    flex: 1;
+    min-height: 0;
+    align-items: stretch;
   }
 
   .page-thread--mobile .composer-wrap--docked.composer-wrap--thread-mobile .search-composer {
-    padding-bottom: 12px;
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    padding-bottom: 10px;
     margin-bottom: 0;
   }
 
-  .page-thread--mobile > .thread-scroll-down {
-    grid-row: 2;
-    grid-column: 1;
-    justify-self: end;
-    align-self: end;
-    margin-right: 16px;
-    margin-bottom: 12px;
-    bottom: calc(100px + env(safe-area-inset-bottom, 0px));
+  .page-thread--mobile .search-composer--thread-mobile .composer-row--text-only {
+    flex: 1;
+    min-height: 0;
+  }
+
+  .page-thread--mobile .search-composer--thread-mobile .composer-input-wrap {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .page-thread--mobile .search-composer--thread-mobile .composer-input {
+    flex: 1;
+    min-height: 36px;
+    max-height: 100%;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .page-thread--mobile .search-composer--thread-mobile:not(.search-composer--focused) .composer-input {
+    flex: 0 0 auto;
+    max-height: 44px;
+  }
+
+  .page-thread--mobile .thread-mobile-body > .thread-scroll-down {
+    position: absolute;
+    right: 16px;
+    bottom: calc(var(--thread-mobile-composer-pct) + 8px);
+    z-index: 105;
+  }
+
+  .page-thread--mobile .thread-mobile-body:has(.composer-wrap--focused) > .thread-scroll-down {
+    bottom: calc(var(--thread-mobile-composer-pct-focused) + 8px);
   }
 
   .page-thread--mobile .composer-wrap--docked {
     padding-top: 0;
     background: var(--bg);
+  }
+
+  .thread-mobile-body--desktop {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
   }
 
   .page-thread .thread-conversation {
