@@ -232,11 +232,13 @@ export function RichTextEditor({
       {allowHtmlSource && (
         <textarea
           className={`rte-html-source${mode !== "html" ? " rte-html-source--hidden" : ""}`}
+          hidden={mode !== "html"}
           value={value === "<p></p>" ? "" : value}
           placeholder="<h2>Заголовок</h2>&#10;<p>Текст…</p>"
           disabled={disabled}
           spellCheck={false}
           aria-hidden={mode !== "html"}
+          tabIndex={mode === "html" ? 0 : -1}
           aria-label="HTML-код документа"
           onChange={(e) => onHtmlSourceChange(e.target.value)}
           onPaste={(e) => {

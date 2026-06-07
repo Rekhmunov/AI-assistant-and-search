@@ -2214,10 +2214,6 @@ pre.small {
   display: none;
 }
 
-.rte-html-source--hidden {
-  display: none;
-}
-
 .rte-html-source {
   display: block;
   width: 100%;
@@ -2234,6 +2230,10 @@ pre.small {
   line-height: 1.5;
   resize: vertical;
   tab-size: 2;
+}
+
+.rte-html-source.rte-html-source--hidden {
+  display: none;
 }
 
 .rte-html-source:focus {
