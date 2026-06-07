@@ -31,7 +31,6 @@
   "voiceRecognizeFailed": "Не удалось распознать речь",
   "voiceNoSpeech": "Речь не распознана. Попробуйте ещё раз",
   "proUpgradeModalTitle": "Перейдите на Pro",
-  "proUpgradeModalHint": "Откройте все возможности Glosix — умные модели, больше лимитов и голосовой ввод.",
   "voiceProModalTitle": "Распознавание речи — Pro",
   "voiceProModalHint": "Голосовой ввод доступен только подписчикам Pro. Оформите подписку, чтобы надиктовывать запросы.",
   "modelSelectorLabel": "Модель",

@@ -21,7 +21,11 @@ BODY=$(curl -sfL "$APP_URL$JS")
 if echo "$BODY" | grep -q 'composer-attach-dropdown'; then
   echo "OK: attach menu present in bundle"
 else
-  echo "FAIL: old bundle (no composer-attach-dropdown). Run update-prod.sh with --no-cache frontend"
+  echo "FAIL: old bundle (no composer-attach-dropdown)."
+  echo "      На сервере: bash scripts/update.sh"
+  echo "      Или: git fetch origin && git reset --hard origin/main"
+  echo "           docker compose -f docker-compose.prod.yml build --no-cache frontend"
+  echo "           docker compose -f docker-compose.prod.yml up -d --force-recreate frontend nginx"
   exit 1
 fi
 

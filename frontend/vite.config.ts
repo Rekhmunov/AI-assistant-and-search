@@ -7,7 +7,15 @@ export default defineConfig({
   define: {
     __BUILD_ID__: JSON.stringify(buildId),
   },
-  plugins: [react()],
+  plugins: [
+    react(),
+    {
+      name: "html-build-id",
+      transformIndexHtml(html) {
+        return html.replace("<html", `<html data-build="${buildId}"`);
+      },
+    },
+  ],
   server: {
     port: 5173,
     proxy: {

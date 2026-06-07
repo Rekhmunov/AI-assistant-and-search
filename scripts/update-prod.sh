@@ -174,15 +174,30 @@ APP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "http://127.0.0.1:${PROXY_PORT
 ADMIN_CODE=$(curl -s -o /dev/null -w "%{http_code}" "http://127.0.0.1:${PROXY_PORT}/login" -H "Host: ${ADMIN_HOST_CHECK}" || echo "000")
 ADMIN_TITLE=$(curl -s "http://127.0.0.1:${PROXY_PORT}/login" -H "Host: ${ADMIN_HOST_CHECK}" | grep -oi '<title>[^<]*</title>' | head -1 || true)
 
-_check_frontend_bundle() {
+_frontend_bundle_has_attach_menu() {
+  local target="$1"
+  grep -q 'composer-attach-dropdown' "$target" 2>/dev/null
+}
+
+_check_frontend_bundle_in_container() {
+  $COMPOSE exec -T frontend sh -c 'grep -q composer-attach-dropdown /usr/share/nginx/html/assets/*.js' 2>/dev/null
+}
+
+_check_frontend_bundle_via_proxy() {
   local app_html app_js
   app_html=$(curl -sf "http://127.0.0.1:${PROXY_PORT}/" -H "Host: ${APP_HOST_CHECK}" 2>/dev/null || true)
   app_js=$(echo "$app_html" | grep -oE '/assets/index-[^"[:space:]]+\.js' | head -1 || true)
   if [ -z "$app_js" ]; then
-    echo "ERROR: не удалось найти /assets/index-*.js в index.html"
+    echo "    app bundle (proxy): не найден /assets/index-*.js в index.html"
     return 1
   fi
-  if curl -sf "http://127.0.0.1:${PROXY_PORT}${app_js}" -H "Host: ${APP_HOST_CHECK}" | grep -q 'composer-attach-dropdown'; then
+  local body
+  body=$(curl -sf "http://127.0.0.1:${PROXY_PORT}${app_js}" -H "Host: ${APP_HOST_CHECK}" 2>/dev/null || true)
+  if [ -z "$body" ]; then
+    echo "    app bundle (proxy): не удалось скачать ${app_js}"
+    return 1
+  fi
+  if _frontend_bundle_has_attach_menu <<<"$body"; then
     echo "    app bundle: attach menu OK (${app_js})"
     return 0
   fi
@@ -190,17 +205,40 @@ _check_frontend_bundle() {
   return 1
 }
 
+_check_frontend_bundle() {
+  if _check_frontend_bundle_in_container; then
+    local js_path
+    js_path=$($COMPOSE exec -T frontend sh -c 'ls /usr/share/nginx/html/assets/index-*.js 2>/dev/null | head -1' | tr -d '\r')
+    echo "    app bundle: attach menu OK (container ${js_path:-/assets/index-*.js})"
+    if ! _check_frontend_bundle_via_proxy; then
+      echo "    WARN: через nginx устаревший JS — пересоздаём nginx"
+      $COMPOSE up -d --force-recreate nginx
+      sleep 2
+      _check_frontend_bundle_via_proxy
+    fi
+    return 0
+  fi
+  _check_frontend_bundle_via_proxy
+}
+
+if [ ! -f frontend/src/components/ComposerAttachMenu.tsx ]; then
+  echo "ERROR: в репозитории нет ComposerAttachMenu — сначала git pull origin main"
+  exit 1
+fi
+
 if ! _check_frontend_bundle; then
-  echo "==> Пересборка frontend --no-cache (устаревший Docker layer cache)"
+  echo "==> Пересборка frontend --no-cache (устаревший образ или кэш Docker)"
   $COMPOSE build --no-cache frontend
   $COMPOSE up -d --force-recreate frontend nginx
   sleep 3
   if ! _check_frontend_bundle; then
-    echo "ERROR: app JS без меню вложений после --no-cache. Проверьте git pull и образ frontend:"
-    echo "       git rev-parse --short HEAD"
-    echo "       $COMPOSE build --no-cache frontend"
-    echo "       $COMPOSE up -d --force-recreate frontend nginx"
-    echo "       bash scripts/verify-prod-frontend.sh"
+    echo "ERROR: frontend без меню вложений после --no-cache."
+    echo "       Текущий коммит: $(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
+    echo "       Ожидаемый origin/main: $(git rev-parse --short origin/main 2>/dev/null || echo unknown)"
+    echo "       1) git fetch origin && git reset --hard origin/main"
+    echo "       2) $COMPOSE build --no-cache frontend"
+    echo "       3) $COMPOSE up -d --force-recreate frontend nginx"
+    echo "       4) bash scripts/verify-prod-frontend.sh"
     exit 1
   fi
 fi

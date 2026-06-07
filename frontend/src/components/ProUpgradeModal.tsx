@@ -1,3 +1,4 @@
+import { createPortal } from "react-dom";
 import { Link } from "react-router-dom";
 import { useBodyScrollLock } from "../hooks/useBodyScrollLock";
 import { t } from "../i18n";
@@ -7,22 +8,20 @@ type Props = {
   open: boolean;
   onClose: () => void;
   title?: string;
-  hint?: string;
 };
 
 export function ProUpgradeModal({
   open,
   onClose,
   title = t("proUpgradeModalTitle"),
-  hint = t("proUpgradeModalHint"),
 }: Props) {
   useBodyScrollLock(open);
 
   if (!open) return null;
 
-  return (
+  return createPortal(
     <div
-      className="feedback-modal-overlay app-modal-overlay"
+      className="feedback-modal-overlay app-modal-overlay pro-upgrade-modal-overlay"
       role="presentation"
       onClick={onClose}
     >
@@ -36,7 +35,6 @@ export function ProUpgradeModal({
         <h2 id="pro-upgrade-modal-title" className="feedback-modal-title">
           {title}
         </h2>
-        <p className="feedback-modal-hint">{hint}</p>
         <ProBenefitsList className="profile-pro-benefits-list pro-upgrade-modal-benefits" />
         <div className="feedback-modal-actions pro-upgrade-modal-actions">
           <Link to="/profile" className="btn-primary btn-block" onClick={onClose}>
@@ -47,6 +45,7 @@ export function ProUpgradeModal({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
