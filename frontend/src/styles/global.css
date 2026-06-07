@@ -18,11 +18,10 @@
   --mobile-header-side-width: calc(var(--mobile-header-btn-size) * 2 + var(--mobile-header-btn-gap));
   --mobile-header-x-padding: 12px;
   --composer-nav-gap: 10px;
-  /* MAX/мобилка тред: доли экрана под шапкой (в сумме 100%) */
-  --thread-mobile-conversation-pct: 72%;
-  --thread-mobile-composer-pct: 28%;
-  --thread-mobile-conversation-pct-focused: 55%;
-  --thread-mobile-composer-pct-focused: 45%;
+  /* MAX/мобилка тред: composer по содержимому; при фокусе — доли под шапкой */
+  --thread-mobile-conversation-pct-focused: 62%;
+  --thread-mobile-composer-pct-focused: 38%;
+  --thread-mobile-composer-bottom-inset: max(12px, env(safe-area-inset-bottom, 0px));
   --sidebar-width: 220px;
   --desktop-nav-min: 900px;
   --desktop-search-max-width: min(2160px, calc(100vw - var(--sidebar-width) - 48px));
@@ -379,17 +378,17 @@ body:has(.page-thread) {
   }
 
   .page-thread--mobile .thread-conversation {
-    flex: 0 0 var(--thread-mobile-conversation-pct);
+    flex: 1 1 auto;
     min-height: 0;
-    height: var(--thread-mobile-conversation-pct);
     padding-left: 16px;
     padding-right: 16px;
     padding-bottom: 8px;
   }
 
   .page-thread--mobile .thread-mobile-body:has(.composer-wrap--focused) .thread-conversation {
-    flex-basis: var(--thread-mobile-conversation-pct-focused);
-    height: var(--thread-mobile-conversation-pct-focused);
+    flex: 1 1 var(--thread-mobile-conversation-pct-focused);
+    min-height: 0;
+    max-height: var(--thread-mobile-conversation-pct-focused);
   }
 
   .page-thread--mobile .thread-conversation--mobile-tabs {
@@ -403,9 +402,8 @@ body:has(.page-thread) {
   }
 
   .page-thread--mobile .composer-wrap--docked.composer-wrap--thread-mobile {
-    flex: 0 0 var(--thread-mobile-composer-pct);
+    flex: 0 0 auto;
     min-height: 0;
-    height: var(--thread-mobile-composer-pct);
     position: static;
     display: flex;
     flex-direction: column;
@@ -413,20 +411,23 @@ body:has(.page-thread) {
     width: 100%;
     max-width: none;
     margin: 0;
-    padding: 8px 16px calc(14px + env(safe-area-inset-bottom, 0px));
+    padding: 4px 16px calc(10px + var(--thread-mobile-composer-bottom-inset));
     background: var(--bg);
     border-top: 1px solid var(--border-subtle);
-    overflow: hidden;
+    overflow: visible;
   }
 
   .page-thread--mobile .thread-mobile-body:has(.composer-wrap--focused) .composer-wrap--thread-mobile {
-    flex-basis: var(--thread-mobile-composer-pct-focused);
-    height: var(--thread-mobile-composer-pct-focused);
+    flex: 0 0 var(--thread-mobile-composer-pct-focused);
+    min-height: 0;
+    max-height: var(--thread-mobile-composer-pct-focused);
+    overflow: hidden;
   }
 
   .page-thread--mobile .composer-wrap--docked.composer-wrap--thread-mobile .composer-outer-row--thread-mobile {
     flex: 0 0 auto;
     align-items: center;
+    gap: 8px;
   }
 
   .page-thread--mobile .composer-wrap--docked.composer-wrap--thread-mobile .search-composer {
@@ -437,6 +438,38 @@ body:has(.page-thread) {
     flex-direction: column;
     padding-bottom: 0;
     margin-bottom: 0;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+  }
+
+  .page-thread--mobile .search-composer--thread-mobile:not(.search-composer--focused) {
+    flex: 0 0 auto;
+    padding: 6px 10px;
+  }
+
+  .page-thread--mobile .search-composer--thread-mobile:not(.search-composer--focused) .composer-row {
+    align-items: center;
+    min-height: 40px;
+    gap: 4px;
+  }
+
+  .page-thread--mobile .search-composer--thread-mobile:not(.search-composer--focused) .composer-row--text-only,
+  .page-thread--mobile .search-composer--thread-mobile:not(.search-composer--focused) .composer-input-wrap {
+    flex: 1 1 auto;
+    align-items: center;
+    min-height: 0;
+  }
+
+  .page-thread--mobile .search-composer--thread-mobile:not(.search-composer--focused) .composer-input {
+    padding-top: 8px;
+    padding-bottom: 8px;
+    line-height: 1.35;
+  }
+
+  .page-thread--mobile .search-composer--thread-mobile:not(.search-composer--focused) .composer-icon {
+    align-self: center;
+    width: 36px;
+    height: 36px;
+    margin: 0;
   }
 
   .page-thread--mobile .composer-wrap--thread-mobile .composer-new-chat {
@@ -444,15 +477,7 @@ body:has(.page-thread) {
     width: 44px;
     height: 44px;
     min-height: 44px;
-  }
-
-  .page-thread--mobile .search-composer--thread-mobile:not(.search-composer--focused) {
-    flex: 0 0 auto;
-  }
-
-  .page-thread--mobile .search-composer--thread-mobile:not(.search-composer--focused) .composer-row--text-only,
-  .page-thread--mobile .search-composer--thread-mobile:not(.search-composer--focused) .composer-input-wrap {
-    flex: 0 0 auto;
+    border-radius: 14px;
   }
 
   .page-thread--mobile .search-composer--thread-mobile.search-composer--focused {
@@ -485,12 +510,12 @@ body:has(.page-thread) {
   .page-thread--mobile .thread-mobile-body > .thread-scroll-down {
     position: absolute;
     right: 16px;
-    bottom: calc(var(--thread-mobile-composer-pct) + 8px);
+    bottom: calc(68px + var(--thread-mobile-composer-bottom-inset));
     z-index: 105;
   }
 
   .page-thread--mobile .thread-mobile-body:has(.composer-wrap--focused) > .thread-scroll-down {
-    bottom: calc(var(--thread-mobile-composer-pct-focused) + 8px);
+    bottom: calc(var(--thread-mobile-composer-pct-focused) + 12px);
   }
 
   .page-thread--mobile .composer-wrap--docked {
@@ -2082,6 +2107,13 @@ body:has(.page-thread) {
   background: #ffffff;
   border-color: #deded8;
   box-shadow: 0 2px 16px rgba(0, 0, 0, 0.08);
+}
+
+.page-thread--mobile .search-composer--thread-mobile {
+  padding-bottom: 0;
+  margin-bottom: 0;
+  background: var(--surface);
+  border-color: var(--border);
 }
 
 .page-thread .composer-input::placeholder {
@@ -3967,6 +3999,11 @@ body:has(.page-thread) {
 }
 
 .search-composer--thread-mobile .composer-input-wrap {
+  align-items: flex-start;
+}
+
+.page-thread--mobile .search-composer--thread-mobile.search-composer--focused .composer-row--text-only,
+.page-thread--mobile .search-composer--thread-mobile.search-composer--focused .composer-input-wrap {
   align-items: flex-start;
 }
 
