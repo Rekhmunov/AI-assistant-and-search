@@ -92,6 +92,20 @@ function mergeTurnAttachments(
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
+function isStreamTurnKey(key: string): boolean {
+  return key.startsWith("stream-");
+}
+
+function findCompletedApiTurn(local: ThreadTurn, api: ThreadTurn[]): ThreadTurn | undefined {
+  return api.find(
+    (turn) =>
+      turn.query === local.query &&
+      answerHasText(turn.answer) &&
+      UUID_RE.test(turn.key) &&
+      !turn.preparing,
+  );
+}
+
 /** UUID assistant message for feedback footer — from messageId or stable turn key. */
 export function resolveAssistantMessageId(
   turn: Pick<ThreadTurn, "key" | "messageId">,
@@ -198,6 +212,28 @@ export function mergeThreadTurns(local: ThreadTurn[], api: ThreadTurn[]): Thread
     !answerHasText(lastApi.answer) &&
     (answerHasText(lastLocal.answer) || lastLocal.images.length > 0)
   ) {
+    const completed = findCompletedApiTurn(lastLocal, api);
+    if (completed) {
+      return preserveLocalMedia(
+        api.map((turn) =>
+          turn.key === completed.key
+            ? {
+                ...turn,
+                answer: lastLocal.answer || turn.answer,
+                sources: turn.sources?.length ? turn.sources : lastLocal.sources,
+                images: turn.images?.length ? turn.images : lastLocal.images,
+                followUps:
+                  lastLocal.followUps.length > turn.followUps.length
+                    ? lastLocal.followUps
+                    : turn.followUps,
+                messageId: turn.key,
+                streaming: false,
+                preparing: false,
+              }
+            : turn,
+        ),
+      );
+    }
     return preserveLocalMedia([
       ...api.slice(0, -1),
       {
@@ -208,5 +244,41 @@ export function mergeThreadTurns(local: ThreadTurn[], api: ThreadTurn[]): Thread
     ]);
   }
 
+  if (
+    isStreamTurnKey(lastLocal.key) &&
+    answerHasText(lastLocal.answer) &&
+    lastLocal.query === lastApi.query &&
+    answerHasText(lastApi.answer) &&
+    UUID_RE.test(lastApi.key)
+  ) {
+    return preserveLocalMedia(
+      api.map((turn) =>
+        turn.key === lastApi.key
+          ? {
+              ...turn,
+              answer: lastLocal.answer || turn.answer,
+              sources: turn.sources?.length ? turn.sources : lastLocal.sources,
+              images: turn.images?.length ? turn.images : lastLocal.images,
+              followUps:
+                lastLocal.followUps.length > turn.followUps.length
+                  ? lastLocal.followUps
+                  : turn.followUps,
+              messageId: turn.key,
+              streaming: false,
+              preparing: false,
+            }
+          : turn,
+      ),
+    );
+  }
+
   return preserveLocalMedia(api);
+}
+
+/** UUID assistant message id из сохранённого треда (для фидбека после SSE без message_id). */
+export function assistantMessageIdFromThread(messages: Message[]): string | undefined {
+  const turns = messagesToTurns(messages);
+  const last = turns[turns.length - 1];
+  if (!last || last.preparing) return undefined;
+  return resolveAssistantMessageId(last);
 }

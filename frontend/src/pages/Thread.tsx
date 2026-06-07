@@ -41,6 +41,7 @@ import {
 import { answerHasText, normalizeAnswerText } from "../lib/answerText";
 import { SEARCH_QUERY_MAX_LENGTH } from "../lib/searchQueryLimits";
 import {
+  assistantMessageIdFromThread,
   mergeThreadTurns,
   messagesToTurns,
   resolveAssistantMessageId,
@@ -271,6 +272,31 @@ export function Thread() {
     setTurns((prev) => mergeThreadTurns(prev, messagesToTurns(thread.messages)));
   }, [thread]);
 
+  const resolveFeedbackMessageId = useCallback(
+    async (threadIdToFetch: string) => {
+      try {
+        const fresh = await fetchThread(token, threadIdToFetch);
+        queryClient.setQueryData(["thread", threadIdToFetch], fresh);
+        const assistantId = assistantMessageIdFromThread(fresh.messages);
+        if (!assistantId) return;
+        setTurns((prev) => {
+          const idx = findLastIndex(
+            prev,
+            (turn) => !turn.streaming && answerHasText(turn.answer) && !resolveAssistantMessageId(turn),
+          );
+          if (idx < 0) return prev;
+          const turn = prev[idx];
+          const next = [...prev];
+          next[idx] = { ...turn, messageId: assistantId, key: assistantId };
+          return next;
+        });
+      } catch {
+        /* ignore */
+      }
+    },
+    [token, queryClient],
+  );
+
   const handleAnswerTypingChange = useCallback(
     (typing: boolean) => {
       isRevealingRef.current = typing;
@@ -287,9 +313,13 @@ export function Thread() {
           next[idx] = { ...turn, key: turn.messageId! };
           return next;
         });
+        const tid = activeThreadIdRef.current;
+        if (tid) {
+          void resolveFeedbackMessageId(tid);
+        }
       }
     },
-    [],
+    [resolveFeedbackMessageId],
   );
 
   useEffect(() => {
@@ -528,14 +558,18 @@ export function Thread() {
           setSearchPhase("idle");
           answerResetPendingRef.current = false;
           const messageId = done?.message_id;
+          const validMessageId =
+            messageId && /^[0-9a-f-]{36}$/i.test(messageId) ? messageId : undefined;
           setTurns((prev) =>
             prev.map((turn) => {
               if (!turn.streaming) return turn;
+              const resolvedId = validMessageId ?? turn.messageId;
               return {
                 ...turn,
                 streaming: false,
-                messageId:
-                  messageId && /^[0-9a-f-]{36}$/i.test(messageId) ? messageId : turn.messageId,
+                messageId: resolvedId,
+                key:
+                  resolvedId && turn.key.startsWith("stream-") ? resolvedId : turn.key,
               };
             }),
           );
@@ -545,6 +579,9 @@ export function Thread() {
           if (tid) {
             queryClient.invalidateQueries({ queryKey: ["thread", tid] });
             queryClient.invalidateQueries({ queryKey: ["thread-answer-status", tid] });
+            if (!validMessageId) {
+              void resolveFeedbackMessageId(tid);
+            }
           }
         },
         onError: (msg, code) => {
@@ -634,7 +671,7 @@ export function Thread() {
         },
       }, { retryPending });
     },
-    [token, id, navigate, queryClient, threadId, session?.is_guest],
+    [token, id, navigate, queryClient, threadId, session?.is_guest, resolveFeedbackMessageId],
   );
 
   const retryPendingTurn = useCallback(

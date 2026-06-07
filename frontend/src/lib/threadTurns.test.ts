@@ -195,6 +195,38 @@ describe("mergeThreadTurns", () => {
     expect(merged[0].images).toEqual(images);
   });
 
+  it("adopts API assistant id when local turn still has stream key", () => {
+    const local: ThreadTurn[] = [
+      {
+        key: "stream-99",
+        query: "МФЦ",
+        attachments: [],
+        answer: "Ответ с ссылками",
+        sources: [{ index: 1, url: "https://a.ru", title: "A", snippet: "", domain: "a.ru" }],
+        images: [],
+        followUps: [],
+      },
+    ];
+    const api: ThreadTurn[] = [
+      {
+        key: ASSISTANT_ID,
+        messageId: ASSISTANT_ID,
+        query: "МФЦ",
+        attachments: [],
+        answer: "Ответ с ссылками",
+        sources: [],
+        images: [],
+        followUps: [],
+      },
+    ];
+
+    const merged = mergeThreadTurns(local, api);
+    expect(merged).toHaveLength(1);
+    expect(merged[0].key).toBe(ASSISTANT_ID);
+    expect(merged[0].messageId).toBe(ASSISTANT_ID);
+    expect(merged[0].sources).toHaveLength(1);
+  });
+
   it("prefers API attachment url over revoked blob previewUrl", () => {
     const local: ThreadTurn[] = [
       {

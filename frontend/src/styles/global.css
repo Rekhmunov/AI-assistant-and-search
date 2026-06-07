@@ -963,6 +963,25 @@ body:has(.page-thread) {
   padding: 10px 18px;
 }
 
+.page-profile:not(.page-profile--mobile) .profile-actions {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.page-profile:not(.page-profile--mobile) .profile-actions .btn-block,
+.page-profile:not(.page-profile--mobile) .profile-actions .btn-danger-ghost.btn-block {
+  width: auto;
+  min-width: 180px;
+  max-width: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding-left: 24px;
+  padding-right: 24px;
+}
+
 .page-profile:not(.page-profile--mobile) .profile-bind-block--password .profile-bind-form-actions {
   flex-direction: row;
   flex-wrap: wrap;
