@@ -20,6 +20,7 @@ _DAY_TTL_SEC = 8 * 86400
 
 SERVICE_LABELS: dict[str, str] = {
     "search": "Yandex Search",
+    "glosix_search": "Поиск Glosix",
     "image_search": "Поиск картинок",
     "image_gen": "GigaChat (картинки)",
     "gpt": "LLM (ответ)",

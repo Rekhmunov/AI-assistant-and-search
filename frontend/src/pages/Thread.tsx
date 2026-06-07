@@ -107,6 +107,8 @@ type ThreadLocationState = {
 
 const PENDING_ANSWER_POLL_MS = 4000;
 const PENDING_ANSWER_POLL_MAX_MS = 10 * 60 * 1000;
+const AUTO_RESUME_GRACE_MS = 1500;
+const AUTO_RESUME_MAX_ATTEMPTS = 3;
 
 function answerStatusPhaseToSearchPhase(
   phase: string | null | undefined,
@@ -126,28 +128,6 @@ function answerStatusPhaseToSearchPhase(
     default:
       return needsSearch ? "searching" : "preparing";
   }
-}
-
-function preparingStatusDetail(phase: SearchPhase, needsSearch?: boolean): string {
-  if (phase === "routing") {
-    return t("answerPreparingDetail", {
-      step: t("thinking"),
-      next: needsSearch ? t("searchingWeb") : t("composingAnswer"),
-    });
-  }
-  if (phase === "searching") {
-    return t("answerPreparingDetail", {
-      step: needsSearch ? t("searchingWeb") : t("searchingSolution"),
-      next: t("composingAnswer"),
-    });
-  }
-  if (phase === "answering") {
-    return t("answerPreparingDetail", {
-      step: t("composingAnswer"),
-      next: t("composingAnswer"),
-    });
-  }
-  return t("answerPreparingPipeline");
 }
 
 function mapComposerAttachments(
@@ -188,6 +168,8 @@ export function Thread() {
   const [activeTab, setActiveTab] = useState<ThreadTab>("answer");
   const started = useRef(false);
   const pendingPollStartedAtRef = useRef<number | null>(null);
+  const autoResumeRef = useRef<{ turnKey: string; attempts: number } | null>(null);
+  const autoResumeScheduledRef = useRef<string | null>(null);
   const streamingRef = useRef(false);
   const isRevealingRef = useRef(false);
   const activeThreadIdRef = useRef<string | null>(id ?? null);
@@ -665,6 +647,94 @@ export function Thread() {
   );
 
   useEffect(() => {
+    if (!threadHasPending) {
+      autoResumeRef.current = null;
+      autoResumeScheduledRef.current = null;
+    }
+  }, [threadHasPending]);
+
+  const answerStatusActive = answerStatus?.active ?? false;
+  const answerStatusStale = answerStatus?.stale ?? false;
+  const pendingTurn = turns[turns.length - 1];
+  const pendingTurnKey = pendingTurn?.preparing ? pendingTurn.key : null;
+
+  useEffect(() => {
+    if (streaming || !threadHasPending || !activeThreadKey || !pendingTurnKey) return;
+    if (!pendingTurn?.preparing || pendingTurn.errorCode || answerHasText(pendingTurn.answer)) return;
+    if (!answerStatus || answerStatusActive) return;
+
+    const turnKey = pendingTurnKey;
+    const priorAttempts =
+      autoResumeRef.current?.turnKey === turnKey ? autoResumeRef.current.attempts : 0;
+
+    if (priorAttempts >= AUTO_RESUME_MAX_ATTEMPTS) {
+      if (pendingTurn.preparing && !pendingTurn.errorCode) {
+        setTurns((prev) =>
+          prev.map((turn) =>
+            turn.key === turnKey
+              ? { ...turn, preparing: false, errorCode: "search_interrupted" }
+              : turn,
+          ),
+        );
+      }
+      return;
+    }
+
+    const scheduleKey = `${turnKey}:${priorAttempts}:${answerStatusStale ? "stale" : "wait"}`;
+    if (autoResumeScheduledRef.current === scheduleKey) return;
+    autoResumeScheduledRef.current = scheduleKey;
+
+    const turnSnapshot = pendingTurn;
+    const delay = answerStatusStale ? 0 : AUTO_RESUME_GRACE_MS;
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        if (streamingRef.current) return;
+        try {
+          const fresh = await fetchThread(token, activeThreadKey);
+          queryClient.setQueryData(["thread", activeThreadKey], fresh);
+          if (!threadHasPendingAnswer(fresh.messages)) return;
+        } catch {
+          return;
+        }
+
+        const nextAttempt =
+          (autoResumeRef.current?.turnKey === turnKey
+            ? autoResumeRef.current.attempts
+            : 0) + 1;
+        autoResumeRef.current = { turnKey, attempts: nextAttempt };
+        autoResumeScheduledRef.current = null;
+
+        if (nextAttempt > AUTO_RESUME_MAX_ATTEMPTS) {
+          setTurns((prev) =>
+            prev.map((turn) =>
+              turn.key === turnKey
+                ? { ...turn, preparing: false, errorCode: "search_interrupted" }
+                : turn,
+            ),
+          );
+          return;
+        }
+
+        retryPendingTurn(turnSnapshot);
+      })();
+    }, delay);
+
+    return () => window.clearTimeout(timer);
+  }, [
+    streaming,
+    threadHasPending,
+    pendingTurn,
+    pendingTurnKey,
+    answerStatus,
+    answerStatusActive,
+    answerStatusStale,
+    activeThreadKey,
+    token,
+    queryClient,
+    retryPendingTurn,
+  ]);
+
+  useEffect(() => {
     if (!(initialQuery || initialFiles.length) || id || started.current) return;
     started.current = true;
     const pending = (location.state as ThreadLocationState | null)?.pendingAttachments;
@@ -780,21 +850,9 @@ export function Thread() {
             const isLastTurn = index === turns.length - 1;
             const turnAnswerStatus: AnswerStatus | undefined =
               isLastTurn && turn.preparing ? answerStatus : undefined;
-            const preparingStale = Boolean(
-              turn.preparing &&
-                !streaming &&
-                (turnAnswerStatus?.stale ||
-                  (pendingPollStartedAtRef.current !== null &&
-                    Date.now() - pendingPollStartedAtRef.current > PENDING_ANSWER_POLL_MAX_MS)),
+            const showPreparing = Boolean(
+              turn.preparing && !streaming && !turn.errorCode && !answerHasText(turn.answer),
             );
-            const showPreparing =
-              Boolean(
-                turn.preparing && !streaming && !turn.errorCode && !answerHasText(turn.answer),
-              ) && !preparingStale;
-            const showPreparingStale =
-              Boolean(
-                turn.preparing && !streaming && !turn.errorCode && !answerHasText(turn.answer),
-              ) && preparingStale;
             const preparingPhase = turnAnswerStatus?.active
               ? answerStatusPhaseToSearchPhase(
                   turnAnswerStatus.phase,
@@ -803,15 +861,9 @@ export function Thread() {
               : "preparing";
             const preparingNeedsSearch =
               turnAnswerStatus?.needs_search ?? turn.needsSearch ?? needsSearch;
-            const preparingDetail =
-              showPreparing && preparingPhase !== "preparing"
-                ? preparingStatusDetail(preparingPhase, preparingNeedsSearch)
-                : showPreparing
-                  ? t("answerPreparingPipeline")
-                  : null;
+            const showInterrupted = turn.errorCode === "search_interrupted";
             const showStatus =
               showPreparing ||
-              showPreparingStale ||
               (isActive &&
                 streaming &&
                 !turn.errorCode &&
@@ -824,6 +876,7 @@ export function Thread() {
             const showFreeLimit = turn.errorCode === "free_rate_limit";
             const showImageGenPro = turn.errorCode === "free_image_gen_pro";
             const showAnswer =
+              showInterrupted ||
               showGuestLimit ||
               showFreeLimit ||
               showImageGenPro ||
@@ -842,24 +895,11 @@ export function Thread() {
                 <ThreadQuery query={turn.query} attachments={turn.attachments} />
 
                 {showStatus &&
-                  (showPreparingStale ? (
-                    <div className="search-status-interrupted" role="status" aria-live="polite">
-                      <p>{t("answerInterrupted")}</p>
-                      <button
-                        type="button"
-                        className="search-status-retry"
-                        disabled={streaming}
-                        onClick={() => retryPendingTurn(turn)}
-                      >
-                        {t("retrySearch")}
-                      </button>
-                    </div>
-                  ) : showPreparing ? (
+                  (showPreparing ? (
                     <SearchStatusLine
                       phase={preparingPhase}
                       needsSearch={preparingNeedsSearch}
                       customStatus={turnAnswerStatus?.custom_status}
-                      detail={preparingDetail}
                     />
                   ) : isDocumentGenTurn ? (
                     <DocGenStatusLine active={Boolean(isActive && streaming)} status={docGenStatus} />
@@ -872,7 +912,23 @@ export function Thread() {
                 {showAnswer && (
                   <section className="answer-section">
                     <AnswerErrorBoundary>
-                      {showGuestLimit ? (
+                      {showInterrupted ? (
+                        <div className="answer">
+                          <div className="answer-text">
+                            <p>{t("answerInterrupted")}</p>
+                            <p>
+                              <button
+                                type="button"
+                                className="btn-link answer-retry-link"
+                                disabled={streaming}
+                                onClick={() => retryPendingTurn(turn)}
+                              >
+                                {t("retrySearch")}
+                              </button>
+                            </p>
+                          </div>
+                        </div>
+                      ) : showGuestLimit ? (
                         <GuestLimitNotice limit={guestSearchLimit} />
                       ) : showFreeLimit ? (
                         <FreeLimitNotice />

@@ -413,8 +413,10 @@ class SearchFlowService:
             needs_search=route.needs_search,
         )
 
+        search_completed = False
+
         async def _pipeline() -> AsyncIterator[str]:
-            nonlocal llm_query
+            nonlocal llm_query, search_completed
             history = thread_ctx.history
             llm_history = llm_history_for_turn(history, has_attachments=has_attachments)
             prior_sources_block = format_sources_for_prompt(thread_ctx.last_assistant_sources)
@@ -960,6 +962,7 @@ class SearchFlowService:
                     await db.rollback()
                     await limiter.release_search(user_id_str)
                     if full_answer.strip():
+                        search_completed = True
                         yield sse_event(
                             "done",
                             {
@@ -983,6 +986,7 @@ class SearchFlowService:
                     )
                     return
 
+            search_completed = True
             yield sse_event(
                 "done",
                 {
@@ -1019,4 +1023,14 @@ class SearchFlowService:
             async for event in _pipeline():
                 yield event
         finally:
+            if not search_completed:
+                from app.services.service_incidents import record_service_incident
+
+                preview = (display_content or "")[:120]
+                await record_service_incident(
+                    redis_client,
+                    service="glosix_search",
+                    kind="interrupted",
+                    message=f"Поиск не завершён (thread={thread.id}, query={preview!r})",
+                )
             await clear_search_pending(redis_client, thread.id)
