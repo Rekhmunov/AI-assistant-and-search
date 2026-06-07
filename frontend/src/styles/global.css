@@ -364,6 +364,11 @@ body:has(.page-thread) {
   }
 
   .home-mobile-header {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 110;
     flex-shrink: 0;
   }
 
@@ -374,7 +379,18 @@ body:has(.page-thread) {
     align-items: center;
     justify-content: center;
     min-height: 0;
-    padding: 0 12px calc(28px + env(safe-area-inset-bottom));
+    padding: calc(54px + env(safe-area-inset-top, 0px)) 12px calc(28px + env(safe-area-inset-bottom));
+  }
+
+  .page-home--mobile:has(.composer-wrap--focused) .home-mobile-main {
+    justify-content: flex-end;
+    padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .page-home--mobile:has(.composer-wrap--focused) .home-mobile-center-stack {
+    transform: none;
+    gap: 20px;
+    width: 100%;
   }
 
   .home-mobile-center-stack {
@@ -3810,6 +3826,16 @@ body:has(.page-thread) {
   align-items: center;
   gap: 2px;
   margin-left: auto;
+}
+
+.search-composer--thread-mobile .composer-toolbar-actions .composer-model-selector,
+.search-composer--thread-mobile .composer-toolbar-actions .composer-model-trigger,
+.search-composer--thread-mobile .composer-toolbar-actions .composer-icon {
+  align-self: center;
+}
+
+.search-composer--thread-mobile .composer-toolbar-actions .composer-model-trigger {
+  height: 32px;
 }
 
 @media (min-width: 900px) {

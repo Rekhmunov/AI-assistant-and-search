@@ -424,7 +424,6 @@ export function SearchComposer({
   const modelSelector = (
     <ComposerModelSelector
       plan={plan}
-      isGuest={isGuest}
       onOpenProModal={openProUpgradeModal}
       keepFocusOnPress={isMobileFocusLayout}
     />
@@ -595,12 +594,7 @@ export function SearchComposer({
                   }}
                 />
               </div>
-              {showInlineMic && (
-                <>
-                  {modelSelector}
-                  {micButton}
-                </>
-              )}
+              {showInlineMic && micButton}
               {showDefaultRow && (
                 <>
                   {modelSelector}

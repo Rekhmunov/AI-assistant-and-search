@@ -1,24 +1,20 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Link, useNavigate } from "react-router-dom";
 import { t } from "../i18n";
 
 const DROPDOWN_ID = "composer-model-dropdown";
 
 type Props = {
   plan: "free" | "pro";
-  isGuest: boolean;
   onOpenProModal: () => void;
   keepFocusOnPress?: boolean;
 };
 
 export function ComposerModelSelector({
   plan,
-  isGuest,
   onOpenProModal,
   keepFocusOnPress = false,
 }: Props) {
-  const navigate = useNavigate();
   const rootRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -26,7 +22,7 @@ export function ComposerModelSelector({
   const [menuStyle, setMenuStyle] = useState<{ top: number; left: number } | null>(null);
 
   const isPro = plan === "pro";
-  const isFreeLoggedIn = !isGuest && !isPro;
+  const showLitePro = !isPro;
 
   const positionMenu = useCallback(() => {
     const btn = buttonRef.current;
@@ -78,26 +74,8 @@ export function ComposerModelSelector({
   const handleProClick = () => {
     setOpen(false);
     if (isPro) return;
-    if (isGuest) {
-      navigate("/profile");
-      return;
-    }
     onOpenProModal();
   };
-
-  const guestUpsellRow = isGuest ? (
-    <Link
-      to="/profile"
-      className="composer-model-upsell"
-      role="menuitem"
-      onClick={() => setOpen(false)}
-    >
-      {t("modelSelectorUpsell")}
-      <span className="composer-model-upsell-arrow" aria-hidden>
-        →
-      </span>
-    </Link>
-  ) : null;
 
   const dropdown =
     open && menuStyle
@@ -113,20 +91,17 @@ export function ComposerModelSelector({
               transform: "translateY(-100%)",
             }}
           >
-            {guestUpsellRow}
-            {!isPro && (
+            {showLitePro && (
               <ModelOption
                 label={t("modelSelectorLite")}
                 active
-                locked={isGuest}
                 onClick={() => setOpen(false)}
               />
             )}
-            {!isPro ? (
+            {showLitePro ? (
               <ModelOption
                 label={t("modelSelectorPro")}
-                upgrade={isFreeLoggedIn}
-                locked={isGuest}
+                locked
                 onClick={handleProClick}
               />
             ) : (
@@ -166,24 +141,22 @@ function ModelOption({
   label,
   active = false,
   locked = false,
-  upgrade = false,
   onClick,
 }: {
   label: string;
   active?: boolean;
   locked?: boolean;
-  upgrade?: boolean;
   onClick: () => void;
 }) {
   return (
     <button
       type="button"
-      className={`composer-model-option${active ? " composer-model-option--active" : ""}${locked ? " composer-model-option--locked" : ""}${upgrade ? " composer-model-option--upgrade" : ""}`}
+      className={`composer-model-option${active ? " composer-model-option--active" : ""}${locked ? " composer-model-option--locked" : ""}`}
       role="menuitem"
       onClick={onClick}
     >
       <span className="composer-model-option-label">{label}</span>
-      {locked ? <LockIcon /> : upgrade ? <UpgradeArrowIcon /> : active ? <CheckIcon /> : null}
+      {locked ? <LockIcon /> : active ? <CheckIcon /> : null}
     </button>
   );
 }
@@ -226,13 +199,5 @@ function CheckIcon() {
         strokeLinejoin="round"
       />
     </svg>
-  );
-}
-
-function UpgradeArrowIcon() {
-  return (
-    <span className="composer-model-upsell-arrow" aria-hidden>
-      →
-    </span>
   );
 }
