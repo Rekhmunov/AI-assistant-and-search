@@ -2489,12 +2489,26 @@ body:has(.page-thread) {
 
 .answer-table-wrap {
   margin: 16px 0;
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
   border: 1px solid var(--border);
   border-radius: 12px;
   background: var(--surface);
   box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+
+.answer-table-header {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg);
+}
+
+.answer-table-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .answer-table {

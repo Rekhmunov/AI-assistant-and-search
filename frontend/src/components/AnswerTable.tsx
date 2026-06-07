@@ -1,6 +1,8 @@
-import type { ReactNode } from "react";
+import { useMemo, type ReactNode } from "react";
 import type { Source } from "../api/client";
+import { CopyIconButton } from "./CopyIconButton";
 import { SourceChipsRow } from "./SourceChipsRow";
+import { formatTableForCopy } from "../lib/formatTableCopy";
 import { renderInlineContent } from "../lib/renderInlineContent";
 import { parseParagraphCitations } from "../lib/paragraphCitations";
 
@@ -40,29 +42,35 @@ export function AnswerTable({ header, rows, sources, keyPrefix }: Props) {
 
   const head = padRow(header);
   const body = rows.map(padRow);
+  const copyText = useMemo(() => formatTableForCopy(header, rows), [header, rows]);
 
   return (
     <div className="answer-table-wrap">
-      <table className="answer-table">
-        <thead>
-          <tr>
-            {head.map((cell, i) => (
-              <th key={`${keyPrefix}-h-${i}`}>{renderCell(cell, sources, `${keyPrefix}-h-${i}`)}</th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {body.map((row, ri) => (
-            <tr key={`${keyPrefix}-r-${ri}`}>
-              {row.map((cell, ci) => (
-                <td key={`${keyPrefix}-r-${ri}-c-${ci}`}>
-                  {renderCell(cell, sources, `${keyPrefix}-r-${ri}-c-${ci}`)}
-                </td>
+      <div className="answer-table-header">
+        <CopyIconButton text={copyText} />
+      </div>
+      <div className="answer-table-scroll">
+        <table className="answer-table">
+          <thead>
+            <tr>
+              {head.map((cell, i) => (
+                <th key={`${keyPrefix}-h-${i}`}>{renderCell(cell, sources, `${keyPrefix}-h-${i}`)}</th>
               ))}
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {body.map((row, ri) => (
+              <tr key={`${keyPrefix}-r-${ri}`}>
+                {row.map((cell, ci) => (
+                  <td key={`${keyPrefix}-r-${ri}-c-${ci}`}>
+                    {renderCell(cell, sources, `${keyPrefix}-r-${ri}-c-${ci}`)}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
