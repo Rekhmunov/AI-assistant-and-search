@@ -69,6 +69,7 @@ export function Profile() {
   const [proBlockedOpen, setProBlockedOpen] = useState(false);
   const [paymentModal, setPaymentModal] = useState<ProPaymentModalState>({ open: false });
   const [acceptOffer, setAcceptOffer] = useState(false);
+  const [paymentEmail, setPaymentEmail] = useState("");
   const [offerModalOpen, setOfferModalOpen] = useState(false);
   const [supportModalOpen, setSupportModalOpen] = useState(false);
   const [supportSource, setSupportSource] = useState<"general" | "pro_payment">("general");
@@ -239,14 +240,25 @@ export function Profile() {
   const usageRatio = searchesLimit > 0 ? Math.min(1, searchesToday / searchesLimit) : 0;
   const usagePercent = Math.round(usageRatio * 100);
 
-  const hasPaymentEmail = Boolean(profileUser?.email?.trim());
+  const profileEmail = profileUser?.email?.trim() ?? "";
+  const hasPaymentEmail = Boolean(profileEmail);
+  const paymentEmailTrimmed = paymentEmail.trim();
+  const canUseInlinePaymentEmail = inMax && !hasPaymentEmail;
+  const effectivePaymentEmail = hasPaymentEmail ? profileEmail : paymentEmailTrimmed;
+  const hasEffectivePaymentEmail = Boolean(effectivePaymentEmail) && effectivePaymentEmail.includes("@");
   const proPayDisabled =
-    !acceptOffer || offerLoading || !offerVersionId || !hasPaymentEmail || proPaying;
+    !acceptOffer || offerLoading || !offerVersionId || !hasEffectivePaymentEmail || proPaying;
   const proPayNeedsOfferConsent = !acceptOffer;
+  const proPayNeedsEmail = !hasEffectivePaymentEmail;
 
   const showProPayBlockedHint = () => {
-    if (!proPayNeedsOfferConsent) return;
-    setProPaymentError(t("proOfferConsentRequired"));
+    if (proPayNeedsOfferConsent) {
+      setProPaymentError(t("proOfferConsentRequired"));
+    } else if (proPayNeedsEmail) {
+      setProPaymentError(t("proPaymentEmailRequired"));
+    } else {
+      return;
+    }
     setProPayHintVisible(true);
     if (proPayHintTimerRef.current) clearTimeout(proPayHintTimerRef.current);
     proPayHintTimerRef.current = setTimeout(() => setProPayHintVisible(false), 4000);
@@ -267,7 +279,7 @@ export function Profile() {
       setProPaymentError(t("proOfferConsentRequired"));
       return;
     }
-    if (!hasPaymentEmail) {
+    if (!hasEffectivePaymentEmail) {
       setProPaymentError(t("proPaymentEmailRequired"));
       return;
     }
@@ -280,7 +292,11 @@ export function Profile() {
         setProPaymentError(t("legalDocumentUnavailable"));
         return;
       }
-      const payment = await createProPayment(token!, freshOffer.version_id);
+      const payment = await createProPayment(
+        token!,
+        freshOffer.version_id,
+        canUseInlinePaymentEmail ? effectivePaymentEmail : undefined,
+      );
       if (payment.dev_mode) {
         await devActivatePro(token!);
         const updated = await fetchMe(token!);
@@ -413,8 +429,25 @@ export function Profile() {
           {(offerLoadError || (offerFetched && !offerLoading && !offerVersionId)) && (
             <p className="profile-hint profile-pro-offer-error">{t("legalDocumentUnavailable")}</p>
           )}
-          {!hasPaymentEmail && (
-            <p className="profile-hint profile-pro-email-hint">{t("proPaymentEmailRequired")}</p>
+          {canUseInlinePaymentEmail && (
+            <label className="auth-field profile-pro-email-field">
+              <span className="auth-field-label">{t("proPaymentEmailLabel")}</span>
+              <input
+                className="auth-field-input"
+                type="email"
+                value={paymentEmail}
+                onChange={(e) => {
+                  setPaymentEmail(e.target.value);
+                  if (proPaymentError) setProPaymentError(null);
+                }}
+                autoComplete="email"
+                placeholder={t("proPaymentEmailPlaceholder")}
+                inputMode="email"
+              />
+            </label>
+          )}
+          {!hasPaymentEmail && !canUseInlinePaymentEmail && (
+            <p className="profile-hint profile-pro-email-hint">{t("proPaymentEmailHintWeb")}</p>
           )}
           {proPaymentError && (
             <p className="profile-hint profile-pro-offer-error" role="alert">
@@ -423,9 +456,17 @@ export function Profile() {
           )}
           <div
             className={`profile-pro-pay-wrap${proPayDisabled ? " profile-pro-pay-wrap--disabled" : ""}${
-              proPayDisabled && proPayNeedsOfferConsent ? " profile-pro-pay-wrap--needs-offer" : ""
+              proPayDisabled && (proPayNeedsOfferConsent || proPayNeedsEmail)
+                ? " profile-pro-pay-wrap--needs-offer"
+                : ""
             }${proPayHintVisible ? " profile-pro-pay-wrap--hint-visible" : ""}`}
-            data-hint={proPayDisabled && proPayNeedsOfferConsent ? t("proOfferConsentRequired") : undefined}
+            data-hint={
+              proPayDisabled && proPayNeedsOfferConsent
+                ? t("proOfferConsentRequired")
+                : proPayDisabled && proPayNeedsEmail
+                  ? t("proPaymentEmailRequired")
+                  : undefined
+            }
             onClick={() => {
               if (proPayDisabled) showProPayBlockedHint();
             }}
@@ -435,10 +476,14 @@ export function Profile() {
                 showProPayBlockedHint();
               }
             }}
-            role={proPayDisabled && proPayNeedsOfferConsent ? "button" : undefined}
-            tabIndex={proPayDisabled && proPayNeedsOfferConsent ? 0 : undefined}
+            role={proPayDisabled && (proPayNeedsOfferConsent || proPayNeedsEmail) ? "button" : undefined}
+            tabIndex={proPayDisabled && (proPayNeedsOfferConsent || proPayNeedsEmail) ? 0 : undefined}
             aria-label={
-              proPayDisabled && proPayNeedsOfferConsent ? t("proOfferConsentRequired") : undefined
+              proPayDisabled && proPayNeedsOfferConsent
+                ? t("proOfferConsentRequired")
+                : proPayDisabled && proPayNeedsEmail
+                  ? t("proPaymentEmailRequired")
+                  : undefined
             }
           >
             <button
