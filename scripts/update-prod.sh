@@ -75,6 +75,9 @@ _nginx_needs_render() {
   if ! grep -q "resolver 127.0.0.11" nginx/nginx.prod.conf 2>/dev/null; then
     return 0
   fi
+  if ! grep -q 'yandex_[a-f0-9]' nginx/nginx.prod.conf 2>/dev/null; then
+    return 0
+  fi
   return 1
 }
 

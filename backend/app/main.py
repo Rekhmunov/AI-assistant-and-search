@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.api import api_router
+from app.api.site import router as site_router
 from app.core.config import get_settings
 from app.core.database import async_session_factory
 from app.core.production_guards import assert_production_security
@@ -62,6 +63,7 @@ def create_app() -> FastAPI:
         return await call_next(request)
 
     app.include_router(api_router)
+    app.include_router(site_router)
 
     @app.exception_handler(RequestValidationError)
     async def validation_exception(request: Request, exc: RequestValidationError):

@@ -48,6 +48,8 @@ BASE_SETTING_KEYS: dict[str, type] = {
     "free_doc_gens_per_day": int,
     "pro_doc_gens_per_day": int,
     "generated_doc_ttl_hours": int,
+    "yandex_metrica_counter_id": str,
+    "yandex_webmaster_verification": str,
 }
 
 SETTING_KEYS: dict[str, type] = {
@@ -77,6 +79,8 @@ ENV_DEFAULTS: dict[str, str] = {
     "bot_welcome_media_token": "",
     "bot_welcome_media_filename": "",
     "support_notify_max_user_ids": "",
+    "yandex_metrica_counter_id": "",
+    "yandex_webmaster_verification": "",
 }
 
 

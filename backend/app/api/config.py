@@ -23,4 +23,11 @@ async def public_config(
     settings = get_settings()
     pro_price_rub = int(await get_setting("pro_price_rub", db, redis_client, settings))
     pro_purchase_disabled = bool(await get_setting("pro_purchase_disabled", db, redis_client, settings))
-    return {"pro_price_rub": pro_price_rub, "pro_purchase_disabled": pro_purchase_disabled}
+    metrica_id = str(await get_setting("yandex_metrica_counter_id", db, redis_client, settings)).strip()
+    webmaster_code = str(await get_setting("yandex_webmaster_verification", db, redis_client, settings)).strip().lower()
+    return {
+        "pro_price_rub": pro_price_rub,
+        "pro_purchase_disabled": pro_purchase_disabled,
+        "yandex_metrica_counter_id": metrica_id or None,
+        "yandex_webmaster_verification": webmaster_code or None,
+    }

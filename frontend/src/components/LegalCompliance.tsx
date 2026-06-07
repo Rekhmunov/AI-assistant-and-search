@@ -4,6 +4,7 @@ import { fetchLegalRoutes } from "../api/client";
 import { isCookieConsentCurrent } from "../lib/cookieConsent";
 import { CookieBanner } from "./CookieBanner";
 import { ReconsentGate } from "./ReconsentGate";
+import { SiteAnalytics } from "./SiteAnalytics";
 
 export function LegalCompliance() {
   const [cookieTick, setCookieTick] = useState(0);
@@ -24,6 +25,7 @@ export function LegalCompliance() {
     <>
       <CookieBanner onAccepted={() => setCookieTick((n) => n + 1)} />
       <ReconsentGate cookiesResolved={cookiesResolved} />
+      <SiteAnalytics enabled={cookiesResolved} />
     </>
   );
 }

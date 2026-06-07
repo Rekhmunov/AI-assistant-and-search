@@ -1,3 +1,4 @@
+import re
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -125,6 +126,20 @@ async def update_settings(
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="GIGACHAT_CREDENTIALS не загружен — генерация изображений недоступна.",
+                )
+        if key == "yandex_metrica_counter_id":
+            val = str(value).strip()
+            if val and not val.isdigit():
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="ID счётчика Яндекс.Метрики должен содержать только цифры",
+                )
+        if key == "yandex_webmaster_verification":
+            val = str(value).strip().lower()
+            if val and not re.fullmatch(r"[a-f0-9]+", val):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Код верификации Вебмастера: только латинские буквы a–f и цифры",
                 )
         if key == "pro_price_rub":
             try:

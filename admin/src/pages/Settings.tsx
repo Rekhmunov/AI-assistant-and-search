@@ -59,6 +59,7 @@ export function SettingsPage() {
   const [providersOpen, setProvidersOpen] = useState(false);
   const [promptsOpen, setPromptsOpen] = useState(false);
   const [limitsOpen, setLimitsOpen] = useState(false);
+  const [analyticsOpen, setAnalyticsOpen] = useState(false);
 
   useEffect(() => {
     apiFetch<SettingsBundle>("/api/admin/settings").then((r) => {
@@ -127,6 +128,10 @@ export function SettingsPage() {
       image_gen_provider: imageGenProvider,
       free_image_gens_per_day: Number(settings.free_image_gens_per_day),
       pro_image_gens_per_day: Number(settings.pro_image_gens_per_day),
+      yandex_metrica_counter_id: String(settings.yandex_metrica_counter_id ?? "").trim(),
+      yandex_webmaster_verification: String(settings.yandex_webmaster_verification ?? "")
+        .trim()
+        .toLowerCase(),
     };
     for (const p of visiblePrompts) {
       payload[p.setting_key] = String(settings[p.setting_key] ?? p.value);
@@ -487,6 +492,66 @@ export function SettingsPage() {
                 Запрет покупки подписки Pro
                 <span className="hint-inline">
                   Кнопка «Перейти на Pro» покажет сообщение; оплата через ЮKassa заблокирована
+                </span>
+              </label>
+            </div>
+          )}
+        </section>
+
+        <section className="settings-section settings-section--collapsible">
+          <button
+            type="button"
+            className="settings-section-toggle"
+            onClick={() => setAnalyticsOpen((open) => !open)}
+            aria-expanded={analyticsOpen}
+            aria-controls="settings-analytics-panel"
+          >
+            <span className="settings-section-toggle-label">Аналитика и SEO</span>
+            <ChevronIcon expanded={analyticsOpen} />
+          </button>
+          {analyticsOpen && (
+            <div id="settings-analytics-panel" className="settings-section-panel">
+              <label>
+                Яндекс.Метрика — ID счётчика
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  placeholder="например, 12345678"
+                  value={String(settings.yandex_metrica_counter_id ?? "")}
+                  onChange={(e) =>
+                    setSettings({ ...settings, yandex_metrica_counter_id: e.target.value })
+                  }
+                  disabled={!can("settings:write")}
+                />
+                <span className="hint-inline">
+                  Только цифры. Счётчик подключается на сайте после согласия пользователя на cookie.
+                  Пустое поле — Метрика отключена.
+                </span>
+              </label>
+              <label>
+                Яндекс.Вебмастер — код верификации
+                <input
+                  type="text"
+                  placeholder="например, 7256c8302424cadd"
+                  value={String(settings.yandex_webmaster_verification ?? "")}
+                  onChange={(e) =>
+                    setSettings({ ...settings, yandex_webmaster_verification: e.target.value })
+                  }
+                  disabled={!can("settings:write")}
+                />
+                <span className="hint-inline">
+                  Код из HTML-файла (строка «Verification: …»). После сохранения файл будет доступен по
+                  адресу{" "}
+                  {String(settings.yandex_webmaster_verification ?? "").trim() ? (
+                    <code>
+                      https://glosix.ru/yandex_
+                      {String(settings.yandex_webmaster_verification).trim().toLowerCase()}.html
+                    </code>
+                  ) : (
+                    <code>https://glosix.ru/yandex_&lt;код&gt;.html</code>
+                  )}
+                  . Укажите этот URL в Вебмастере.
                 </span>
               </label>
             </div>
