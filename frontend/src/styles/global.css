@@ -370,20 +370,13 @@ body:has(.page-thread) {
     flex-direction: column;
     width: 100%;
     max-width: none;
-    height: 100svh;
-    max-height: 100svh;
-    min-height: 0;
+    min-height: 100dvh;
     margin: 0;
     padding: 0;
     justify-content: flex-start;
   }
 
   .home-mobile-header {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    z-index: 110;
     flex-shrink: 0;
   }
 
@@ -394,18 +387,7 @@ body:has(.page-thread) {
     align-items: center;
     justify-content: center;
     min-height: 0;
-    padding: calc(54px + env(safe-area-inset-top, 0px)) 12px calc(12px + env(safe-area-inset-bottom, 0px));
-  }
-
-  .page-home--mobile:has(.composer-wrap--focused) .home-mobile-main {
-    justify-content: flex-end;
-    padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
-  }
-
-  .page-home--mobile:has(.composer-wrap--focused) .home-mobile-center-stack {
-    transform: none;
-    gap: 20px;
-    width: 100%;
+    padding: 0 12px calc(28px + env(safe-area-inset-bottom, 0px));
   }
 
   .home-mobile-center-stack {
