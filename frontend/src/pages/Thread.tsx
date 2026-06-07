@@ -172,6 +172,7 @@ export function Thread() {
   const autoResumeScheduledRef = useRef<string | null>(null);
   const streamingRef = useRef(false);
   const isRevealingRef = useRef(false);
+  const [lastTurnRevealing, setLastTurnRevealing] = useState(false);
   const activeThreadIdRef = useRef<string | null>(id ?? null);
   const scrollTurnKeyRef = useRef<string | null>(null);
   const conversationRef = useRef<HTMLDivElement>(null);
@@ -273,6 +274,7 @@ export function Thread() {
   const handleAnswerTypingChange = useCallback(
     (typing: boolean) => {
       isRevealingRef.current = typing;
+      setLastTurnRevealing(typing);
       if (!typing && !streamingRef.current) {
         setTurns((prev) => {
           const idx = findLastIndex(
@@ -875,6 +877,11 @@ export function Thread() {
             const showGuestLimit = turn.errorCode === "guest_rate_limit" || turn.errorCode === "rate_limit";
             const showFreeLimit = turn.errorCode === "free_rate_limit";
             const showImageGenPro = turn.errorCode === "free_image_gen_pro";
+            const showEntityImages =
+              (turn.images?.length ?? 0) > 0 &&
+              (isImageGenTurn ||
+                (isLastTurn && !streaming && !lastTurnRevealing) ||
+                (!isLastTurn && !isActive));
             const showAnswer =
               showInterrupted ||
               showGuestLimit ||
@@ -882,7 +889,8 @@ export function Thread() {
               showImageGenPro ||
               answerHasText(turn.answer) ||
               Boolean(turn.generatedDocument) ||
-              (turn.images?.length ?? 0) > 0 ||
+              (isImageGenTurn && (turn.images?.length ?? 0) > 0) ||
+              showEntityImages ||
               isActive;
             const showFollowUps =
               index === lastCompletedIndex &&
@@ -957,7 +965,7 @@ export function Thread() {
                     {turn.generatedDocument && (
                       <GeneratedDocumentCard document={turn.generatedDocument} />
                     )}
-                    {(turn.images?.length ?? 0) > 0 && (
+                    {showEntityImages && (
                       <div className="answer-generated-media">
                         {isImageGenTurn ? (
                           <ChatGeneratedImages images={turn.images} />

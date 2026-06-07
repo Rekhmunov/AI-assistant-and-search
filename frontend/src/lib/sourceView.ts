@@ -10,6 +10,19 @@ export function parseSourceViewUrl(raw: string | null): string | null {
   }
 }
 
+/** http(s) URL or domain/path without scheme (max.ru/bot → https://…). */
+export function normalizeLinkHref(raw: string | null): string | null {
+  const trimmed = raw?.trim();
+  if (!trimmed) return null;
+  if (/^https?:\/\//i.test(trimmed)) {
+    return parseSourceViewUrl(trimmed);
+  }
+  if (/^[a-z0-9][a-z0-9-]*(?:\.[a-z0-9][a-z0-9-]*)*\.[a-z]{2,}(?:\/[^\s]*)?$/i.test(trimmed)) {
+    return parseSourceViewUrl(`https://${trimmed}`);
+  }
+  return null;
+}
+
 export function buildSourceViewPath(url: string): string {
   return `/source-view?url=${encodeURIComponent(url)}`;
 }

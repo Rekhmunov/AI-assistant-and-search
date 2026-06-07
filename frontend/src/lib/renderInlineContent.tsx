@@ -2,16 +2,15 @@ import type { ReactNode } from "react";
 import { SourceLink } from "../components/SourceLink";
 import { formatMarkdownText } from "./formatMarkdownText";
 import { linkifyPlainText } from "./linkifyInlineText";
-import { parseSourceViewUrl } from "./sourceView";
+import { normalizeLinkHref } from "./sourceView";
 
 function renderLinkifiedPlain(text: string, keyPrefix: string, keyCounter: { n: number }): ReactNode[] {
   const nodes: ReactNode[] = [];
-  const formatted = formatMarkdownText(text).replace(/\[\d+\]/g, "");
-  if (!formatted) return nodes;
+  if (!text.trim()) return nodes;
 
-  for (const part of linkifyPlainText(formatted)) {
+  for (const part of linkifyPlainText(text)) {
     if (part.type === "link") {
-      const safe = parseSourceViewUrl(part.href);
+      const safe = normalizeLinkHref(part.href);
       if (!safe) {
         nodes.push(<span key={`${keyPrefix}-t-${keyCounter.n++}`}>{part.label}</span>);
         continue;
@@ -27,8 +26,9 @@ function renderLinkifiedPlain(text: string, keyPrefix: string, keyCounter: { n: 
       );
       continue;
     }
-    if (part.value) {
-      nodes.push(<span key={`${keyPrefix}-t-${keyCounter.n++}`}>{part.value}</span>);
+    const formatted = formatMarkdownText(part.value).replace(/\[\d+\]/g, "");
+    if (formatted) {
+      nodes.push(<span key={`${keyPrefix}-t-${keyCounter.n++}`}>{formatted}</span>);
     }
   }
 

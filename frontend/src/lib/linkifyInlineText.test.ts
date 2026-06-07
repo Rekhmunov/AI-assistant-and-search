@@ -33,4 +33,12 @@ describe("linkifyPlainText", () => {
       { type: "link", label: "https://c.test", href: "https://c.test" },
     ]);
   });
+
+  it("linkifies domain paths without scheme", () => {
+    const parts = linkifyPlainText("Бот: max.ru/mfcryazan_bot");
+    expect(parts).toEqual([
+      { type: "text", value: "Бот: " },
+      { type: "link", label: "max.ru/mfcryazan_bot", href: "max.ru/mfcryazan_bot" },
+    ]);
+  });
 });

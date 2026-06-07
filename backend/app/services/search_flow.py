@@ -508,7 +508,6 @@ class SearchFlowService:
                                     imgs = entity_images_to_json(image_task.result())
                                     if imgs:
                                         entity_images_json = imgs
-                                        yield sse_event("images", {"images": imgs})
                                 except Exception:
                                     logger.exception("Entity image search failed (non-fatal)")
                             if event.sources and not sources:
@@ -536,7 +535,6 @@ class SearchFlowService:
                                 imgs = entity_images_to_json(raw)
                                 if imgs:
                                     entity_images_json = imgs
-                                    yield sse_event("images", {"images": imgs})
                             except asyncio.TimeoutError:
                                 image_task.cancel()
                                 logger.info("Entity image search timed out")
@@ -681,8 +679,6 @@ class SearchFlowService:
                             if task is image_ready_task and not images_emitted:
                                 images_emitted = True
                                 entity_images_json = entity_images_to_json(task.result())
-                                if entity_images_json:
-                                    yield sse_event("images", {"images": entity_images_json})
                             elif task is pipeline_task:
                                 pipeline_result = task.result()
 
@@ -858,6 +854,9 @@ class SearchFlowService:
                         {"code": "yandex_error", "message": str(e)},
                     )
                     return
+
+            if entity_images_json and full_answer.strip():
+                yield sse_event("images", {"images": entity_images_json})
 
             settings = get_settings()
             follow_ups: list[str] = []

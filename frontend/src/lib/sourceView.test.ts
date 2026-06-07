@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { detectIframeEmbedState, parseSourceViewUrl } from "./sourceView";
+import { detectIframeEmbedState, normalizeLinkHref, parseSourceViewUrl } from "./sourceView";
 
 describe("parseSourceViewUrl", () => {
   it("accepts https URLs", () => {
@@ -12,6 +12,12 @@ describe("parseSourceViewUrl", () => {
 
   it("rejects invalid URLs", () => {
     expect(parseSourceViewUrl("not-a-url")).toBeNull();
+  });
+});
+
+describe("normalizeLinkHref", () => {
+  it("adds https to domain paths", () => {
+    expect(normalizeLinkHref("max.ru/mfcryazan_bot")).toBe("https://max.ru/mfcryazan_bot");
   });
 });
 
