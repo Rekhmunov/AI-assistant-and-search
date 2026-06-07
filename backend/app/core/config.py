@@ -55,6 +55,7 @@ class Settings(BaseSettings):
     # Model URI suffixes: gpt://{folder_id}/{name}/{version}
     yandex_gpt_lite_model: str = "yandexgpt-lite/latest"
     yandex_gpt_pro_model: str = "yandexgpt/latest"
+    yandex_alice_vlm_model: str = "aliceai-vlm/latest"
 
     anthropic_api_key: str = ""
     # Lite = rewriter/extract; Pro = финальный ответ. ID из console.anthropic.com → Models

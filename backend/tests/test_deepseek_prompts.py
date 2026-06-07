@@ -6,8 +6,13 @@ from app.services.prompts.deepseek_defaults import DEEPSEEK_ANSWER_PROMPT_IDS
 from app.services.prompts.provider_answer_defaults import PROVIDER_ANSWER_PROMPTS
 
 
-def test_provider_registry_has_deepseek_claude_and_gigachat():
-    assert set(PROVIDER_ANSWER_PROMPTS) == {"deepseek", "anthropic_claude", "gigachat"}
+def test_provider_registry_has_answer_prompt_providers():
+    assert set(PROVIDER_ANSWER_PROMPTS) == {
+        "alice_vlm",
+        "deepseek",
+        "anthropic_claude",
+        "gigachat",
+    }
 
 
 def test_deepseek_answer_prompts_use_fenced_code_instructions():

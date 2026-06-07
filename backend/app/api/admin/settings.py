@@ -108,6 +108,15 @@ async def update_settings(
                         "ANTHROPIC_API_KEY не загружен в backend — vision через Claude недоступен."
                     ),
                 )
+        if key == "vision_provider" and str(value) == "alice_vlm":
+            if not env.yandex_configured:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=(
+                        "YANDEX_FOLDER_ID / YANDEX_API_KEY не загружены в backend — "
+                        "vision через Alice AI VLM недоступен."
+                    ),
+                )
         if key == "vision_provider" and str(value) == "gigachat":
             if not env.gigachat_configured:
                 raise HTTPException(

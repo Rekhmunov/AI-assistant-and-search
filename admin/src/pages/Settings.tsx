@@ -81,7 +81,7 @@ export function SettingsPage() {
     setPromptsOpen(false);
   }, [llmProvider]);
   const searchProvider = String(settings.search_provider ?? "yandex_search");
-  const visionProvider = String(settings.vision_provider ?? "gigachat");
+  const visionProvider = String(settings.vision_provider ?? "alice_vlm");
   const imageGenProvider = String(settings.image_gen_provider ?? "gigachat");
 
   const visiblePrompts = useMemo(

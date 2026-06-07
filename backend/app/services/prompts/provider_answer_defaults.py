@@ -10,12 +10,14 @@
 
 from __future__ import annotations
 
+from app.services.prompts.alice_vlm_defaults import ALICE_VLM_ANSWER_PROMPT_IDS
 from app.services.prompts.anthropic_claude_defaults import ANTHROPIC_ANSWER_PROMPT_IDS
 from app.services.prompts.deepseek_defaults import DEEPSEEK_ANSWER_PROMPT_IDS
 from app.services.prompts.gigachat_defaults import GIGACHAT_ANSWER_PROMPT_IDS
 
 # id провайдера из registry / llm_provider → словарь prompt_id → текст
 PROVIDER_ANSWER_PROMPTS: dict[str, dict[str, str]] = {
+    "alice_vlm": ALICE_VLM_ANSWER_PROMPT_IDS,
     "deepseek": DEEPSEEK_ANSWER_PROMPT_IDS,
     "anthropic_claude": ANTHROPIC_ANSWER_PROMPT_IDS,
     "gigachat": GIGACHAT_ANSWER_PROMPT_IDS,
