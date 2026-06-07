@@ -285,13 +285,13 @@ export function UserDetailPage() {
             <button type="submit" className="btn-primary">
               Выдать Pro
             </button>
+          </form>
+          <div className="user-detail-actions-row">
             {user.plan === "pro" && (
-              <button type="button" className="btn-danger-outline" onClick={() => void revokePro()}>
+              <button type="button" className="btn-secondary btn-danger-outline" onClick={() => void revokePro()}>
                 Отменить Pro
               </button>
             )}
-          </form>
-          <div className="user-detail-actions-row">
             {can("payments:write") && user.plan !== "pro" && (
               <button type="button" className="btn-secondary" onClick={() => void syncProPayment()}>
                 Синхронизировать оплату ЮKassa
