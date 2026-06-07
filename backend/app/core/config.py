@@ -97,6 +97,8 @@ class Settings(BaseSettings):
     cookie_domain: str = ""
     public_web_url: str = "https://glosix.ru"
     api_public_url: str = "https://api.glosix.ru"
+    # Deeplink бота MAX (https://max.ru/<bot>) — return_url после оплаты в миниаппе
+    max_bot_url: str = ""
 
     guest_searches_per_day: int = 5
     free_searches_per_day: int = 10

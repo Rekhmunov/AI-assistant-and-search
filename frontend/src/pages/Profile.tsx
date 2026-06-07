@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
-  confirmProPayment,
   createProPayment,
   createSupportTicket,
   devActivatePro,
@@ -26,7 +25,12 @@ import { ProfileAccountSection } from "../components/ProfileAccountSection";
 import { useDesktopLayout } from "../hooks/useDesktopLayout";
 import { useSignOut } from "../hooks/useSignOut";
 import { isMaxWebApp } from "../lib/maxApp";
-import { openExternalUrl } from "../lib/openExternalUrl";
+import { openPaymentUrl } from "../lib/openPaymentUrl";
+import {
+  markProPaymentPending,
+  refreshUserAfterProPayment,
+  runProPaymentConfirm,
+} from "../lib/proPaymentReturn";
 import { t } from "../i18n";
 import { useAuthStore } from "../store/authStore";
 
@@ -51,12 +55,6 @@ const PRO_BENEFIT_KEYS = [
   "proBenefitSearchPriority",
   "proBenefitCoffeePrice",
 ] as const;
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => {
-    window.setTimeout(resolve, ms);
-  });
-}
 
 export function Profile() {
   const token = useAuthStore((s) => s.token);
@@ -138,69 +136,36 @@ export function Profile() {
   const proPriceRub = appConfig?.pro_price_rub ?? profileUser?.pro_price_rub ?? session?.pro_price_rub ?? 299;
   const proPurchaseDisabled = Boolean(appConfig?.pro_purchase_disabled);
 
-  const refreshUserAfterPro = async () => {
-    const updated = await fetchMe(token!);
-    setUser(updated);
-    queryClient.setQueryData(["me"], updated);
-    queryClient.invalidateQueries({ queryKey: ["me"] });
-    queryClient.invalidateQueries({ queryKey: ["session"] });
-    return updated;
-  };
-
   const runPaymentConfirm = async (options?: { retries?: number }) => {
     if (!token || confirmInFlight.current) return;
     confirmInFlight.current = true;
     setPaymentModal({ open: true, kind: "loading" });
-
-    const retries = options?.retries ?? 3;
     try {
-      for (let attempt = 0; attempt < retries; attempt += 1) {
-        const result = await confirmProPayment(token);
-        if (result.ok && result.plan === "pro") {
-          await refreshUserAfterPro();
-          setPaymentModal({ open: true, kind: "success" });
-          return;
-        }
-        if (result.ok && result.plan !== "pro") {
-          setPaymentModal({
-            open: true,
-            kind: "error",
-            message: "Оплата найдена, но тариф не обновился. Обновите страницу или напишите в поддержку.",
-            canRetry: true,
-          });
-          return;
-        }
-
-        const isPending =
-          result.status === "pending" ||
-          result.status === "waiting_for_capture" ||
-          Boolean(result.message?.includes("обрабатывается"));
-
-        if (isPending && attempt < retries - 1) {
-          await sleep(2000);
-          continue;
-        }
-
-        const paymentNotFound =
-          !isPending &&
-          Boolean(
-            result.message?.includes("Успешная оплата не найдена") ||
-              result.message?.includes("Оплата не завершена"),
-          );
-
+      const result = await runProPaymentConfirm(token, { retries: options?.retries ?? 3 });
+      if (result.kind === "success" || result.kind === "already_pro") {
+        await refreshUserAfterProPayment(token, setUser, () => {
+          queryClient.invalidateQueries({ queryKey: ["me"] });
+          queryClient.invalidateQueries({ queryKey: ["session"] });
+        });
+        setPaymentModal({ open: true, kind: "success" });
+        return;
+      }
+      if (result.kind === "pending") {
         setPaymentModal({
           open: true,
-          kind: isPending ? "pending" : "error",
-          message:
-            result.message ||
-            (isPending
-              ? t("proPaymentPendingHint")
-              : t("proPaymentNotFoundPrefix")),
-          canRetry: !paymentNotFound,
-          showSupportLink: paymentNotFound,
+          kind: "pending",
+          message: result.message ?? t("proPaymentPendingHint"),
+          canRetry: true,
         });
         return;
       }
+      setPaymentModal({
+        open: true,
+        kind: "error",
+        message: result.message,
+        canRetry: result.canRetry,
+        showSupportLink: result.showSupportLink,
+      });
     } catch (err) {
       setPaymentModal({
         open: true,
@@ -290,7 +255,8 @@ export function Profile() {
         setProPaymentError(t("legalDocumentUnavailable"));
         return;
       }
-      const payment = await createProPayment(token!, freshOffer.version_id);
+      markProPaymentPending();
+      const payment = await createProPayment(token!, freshOffer.version_id, { fromMax: inMax });
       if (payment.dev_mode) {
         await devActivatePro(token!);
         const updated = await fetchMe(token!);
@@ -299,9 +265,7 @@ export function Profile() {
         queryClient.invalidateQueries({ queryKey: ["session"] });
         return;
       }
-      if (!openExternalUrl(payment.confirmation_url)) {
-        window.location.assign(payment.confirmation_url);
-      }
+      openPaymentUrl(payment.confirmation_url);
     } catch (err) {
       const message = err instanceof Error ? err.message : t("proPaymentCreateError");
       if (message.includes("временно недоступна") || message.includes("недоступна")) {

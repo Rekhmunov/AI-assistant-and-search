@@ -526,12 +526,16 @@ export async function devActivatePro(token: string): Promise<void> {
 export async function createProPayment(
   token: string,
   offerVersionId: string,
+  options?: { fromMax?: boolean },
 ): Promise<{ confirmation_url: string; dev_mode?: boolean }> {
   const res = await fetch(`${API_BASE}/api/payments/create`, {
     method: "POST",
     headers: apiHeaders(token),
     credentials: "include",
-    body: JSON.stringify({ offer_version_id: offerVersionId }),
+    body: JSON.stringify({
+      offer_version_id: offerVersionId,
+      from_max: Boolean(options?.fromMax),
+    }),
   });
   if (!res.ok) {
     let msg = "Не удалось создать платёж";

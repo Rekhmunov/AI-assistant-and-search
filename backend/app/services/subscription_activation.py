@@ -163,19 +163,36 @@ def payment_amount_is_valid(payment_object: dict[str, Any], expected_rub: int) -
     return paid == int(expected_rub)
 
 
-def payment_matches_user(payment: dict[str, Any], user: User) -> bool:
+def _technical_receipt_email(user: User, settings: Settings | None = None) -> str | None:
+    if user.max_user_id is None:
+        return None
+    settings = settings or get_settings()
+    host = settings.public_web_url.replace("https://", "").replace("http://", "").split("/")[0]
+    return f"max{user.max_user_id}@{host}".lower()
+
+
+def payment_matches_user(
+    payment: dict[str, Any],
+    user: User,
+    *,
+    settings: Settings | None = None,
+) -> bool:
     metadata = payment.get("metadata") or {}
     if str(metadata.get("user_id")) == str(user.id):
         return True
 
-    user_email = _normalize_email(user.email)
-    if not user_email:
-        return False
-
     receipt = payment.get("receipt") or {}
     customer = receipt.get("customer") or {}
     receipt_email = _normalize_email(str(customer.get("email") or ""))
-    if receipt_email and receipt_email == user_email:
+    if not receipt_email:
+        return False
+
+    user_email = _normalize_email(user.email)
+    if user_email and receipt_email == user_email:
+        return True
+
+    technical = _technical_receipt_email(user, settings)
+    if technical and receipt_email == technical:
         return True
 
     return False

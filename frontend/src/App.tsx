@@ -10,6 +10,7 @@ import { LoginPage } from "./pages/Login";
 import { Profile } from "./pages/Profile";
 import { SourceViewPage } from "./pages/SourceViewPage";
 import { LegalCompliance } from "./components/LegalCompliance";
+import { ProPaymentReturnHandler } from "./components/ProPaymentReturnHandler";
 import { LegalPathCatch } from "./components/LegalPathCatch";
 import { Thread } from "./pages/Thread";
 
@@ -42,6 +43,7 @@ function AppRoutes() {
         )}
       </main>
       {ready && <LegalCompliance />}
+      <ProPaymentReturnHandler ready={ready} />
     </div>
   );
 }

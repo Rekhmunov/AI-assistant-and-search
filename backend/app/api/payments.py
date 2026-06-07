@@ -30,6 +30,24 @@ router = APIRouter(prefix="/payments", tags=["payments"])
 _PAYMENT_UNAVAILABLE = "Не удалось создать платёж. Попробуйте позже или напишите в поддержку."
 
 
+MAX_PAY_RETURN_START_PARAM = "pay_ok"
+
+
+def _max_payment_return_url(settings) -> str | None:
+    base = (settings.max_bot_url or "").strip().rstrip("/").split("?")[0]
+    if not base or base.rstrip("/") == "https://max.ru":
+        return None
+    return f"{base}?startapp={MAX_PAY_RETURN_START_PARAM}"
+
+
+def _pro_payment_return_url(settings, *, from_max: bool) -> str:
+    if from_max:
+        max_url = _max_payment_return_url(settings)
+        if max_url:
+            return max_url
+    return f"{settings.public_web_url.rstrip('/')}/profile?payment=success"
+
+
 def _receipt_email_for_user(user: User, settings) -> str | None:
     """Email для фискального чека ЮKassa."""
     email = (user.email or "").strip().lower()
@@ -70,7 +88,11 @@ async def create_pro_payment(
     """Create YooKassa payment for Pro subscription."""
     verify_allowed_origin(request)
     settings = get_settings()
-    return_url = f"{settings.public_web_url.rstrip('/')}/profile?payment=success"
+    return_url = _pro_payment_return_url(settings, from_max=body.from_max)
+    if body.from_max and return_url.startswith(settings.public_web_url.rstrip("/")):
+        logger.warning(
+            "MAX payment return_url falls back to web — set MAX_BOT_URL in .env (same as VITE_MAX_BOT_URL)"
+        )
 
     try:
         ip_address, ua = consent_request_meta(request)
