@@ -132,8 +132,7 @@ export function SearchComposer({
       !mobileComposerOpen &&
       !attachMenuOpenRef.current &&
       !modelMenuOpenRef.current &&
-      !value.trim() &&
-      !disabled;
+      !value.trim();
     if (collapsedThreadBar) {
       el.style.height = "44px";
       el.style.maxHeight = "44px";
@@ -186,13 +185,8 @@ export function SearchComposer({
   );
 
   const voiceActive = voice.state !== "idle";
-  const streamingLocked = layoutMode === "threadMobile" && Boolean(disabled);
   const composerExpanded = isMobileFocusLayout
-    ? mobileComposerOpen ||
-      hasComposerText ||
-      attachMenuOpen ||
-      modelMenuOpen ||
-      streamingLocked
+    ? mobileComposerOpen || hasComposerText || attachMenuOpen || modelMenuOpen
     : inputFocused || attachMenuOpen || modelMenuOpen || hasComposerText;
 
   const openProUpgradeModal = () => setProUpgradeModalOpen(true);
@@ -218,7 +212,11 @@ export function SearchComposer({
       return;
     }
     if (disabled || isBusy) return;
-    if (isMobileFocusLayout) {
+    if (layoutMode === "threadMobile") {
+      setMobileComposerOpen(false);
+      setInputFocused(false);
+      textareaRef.current?.blur();
+    } else if (isMobileFocusLayout) {
       engageMobileComposer();
     }
     onSubmit({
@@ -388,7 +386,6 @@ export function SearchComposer({
 
     const onPointerDown = (e: PointerEvent) => {
       if (value.trim()) return;
-      if (disabled) return;
       if (voiceActive) return;
       if (attachMenuOpenRef.current || modelMenuOpenRef.current) return;
       const target = e.target as Node;
@@ -405,7 +402,18 @@ export function SearchComposer({
 
     document.addEventListener("pointerdown", onPointerDown, true);
     return () => document.removeEventListener("pointerdown", onPointerDown, true);
-  }, [disabled, isMobileFocusLayout, mobileComposerOpen, value, voiceActive]);
+  }, [isMobileFocusLayout, mobileComposerOpen, value, voiceActive]);
+
+  useEffect(() => {
+    if (layoutMode !== "threadMobile" || !disabled) return;
+    setMobileComposerOpen(false);
+    setInputFocused(false);
+    if (blurTimerRef.current) {
+      clearTimeout(blurTimerRef.current);
+      blurTimerRef.current = null;
+    }
+    textareaRef.current?.blur();
+  }, [disabled, layoutMode]);
 
   useEffect(
     () => () => {
