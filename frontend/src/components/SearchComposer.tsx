@@ -88,11 +88,15 @@ export function SearchComposer({
 }: Props) {
   const token = useAuthStore((s) => s.token);
   const isDesktop = useDesktopLayout();
+  const isMobileFocusLayout =
+    (layoutMode === "threadMobile" || layoutMode === "homeMobile") && !isDesktop;
   const allFilesRef = useRef<HTMLInputElement>(null);
+  const composerWrapRef = useRef<HTMLDivElement>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploadSuggestPro, setUploadSuggestPro] = useState(false);
   const [uploading, setUploading] = useState<UploadingItem[]>([]);
   const [inputFocused, setInputFocused] = useState(false);
+  const [mobileComposerOpen, setMobileComposerOpen] = useState(false);
   const [attachMenuOpen, setAttachMenuOpen] = useState(false);
   const [modelMenuOpen, setModelMenuOpen] = useState(false);
   const [proUpgradeModalOpen, setProUpgradeModalOpen] = useState(false);
@@ -101,6 +105,20 @@ export function SearchComposer({
   const modelMenuOpenRef = useRef(false);
   const cancelledUploadsRef = useRef<Set<string>>(new Set());
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const hasComposerText = value.trim().length > 0;
+  const composerExpanded = isMobileFocusLayout
+    ? mobileComposerOpen || hasComposerText || attachMenuOpen || modelMenuOpen
+    : inputFocused || attachMenuOpen || modelMenuOpen || hasComposerText;
+
+  const engageMobileComposer = useCallback(() => {
+    if (!isMobileFocusLayout) return;
+    if (blurTimerRef.current) {
+      clearTimeout(blurTimerRef.current);
+      blurTimerRef.current = null;
+    }
+    setMobileComposerOpen(true);
+  }, [isMobileFocusLayout]);
 
   const COMPOSER_MAX_HEIGHT_RATIO = 0.3;
 
@@ -114,7 +132,7 @@ export function SearchComposer({
     if (!el) return;
     const collapsedThreadBar =
       layoutMode === "threadMobile" &&
-      !inputFocused &&
+      !mobileComposerOpen &&
       !attachMenuOpenRef.current &&
       !modelMenuOpenRef.current &&
       !value.trim();
@@ -131,7 +149,7 @@ export function SearchComposer({
     el.style.height = `${next}px`;
     el.style.maxHeight = `${maxPx}px`;
     el.style.overflowY = scroll > maxPx ? "auto" : "hidden";
-  }, [getComposerMaxHeightPx, inputFocused, layoutMode, value]);
+  }, [getComposerMaxHeightPx, layoutMode, mobileComposerOpen, value]);
 
   const { data: session } = useQuery({
     queryKey: ["session", token],
@@ -279,9 +297,10 @@ export function SearchComposer({
     if (ref.current) ref.current.value = "";
   };
 
-  /** Prevent textarea blur before toolbar tap registers (mobile focus layout). */
-  const keepComposerFocus = (e: React.PointerEvent) => {
+  /** Keep expanded composer on toolbar taps (mobile); blur alone must not collapse. */
+  const keepComposerEngaged = (e: React.PointerEvent) => {
     e.preventDefault();
+    engageMobileComposer();
   };
 
   const handleInputFocus = () => {
@@ -290,6 +309,7 @@ export function SearchComposer({
       blurTimerRef.current = null;
     }
     setInputFocused(true);
+    engageMobileComposer();
     requestAnimationFrame(() => requestAnimationFrame(adjustTextareaHeight));
   };
 
@@ -323,29 +343,51 @@ export function SearchComposer({
     [atLimit, canAttachFiles, clearUploadFailure, onFilesPicked, setUploadFailure],
   );
 
-  const handleAttachMenuOpenChange = useCallback((open: boolean) => {
-    attachMenuOpenRef.current = open;
-    setAttachMenuOpen(open);
-    if (open) {
-      if (blurTimerRef.current) {
-        clearTimeout(blurTimerRef.current);
-        blurTimerRef.current = null;
+  const handleAttachMenuOpenChange = useCallback(
+    (open: boolean) => {
+      attachMenuOpenRef.current = open;
+      setAttachMenuOpen(open);
+      if (open) {
+        engageMobileComposer();
+        setInputFocused(true);
       }
-      setInputFocused(true);
-    }
-  }, []);
+    },
+    [engageMobileComposer],
+  );
 
-  const handleModelMenuOpenChange = useCallback((open: boolean) => {
-    modelMenuOpenRef.current = open;
-    setModelMenuOpen(open);
-    if (open) {
+  const handleModelMenuOpenChange = useCallback(
+    (open: boolean) => {
+      modelMenuOpenRef.current = open;
+      setModelMenuOpen(open);
+      if (open) {
+        engageMobileComposer();
+        setInputFocused(true);
+      }
+    },
+    [engageMobileComposer],
+  );
+
+  useEffect(() => {
+    if (!isMobileFocusLayout || !mobileComposerOpen) return;
+
+    const onPointerDown = (e: PointerEvent) => {
+      if (value.trim()) return;
+      if (attachMenuOpenRef.current || modelMenuOpenRef.current) return;
+      const target = e.target as Node;
+      if (composerWrapRef.current?.contains(target)) return;
+
+      setMobileComposerOpen(false);
+      setInputFocused(false);
       if (blurTimerRef.current) {
         clearTimeout(blurTimerRef.current);
         blurTimerRef.current = null;
       }
-      setInputFocused(true);
-    }
-  }, []);
+      textareaRef.current?.blur();
+    };
+
+    document.addEventListener("pointerdown", onPointerDown, true);
+    return () => document.removeEventListener("pointerdown", onPointerDown, true);
+  }, [isMobileFocusLayout, mobileComposerOpen, value]);
 
   useEffect(
     () => () => {
@@ -358,9 +400,7 @@ export function SearchComposer({
     (value.trim().length > 0 || (attachments.length > 0 && !requireTextWithAttachments)) &&
     !disabled &&
     !isBusy;
-  const hasComposerText = value.trim().length > 0;
   const hasAttachment = totalCount > 0;
-  const composerExpanded = inputFocused || attachMenuOpen || modelMenuOpen || hasComposerText;
 
   useLayoutEffect(() => {
     adjustTextareaHeight();
@@ -386,7 +426,7 @@ export function SearchComposer({
     return () => ro.disconnect();
   }, [adjustTextareaHeight]);
   const showTypingOverlay =
-    animatedPlaceholder && !value.trim() && !disabled && !inputFocused;
+    animatedPlaceholder && !value.trim() && !disabled && !composerExpanded;
   const typingPlaceholder = useTypingPlaceholder(showTypingOverlay, placeholderPhrases);
   const staticPlaceholder = placeholder ?? t("searchPlaceholder");
   const textareaPlaceholder = inputFocused
@@ -395,8 +435,6 @@ export function SearchComposer({
       ? " "
       : staticPlaceholder;
 
-  const isMobileFocusLayout =
-    (layoutMode === "threadMobile" || layoutMode === "homeMobile") && !isDesktop;
   const showComposerToolbar = isMobileFocusLayout && composerExpanded;
   const showAttachInToolbar = showComposerToolbar;
   const showSendInToolbar = showComposerToolbar;
@@ -404,11 +442,16 @@ export function SearchComposer({
   const showDefaultRow = !isMobileFocusLayout;
   const useDesktopStackedLayout = isDesktop && showDefaultRow;
 
+  const handleDirectPick = () => {
+    engageMobileComposer();
+    openPicker(allFilesRef);
+  };
+
   const attachMenu = (
     <ComposerAttachMenu
       disabled={disabled || isBusy || atLimit}
       directPick
-      onDirectPick={() => openPicker(allFilesRef)}
+      onDirectPick={handleDirectPick}
       keepFocusOnPress={isMobileFocusLayout}
       onOpenChange={useDesktopStackedLayout ? undefined : handleAttachMenuOpenChange}
     />
@@ -421,7 +464,7 @@ export function SearchComposer({
       aria-label={t("voiceInput")}
       aria-pressed={voice.state === "recording"}
       disabled={disabled || voice.state === "transcribing"}
-      onPointerDown={useDesktopStackedLayout ? undefined : keepComposerFocus}
+      onPointerDown={useDesktopStackedLayout ? undefined : keepComposerEngaged}
       onClick={handleVoiceToggle}
     >
       <MicIcon recording={voice.state === "recording"} />
@@ -434,7 +477,7 @@ export function SearchComposer({
       className="composer-send"
       disabled={!canSend}
       aria-label={t("send")}
-      onPointerDown={useDesktopStackedLayout ? undefined : keepComposerFocus}
+      onPointerDown={useDesktopStackedLayout ? undefined : keepComposerEngaged}
     >
       <SendIcon />
     </button>
@@ -455,6 +498,7 @@ export function SearchComposer({
       className="composer-icon composer-icon--clear"
       aria-label={t("composerClearInput")}
       disabled={disabled}
+      onPointerDown={isMobileFocusLayout ? keepComposerEngaged : undefined}
       onClick={() => onChange("")}
     >
       <CloseIcon />
@@ -463,6 +507,7 @@ export function SearchComposer({
 
   return (
     <div
+      ref={composerWrapRef}
       className={`composer-wrap${docked ? " composer-wrap--docked" : " composer-wrap--inline"}${isMobileFocusLayout ? " composer-wrap--thread-mobile" : ""}${composerExpanded && isMobileFocusLayout ? " composer-wrap--focused" : ""}`}
     >
       {(uploadError || voice.error) && (
@@ -603,12 +648,15 @@ export function SearchComposer({
             </div>
 
             {showComposerToolbar && (
-              <div className="composer-toolbar">
+              <div
+                className="composer-toolbar"
+                onPointerDownCapture={isMobileFocusLayout ? keepComposerEngaged : undefined}
+              >
                 {showAttachInToolbar && (
                   <ComposerAttachMenu
                     disabled={disabled || isBusy || atLimit}
                     directPick
-                    onDirectPick={() => openPicker(allFilesRef)}
+                    onDirectPick={handleDirectPick}
                     keepFocusOnPress={isMobileFocusLayout}
                     onOpenChange={handleAttachMenuOpenChange}
                   />

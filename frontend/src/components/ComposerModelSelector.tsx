@@ -13,16 +13,17 @@ type Props = {
 
 export function ComposerModelSelector(props: Props) {
   if (props.plan === "pro") {
-    return <ComposerModelProLabel />;
+    return <ComposerModelProLabel keepFocusOnPress={props.keepFocusOnPress} />;
   }
   return <ComposerModelSelectorDropdown {...props} />;
 }
 
-function ComposerModelProLabel() {
+function ComposerModelProLabel({ keepFocusOnPress = false }: { keepFocusOnPress?: boolean }) {
   return (
     <div
       className="composer-model-selector composer-model-selector--static"
       aria-label={t("modelSelectorProLabel")}
+      onPointerDown={keepFocusOnPress ? (e) => e.preventDefault() : undefined}
     >
       <span className="composer-model-static-label">{t("modelSelectorProLabel")}</span>
     </div>
