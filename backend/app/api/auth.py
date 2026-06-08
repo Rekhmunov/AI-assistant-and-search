@@ -166,15 +166,29 @@ def _validate_init_data(init_data: str) -> dict:
     return user_data
 
 
+def _apply_plan_expiry(user: User) -> None:
+    if user.plan == Plan.PRO and user.plan_expires_at and user.plan_expires_at < datetime.now(timezone.utc):
+        user.plan = Plan.FREE
+        user.plan_expires_at = None
+
+
 def _apply_max_profile(user: User, user_data: dict) -> None:
     user.first_name = user_data.get("first_name") or user.first_name
     user.last_name = user_data.get("last_name") or user.last_name
     user.username = user_data.get("username") or user.username
     if user_data.get("language_code"):
         user.language = user_data.get("language_code", user.language)
-    if user.plan == Plan.PRO and user.plan_expires_at and user.plan_expires_at < datetime.now(timezone.utc):
-        user.plan = Plan.FREE
-        user.plan_expires_at = None
+    _apply_plan_expiry(user)
+
+
+def _is_admin_banned_email_user(user: User) -> bool:
+    """Admin ban: deleted_at set and password removed — not a self-service delete."""
+    return user.deleted_at is not None and not user.password_hash
+
+
+def _reactivate_self_deleted_user(user: User) -> None:
+    user.deleted_at = None
+    _apply_plan_expiry(user)
 
 
 async def _release_deleted_max_user_id(db: AsyncSession, max_user_id: int) -> None:
@@ -370,27 +384,41 @@ async def register_email(
     await check_auth_rate_limit(redis_client, "register", ip)
     await check_auth_rate_limit(redis_client, "register_email", email)
     try:
-        existing = await db.execute(select(User).where(User.email == email))
-        if existing.scalar_one_or_none():
+        existing_result = await db.execute(select(User).where(User.email == email))
+        existing = existing_result.scalar_one_or_none()
+        if existing and existing.deleted_at is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Не удалось завершить регистрацию. Проверьте данные или войдите в аккаунт.",
+            )
+        if existing and _is_admin_banned_email_user(existing):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Не удалось завершить регистрацию. Проверьте данные или войдите в аккаунт.",
             )
 
-        user = User(
-            email=email,
-            password_hash=hash_password(body.password),
-            first_name=body.first_name,
-            max_user_id=None,
-        )
-        db.add(user)
-        try:
+        if existing and existing.deleted_at is not None:
+            user = existing
+            _reactivate_self_deleted_user(user)
+            user.password_hash = hash_password(body.password)
+            if body.first_name:
+                user.first_name = body.first_name
             await db.flush()
-        except IntegrityError as exc:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Не удалось завершить регистрацию. Проверьте данные или войдите в аккаунт.",
-            ) from exc
+        else:
+            user = User(
+                email=email,
+                password_hash=hash_password(body.password),
+                first_name=body.first_name,
+                max_user_id=None,
+            )
+            db.add(user)
+            try:
+                await db.flush()
+            except IntegrityError as exc:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Не удалось завершить регистрацию. Проверьте данные или войдите в аккаунт.",
+                ) from exc
 
         if not body.privacy_version_id or not body.pd_consent_version_id:
             raise HTTPException(
@@ -461,17 +489,12 @@ async def login_email(
     await check_auth_rate_limit(redis_client, "login_email", email)
     result = await db.execute(select(User).where(User.email == email))
     user = result.scalar_one_or_none()
-    if not user or not user.password_hash or not verify_password(body.password, user.password_hash):
+    if not user or _is_admin_banned_email_user(user):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Неверный email или пароль")
+    if not user.password_hash or not verify_password(body.password, user.password_hash):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Неверный email или пароль")
     if user.deleted_at is not None:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Вы попали в бан, обратитесь в поддержку",
-        )
-
-    if user.plan == Plan.PRO and user.plan_expires_at and user.plan_expires_at < datetime.now(timezone.utc):
-        user.plan = Plan.FREE
-        user.plan_expires_at = None
+        _reactivate_self_deleted_user(user)
 
     await clear_auth_rate_limit(redis_client, "login", ip)
     await clear_auth_rate_limit(redis_client, "login_email", email)

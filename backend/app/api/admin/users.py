@@ -215,6 +215,7 @@ async def update_user(
         if body.banned:
             user.deleted_at = datetime.now(timezone.utc)
             user.max_user_id = None
+            user.password_hash = None
             changes["banned"] = True
         else:
             user.deleted_at = None
