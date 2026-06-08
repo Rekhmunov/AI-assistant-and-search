@@ -18,7 +18,6 @@ import { ProUpgradeModal } from "./ProUpgradeModal";
 import { MobileNewThreadButton } from "./MobileNewThreadButton";
 import {
   ACCEPT_FILE_INPUT,
-  ACCEPT_IMAGE_INPUT,
   MAX_ATTACHMENTS,
   MAX_FILE_BYTES_FREE,
   MAX_FILE_BYTES_PRO,
@@ -90,8 +89,6 @@ export function SearchComposer({
   const token = useAuthStore((s) => s.token);
   const isDesktop = useDesktopLayout();
   const allFilesRef = useRef<HTMLInputElement>(null);
-  const photoRef = useRef<HTMLInputElement>(null);
-  const cameraRef = useRef<HTMLInputElement>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploadSuggestPro, setUploadSuggestPro] = useState(false);
   const [uploading, setUploading] = useState<UploadingItem[]>([]);
@@ -410,11 +407,8 @@ export function SearchComposer({
   const attachMenu = (
     <ComposerAttachMenu
       disabled={disabled || isBusy || atLimit}
-      directPick={isDesktop}
+      directPick
       onDirectPick={() => openPicker(allFilesRef)}
-      onPickGallery={() => openPicker(photoRef)}
-      onPickCamera={() => openPicker(cameraRef)}
-      onPickFiles={() => openPicker(allFilesRef)}
       keepFocusOnPress={isMobileFocusLayout}
       onOpenChange={useDesktopStackedLayout ? undefined : handleAttachMenuOpenChange}
     />
@@ -521,28 +515,6 @@ export function SearchComposer({
               resetInput(allFilesRef);
             }}
           />
-          <input
-            ref={photoRef}
-            type="file"
-            accept={ACCEPT_IMAGE_INPUT}
-            multiple
-            hidden
-            onChange={(e) => {
-              void onFilesPicked(e.target.files, "image");
-              resetInput(photoRef);
-            }}
-          />
-          <input
-            ref={cameraRef}
-            type="file"
-            accept={ACCEPT_IMAGE_INPUT}
-            capture="environment"
-            hidden
-            onChange={(e) => {
-              void onFilesPicked(e.target.files, "image");
-              resetInput(cameraRef);
-            }}
-          />
 
         {useDesktopStackedLayout ? (
           <>
@@ -635,11 +607,8 @@ export function SearchComposer({
                 {showAttachInToolbar && (
                   <ComposerAttachMenu
                     disabled={disabled || isBusy || atLimit}
-                    directPick={isDesktop}
+                    directPick
                     onDirectPick={() => openPicker(allFilesRef)}
-                    onPickGallery={() => openPicker(photoRef)}
-                    onPickCamera={() => openPicker(cameraRef)}
-                    onPickFiles={() => openPicker(allFilesRef)}
                     keepFocusOnPress={isMobileFocusLayout}
                     onOpenChange={handleAttachMenuOpenChange}
                   />
