@@ -60,20 +60,33 @@ class AliceVLMProvider(PromptedLLMMixin):
     def configured(self) -> bool:
         return self.settings.yandex_configured
 
-    def _model_uri(self) -> str:
-        folder = self.settings.yandex_folder_id
-        suffix = self.settings.yandex_alice_vlm_model
-        return f"gpt://{folder}/{suffix}"
+    def _model_uri_candidates(self) -> list[str]:
+        folder = self.settings.yandex_folder_id.strip()
+        if not folder:
+            return []
+        configured = self.settings.yandex_alice_vlm_model.strip()
+        suffixes: list[str] = []
+        for suffix in (configured, "aliceai-vlm/latest", "aliceai-vlm"):
+            if suffix and suffix not in suffixes:
+                suffixes.append(suffix)
+        return [f"gpt://{folder}/{suffix}" for suffix in suffixes]
 
     def _headers(self) -> dict[str, str]:
+        api_key = self.settings.yandex_api_key.strip()
         headers = {
-            "Authorization": f"Api-Key {self.settings.yandex_api_key}",
+            # OpenAI-совместимый /v1/chat/completions ожидает Bearer (не Api-Key).
+            "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
+            "x-data-logging-enabled": "false",
         }
         folder = self.settings.yandex_folder_id.strip()
         if folder:
             headers["x-folder-id"] = folder
         return headers
+
+    @staticmethod
+    def _retryable_model_status(status_code: int) -> bool:
+        return status_code in (400, 404, 422)
 
     def _vision_user_text(
         self,
@@ -133,28 +146,113 @@ class AliceVLMProvider(PromptedLLMMixin):
         max_tokens: int,
         temperature: float,
     ) -> str:
+        candidates = self._model_uri_candidates()
+        if not candidates:
+            raise YandexServiceError("gpt", "Alice AI VLM: не задан YANDEX_FOLDER_ID")
+
+        last_error: Exception | None = None
+        for model_uri in candidates:
+            payload = {
+                "model": model_uri,
+                "messages": messages,
+                "max_tokens": max_tokens,
+                "temperature": temperature,
+            }
+            try:
+                async with httpx.AsyncClient(timeout=120.0) as client:
+                    response = await client.post(CHAT_URL, headers=self._headers(), json=payload)
+                    response.raise_for_status()
+                    data = response.json()
+                text = self._text_from_completion(data)
+                if not text:
+                    raise YandexServiceError("gpt", "Alice AI VLM вернула пустой ответ")
+                logger.info("Alice VLM complete success model_uri=%s", model_uri)
+                return text
+            except httpx.HTTPStatusError as e:
+                logger.warning(
+                    "Alice VLM HTTP %s model_uri=%s: %s",
+                    e.response.status_code,
+                    model_uri,
+                    e.response.text[:500],
+                )
+                last_error = _alice_vlm_http_error(e.response)
+                if self._retryable_model_status(e.response.status_code):
+                    continue
+                raise last_error from e
+            except httpx.HTTPError as e:
+                logger.exception("Alice VLM request failed model_uri=%s", model_uri)
+                raise YandexServiceError("gpt", "Alice AI VLM недоступен (сеть)") from e
+            except YandexServiceError as e:
+                last_error = e
+                continue
+
+        if last_error:
+            raise last_error
+        raise YandexServiceError("gpt", "Alice AI VLM недоступен")
+
+    async def _stream_messages_for_model(
+        self,
+        messages: list[dict[str, Any]],
+        model_uri: str,
+        *,
+        max_tokens: int,
+        temperature: float,
+    ) -> AsyncIterator[str]:
         payload = {
-            "model": self._model_uri(),
+            "model": model_uri,
             "messages": messages,
             "max_tokens": max_tokens,
             "temperature": temperature,
+            "stream": True,
         }
-        try:
-            async with httpx.AsyncClient(timeout=120.0) as client:
-                response = await client.post(CHAT_URL, headers=self._headers(), json=payload)
-                response.raise_for_status()
-                data = response.json()
-        except httpx.HTTPStatusError as e:
-            logger.error("Alice VLM HTTP %s: %s", e.response.status_code, e.response.text[:500])
-            raise _alice_vlm_http_error(e.response) from e
-        except httpx.HTTPError as e:
-            logger.exception("Alice VLM request failed")
-            raise YandexServiceError("gpt", "Alice AI VLM недоступен (сеть)") from e
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            async with client.stream(
+                "POST", CHAT_URL, headers=self._headers(), json=payload
+            ) as response:
+                if response.status_code >= 400:
+                    body = (await response.aread()).decode("utf-8", errors="replace")[:500]
+                    logger.warning(
+                        "Alice VLM stream HTTP %s model_uri=%s: %s",
+                        response.status_code,
+                        model_uri,
+                        body,
+                    )
+                    req = httpx.Request("POST", CHAT_URL)
+                    resp = httpx.Response(response.status_code, request=req, content=body.encode())
+                    raise _alice_vlm_http_error(resp)
 
-        text = self._text_from_completion(data)
-        if not text:
-            raise YandexServiceError("gpt", "Alice AI VLM вернула пустой ответ")
-        return text
+                yielded = False
+                content_filter = False
+                async for line in response.aiter_lines():
+                    if not line.startswith("data:"):
+                        continue
+                    raw = line[5:].strip()
+                    if not raw or raw == "[DONE]":
+                        continue
+                    try:
+                        event = json.loads(raw)
+                    except json.JSONDecodeError:
+                        continue
+                    choices = event.get("choices") or []
+                    if not choices:
+                        continue
+                    choice = choices[0]
+                    finish = str(choice.get("finish_reason") or "").lower()
+                    if finish == "content_filter":
+                        content_filter = True
+                    delta = choice.get("delta") or {}
+                    text = delta.get("content")
+                    if text:
+                        yielded = True
+                        yield str(text)
+
+                if content_filter and not yielded:
+                    raise YandexServiceError(
+                        "gpt",
+                        "Alice AI VLM отклонила запрос (content_filter)",
+                    )
+                if not yielded:
+                    raise YandexServiceError("gpt", "Alice AI VLM вернула пустой ответ")
 
     async def _stream_messages(
         self,
@@ -163,63 +261,45 @@ class AliceVLMProvider(PromptedLLMMixin):
         max_tokens: int,
         temperature: float,
     ) -> AsyncIterator[str]:
-        payload = {
-            "model": self._model_uri(),
-            "messages": messages,
-            "max_tokens": max_tokens,
-            "temperature": temperature,
-            "stream": True,
-        }
-        try:
-            async with httpx.AsyncClient(timeout=120.0) as client:
-                async with client.stream(
-                    "POST", CHAT_URL, headers=self._headers(), json=payload
-                ) as response:
-                    if response.status_code >= 400:
-                        body = (await response.aread()).decode("utf-8", errors="replace")[:500]
-                        logger.error("Alice VLM stream HTTP %s: %s", response.status_code, body)
-                        req = httpx.Request("POST", CHAT_URL)
-                        resp = httpx.Response(response.status_code, request=req, content=body.encode())
-                        raise _alice_vlm_http_error(resp)
+        candidates = self._model_uri_candidates()
+        if not candidates:
+            raise YandexServiceError("gpt", "Alice AI VLM: не задан YANDEX_FOLDER_ID")
 
-                    yielded = False
-                    content_filter = False
-                    async for line in response.aiter_lines():
-                        if not line.startswith("data:"):
-                            continue
-                        raw = line[5:].strip()
-                        if not raw or raw == "[DONE]":
-                            continue
-                        try:
-                            event = json.loads(raw)
-                        except json.JSONDecodeError:
-                            continue
-                        choices = event.get("choices") or []
-                        if not choices:
-                            continue
-                        choice = choices[0]
-                        finish = str(choice.get("finish_reason") or "").lower()
-                        if finish == "content_filter":
-                            content_filter = True
-                        delta = choice.get("delta") or {}
-                        text = delta.get("content")
-                        if text:
-                            yielded = True
-                            yield str(text)
+        last_error: Exception | None = None
+        for model_uri in candidates:
+            try:
+                async for chunk in self._stream_messages_for_model(
+                    messages,
+                    model_uri,
+                    max_tokens=max_tokens,
+                    temperature=temperature,
+                ):
+                    yield chunk
+                logger.info("Alice VLM stream success model_uri=%s", model_uri)
+                return
+            except httpx.HTTPStatusError as e:
+                logger.warning(
+                    "Alice VLM stream HTTP %s model_uri=%s: %s",
+                    e.response.status_code,
+                    model_uri,
+                    e.response.text[:500],
+                )
+                last_error = _alice_vlm_http_error(e.response)
+                if self._retryable_model_status(e.response.status_code):
+                    continue
+                raise last_error from e
+            except httpx.HTTPError as e:
+                logger.exception("Alice VLM stream failed model_uri=%s", model_uri)
+                raise YandexServiceError("gpt", "Alice AI VLM недоступен (сеть)") from e
+            except YandexServiceError as e:
+                last_error = e
+                if e.status_code and self._retryable_model_status(e.status_code):
+                    continue
+                raise
 
-                    if content_filter and not yielded:
-                        raise YandexServiceError(
-                            "gpt",
-                            "Alice AI VLM отклонила запрос (content_filter)",
-                        )
-                    if not yielded:
-                        raise YandexServiceError("gpt", "Alice AI VLM вернула пустой ответ")
-        except httpx.HTTPStatusError as e:
-            logger.error("Alice VLM stream HTTP %s: %s", e.response.status_code, e.response.text[:500])
-            raise _alice_vlm_http_error(e.response) from e
-        except httpx.HTTPError as e:
-            logger.exception("Alice VLM stream failed")
-            raise YandexServiceError("gpt", "Alice AI VLM недоступен (сеть)") from e
+        if last_error:
+            raise last_error
+        raise YandexServiceError("gpt", "Alice AI VLM недоступен")
 
     async def summarize_vision_for_search(
         self,

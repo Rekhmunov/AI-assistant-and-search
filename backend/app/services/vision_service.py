@@ -201,7 +201,7 @@ async def summarize_vision_for_search(
         if not _vision_configured(provider_id, settings):
             continue
         try:
-            return await _summarize_with_provider(
+            result = await _summarize_with_provider(
                 provider_id,
                 query,
                 vision_images,
@@ -210,6 +210,8 @@ async def summarize_vision_for_search(
                 prompt_store=prompt_store,
                 prior_sources_block=prior_sources_block,
             )
+            logger.info("Vision summary succeeded provider=%s", provider_id)
+            return result
         except (YandexServiceError, VisionProviderRefusedError) as e:
             logger.warning("Vision summary failed (%s), trying next provider: %s", provider_id, e)
             last_error = e
@@ -254,6 +256,7 @@ async def stream_vision_answer(
                 prior_sources_block=prior_sources_block,
             ):
                 yield chunk
+            logger.info("Vision stream succeeded provider=%s", provider_id)
             return
         except (YandexServiceError, VisionProviderRefusedError) as e:
             logger.warning("Vision stream failed (%s), trying next provider: %s", provider_id, e)
