@@ -71,7 +71,6 @@ class AliceVLMProvider(PromptedLLMMixin):
             return []
         configured = self.settings.yandex_alice_vlm_model.strip()
         gemma = self.settings.yandex_vision_gemma_model.strip()
-        # Gemma первой: aliceai-vlm пока нет в API (лишние запросы и задержка).
         gemma_suffixes: list[str] = []
         for suffix in (gemma, "gemma-3-27b-it", "gemma-3-27b-it/latest"):
             if suffix and suffix not in gemma_suffixes:
@@ -80,7 +79,12 @@ class AliceVLMProvider(PromptedLLMMixin):
         for suffix in (configured, "aliceai-vlm/latest", "aliceai-vlm"):
             if suffix and suffix not in alice_suffixes and suffix not in gemma_suffixes:
                 alice_suffixes.append(suffix)
-        return [f"gpt://{folder}/{suffix}" for suffix in (*gemma_suffixes, *alice_suffixes)]
+        order = (
+            (*alice_suffixes, *gemma_suffixes)
+            if self.settings.yandex_vision_alice_first
+            else (*gemma_suffixes, *alice_suffixes)
+        )
+        return [f"gpt://{folder}/{suffix}" for suffix in order]
 
     @staticmethod
     def _is_gemma_model(model_uri: str) -> bool:

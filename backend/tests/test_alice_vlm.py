@@ -67,6 +67,16 @@ def test_alice_vlm_text_from_responses_api():
     assert text == "На фото чайник."
 
 
+def test_alice_vlm_model_uri_candidates_alice_first_when_configured():
+    provider = AliceVLMProvider(
+        Settings(
+            yandex_folder_id="b1gfolder",
+            yandex_vision_alice_first=True,
+        )
+    )
+    assert provider._model_uri_candidates()[0].endswith("/aliceai-vlm/latest")
+
+
 def test_alice_vlm_stream_event_parsing():
     assert AliceVLMProvider._text_from_stream_event(
         {"type": "response.output_text.delta", "delta": "Привет"}

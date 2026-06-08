@@ -58,6 +58,8 @@ class Settings(BaseSettings):
     yandex_alice_vlm_model: str = "aliceai-vlm/latest"
     # Fallback vision в API AI Studio (aliceai-vlm пока нет в каталоге; gemma принимает фото).
     yandex_vision_gemma_model: str = "gemma-3-27b-it"
+    # False = gemma первой (пока aliceai-vlm нет в API). True — когда Alice VLM появится в каталоге.
+    yandex_vision_alice_first: bool = False
     # Responses API (vision/multimodal) — не llm.api.../chat/completions.
     yandex_ai_studio_base_url: str = "https://ai.api.cloud.yandex.net/v1"
 
