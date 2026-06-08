@@ -168,7 +168,13 @@ def _validate_init_data(init_data: str) -> dict:
 
 async def _attach_max_identity(db: AsyncSession, user: User, user_data: dict) -> None:
     max_user_id = int(user_data["id"])
-    other = await db.execute(select(User).where(User.max_user_id == max_user_id, User.id != user.id))
+    other = await db.execute(
+        select(User).where(
+            User.max_user_id == max_user_id,
+            User.id != user.id,
+            User.deleted_at.is_(None),
+        )
+    )
     if other.scalar_one_or_none():
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Этот MAX уже привязан к другому аккаунту")
 
@@ -255,10 +261,20 @@ async def login(
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="User data missing")
 
     max_user_id = int(user_data["id"])
-    result = await db.execute(select(User).where(User.max_user_id == max_user_id))
+    result = await db.execute(
+        select(User).where(User.max_user_id == max_user_id, User.deleted_at.is_(None))
+    )
     user = result.scalar_one_or_none()
 
     if not user:
+        legacy = await db.execute(
+            select(User).where(User.max_user_id == max_user_id, User.deleted_at.isnot(None))
+        )
+        legacy_user = legacy.scalar_one_or_none()
+        if legacy_user:
+            legacy_user.max_user_id = None
+            await db.flush()
+
         user = User(
             max_user_id=max_user_id,
             first_name=user_data.get("first_name"),
@@ -269,11 +285,6 @@ async def login(
         db.add(user)
         await db.flush()
     else:
-        if user.deleted_at is not None:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Вы попали в бан, обратитесь в поддержку",
-            )
         user.first_name = user_data.get("first_name") or user.first_name
         user.last_name = user_data.get("last_name") or user.last_name
         user.username = user_data.get("username") or user.username

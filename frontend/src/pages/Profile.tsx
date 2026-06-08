@@ -11,6 +11,7 @@ import {
   fetchMe,
   fetchMySupportTickets,
   fetchSession,
+  loginWithInitData,
 } from "../api/client";
 import { AuthGate } from "../components/AuthGate";
 import { LegalDocumentModal } from "../components/LegalDocumentModal";
@@ -25,7 +26,7 @@ import { SupportToast } from "../components/SupportToast";
 import { ProfileAccountSection } from "../components/ProfileAccountSection";
 import { useDesktopLayout } from "../hooks/useDesktopLayout";
 import { useSignOut } from "../hooks/useSignOut";
-import { isMaxWebApp } from "../lib/maxApp";
+import { getMaxInitData, isMaxWebApp } from "../lib/maxApp";
 import { openPaymentUrl } from "../lib/openPaymentUrl";
 import {
   markProPaymentPending,
@@ -52,6 +53,7 @@ function getProfileTierLabel(tier: ProfileTier): string {
 
 export function Profile() {
   const token = useAuthStore((s) => s.token);
+  const setAuth = useAuthStore((s) => s.setAuth);
   const setUser = useAuthStore((s) => s.setUser);
   const signOut = useSignOut();
   const queryClient = useQueryClient();
@@ -70,6 +72,8 @@ export function Profile() {
   const [proPaymentError, setProPaymentError] = useState<string | null>(null);
   const [proPayHintVisible, setProPayHintVisible] = useState(false);
   const proPayHintTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [maxLoginBusy, setMaxLoginBusy] = useState(false);
+  const [maxLoginError, setMaxLoginError] = useState<string | null>(null);
   const inMax = isMaxWebApp();
   const isDesktop = useDesktopLayout();
 
@@ -178,13 +182,34 @@ export function Profile() {
     void runPaymentConfirm({ retries: 4 });
   }, [token, searchParams, setSearchParams]);
 
+  const onMaxLogin = async () => {
+    const initData = getMaxInitData();
+    if (!initData) {
+      setMaxLoginError(t("maxInitDataMissing"));
+      return;
+    }
+    setMaxLoginBusy(true);
+    setMaxLoginError(null);
+    try {
+      const data = await loginWithInitData(initData);
+      setAuth(data.access_token, data.user);
+    } catch (err) {
+      setMaxLoginError(err instanceof Error ? err.message : t("loginError"));
+    } finally {
+      setMaxLoginBusy(false);
+    }
+  };
+
   if (!token) {
     return (
       <AuthGate
         title={t("profileGuestGateTitle")}
-        primaryTo="/login"
-        primaryLabel={t("signIn")}
-        showPrimary={!inMax}
+        hint={maxLoginError ?? undefined}
+        primaryTo={inMax ? undefined : "/login"}
+        primaryLabel={inMax ? t("maxSignIn") : t("signIn")}
+        primaryAction={inMax ? onMaxLogin : undefined}
+        primaryBusy={maxLoginBusy}
+        showPrimary
         showSecondary
         showBrand={false}
       />

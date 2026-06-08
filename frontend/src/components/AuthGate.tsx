@@ -8,6 +8,8 @@ type Props = {
   hint?: string;
   primaryTo?: string;
   primaryLabel?: string;
+  primaryAction?: () => void | Promise<void>;
+  primaryBusy?: boolean;
   showPrimary?: boolean;
   showSecondary?: boolean;
   showBrand?: boolean;
@@ -61,6 +63,8 @@ export function AuthGate({
   hint,
   primaryTo,
   primaryLabel,
+  primaryAction,
+  primaryBusy = false,
   showPrimary = true,
   showSecondary = true,
   showBrand = true,
@@ -84,11 +88,22 @@ export function AuthGate({
             ) : undefined
           }
         >
-          {showPrimary && primaryTo && primaryLabel && (
+          {showPrimary && primaryLabel && (primaryAction || primaryTo) && (
             <div className="auth-modal-actions">
-              <Link to={primaryTo} className="btn-primary btn-block">
-                {primaryLabel}
-              </Link>
+              {primaryAction ? (
+                <button
+                  type="button"
+                  className="btn-primary btn-block"
+                  disabled={primaryBusy}
+                  onClick={() => void primaryAction()}
+                >
+                  {primaryBusy ? "…" : primaryLabel}
+                </button>
+              ) : (
+                <Link to={primaryTo!} className="btn-primary btn-block">
+                  {primaryLabel}
+                </Link>
+              )}
             </div>
           )}
         </AuthModalCard>

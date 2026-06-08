@@ -190,6 +190,8 @@
   "routeSearchPro": "Поиск в интернете · Pro",
   "routeDirect": "Ответ по диалогу",
   "signIn": "Войти",
+  "maxSignIn": "Войти через MAX",
+  "maxInitDataMissing": "Не удалось получить данные MAX. Закройте и снова откройте миниапп.",
   "register": "Регистрация",
   "loginTitle": "Вход на сайт",
   "registerTitle": "Создание аккаунта",
