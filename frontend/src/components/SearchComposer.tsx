@@ -177,7 +177,13 @@ export function SearchComposer({
   };
 
   const voice = useVoiceInput(
-    (text) => onChange(value ? `${value} ${text}` : text),
+    (text) => {
+      const nextValue = value ? `${value} ${text}` : text;
+      onChange(nextValue);
+      if (isMobileFocusLayout && nextValue.trim()) {
+        engageMobileComposer();
+      }
+    },
     token,
   );
 
@@ -457,14 +463,16 @@ export function SearchComposer({
     />
   );
 
-  const micButton = (
+  const renderMicButton = (engageOnPress: boolean) => (
     <button
       type="button"
       className={`composer-icon${voice.state === "recording" ? " recording" : ""}`}
       aria-label={t("voiceInput")}
       aria-pressed={voice.state === "recording"}
       disabled={disabled || voice.state === "transcribing"}
-      onPointerDown={useDesktopStackedLayout ? undefined : keepComposerEngaged}
+      onPointerDown={
+        engageOnPress && !useDesktopStackedLayout ? keepComposerEngaged : undefined
+      }
       onClick={handleVoiceToggle}
     >
       <MicIcon recording={voice.state === "recording"} />
@@ -599,7 +607,7 @@ export function SearchComposer({
               <div className="composer-toolbar-actions">
                 {clearButton}
                 {modelSelector}
-                {micButton}
+                {renderMicButton(true)}
                 {sendButton}
               </div>
             </div>
@@ -637,11 +645,11 @@ export function SearchComposer({
                   }}
                 />
               </div>
-              {showInlineMic && micButton}
+              {showInlineMic && renderMicButton(false)}
               {showDefaultRow && (
                 <>
                   {modelSelector}
-                  {micButton}
+                  {renderMicButton(true)}
                   {sendButton}
                 </>
               )}
@@ -663,7 +671,7 @@ export function SearchComposer({
                 )}
                 <div className="composer-toolbar-actions">
                   {modelSelector}
-                  {micButton}
+                  {renderMicButton(true)}
                   {showSendInToolbar && sendButton}
                 </div>
               </div>
