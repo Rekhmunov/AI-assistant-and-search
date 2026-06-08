@@ -523,7 +523,7 @@ body:has(.page-thread) {
     min-height: 40px;
     margin-top: 0;
     padding-top: 2px;
-    padding-bottom: 2px;
+    padding-bottom: 15px;
   }
 
   .page-thread--mobile .search-composer--thread-mobile.search-composer--focused .composer-attach-menu,
@@ -4253,7 +4253,18 @@ body:has(.page-thread) {
   height: 20px;
 }
 
+.page-thread:not(.page-thread--mobile) .thread-mobile-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
 .page-thread:not(.page-thread--mobile) .thread-conversation {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
   padding-bottom: calc(28px + 88px + env(safe-area-inset-bottom));
 }
 
