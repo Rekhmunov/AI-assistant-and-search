@@ -60,6 +60,8 @@ class Settings(BaseSettings):
     yandex_vision_gemma_model: str = "gemma-3-27b-it"
     # False = gemma первой (пока aliceai-vlm нет в API). True — когда Alice VLM появится в каталоге.
     yandex_vision_alice_first: bool = False
+    yandex_vision_image_max_side: int = 1536
+    yandex_vision_image_max_bytes: int = 900_000
     # Responses API (vision/multimodal) — не llm.api.../chat/completions.
     yandex_ai_studio_base_url: str = "https://ai.api.cloud.yandex.net/v1"
 

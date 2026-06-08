@@ -1,7 +1,12 @@
 """Alice AI VLM: Responses API, auth, model URI candidates."""
 
+import base64
+import io
+
+from PIL import Image
+
 from app.core.config import Settings
-from app.services.alice_vlm import AliceVLMProvider
+from app.services.alice_vlm import AliceVLMProvider, encode_vision_image_for_yandex
 
 
 def test_alice_vlm_uses_responses_api_url():
@@ -30,25 +35,25 @@ def test_alice_vlm_model_uri_candidates_include_gemma_fallback():
     assert provider._model_uri_candidates() == [
         "gpt://b1gfolder/gemma-3-27b-it",
         "gpt://b1gfolder/gemma-3-27b-it/latest",
-        "gpt://b1gfolder/aliceai-vlm/latest",
-        "gpt://b1gfolder/aliceai-vlm",
     ]
 
 
 def test_alice_vlm_vision_input_uses_responses_api_content_types():
+    img = Image.new("RGB", (64, 64), color=(0, 128, 255))
+    buf = io.BytesIO()
+    img.save(buf, format="JPEG")
+    raw_b64 = base64.standard_b64encode(buf.getvalue()).decode("ascii")
     provider = AliceVLMProvider(Settings())
     input_messages = provider._vision_input(
         "что на фото?",
         [
-            type("Img", (), {"media_type": "image/jpeg", "data_base64": "abc123"})(),  # type: ignore[arg-type]
+            type("Img", (), {"media_type": "image/jpeg", "data_base64": raw_b64})(),  # type: ignore[arg-type]
         ],
         [],
     )
     content = input_messages[0]["content"]
-    assert content[0] == {
-        "type": "input_image",
-        "image_url": "data:image/jpeg;base64,abc123",
-    }
+    assert content[0]["type"] == "input_image"
+    assert str(content[0]["image_url"]).startswith("data:image/jpeg;base64,")
     assert content[1]["type"] == "input_text"
     assert "что на фото?" in content[1]["text"]
 
@@ -65,6 +70,18 @@ def test_alice_vlm_text_from_responses_api():
         }
     )
     assert text == "На фото чайник."
+
+
+def test_encode_vision_image_resizes_to_jpeg():
+    img = Image.new("RGB", (4000, 3000), color=(255, 0, 0))
+    buf = io.BytesIO()
+    img.save(buf, format="JPEG", quality=95)
+    raw_b64 = base64.standard_b64encode(buf.getvalue()).decode("ascii")
+    data_uri = encode_vision_image_for_yandex(raw_b64, max_side=1536, max_bytes=900_000)
+    assert data_uri.startswith("data:image/jpeg;base64,")
+    out = base64.standard_b64decode(data_uri.split(",", 1)[1])
+    out_img = Image.open(io.BytesIO(out))
+    assert max(out_img.size) <= 1536
 
 
 def test_alice_vlm_model_uri_candidates_alice_first_when_configured():

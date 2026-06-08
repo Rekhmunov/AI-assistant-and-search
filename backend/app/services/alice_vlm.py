@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import base64
+import io
 import json
 import logging
 from collections.abc import AsyncIterator
@@ -23,6 +25,57 @@ from app.services.yandex_gpt import _format_history, _yield_text_paced
 logger = logging.getLogger(__name__)
 
 AnswerModel = Literal["lite", "pro"]
+
+
+def _extract_yandex_api_error(payload: dict) -> str:
+    err = payload.get("error")
+    if isinstance(err, dict):
+        for key in ("message", "detail", "code", "type"):
+            val = str(err.get(key) or "").strip()
+            if val:
+                return val
+    elif isinstance(err, str) and err.strip():
+        return err.strip()
+    for key in ("message", "detail", "title"):
+        val = str(payload.get(key) or "").strip()
+        if val and val not in ("Bad Request",):
+            return val
+    resp = payload.get("response")
+    if isinstance(resp, dict):
+        nested = _extract_yandex_api_error(resp)
+        if nested:
+            return nested
+    return ""
+
+
+def encode_vision_image_for_yandex(
+    data_base64: str,
+    *,
+    max_side: int = 1536,
+    max_bytes: int = 900_000,
+) -> str:
+    """Сжимает фото для Gemma API (большие iPhone JPEG ломают stream с error)."""
+    from PIL import Image
+
+    raw = base64.standard_b64decode(data_base64)
+    img = Image.open(io.BytesIO(raw))
+    if img.mode not in ("RGB", "L"):
+        img = img.convert("RGB")
+    elif img.mode == "L":
+        img = img.convert("RGB")
+    if max(img.size) > max_side:
+        img.thumbnail((max_side, max_side), Image.Resampling.LANCZOS)
+    quality = 85
+    buf = io.BytesIO()
+    while quality >= 50:
+        buf.seek(0)
+        buf.truncate()
+        img.save(buf, format="JPEG", quality=quality, optimize=True)
+        if buf.tell() <= max_bytes:
+            break
+        quality -= 10
+    encoded = base64.standard_b64encode(buf.getvalue()).decode("ascii")
+    return f"data:image/jpeg;base64,{encoded}"
 
 
 def _alice_vlm_http_error(response: httpx.Response) -> YandexServiceError:
@@ -76,14 +129,13 @@ class AliceVLMProvider(PromptedLLMMixin):
             if suffix and suffix not in gemma_suffixes:
                 gemma_suffixes.append(suffix)
         alice_suffixes: list[str] = []
-        for suffix in (configured, "aliceai-vlm/latest", "aliceai-vlm"):
-            if suffix and suffix not in alice_suffixes and suffix not in gemma_suffixes:
-                alice_suffixes.append(suffix)
-        order = (
-            (*alice_suffixes, *gemma_suffixes)
-            if self.settings.yandex_vision_alice_first
-            else (*gemma_suffixes, *alice_suffixes)
-        )
+        if self.settings.yandex_vision_alice_first:
+            for suffix in (configured, "aliceai-vlm/latest", "aliceai-vlm"):
+                if suffix and suffix not in alice_suffixes and suffix not in gemma_suffixes:
+                    alice_suffixes.append(suffix)
+            order = (*alice_suffixes, *gemma_suffixes)
+        else:
+            order = tuple(gemma_suffixes)
         return [f"gpt://{folder}/{suffix}" for suffix in order]
 
     @staticmethod
@@ -139,17 +191,24 @@ class AliceVLMProvider(PromptedLLMMixin):
         user_text = self._vision_user_text(query, history, prior_sources_block)
         content: list[dict[str, Any]] = []
         for img in vision_images[:10]:
-            content.append(
-                {
-                    "type": "input_image",
-                    "image_url": f"data:{img.media_type};base64,{img.data_base64}",
-                }
+            image_url = encode_vision_image_for_yandex(
+                img.data_base64,
+                max_side=self.settings.yandex_vision_image_max_side,
+                max_bytes=self.settings.yandex_vision_image_max_bytes,
             )
+            content.append({"type": "input_image", "image_url": image_url})
         content.append({"type": "input_text", "text": user_text})
         return [{"role": "user", "content": content}]
 
     @staticmethod
     def _text_from_response(data: dict) -> str:
+        status = str(data.get("status") or "").lower()
+        if status in ("failed", "cancelled", "incomplete"):
+            detail = _extract_yandex_api_error(data)
+            msg = f"Yandex vision failed ({status})"
+            if detail:
+                msg += f": {detail}"
+            raise YandexServiceError("gpt", msg)
         parts: list[str] = []
         for item in data.get("output") or []:
             if item.get("type") != "message":
@@ -170,13 +229,13 @@ class AliceVLMProvider(PromptedLLMMixin):
             return str(event.get("text") or "")
         if event_type == "response.completed":
             return AliceVLMProvider._text_from_response(event.get("response") or {})
-        if event_type == "error":
-            message = ""
-            err = event.get("error")
-            if isinstance(err, dict):
-                message = str(err.get("message") or "")
-            if message:
-                raise YandexServiceError("gpt", f"Alice AI VLM stream error: {message}")
+        if event_type in ("error", "response.failed", "response.error"):
+            detail = _extract_yandex_api_error(event)
+            if not detail and event_type == "response.failed":
+                detail = _extract_yandex_api_error(event.get("response") or {})
+            if detail:
+                raise YandexServiceError("gpt", f"Yandex vision stream: {detail}")
+            raise YandexServiceError("gpt", f"Yandex vision stream error ({event_type})")
         return ""
 
     def _build_payload(
@@ -307,6 +366,7 @@ class AliceVLMProvider(PromptedLLMMixin):
 
                 yielded = False
                 event_types: list[str] = []
+                last_error_event: dict | None = None
                 pending_event_type = ""
                 async for line in response.aiter_lines():
                     line = line.strip()
@@ -333,12 +393,30 @@ class AliceVLMProvider(PromptedLLMMixin):
                     event_type = str(event.get("type") or "")
                     if event_type and (not event_types or event_types[-1] != event_type):
                         event_types.append(event_type)
-                    text = self._text_from_stream_event(event)
+                    if event_type in ("error", "response.failed", "response.error"):
+                        last_error_event = event
+                    try:
+                        text = self._text_from_stream_event(event)
+                    except YandexServiceError:
+                        raise
                     if text:
                         yielded = True
                         yield text
 
                 if not yielded:
+                    if last_error_event:
+                        detail = _extract_yandex_api_error(last_error_event)
+                        if not detail and last_error_event.get("response"):
+                            detail = _extract_yandex_api_error(last_error_event["response"])
+                        logger.warning(
+                            "Yandex vision stream error model_uri=%s events=%s detail=%s raw=%s",
+                            model_uri,
+                            event_types[:12],
+                            detail,
+                            json.dumps(last_error_event, ensure_ascii=False)[:400],
+                        )
+                        if detail:
+                            raise YandexServiceError("gpt", f"Yandex vision stream: {detail}")
                     logger.warning(
                         "Yandex vision empty stream model_uri=%s events=%s",
                         model_uri,
