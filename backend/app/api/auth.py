@@ -166,6 +166,74 @@ def _validate_init_data(init_data: str) -> dict:
     return user_data
 
 
+def _apply_max_profile(user: User, user_data: dict) -> None:
+    user.first_name = user_data.get("first_name") or user.first_name
+    user.last_name = user_data.get("last_name") or user.last_name
+    user.username = user_data.get("username") or user.username
+    if user_data.get("language_code"):
+        user.language = user_data.get("language_code", user.language)
+    if user.plan == Plan.PRO and user.plan_expires_at and user.plan_expires_at < datetime.now(timezone.utc):
+        user.plan = Plan.FREE
+        user.plan_expires_at = None
+
+
+async def _release_deleted_max_user_id(db: AsyncSession, max_user_id: int) -> None:
+    await db.execute(
+        update(User)
+        .where(User.max_user_id == max_user_id, User.deleted_at.isnot(None))
+        .values(max_user_id=None)
+    )
+
+
+async def _resolve_max_login_user(db: AsyncSession, max_user_id: int, user_data: dict) -> User:
+    """Active MAX login, re-activate self-deleted MAX row, or register a new user."""
+    result = await db.execute(
+        select(User).where(User.max_user_id == max_user_id, User.deleted_at.is_(None))
+    )
+    user = result.scalar_one_or_none()
+    if user:
+        _apply_max_profile(user, user_data)
+        return user
+
+    deleted_result = await db.execute(
+        select(User)
+        .where(User.max_user_id == max_user_id, User.deleted_at.isnot(None))
+        .order_by(User.deleted_at.desc())
+        .limit(1)
+    )
+    deleted_user = deleted_result.scalar_one_or_none()
+    if deleted_user:
+        deleted_user.deleted_at = None
+        _apply_max_profile(deleted_user, user_data)
+        await db.flush()
+        return deleted_user
+
+    await _release_deleted_max_user_id(db, max_user_id)
+    await db.flush()
+
+    user = User(
+        max_user_id=max_user_id,
+        first_name=user_data.get("first_name"),
+        last_name=user_data.get("last_name"),
+        username=user_data.get("username"),
+        language=user_data.get("language_code", "ru"),
+    )
+    db.add(user)
+    try:
+        await db.flush()
+    except IntegrityError:
+        await db.rollback()
+        retry = await db.execute(
+            select(User).where(User.max_user_id == max_user_id, User.deleted_at.is_(None))
+        )
+        existing = retry.scalar_one_or_none()
+        if not existing:
+            raise
+        _apply_max_profile(existing, user_data)
+        return existing
+    return user
+
+
 async def _attach_max_identity(db: AsyncSession, user: User, user_data: dict) -> None:
     max_user_id = int(user_data["id"])
     other = await db.execute(
@@ -261,36 +329,13 @@ async def login(
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="User data missing")
 
     max_user_id = int(user_data["id"])
-    result = await db.execute(
-        select(User).where(User.max_user_id == max_user_id, User.deleted_at.is_(None))
-    )
-    user = result.scalar_one_or_none()
-
-    if not user:
-        legacy = await db.execute(
-            select(User).where(User.max_user_id == max_user_id, User.deleted_at.isnot(None))
-        )
-        legacy_user = legacy.scalar_one_or_none()
-        if legacy_user:
-            legacy_user.max_user_id = None
-            await db.flush()
-
-        user = User(
-            max_user_id=max_user_id,
-            first_name=user_data.get("first_name"),
-            last_name=user_data.get("last_name"),
-            username=user_data.get("username"),
-            language=user_data.get("language_code", "ru"),
-        )
-        db.add(user)
-        await db.flush()
-    else:
-        user.first_name = user_data.get("first_name") or user.first_name
-        user.last_name = user_data.get("last_name") or user.last_name
-        user.username = user_data.get("username") or user.username
-        if user.plan == Plan.PRO and user.plan_expires_at and user.plan_expires_at < datetime.now(timezone.utc):
-            user.plan = Plan.FREE
-            user.plan_expires_at = None
+    try:
+        user = await _resolve_max_login_user(db, max_user_id, user_data)
+    except IntegrityError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Не удалось войти через MAX. Попробуйте ещё раз.",
+        ) from exc
 
     await _merge_guest_session(db, guest_session, user)
     clear_guest_cookie(response)

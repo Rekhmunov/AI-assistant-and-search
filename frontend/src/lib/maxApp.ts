@@ -61,6 +61,7 @@ export function getMaxBotUrl(): string {
 }
 
 export const MAX_BIND_ERROR_KEY = "glosix-max-bind-error";
+export const MAX_LOGIN_ERROR_KEY = "glosix-max-login-error";
 
 export function setMaxBindError(message: string): void {
   try {
@@ -74,6 +75,24 @@ export function takeMaxBindError(): string | null {
   try {
     const msg = sessionStorage.getItem(MAX_BIND_ERROR_KEY);
     if (msg) sessionStorage.removeItem(MAX_BIND_ERROR_KEY);
+    return msg;
+  } catch {
+    return null;
+  }
+}
+
+export function setMaxLoginError(message: string): void {
+  try {
+    sessionStorage.setItem(MAX_LOGIN_ERROR_KEY, message);
+  } catch {
+    /* ignore */
+  }
+}
+
+export function takeMaxLoginError(): string | null {
+  try {
+    const msg = sessionStorage.getItem(MAX_LOGIN_ERROR_KEY);
+    if (msg) sessionStorage.removeItem(MAX_LOGIN_ERROR_KEY);
     return msg;
   } catch {
     return null;

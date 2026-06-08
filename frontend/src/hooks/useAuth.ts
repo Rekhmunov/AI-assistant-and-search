@@ -13,6 +13,7 @@ import {
   getMaxStartParam,
   parseMaxBindToken,
   setMaxBindError,
+  setMaxLoginError,
 } from "../lib/maxApp";
 import { HttpResponseError, isAuthFailureStatus, isTransientFailureStatus } from "../lib/httpError";
 import { useAuthStore } from "../store/authStore";
@@ -131,8 +132,12 @@ export function useAuthBootstrap() {
               setReady(true);
               return;
             }
-          } catch {
-            /* MAX: no email login screen; user stays guest until retry from bot */
+          } catch (err) {
+            if (!cancelled) {
+              const message =
+                err instanceof Error ? err.message : "Не удалось войти через MAX";
+              setMaxLoginError(message);
+            }
           }
         }
 

@@ -26,7 +26,7 @@ import { SupportToast } from "../components/SupportToast";
 import { ProfileAccountSection } from "../components/ProfileAccountSection";
 import { useDesktopLayout } from "../hooks/useDesktopLayout";
 import { useSignOut } from "../hooks/useSignOut";
-import { getMaxInitData, isMaxWebApp } from "../lib/maxApp";
+import { getMaxInitData, isMaxWebApp, takeMaxLoginError } from "../lib/maxApp";
 import { openPaymentUrl } from "../lib/openPaymentUrl";
 import {
   markProPaymentPending,
@@ -73,7 +73,7 @@ export function Profile() {
   const [proPayHintVisible, setProPayHintVisible] = useState(false);
   const proPayHintTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [maxLoginBusy, setMaxLoginBusy] = useState(false);
-  const [maxLoginError, setMaxLoginError] = useState<string | null>(null);
+  const [maxLoginError, setMaxLoginError] = useState<string | null>(() => takeMaxLoginError());
   const inMax = isMaxWebApp();
   const isDesktop = useDesktopLayout();
 

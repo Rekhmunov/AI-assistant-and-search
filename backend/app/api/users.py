@@ -55,7 +55,6 @@ async def delete_account(
 ):
     verify_allowed_origin(request)
     user.deleted_at = datetime.now(timezone.utc)
-    user.max_user_id = None
     await revoke_refresh_tokens(redis_client, str(user.id))
     clear_refresh_cookie(response)
     clear_guest_cookie(response)

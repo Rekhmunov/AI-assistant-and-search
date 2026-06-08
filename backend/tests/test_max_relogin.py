@@ -7,71 +7,74 @@ import pytest
 from app.models.user import Plan, User
 
 
-@pytest.mark.asyncio
-async def test_login_clears_legacy_deleted_max_user_id(monkeypatch):
-    """Deleted account that still holds max_user_id must not block re-registration."""
-    from app.api import auth as auth_module
-
-    max_user_id = 424242
-    legacy_id = uuid4()
-    legacy_user = User(id=legacy_id, max_user_id=max_user_id, deleted_at=datetime.now(timezone.utc))
-
+def _login_db_for_reactivation(deleted_user: User, *, flush_raises: bool = False):
     active_result = MagicMock()
     active_result.scalar_one_or_none.return_value = None
 
-    legacy_result = MagicMock()
-    legacy_result.scalar_one_or_none.return_value = legacy_user
-
-    created_user = User(
-        id=uuid4(),
-        max_user_id=max_user_id,
-        first_name="A",
-        language="ru",
-    )
+    deleted_result = MagicMock()
+    deleted_result.scalar_one_or_none.return_value = deleted_user
 
     db = AsyncMock()
-    db.execute = AsyncMock(side_effect=[active_result, legacy_result])
+    db.execute = AsyncMock(side_effect=[active_result, deleted_result])
+    if flush_raises:
+        db.flush = AsyncMock(side_effect=IntegrityError("stmt", {}, Exception("dup")))
+        db.rollback = AsyncMock()
+    else:
+        db.flush = AsyncMock()
+    db.add = MagicMock()
+    return db
 
-    async def _flush():
-        if created_user.id is None:
-            created_user.id = uuid4()
 
-    db.flush = AsyncMock(side_effect=_flush)
+@pytest.mark.asyncio
+async def test_login_reactivates_self_deleted_max_account():
+    from app.api import auth as auth_module
 
-    def _add(user: User) -> None:
-        if user is not legacy_user:
-            user.id = created_user.id
-            user.plan = Plan.FREE
-            user.language = created_user.language
+    max_user_id = 424242
+    deleted_user = User(
+        id=uuid4(),
+        max_user_id=max_user_id,
+        deleted_at=datetime.now(timezone.utc),
+        plan=Plan.FREE,
+        language="ru",
+    )
+    db = _login_db_for_reactivation(deleted_user)
 
-    db.add = MagicMock(side_effect=_add)
-
-    limiter = AsyncMock()
-    limiter.usage_and_limit = AsyncMock(return_value=(0, 10))
-    redis_client = AsyncMock()
-    response = MagicMock()
-
-    monkeypatch.setattr(auth_module, "get_settings", lambda: MagicMock(skip_init_data_validation=True, bot_token="x"))
-    monkeypatch.setattr(auth_module, "parse_init_data_user", lambda _d: {"id": max_user_id, "first_name": "A"})
-    monkeypatch.setattr(auth_module, "_merge_guest_session", AsyncMock())
-    monkeypatch.setattr(auth_module, "_set_auth_cookies", AsyncMock(return_value="access"))
-    monkeypatch.setattr(auth_module, "clear_guest_cookie", lambda _r: None)
-
-    request = MagicMock()
-    body = MagicMock(init_data="dev")
-
-    result = await auth_module.login(
-        request=request,
-        body=body,
-        response=response,
-        db=db,
-        limiter=limiter,
-        redis_client=redis_client,
-        guest_session=None,
+    user = await auth_module._resolve_max_login_user(
+        db,
+        max_user_id,
+        {"id": max_user_id, "first_name": "New", "language_code": "ru"},
     )
 
-    assert legacy_user.max_user_id is None
+    assert user is deleted_user
+    assert user.deleted_at is None
+    assert user.first_name == "New"
+    db.add.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_login_creates_new_user_when_deleted_max_id_was_cleared(monkeypatch):
+    from app.api import auth as auth_module
+
+    max_user_id = 424242
+    active_result = MagicMock()
+    active_result.scalar_one_or_none.return_value = None
+    deleted_result = MagicMock()
+    deleted_result.scalar_one_or_none.return_value = None
+
+    db = AsyncMock()
+    db.execute = AsyncMock(side_effect=[active_result, deleted_result, active_result])
+    db.flush = AsyncMock()
+    db.add = MagicMock()
+    db.rollback = AsyncMock()
+
+    user = await auth_module._resolve_max_login_user(
+        db,
+        max_user_id,
+        {"id": max_user_id, "first_name": "A", "language_code": "ru"},
+    )
+
     db.add.assert_called_once()
-    new_user = db.add.call_args[0][0]
-    assert new_user.max_user_id == max_user_id
-    assert result.access_token == "access"
+    created = db.add.call_args[0][0]
+    assert created.max_user_id == max_user_id
+    assert user is created
+

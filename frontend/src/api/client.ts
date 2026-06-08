@@ -685,11 +685,12 @@ export async function confirmProPayment(
 }
 
 export async function deleteAccount(token: string): Promise<void> {
-  await fetch(`${API_BASE}/api/users/me`, {
+  const res = await fetch(`${API_BASE}/api/users/me`, {
     method: "DELETE",
     headers: apiHeaders(token),
     credentials: "include",
   });
+  if (!res.ok) await throwHttpError(res, parseAuthError);
 }
 
 export interface RouteInfo {
