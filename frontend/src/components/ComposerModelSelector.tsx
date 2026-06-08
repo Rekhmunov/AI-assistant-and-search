@@ -11,8 +11,25 @@ type Props = {
   onOpenChange?: (open: boolean) => void;
 };
 
-export function ComposerModelSelector({
-  plan,
+export function ComposerModelSelector(props: Props) {
+  if (props.plan === "pro") {
+    return <ComposerModelProLabel />;
+  }
+  return <ComposerModelSelectorDropdown {...props} />;
+}
+
+function ComposerModelProLabel() {
+  return (
+    <div
+      className="composer-model-selector composer-model-selector--static"
+      aria-label={t("modelSelectorProLabel")}
+    >
+      <span className="composer-model-static-label">{t("modelSelectorProLabel")}</span>
+    </div>
+  );
+}
+
+function ComposerModelSelectorDropdown({
   onOpenProModal,
   keepFocusOnPress = false,
   onOpenChange,
@@ -22,9 +39,6 @@ export function ComposerModelSelector({
   const menuRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
   const [menuStyle, setMenuStyle] = useState<{ top: number; left: number } | null>(null);
-
-  const isPro = plan === "pro";
-  const showLitePro = !isPro;
 
   const positionMenu = useCallback(() => {
     const btn = buttonRef.current;
@@ -83,7 +97,6 @@ export function ComposerModelSelector({
 
   const handleProClick = () => {
     setMenuOpen(false);
-    if (isPro) return;
     onOpenProModal();
   };
 
@@ -107,26 +120,8 @@ export function ComposerModelSelector({
               transform: "translateY(-100%)",
             }}
           >
-            {showLitePro && (
-              <ModelOption
-                label={t("modelSelectorLite")}
-                active
-                onClick={() => setMenuOpen(false)}
-              />
-            )}
-            {showLitePro ? (
-              <ModelOption
-                label={t("modelSelectorPro")}
-                locked
-                onClick={handleProClick}
-              />
-            ) : (
-              <ModelOption
-                label={t("modelSelectorPro")}
-                active
-                onClick={() => setMenuOpen(false)}
-              />
-            )}
+            <ModelOption label={t("modelSelectorLite")} active onClick={() => setMenuOpen(false)} />
+            <ModelOption label={t("modelSelectorPro")} locked onClick={handleProClick} />
           </div>,
           document.body,
         )

@@ -1943,6 +1943,22 @@ body:has(.page-thread) {
   flex-shrink: 0;
 }
 
+.composer-model-selector--static {
+  display: inline-flex;
+  align-items: center;
+  height: 32px;
+  padding: 0 10px;
+  flex-shrink: 0;
+}
+
+.composer-model-static-label {
+  color: var(--muted);
+  font-size: 0.875rem;
+  font-weight: 500;
+  line-height: 1;
+  user-select: none;
+}
+
 .composer-model-trigger {
   display: inline-flex;
   align-items: center;

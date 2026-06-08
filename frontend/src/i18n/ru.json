@@ -34,6 +34,7 @@
   "voiceProModalTitle": "Распознавание речи — Pro",
   "voiceProModalHint": "Голосовой ввод доступен только подписчикам Pro. Оформите подписку, чтобы надиктовывать запросы.",
   "modelSelectorLabel": "Модель",
+  "modelSelectorProLabel": "Модель Pro",
   "modelSelectorLite": "Lite",
   "modelSelectorPro": "Pro",
   "modelSelectorUpsell": "Получите доступ к лучшим моделям ИИ",
