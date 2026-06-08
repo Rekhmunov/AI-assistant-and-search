@@ -71,14 +71,16 @@ class AliceVLMProvider(PromptedLLMMixin):
             return []
         configured = self.settings.yandex_alice_vlm_model.strip()
         gemma = self.settings.yandex_vision_gemma_model.strip()
-        suffixes: list[str] = []
-        for suffix in (configured, "aliceai-vlm/latest", "aliceai-vlm"):
-            if suffix and suffix not in suffixes:
-                suffixes.append(suffix)
+        # Gemma первой: aliceai-vlm пока нет в API (лишние запросы и задержка).
+        gemma_suffixes: list[str] = []
         for suffix in (gemma, "gemma-3-27b-it", "gemma-3-27b-it/latest"):
-            if suffix and suffix not in suffixes:
-                suffixes.append(suffix)
-        return [f"gpt://{folder}/{suffix}" for suffix in suffixes]
+            if suffix and suffix not in gemma_suffixes:
+                gemma_suffixes.append(suffix)
+        alice_suffixes: list[str] = []
+        for suffix in (configured, "aliceai-vlm/latest", "aliceai-vlm"):
+            if suffix and suffix not in alice_suffixes and suffix not in gemma_suffixes:
+                alice_suffixes.append(suffix)
+        return [f"gpt://{folder}/{suffix}" for suffix in (*gemma_suffixes, *alice_suffixes)]
 
     @staticmethod
     def _is_gemma_model(model_uri: str) -> bool:
@@ -155,6 +157,24 @@ class AliceVLMProvider(PromptedLLMMixin):
             parts.append(str(data["output_text"]))
         return "".join(parts).strip()
 
+    @staticmethod
+    def _text_from_stream_event(event: dict) -> str:
+        event_type = str(event.get("type") or "")
+        if event_type == "response.output_text.delta":
+            return str(event.get("delta") or "")
+        if event_type == "response.output_text.done":
+            return str(event.get("text") or "")
+        if event_type == "response.completed":
+            return AliceVLMProvider._text_from_response(event.get("response") or {})
+        if event_type == "error":
+            message = ""
+            err = event.get("error")
+            if isinstance(err, dict):
+                message = str(err.get("message") or "")
+            if message:
+                raise YandexServiceError("gpt", f"Alice AI VLM stream error: {message}")
+        return ""
+
     def _build_payload(
         self,
         *,
@@ -176,6 +196,32 @@ class AliceVLMProvider(PromptedLLMMixin):
             payload["stream"] = True
         return payload
 
+    async def _complete_for_model(
+        self,
+        instructions: str,
+        input_messages: list[dict[str, Any]],
+        model_uri: str,
+        *,
+        max_tokens: int,
+        temperature: float,
+    ) -> str:
+        url = self._responses_url()
+        payload = self._build_payload(
+            model_uri=model_uri,
+            instructions=instructions,
+            input_messages=input_messages,
+            max_output_tokens=max_tokens,
+            temperature=temperature,
+        )
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            response = await client.post(url, headers=self._headers(), json=payload)
+            response.raise_for_status()
+            data = response.json()
+        text = self._text_from_response(data)
+        if not text:
+            raise YandexServiceError("gpt", "Alice AI VLM вернула пустой ответ")
+        return text
+
     async def _complete_messages(
         self,
         instructions: str,
@@ -189,23 +235,15 @@ class AliceVLMProvider(PromptedLLMMixin):
             raise YandexServiceError("gpt", "Alice AI VLM: не задан YANDEX_FOLDER_ID")
 
         last_error: Exception | None = None
-        url = self._responses_url()
         for model_uri in candidates:
-            payload = self._build_payload(
-                model_uri=model_uri,
-                instructions=instructions,
-                input_messages=input_messages,
-                max_output_tokens=max_tokens,
-                temperature=temperature,
-            )
             try:
-                async with httpx.AsyncClient(timeout=120.0) as client:
-                    response = await client.post(url, headers=self._headers(), json=payload)
-                    response.raise_for_status()
-                    data = response.json()
-                text = self._text_from_response(data)
-                if not text:
-                    raise YandexServiceError("gpt", "Alice AI VLM вернула пустой ответ")
+                text = await self._complete_for_model(
+                    instructions,
+                    input_messages,
+                    model_uri,
+                    max_tokens=max_tokens,
+                    temperature=temperature,
+                )
                 self._log_vision_success(model_uri, stream=False)
                 return text
             except httpx.HTTPStatusError as e:
@@ -223,6 +261,7 @@ class AliceVLMProvider(PromptedLLMMixin):
                 logger.exception("Yandex vision request failed model_uri=%s", model_uri)
                 raise YandexServiceError("gpt", "Alice AI VLM недоступен (сеть)") from e
             except YandexServiceError as e:
+                logger.warning("Yandex vision empty/declined model_uri=%s: %s", model_uri, e)
                 last_error = e
                 continue
 
@@ -263,25 +302,44 @@ class AliceVLMProvider(PromptedLLMMixin):
                     raise _alice_vlm_http_error(resp)
 
                 yielded = False
+                event_types: list[str] = []
+                pending_event_type = ""
                 async for line in response.aiter_lines():
-                    if not line.startswith("data:"):
+                    line = line.strip()
+                    if not line:
                         continue
-                    raw = line[5:].strip()
+                    if line.startswith("event:"):
+                        pending_event_type = line[6:].strip()
+                        continue
+                    if line.startswith("data:"):
+                        raw = line[5:].strip()
+                    elif line.startswith("{"):
+                        raw = line
+                    else:
+                        continue
                     if not raw or raw == "[DONE]":
                         continue
                     try:
                         event = json.loads(raw)
                     except json.JSONDecodeError:
                         continue
-                    if event.get("type") != "response.output_text.delta":
-                        continue
-                    text = event.get("delta")
+                    if pending_event_type and not event.get("type"):
+                        event["type"] = pending_event_type
+                        pending_event_type = ""
+                    event_type = str(event.get("type") or "")
+                    if event_type and (not event_types or event_types[-1] != event_type):
+                        event_types.append(event_type)
+                    text = self._text_from_stream_event(event)
                     if text:
                         yielded = True
-                        yield str(text)
+                        yield text
 
                 if not yielded:
-                    raise YandexServiceError("gpt", "Alice AI VLM вернула пустой ответ")
+                    logger.warning(
+                        "Yandex vision empty stream model_uri=%s events=%s",
+                        model_uri,
+                        event_types[:12],
+                    )
 
     async def _stream_messages(
         self,
@@ -298,6 +356,7 @@ class AliceVLMProvider(PromptedLLMMixin):
         last_error: Exception | None = None
         for model_uri in candidates:
             try:
+                streamed_parts: list[str] = []
                 async for chunk in self._stream_messages_for_model(
                     instructions,
                     input_messages,
@@ -305,6 +364,22 @@ class AliceVLMProvider(PromptedLLMMixin):
                     max_tokens=max_tokens,
                     temperature=temperature,
                 ):
+                    streamed_parts.append(chunk)
+                    yield chunk
+                if streamed_parts:
+                    self._log_vision_success(model_uri, stream=True)
+                    return
+
+                # Стрим пустой — пробуем синхронный ответ той же модели.
+                logger.info("Yandex vision sync fallback model_uri=%s", model_uri)
+                text = await self._complete_for_model(
+                    instructions,
+                    input_messages,
+                    model_uri,
+                    max_tokens=max_tokens,
+                    temperature=temperature,
+                )
+                async for chunk in _yield_text_paced(text):
                     yield chunk
                 self._log_vision_success(model_uri, stream=True)
                 return
@@ -323,10 +398,9 @@ class AliceVLMProvider(PromptedLLMMixin):
                 logger.exception("Yandex vision stream failed model_uri=%s", model_uri)
                 raise YandexServiceError("gpt", "Alice AI VLM недоступен (сеть)") from e
             except YandexServiceError as e:
+                logger.warning("Yandex vision failed model_uri=%s: %s", model_uri, e)
                 last_error = e
-                if e.status_code and self._retryable_model_status(e.status_code):
-                    continue
-                raise
+                continue
 
         if last_error:
             raise last_error

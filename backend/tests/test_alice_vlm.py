@@ -28,10 +28,10 @@ def test_alice_vlm_model_uri_candidates_include_gemma_fallback():
         )
     )
     assert provider._model_uri_candidates() == [
-        "gpt://b1gfolder/aliceai-vlm/latest",
-        "gpt://b1gfolder/aliceai-vlm",
         "gpt://b1gfolder/gemma-3-27b-it",
         "gpt://b1gfolder/gemma-3-27b-it/latest",
+        "gpt://b1gfolder/aliceai-vlm/latest",
+        "gpt://b1gfolder/aliceai-vlm",
     ]
 
 
@@ -65,6 +65,28 @@ def test_alice_vlm_text_from_responses_api():
         }
     )
     assert text == "На фото чайник."
+
+
+def test_alice_vlm_stream_event_parsing():
+    assert AliceVLMProvider._text_from_stream_event(
+        {"type": "response.output_text.delta", "delta": "Привет"}
+    ) == "Привет"
+    assert AliceVLMProvider._text_from_stream_event(
+        {"type": "response.output_text.done", "text": "Полный ответ"}
+    ) == "Полный ответ"
+    assert AliceVLMProvider._text_from_stream_event(
+        {
+            "type": "response.completed",
+            "response": {
+                "output": [
+                    {
+                        "type": "message",
+                        "content": [{"type": "output_text", "text": "Из completed"}],
+                    }
+                ]
+            },
+        }
+    ) == "Из completed"
 
 
 def test_alice_vlm_build_payload_uses_responses_fields():
