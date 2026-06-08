@@ -1,4 +1,4 @@
-"""Alice AI VLM (Yandex Cloud) — vision через OpenAI-совместимый chat API."""
+"""Yandex AI Studio vision: Alice AI VLM (когда появится в API) или Gemma 3 27B."""
 
 from __future__ import annotations
 
@@ -23,7 +23,6 @@ from app.services.yandex_gpt import _format_history, _yield_text_paced
 logger = logging.getLogger(__name__)
 
 AnswerModel = Literal["lite", "pro"]
-CHAT_URL = "https://llm.api.cloud.yandex.net/v1/chat/completions"
 
 
 def _alice_vlm_http_error(response: httpx.Response) -> YandexServiceError:
@@ -42,14 +41,11 @@ def _alice_vlm_http_error(response: httpx.Response) -> YandexServiceError:
     if detail:
         msg += f": {detail}"
     if detail == "Failed to get model":
-        msg += (
-            ". Модель aliceai-vlm пока недоступна в API Yandex AI Studio "
-            "(есть только в приложении Алисы); пробуем gemma-3-27b-it."
-        )
+        msg += ". Модель aliceai-vlm пока не в каталоге API; пробуем gemma-3-27b-it."
     elif response.status_code == 403:
         msg += (
-            ". Проверьте роль ai.languageModels.user у сервисного аккаунта "
-            "и доступ к vision-модели в AI Studio."
+            ". Проверьте scope API-ключа yc.ai.languageModels.execute "
+            "и доступ к gemma-3-27b-it в Model Gallery AI Studio."
         )
     return YandexServiceError("gpt", msg, response.status_code)
 
@@ -65,6 +61,10 @@ class AliceVLMProvider(PromptedLLMMixin):
     def configured(self) -> bool:
         return self.settings.yandex_configured
 
+    def _responses_url(self) -> str:
+        base = self.settings.yandex_ai_studio_base_url.rstrip("/")
+        return f"{base}/responses"
+
     def _model_uri_candidates(self) -> list[str]:
         folder = self.settings.yandex_folder_id.strip()
         if not folder:
@@ -75,7 +75,7 @@ class AliceVLMProvider(PromptedLLMMixin):
         for suffix in (configured, "aliceai-vlm/latest", "aliceai-vlm"):
             if suffix and suffix not in suffixes:
                 suffixes.append(suffix)
-        for suffix in (gemma, "gemma-3-27b-it/latest", "gemma-3-27b-it"):
+        for suffix in (gemma, "gemma-3-27b-it", "gemma-3-27b-it/latest"):
             if suffix and suffix not in suffixes:
                 suffixes.append(suffix)
         return [f"gpt://{folder}/{suffix}" for suffix in suffixes]
@@ -88,8 +88,7 @@ class AliceVLMProvider(PromptedLLMMixin):
         action = "stream" if stream else "complete"
         if self._is_gemma_model(model_uri):
             logger.info(
-                "Yandex vision %s via gemma fallback model_uri=%s "
-                "(aliceai-vlm not in AI Studio catalog yet)",
+                "Yandex vision %s via gemma model_uri=%s (aliceai-vlm not in API catalog)",
                 action,
                 model_uri,
             )
@@ -123,49 +122,64 @@ class AliceVLMProvider(PromptedLLMMixin):
 
 {query}"""
 
-    def _vision_messages(
+    def _vision_input(
         self,
         query: str,
         vision_images: list[VisionImage],
         history: list[tuple[str, str]],
-        *,
-        system: str,
         prior_sources_block: str = "",
     ) -> list[dict[str, Any]]:
+        """Responses API input: image_url — строка data:...;base64 (не объект с url)."""
         user_text = self._vision_user_text(query, history, prior_sources_block)
         content: list[dict[str, Any]] = []
         for img in vision_images[:10]:
             content.append(
                 {
                     "type": "image_url",
-                    "image_url": {
-                        "url": f"data:{img.media_type};base64,{img.data_base64}",
-                    },
+                    "image_url": f"data:{img.media_type};base64,{img.data_base64}",
                 }
             )
         content.append({"type": "text", "text": user_text})
-        return [
-            {"role": "system", "content": system},
-            {"role": "user", "content": content},
-        ]
+        return [{"role": "user", "content": content}]
 
-    def _text_from_completion(self, data: dict) -> str:
-        choices = data.get("choices") or []
-        if not choices:
-            return ""
-        choice = choices[0]
-        finish = str(choice.get("finish_reason") or "").lower()
-        if finish == "content_filter":
-            raise YandexServiceError(
-                "gpt",
-                "Alice AI VLM отклонила запрос (content_filter)",
-            )
-        msg = choice.get("message") or {}
-        return str(msg.get("content") or "").strip()
+    @staticmethod
+    def _text_from_response(data: dict) -> str:
+        parts: list[str] = []
+        for item in data.get("output") or []:
+            if item.get("type") != "message":
+                continue
+            for block in item.get("content") or []:
+                if block.get("type") == "output_text":
+                    parts.append(str(block.get("text") or ""))
+        if not parts and data.get("output_text"):
+            parts.append(str(data["output_text"]))
+        return "".join(parts).strip()
+
+    def _build_payload(
+        self,
+        *,
+        model_uri: str,
+        instructions: str,
+        input_messages: list[dict[str, Any]],
+        max_output_tokens: int,
+        temperature: float,
+        stream: bool = False,
+    ) -> dict[str, Any]:
+        payload: dict[str, Any] = {
+            "model": model_uri,
+            "instructions": instructions,
+            "input": input_messages,
+            "max_output_tokens": max_output_tokens,
+            "temperature": temperature,
+        }
+        if stream:
+            payload["stream"] = True
+        return payload
 
     async def _complete_messages(
         self,
-        messages: list[dict[str, Any]],
+        instructions: str,
+        input_messages: list[dict[str, Any]],
         *,
         max_tokens: int,
         temperature: float,
@@ -175,26 +189,28 @@ class AliceVLMProvider(PromptedLLMMixin):
             raise YandexServiceError("gpt", "Alice AI VLM: не задан YANDEX_FOLDER_ID")
 
         last_error: Exception | None = None
+        url = self._responses_url()
         for model_uri in candidates:
-            payload = {
-                "model": model_uri,
-                "messages": messages,
-                "max_tokens": max_tokens,
-                "temperature": temperature,
-            }
+            payload = self._build_payload(
+                model_uri=model_uri,
+                instructions=instructions,
+                input_messages=input_messages,
+                max_output_tokens=max_tokens,
+                temperature=temperature,
+            )
             try:
                 async with httpx.AsyncClient(timeout=120.0) as client:
-                    response = await client.post(CHAT_URL, headers=self._headers(), json=payload)
+                    response = await client.post(url, headers=self._headers(), json=payload)
                     response.raise_for_status()
                     data = response.json()
-                text = self._text_from_completion(data)
+                text = self._text_from_response(data)
                 if not text:
                     raise YandexServiceError("gpt", "Alice AI VLM вернула пустой ответ")
                 self._log_vision_success(model_uri, stream=False)
                 return text
             except httpx.HTTPStatusError as e:
                 logger.warning(
-                    "Alice VLM HTTP %s model_uri=%s: %s",
+                    "Yandex vision HTTP %s model_uri=%s: %s",
                     e.response.status_code,
                     model_uri,
                     e.response.text[:500],
@@ -204,7 +220,7 @@ class AliceVLMProvider(PromptedLLMMixin):
                     continue
                 raise last_error from e
             except httpx.HTTPError as e:
-                logger.exception("Alice VLM request failed model_uri=%s", model_uri)
+                logger.exception("Yandex vision request failed model_uri=%s", model_uri)
                 raise YandexServiceError("gpt", "Alice AI VLM недоступен (сеть)") from e
             except YandexServiceError as e:
                 last_error = e
@@ -216,37 +232,37 @@ class AliceVLMProvider(PromptedLLMMixin):
 
     async def _stream_messages_for_model(
         self,
-        messages: list[dict[str, Any]],
+        instructions: str,
+        input_messages: list[dict[str, Any]],
         model_uri: str,
         *,
         max_tokens: int,
         temperature: float,
     ) -> AsyncIterator[str]:
-        payload = {
-            "model": model_uri,
-            "messages": messages,
-            "max_tokens": max_tokens,
-            "temperature": temperature,
-            "stream": True,
-        }
+        url = self._responses_url()
+        payload = self._build_payload(
+            model_uri=model_uri,
+            instructions=instructions,
+            input_messages=input_messages,
+            max_output_tokens=max_tokens,
+            temperature=temperature,
+            stream=True,
+        )
         async with httpx.AsyncClient(timeout=120.0) as client:
-            async with client.stream(
-                "POST", CHAT_URL, headers=self._headers(), json=payload
-            ) as response:
+            async with client.stream("POST", url, headers=self._headers(), json=payload) as response:
                 if response.status_code >= 400:
                     body = (await response.aread()).decode("utf-8", errors="replace")[:500]
                     logger.warning(
-                        "Alice VLM stream HTTP %s model_uri=%s: %s",
+                        "Yandex vision stream HTTP %s model_uri=%s: %s",
                         response.status_code,
                         model_uri,
                         body,
                     )
-                    req = httpx.Request("POST", CHAT_URL)
+                    req = httpx.Request("POST", url)
                     resp = httpx.Response(response.status_code, request=req, content=body.encode())
                     raise _alice_vlm_http_error(resp)
 
                 yielded = False
-                content_filter = False
                 async for line in response.aiter_lines():
                     if not line.startswith("data:"):
                         continue
@@ -257,30 +273,20 @@ class AliceVLMProvider(PromptedLLMMixin):
                         event = json.loads(raw)
                     except json.JSONDecodeError:
                         continue
-                    choices = event.get("choices") or []
-                    if not choices:
+                    if event.get("type") != "response.output_text.delta":
                         continue
-                    choice = choices[0]
-                    finish = str(choice.get("finish_reason") or "").lower()
-                    if finish == "content_filter":
-                        content_filter = True
-                    delta = choice.get("delta") or {}
-                    text = delta.get("content")
+                    text = event.get("delta")
                     if text:
                         yielded = True
                         yield str(text)
 
-                if content_filter and not yielded:
-                    raise YandexServiceError(
-                        "gpt",
-                        "Alice AI VLM отклонила запрос (content_filter)",
-                    )
                 if not yielded:
                     raise YandexServiceError("gpt", "Alice AI VLM вернула пустой ответ")
 
     async def _stream_messages(
         self,
-        messages: list[dict[str, Any]],
+        instructions: str,
+        input_messages: list[dict[str, Any]],
         *,
         max_tokens: int,
         temperature: float,
@@ -293,7 +299,8 @@ class AliceVLMProvider(PromptedLLMMixin):
         for model_uri in candidates:
             try:
                 async for chunk in self._stream_messages_for_model(
-                    messages,
+                    instructions,
+                    input_messages,
                     model_uri,
                     max_tokens=max_tokens,
                     temperature=temperature,
@@ -303,7 +310,7 @@ class AliceVLMProvider(PromptedLLMMixin):
                 return
             except httpx.HTTPStatusError as e:
                 logger.warning(
-                    "Alice VLM stream HTTP %s model_uri=%s: %s",
+                    "Yandex vision stream HTTP %s model_uri=%s: %s",
                     e.response.status_code,
                     model_uri,
                     e.response.text[:500],
@@ -313,7 +320,7 @@ class AliceVLMProvider(PromptedLLMMixin):
                     continue
                 raise last_error from e
             except httpx.HTTPError as e:
-                logger.exception("Alice VLM stream failed model_uri=%s", model_uri)
+                logger.exception("Yandex vision stream failed model_uri=%s", model_uri)
                 raise YandexServiceError("gpt", "Alice AI VLM недоступен (сеть)") from e
             except YandexServiceError as e:
                 last_error = e
@@ -335,14 +342,13 @@ class AliceVLMProvider(PromptedLLMMixin):
     ) -> str:
         if not self.configured:
             return "Mock: на фото объект для поиска."
-        messages = self._vision_messages(
-            query,
-            vision_images,
-            history,
-            system=ALICE_VLM_VISION_SEARCH_SUMMARY,
-            prior_sources_block=prior_sources_block,
+        input_messages = self._vision_input(query, vision_images, history, prior_sources_block)
+        return await self._complete_messages(
+            ALICE_VLM_VISION_SEARCH_SUMMARY,
+            input_messages,
+            max_tokens=900,
+            temperature=0.2,
         )
-        return await self._complete_messages(messages, max_tokens=900, temperature=0.2)
 
     async def stream_answer_vision(
         self,
@@ -358,16 +364,11 @@ class AliceVLMProvider(PromptedLLMMixin):
             return
 
         system = await self.get_prompt("answer_vision", ALICE_VLM_ANSWER_VISION)
-        messages = self._vision_messages(
-            query,
-            vision_images,
-            history,
-            system=system,
-            prior_sources_block=prior_sources_block,
-        )
+        input_messages = self._vision_input(query, vision_images, history, prior_sources_block)
         max_tokens = 3500 if model == "pro" else 2200
         async for chunk in self._stream_messages(
-            messages,
+            system,
+            input_messages,
             max_tokens=max_tokens,
             temperature=0.35,
         ):
