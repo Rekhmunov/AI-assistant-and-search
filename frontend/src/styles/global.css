@@ -562,7 +562,7 @@ body:has(.page-thread) {
   }
 
   .page-thread--mobile .thread-mobile-body:has(.composer-wrap--focused) > .thread-scroll-down {
-    bottom: calc(112px + var(--thread-mobile-composer-bottom-inset));
+    bottom: calc(140px + var(--thread-mobile-composer-bottom-inset));
   }
 
   .page-thread--mobile .composer-wrap--docked {
