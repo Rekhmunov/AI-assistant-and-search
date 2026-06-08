@@ -129,17 +129,17 @@ class AliceVLMProvider(PromptedLLMMixin):
         history: list[tuple[str, str]],
         prior_sources_block: str = "",
     ) -> list[dict[str, Any]]:
-        """Responses API input: image_url — строка data:...;base64 (не объект с url)."""
+        """Responses API: input_image + input_text (не image_url/text из Chat Completions)."""
         user_text = self._vision_user_text(query, history, prior_sources_block)
         content: list[dict[str, Any]] = []
         for img in vision_images[:10]:
             content.append(
                 {
-                    "type": "image_url",
+                    "type": "input_image",
                     "image_url": f"data:{img.media_type};base64,{img.data_base64}",
                 }
             )
-        content.append({"type": "text", "text": user_text})
+        content.append({"type": "input_text", "text": user_text})
         return [{"role": "user", "content": content}]
 
     @staticmethod

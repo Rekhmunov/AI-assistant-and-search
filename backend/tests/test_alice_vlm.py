@@ -35,7 +35,7 @@ def test_alice_vlm_model_uri_candidates_include_gemma_fallback():
     ]
 
 
-def test_alice_vlm_vision_input_uses_string_image_url():
+def test_alice_vlm_vision_input_uses_responses_api_content_types():
     provider = AliceVLMProvider(Settings())
     input_messages = provider._vision_input(
         "что на фото?",
@@ -45,9 +45,11 @@ def test_alice_vlm_vision_input_uses_string_image_url():
         [],
     )
     content = input_messages[0]["content"]
-    assert content[0]["type"] == "image_url"
-    assert content[0]["image_url"] == "data:image/jpeg;base64,abc123"
-    assert content[1]["type"] == "text"
+    assert content[0] == {
+        "type": "input_image",
+        "image_url": "data:image/jpeg;base64,abc123",
+    }
+    assert content[1]["type"] == "input_text"
     assert "что на фото?" in content[1]["text"]
 
 
