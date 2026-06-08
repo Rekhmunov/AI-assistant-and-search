@@ -140,11 +140,7 @@ def list_vision_providers(settings: Settings) -> list[ProviderInfo]:
             label="Alice AI VLM",
             kind="vision",
             configured=alice_ok,
-            hint=(
-                "Yandex AI Studio; aliceai-vlm в API пока нет — fallback gemma-3-27b-it"
-                if alice_ok
-                else "Нужны YANDEX_FOLDER_ID и YANDEX_API_KEY в .env"
-            ),
+            hint=None if alice_ok else "Нужны YANDEX_FOLDER_ID и YANDEX_API_KEY в .env",
         ),
         ProviderInfo(
             id="gigachat",
