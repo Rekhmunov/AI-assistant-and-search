@@ -58,7 +58,10 @@ def _build_features() -> dict[str, bool]:
 
 
 @router.get("/health/query-url-index")
-async def api_health_query_url_index(db: Annotated[AsyncSession, Depends(get_db)]):
+async def api_health_query_url_index(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    _auth: Annotated[None, Depends(require_admin_or_api_key)],
+):
     """Статистика памяти query → URL (Postgres)."""
     from app.services.query_url_memory import index_stats
 
@@ -66,7 +69,7 @@ async def api_health_query_url_index(db: Annotated[AsyncSession, Depends(get_db)
 
 
 @router.get("/health/page-cache")
-async def api_health_page_cache():
+async def api_health_page_cache(_auth: Annotated[None, Depends(require_admin_or_api_key)]):
     """Статистика Redis page_cache (приблизительно)."""
     from app.core.config import get_settings
     from app.services.page_cache import cache_stats_sample

@@ -8,7 +8,9 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
 from pydantic import BaseModel, Field
 
-from app.api.deps import SearchUserResult, get_search_user
+from app.api.deps import SearchUserResult, get_rate_limiter, get_search_user
+from app.core.auth_limits import client_ip
+from app.core.limiter import RateLimiter
 from app.core.config import get_settings
 from app.models.user import Plan
 from app.services.yandex_stt import SpeechTranscriptionError, resolve_audio_content_type, transcribe_audio
@@ -42,8 +44,13 @@ class VoiceClientReport(BaseModel):
 
 
 @router.post("/report")
-async def voice_client_report(body: VoiceClientReport, request: Request):
+async def voice_client_report(
+    body: VoiceClientReport,
+    request: Request,
+    limiter: Annotated[RateLimiter, Depends(get_rate_limiter)],
+):
     """Диагностика из MAX WebView (запрос до /transcribe или вместо него)."""
+    await limiter.check_voice_report_limit(client_ip(request))
     logger.info(
         "voice client report event=%s bytes=%s platform=%s max=%s mime=%s elapsed_ms=%s api_base=%s error=%s ip=%s",
         body.event,

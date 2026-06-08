@@ -1,0 +1,14 @@
+# Glosix — индексируем только лендинг и публичные юридические страницы.
+# Треды, история, профиль и поисковые сессии — приватные.
+
+User-agent: *
+Allow: /
+Allow: /privacy
+Allow: /offer
+Allow: /pd_consent
+Disallow: /thread
+Disallow: /history
+Disallow: /profile
+Disallow: /login
+Disallow: /source-view
+Disallow: /api/

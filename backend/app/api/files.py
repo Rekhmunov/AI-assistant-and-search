@@ -166,6 +166,7 @@ async def download_file_shared(
         content=data,
         media_type=mime,
         headers={
+            "X-Robots-Tag": "noindex, nofollow, noarchive",
             "Cache-Control": "private, max-age=3600",
             "Content-Disposition": attachment_content_disposition(row.filename),
         },

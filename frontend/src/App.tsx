@@ -3,6 +3,7 @@ import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { AppErrorBoundary } from "./components/AppErrorBoundary";
 import { AppNavigation } from "./components/AppNavigation";
 import { useAuthBootstrap } from "./hooks/useAuth";
+import { usePageRobots } from "./hooks/usePageRobots";
 import { t } from "./i18n";
 import { History } from "./pages/History";
 import { Home } from "./pages/Home";
@@ -48,13 +49,20 @@ function AppRoutes() {
   );
 }
 
+function AppShell() {
+  usePageRobots();
+  return (
+    <AppErrorBoundary>
+      <AppRoutes />
+    </AppErrorBoundary>
+  );
+}
+
 export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
-        <AppErrorBoundary>
-          <AppRoutes />
-        </AppErrorBoundary>
+        <AppShell />
       </BrowserRouter>
     </QueryClientProvider>
   );

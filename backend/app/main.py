@@ -9,6 +9,7 @@ from fastapi.responses import JSONResponse
 from app.api import api_router
 from app.api.site import router as site_router
 from app.core.config import get_settings
+from app.middleware.private_api_headers import PrivateApiHeadersMiddleware
 from app.core.database import async_session_factory
 from app.core.production_guards import assert_production_security
 from app.services.admin_bootstrap import ensure_bootstrap_admin
@@ -45,6 +46,7 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
         expose_headers=["X-Guest-Session"],
     )
+    app.add_middleware(PrivateApiHeadersMiddleware)
 
     @app.middleware("http")
     async def log_voice_requests(request: Request, call_next):
