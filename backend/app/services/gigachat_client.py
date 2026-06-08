@@ -173,7 +173,7 @@ async def download_file_bytes(
     settings = settings or get_settings()
     token = await get_access_token(settings)
     base = settings.gigachat_base_url.rstrip("/")
-    headers = {"Authorization": f"Bearer {token}", "Accept": "application/jpeg"}
+    headers = {"Authorization": f"Bearer {token}", "Accept": "application/jpg, image/jpeg, */*"}
     async with _http_client(settings, timeout=120.0) as client:
         resp = await client.get(f"{base}/files/{file_id}/content", headers=headers)
     if resp.status_code >= 400:

@@ -16,3 +16,12 @@ def test_wants_image_generation_negative():
 
 def test_image_generation_prompt_adds_draw():
     assert image_generation_prompt("закат").startswith("Нарисуй")
+
+
+def test_image_generation_prompt_rewrites_sgeneriruy():
+    assert image_generation_prompt("Сгенерируй план дома") == "Нарисуй план дома"
+    assert image_generation_prompt("Сгенерируй картинку заката").startswith("Нарисуй")
+
+
+def test_wants_image_generation_house_plan_short():
+    assert wants_image_generation("Сгенерируй план дома")
