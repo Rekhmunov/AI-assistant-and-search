@@ -56,6 +56,8 @@ class Settings(BaseSettings):
     yandex_gpt_lite_model: str = "yandexgpt-lite/latest"
     yandex_gpt_pro_model: str = "yandexgpt/latest"
     yandex_alice_vlm_model: str = "aliceai-vlm/latest"
+    # Fallback vision в API AI Studio (aliceai-vlm пока нет в каталоге; gemma принимает фото).
+    yandex_vision_gemma_model: str = "gemma-3-27b-it/latest"
 
     anthropic_api_key: str = ""
     # Lite = rewriter/extract; Pro = финальный ответ. ID из console.anthropic.com → Models

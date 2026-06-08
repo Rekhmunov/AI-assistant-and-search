@@ -41,10 +41,15 @@ def _alice_vlm_http_error(response: httpx.Response) -> YandexServiceError:
     msg = f"Alice AI VLM недоступен (HTTP {response.status_code})"
     if detail:
         msg += f": {detail}"
-    if response.status_code == 403:
+    if detail == "Failed to get model":
+        msg += (
+            ". Модель aliceai-vlm пока недоступна в API Yandex AI Studio "
+            "(есть только в приложении Алисы); пробуем gemma-3-27b-it."
+        )
+    elif response.status_code == 403:
         msg += (
             ". Проверьте роль ai.languageModels.user у сервисного аккаунта "
-            "и доступ к модели aliceai-vlm в AI Studio."
+            "и доступ к vision-модели в AI Studio."
         )
     return YandexServiceError("gpt", msg, response.status_code)
 
@@ -65,17 +70,36 @@ class AliceVLMProvider(PromptedLLMMixin):
         if not folder:
             return []
         configured = self.settings.yandex_alice_vlm_model.strip()
+        gemma = self.settings.yandex_vision_gemma_model.strip()
         suffixes: list[str] = []
         for suffix in (configured, "aliceai-vlm/latest", "aliceai-vlm"):
             if suffix and suffix not in suffixes:
                 suffixes.append(suffix)
+        for suffix in (gemma, "gemma-3-27b-it/latest", "gemma-3-27b-it"):
+            if suffix and suffix not in suffixes:
+                suffixes.append(suffix)
         return [f"gpt://{folder}/{suffix}" for suffix in suffixes]
+
+    @staticmethod
+    def _is_gemma_model(model_uri: str) -> bool:
+        return "gemma-3-27b-it" in model_uri
+
+    def _log_vision_success(self, model_uri: str, *, stream: bool) -> None:
+        action = "stream" if stream else "complete"
+        if self._is_gemma_model(model_uri):
+            logger.info(
+                "Yandex vision %s via gemma fallback model_uri=%s "
+                "(aliceai-vlm not in AI Studio catalog yet)",
+                action,
+                model_uri,
+            )
+            return
+        logger.info("Alice VLM %s success model_uri=%s", action, model_uri)
 
     def _headers(self) -> dict[str, str]:
         api_key = self.settings.yandex_api_key.strip()
         headers = {
-            # OpenAI-совместимый /v1/chat/completions ожидает Bearer (не Api-Key).
-            "Authorization": f"Bearer {api_key}",
+            "Authorization": f"Api-Key {api_key}",
             "Content-Type": "application/json",
             "x-data-logging-enabled": "false",
         }
@@ -166,7 +190,7 @@ class AliceVLMProvider(PromptedLLMMixin):
                 text = self._text_from_completion(data)
                 if not text:
                     raise YandexServiceError("gpt", "Alice AI VLM вернула пустой ответ")
-                logger.info("Alice VLM complete success model_uri=%s", model_uri)
+                self._log_vision_success(model_uri, stream=False)
                 return text
             except httpx.HTTPStatusError as e:
                 logger.warning(
@@ -275,7 +299,7 @@ class AliceVLMProvider(PromptedLLMMixin):
                     temperature=temperature,
                 ):
                     yield chunk
-                logger.info("Alice VLM stream success model_uri=%s", model_uri)
+                self._log_vision_success(model_uri, stream=True)
                 return
             except httpx.HTTPStatusError as e:
                 logger.warning(
