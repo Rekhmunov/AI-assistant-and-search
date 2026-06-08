@@ -593,6 +593,10 @@ body:has(.page-thread) {
     position: static;
   }
 
+  .thread-tabs-segment {
+    padding: 2px 25px;
+  }
+
   .mobile-page-header {
     margin-bottom: 20px;
   }
