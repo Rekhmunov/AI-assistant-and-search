@@ -19,6 +19,16 @@ function isChartLang(lang?: string): boolean {
   return lang?.trim().toLowerCase() === "chart";
 }
 
+function isBlankText(seg: AnswerSegment): boolean {
+  return seg.type === "text" && !seg.content.trim();
+}
+
+function isBridgeText(seg: AnswerSegment): boolean {
+  if (seg.type !== "text") return false;
+  const t = seg.content.trim();
+  return t.length > 0 && t.length <= 400;
+}
+
 /**
  * Склеивает цепочку markdown → chart → markdown в один блок документа с диаграммой.
  */
@@ -46,16 +56,46 @@ export function groupAnswerSegments(segments: AnswerSegment[]): GroupedAnswerSeg
     i += 1;
 
     while (i < segments.length) {
+      while (i < segments.length && isBlankText(segments[i])) {
+        i += 1;
+      }
+      if (i >= segments.length) break;
+
       const next = segments[i];
+
+      if (next.type === "text" && isBridgeText(next)) {
+        const peek = segments[i + 1];
+        if (
+          peek?.type === "code" &&
+          !peek.partial &&
+          (isChartLang(peek.lang) || isMarkdownLang(peek.lang)) &&
+          peek.content.trim()
+        ) {
+          i += 1;
+          continue;
+        }
+        if (charts.length > 0 || markdownParts.length > 1) {
+          markdownParts.push(next.content.trim());
+          i += 1;
+          continue;
+        }
+        break;
+      }
+
       if (next.type !== "code" || next.partial) break;
 
-      if (isChartLang(next.lang) && next.content.trim()) {
+      if (!next.content.trim()) {
+        i += 1;
+        continue;
+      }
+
+      if (isChartLang(next.lang)) {
         charts.push(next.content);
         i += 1;
         continue;
       }
 
-      if (isMarkdownLang(next.lang) && next.content.trim()) {
+      if (isMarkdownLang(next.lang)) {
         markdownParts.push(next.content);
         i += 1;
         continue;

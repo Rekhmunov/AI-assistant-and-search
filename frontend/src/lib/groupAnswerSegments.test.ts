@@ -3,6 +3,22 @@ import { parseAnswerSegments } from "./parseAnswerSegments";
 import { groupAnswerSegments } from "./groupAnswerSegments";
 
 describe("groupAnswerSegments", () => {
+  it("merges markdown and chart separated by blank lines", () => {
+    const raw = [
+      "```markdown",
+      "# Документ",
+      "Текст.",
+      "```",
+      "",
+      "",
+      "```chart",
+      '{"type":"bar","title":"T","labels":["A"],"series":[{"name":"S","values":[1]}]}',
+      "```",
+    ].join("\n");
+    const grouped = groupAnswerSegments(parseAnswerSegments(raw));
+    expect(grouped.some((s) => s.type === "document")).toBe(true);
+  });
+
   it("merges markdown chart markdown into one document block", () => {
     const raw = [
       "Вот документ с диаграммой.",

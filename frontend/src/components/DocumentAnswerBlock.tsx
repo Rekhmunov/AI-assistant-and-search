@@ -84,6 +84,7 @@ export function DocumentAnswerBlock({ markdownParts, charts, partial }: Props) {
         {Array.from({ length: maxSlots }, (_, slot) => {
           const md = markdownParts[slot];
           const chart = chartSpecs[slot];
+          if (!md && !chart) return null;
           return (
             <div key={`doc-slot-${slot}`} className="document-answer-slot">
               {md ? <MarkdownDocumentPreview content={md} /> : null}

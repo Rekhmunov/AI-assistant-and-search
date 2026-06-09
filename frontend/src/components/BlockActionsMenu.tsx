@@ -242,7 +242,7 @@ function ChevronIcon({ open }: { open: boolean }) {
       aria-hidden
       className={`block-actions-menu-chevron${open ? " block-actions-menu-chevron--open" : ""}`}
     >
-      <path d="M9 6l6 6-6 6" />
+      <path d="M9 7.5 15.5 12 9 16.5V7.5Z" />
     </svg>
   );
 }

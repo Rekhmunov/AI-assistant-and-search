@@ -12,6 +12,7 @@ import {
   type MessageAttachment,
 } from "../api/client";
 import { AnswerBody } from "../components/AnswerBody";
+import { DocumentAnswerBlock } from "../components/DocumentAnswerBlock";
 import { AnswerErrorBoundary } from "../components/AnswerErrorBoundary";
 import { AnswerFooter } from "../components/AnswerFooter";
 import { FreeLimitNotice } from "../components/FreeLimitNotice";
@@ -39,6 +40,8 @@ import {
   threadHasSearchTurns,
 } from "../lib/threadImageGroups";
 import { answerHasText, normalizeAnswerText } from "../lib/answerText";
+import { renderAnswerTextSegment } from "../lib/renderAnswerText";
+import { resolveUnifiedDocument } from "../lib/resolveUnifiedDocument";
 import { SEARCH_QUERY_MAX_LENGTH } from "../lib/searchQueryLimits";
 import {
   assistantMessageIdFromThread,
@@ -934,12 +937,15 @@ export function Thread() {
               (isImageGenTurn ||
                 (isLastTurn && !streaming && !lastTurnRevealing) ||
                 (!isLastTurn && !isActive));
+            const unifiedDoc = resolveUnifiedDocument(turn.answer, turn.markdownDocument);
             const showAnswer =
               showInterrupted ||
               showGuestLimit ||
               showFreeLimit ||
               showImageGenPro ||
               answerHasText(turn.answer) ||
+              Boolean(unifiedDoc) ||
+              Boolean(turn.markdownDocument) ||
               Boolean(turn.generatedDocument) ||
               (isImageGenTurn && (turn.images?.length ?? 0) > 0) ||
               showEntityImages ||
@@ -994,6 +1000,18 @@ export function Thread() {
                         <FreeLimitNotice />
                       ) : showImageGenPro ? (
                         <ImageGenProNotice />
+                      ) : unifiedDoc ? (
+                        <div className="answer">
+                          {unifiedDoc.intro ? (
+                            <div className="answer-text">
+                              {renderAnswerTextSegment(unifiedDoc.intro, sources, `u-intro-${index}`)}
+                            </div>
+                          ) : null}
+                          <DocumentAnswerBlock
+                            markdownParts={unifiedDoc.markdownParts}
+                            charts={unifiedDoc.charts}
+                          />
+                        </div>
                       ) : (
                         <AnswerBody
                           text={normalizeAnswerText(turn.answer)}
@@ -1007,13 +1025,13 @@ export function Thread() {
                         />
                       )}
                     </AnswerErrorBoundary>
-                    {turn.markdownDocument && (
+                    {turn.markdownDocument && !unifiedDoc ? (
                       <CollapsibleMarkdownDocument
                         title={turn.markdownDocument.title}
                         content={turn.markdownDocument.content}
                         collapsible={turn.markdownDocument.collapsible}
                       />
-                    )}
+                    ) : null}
                     {turn.generatedDocument && (
                       <GeneratedDocumentCard document={turn.generatedDocument} />
                     )}
