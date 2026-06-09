@@ -301,5 +301,13 @@
   "feedbackSending": "Отправка…",
   "feedbackSubmitFailed": "Не удалось сохранить оценку",
   "feedbackCommentRequired": "Введите комментарий",
-  "feedbackThankYou": "Спасибо за вашу оценку! Вы помогаете стать лучше."
+  "feedbackThankYou": "Спасибо за вашу оценку! Вы помогаете стать лучше.",
+  "agentModeButton": "Режим агента MAX",
+  "agentProModalTitle": "Агент MAX — только Pro",
+  "agentProModalDescription": "Настройка агента Glosix в MAX доступна подписчикам Pro.",
+  "agentMaxModalTitle": "Привяжите MAX",
+  "agentMaxModalDescription": "Чтобы создать агента, войдите через MAX или привяжите аккаунт в профиле. Без привязки агент не сможет писать вам в чат.",
+  "agentMaxModalCta": "Перейти в профиль",
+  "agentThreadBadge": "Агент",
+  "agentComposerPlaceholder": "Опишите задачу агента…"
 }

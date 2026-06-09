@@ -2,10 +2,12 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
+  createAgentThread,
   fetchAnswerStatus,
   fetchFileMeta,
   fetchThread,
   fetchSession,
+  postAgentMessage,
   streamSearch,
   type AnswerStatus,
   type GeneratedDocumentInfo,
@@ -254,7 +256,10 @@ export function Thread() {
     },
   });
 
-  const threadHasPending = Boolean(thread && threadHasPendingAnswer(thread.messages));
+  const isAgentThread = thread?.thread_type === "agent";
+  const threadHasPending = Boolean(
+    !isAgentThread && thread && threadHasPendingAnswer(thread.messages),
+  );
 
   const { data: answerStatus } = useQuery({
     queryKey: ["thread-answer-status", activeThreadKey],
@@ -376,6 +381,65 @@ export function Thread() {
     const el = document.getElementById(`turn-${active.key}`);
     el?.scrollIntoView({ block: "start", behavior: "smooth" });
   }, [turns.length, activeTab, turns]);
+
+  const runAgentMessage = useCallback(
+    async (text: string, existingThreadId: string | null) => {
+      if (!text.trim() || !token || streamingRef.current) return;
+      const tid = existingThreadId ?? threadId;
+      if (!tid) return;
+
+      streamingRef.current = true;
+      setStreaming(true);
+      setSearchPhase("idle");
+      const pendingKey = `agent-${Date.now()}`;
+      setTurns((prev) => [
+        ...prev,
+        {
+          key: pendingKey,
+          query: text,
+          attachments: [],
+          answer: "",
+          sources: [],
+          images: [],
+          followUps: [],
+          needsSearch: false,
+          streaming: true,
+        },
+      ]);
+
+      try {
+        const result = await postAgentMessage(token, tid, text);
+        queryClient.invalidateQueries({ queryKey: ["thread", tid] });
+        queryClient.invalidateQueries({ queryKey: ["threads"] });
+        setTurns((prev) =>
+          prev.map((turn) =>
+            turn.key === pendingKey
+              ? {
+                  ...turn,
+                  key: result.assistant_message.id,
+                  messageId: result.assistant_message.id,
+                  answer: result.assistant_message.content,
+                  streaming: false,
+                }
+              : turn,
+          ),
+        );
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Не удалось отправить сообщение";
+        setTurns((prev) =>
+          prev.map((turn) =>
+            turn.key === pendingKey
+              ? { ...turn, answer: msg, streaming: false }
+              : turn,
+          ),
+        );
+      } finally {
+        streamingRef.current = false;
+        setStreaming(false);
+      }
+    },
+    [token, threadId, queryClient],
+  );
 
   const runSearch = useCallback(
     async (
@@ -791,6 +855,7 @@ export function Thread() {
   ]);
 
   useEffect(() => {
+    if (isAgentThread) return;
     if (!(initialQuery || initialFiles.length) || id || started.current) return;
     started.current = true;
     const pending = (location.state as ThreadLocationState | null)?.pendingAttachments;
@@ -825,13 +890,17 @@ export function Thread() {
         metas.filter((m): m is MessageAttachment => m !== null),
       );
     })();
-  }, [initialQuery, initialFiles, id, runSearch, token, location.state]);
+  }, [initialQuery, initialFiles, id, runSearch, token, location.state, isAgentThread]);
 
   const onComposerSubmit = (payload: {
     query: string;
     attachmentIds: string[];
     attachments: ComposerAttachment[];
   }) => {
+    if (isAgentThread) {
+      void runAgentMessage(payload.query, threadId);
+      return;
+    }
     runSearch(
       payload.query,
       threadId,
@@ -840,12 +909,19 @@ export function Thread() {
     );
   };
 
+  const startNewAgentThread = useCallback(async () => {
+    if (!token) return;
+    const data = await createAgentThread(token);
+    queryClient.invalidateQueries({ queryKey: ["threads"] });
+    navigate(`/thread/${data.thread.id}`, { replace: true, state: { fromHistory: true } });
+  }, [token, navigate, queryClient]);
+
   const lastCompletedIndex = findLastIndex(
     turns,
     (turn) => !turn.streaming && answerHasText(turn.answer),
   );
 
-  const showImagesTab = threadHasSearchTurns(turns);
+  const showImagesTab = !isAgentThread && threadHasSearchTurns(turns);
   const totalImages = countThreadImages(turns);
   const imageGroups = useMemo(() => buildThreadImageGroups(turns), [turns]);
   const lastTurn = turns[turns.length - 1];
@@ -1111,12 +1187,14 @@ export function Thread() {
           onComposerSubmit(p);
         }}
         disabled={streaming}
-        placeholder={t("askFollowUp")}
+        placeholder={isAgentThread ? t("agentComposerPlaceholder") : t("askFollowUp")}
         attachments={attachments}
         onAttachmentsChange={setAttachments}
-        requireTextWithAttachments={turns.length === 0}
+        requireTextWithAttachments={!isAgentThread && turns.length === 0}
         layoutMode={isDesktop ? "default" : "threadMobile"}
         onNewChat={isDesktop ? undefined : () => navigate("/")}
+        onAgentClick={startNewAgentThread}
+        agentMode={isAgentThread}
       />
       </div>
     </div>

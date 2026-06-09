@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import get_settings
 from app.core.limiter import RateLimiter
 from app.models.message import Message, MessageRole
-from app.models.thread import Thread
+from app.models.thread import Thread, ThreadType
 from app.models.user import Plan, User
 from app.services.image_gen_service import (
     persist_generated_image,
@@ -98,8 +98,22 @@ async def stream_image_generation_turn(
             await limiter.release_image_gen(user_id_str)
             yield sse_event("error", {"code": "not_found", "message": "Тред не найден"})
             return
+        if thread.thread_type != ThreadType.SEARCH:
+            await limiter.release_image_gen(user_id_str)
+            yield sse_event(
+                "error",
+                {
+                    "code": "wrong_thread_type",
+                    "message": "Этот диалог — настройка агента, не поиск.",
+                },
+            )
+            return
     else:
-        thread = Thread(user_id=user.id, title=display_content[:200])
+        thread = Thread(
+            user_id=user.id,
+            title=display_content[:200],
+            thread_type=ThreadType.SEARCH,
+        )
         db.add(thread)
         await db.flush()
 

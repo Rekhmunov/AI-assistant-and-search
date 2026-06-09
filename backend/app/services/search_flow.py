@@ -16,7 +16,7 @@ from app.services.vision_routing import is_image_display_request, wants_web_sear
 from app.core.config import get_settings
 from app.core.limiter import RateLimiter
 from app.models.message import Message, MessageRole
-from app.models.thread import Thread
+from app.models.thread import Thread, ThreadType
 from app.models.user import Plan, User
 from app.services.llm_provider import SearchSource
 from app.services.answer_guard import free_vision_pro_addon, image_display_answer_addon, is_template_evasion
@@ -302,8 +302,21 @@ class SearchFlowService:
             if not thread:
                 yield sse_event("error", {"code": "not_found", "message": "Тред не найден"})
                 return
+            if thread.thread_type != ThreadType.SEARCH:
+                yield sse_event(
+                    "error",
+                    {
+                        "code": "wrong_thread_type",
+                        "message": "Этот диалог — настройка агента, не поиск.",
+                    },
+                )
+                return
         else:
-            thread = Thread(user_id=user_uuid, title=display_content[:200])
+            thread = Thread(
+                user_id=user_uuid,
+                title=display_content[:200],
+                thread_type=ThreadType.SEARCH,
+            )
             db.add(thread)
             await db.flush()
 

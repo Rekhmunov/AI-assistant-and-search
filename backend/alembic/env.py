@@ -11,6 +11,7 @@ from app.core.database import Base
 from app.models import (  # noqa: F401
     admin_audit,
     admin_user,
+    agent,
     app_setting,
     broadcast,
     message,

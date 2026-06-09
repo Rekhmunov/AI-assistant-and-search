@@ -17,8 +17,12 @@ celery.conf.update(
     result_serializer="json",
     timezone="Europe/Moscow",
     enable_utc=True,
-    imports=["app.workers.broadcast_tasks", "app.workers.maintenance_tasks"],
+    imports=["app.workers.broadcast_tasks", "app.workers.maintenance_tasks", "app.workers.agent_tasks"],
     beat_schedule={
+        "dispatch-agent-reminders": {
+            "task": "dispatch_agent_reminders",
+            "schedule": crontab(minute="*"),
+        },
         "cleanup-expired-uploads": {
             "task": "cleanup_expired_uploads",
             "schedule": crontab(minute=15, hour="*/6"),

@@ -239,7 +239,12 @@ export function History() {
                         navigate(`/thread/${th.id}`, { state: { fromHistory: true } });
                       }}
                     >
-                      <span className="history-card-title">{th.title}</span>
+                      <span className="history-card-title">
+                        {th.title}
+                        {th.thread_type === "agent" && (
+                          <span className="history-card-badge">{t("agentThreadBadge")}</span>
+                        )}
+                      </span>
                       <small className="history-card-meta">
                         {th.message_count} {t("questionsCount")} •{" "}
                         {new Date(th.last_message_at).toLocaleTimeString("ru-RU", {

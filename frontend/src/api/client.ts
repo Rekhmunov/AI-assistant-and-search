@@ -39,9 +39,13 @@ export interface AppPublicConfig {
   yandex_webmaster_verification?: string | null;
 }
 
+export type ThreadType = "search" | "agent";
+
 export interface ThreadListItem {
   id: string;
   title: string;
+  thread_type?: ThreadType;
+  agent_seq?: number | null;
   message_count: number;
   is_saved: boolean;
   last_message_at: string;
@@ -113,8 +117,22 @@ export interface Message {
 export interface ThreadDetail {
   id: string;
   title: string;
+  thread_type?: ThreadType;
+  agent_seq?: number | null;
   is_saved: boolean;
   messages: Message[];
+}
+
+export interface AgentThreadCreateResponse {
+  thread: ThreadListItem;
+  welcome_message: Message;
+}
+
+export interface AgentMessageResponse {
+  user_message: Message;
+  assistant_message: Message;
+  agent_status: string;
+  agent_role: string | null;
 }
 
 export interface AnswerStatus {
@@ -498,6 +516,39 @@ export async function deleteThread(token: string, id: string): Promise<void> {
     const err = await res.json().catch(() => ({}));
     throw new Error((err as { detail?: string }).detail || "Failed to delete thread");
   }
+}
+
+export async function createAgentThread(token: string): Promise<AgentThreadCreateResponse> {
+  const res = await fetch(`${API_BASE}/api/agent/threads`, {
+    method: "POST",
+    headers: apiHeaders(token),
+    credentials: "include",
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    const detail = (err as { detail?: unknown }).detail;
+    throw new HttpResponseError(formatApiErrorDetail(detail) || "Failed to create agent", res.status);
+  }
+  return res.json();
+}
+
+export async function postAgentMessage(
+  token: string,
+  threadId: string,
+  text: string,
+): Promise<AgentMessageResponse> {
+  const res = await fetch(`${API_BASE}/api/agent/threads/${threadId}/messages`, {
+    method: "POST",
+    headers: apiHeaders(token),
+    credentials: "include",
+    body: JSON.stringify({ text }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    const detail = (err as { detail?: unknown }).detail;
+    throw new HttpResponseError(formatApiErrorDetail(detail) || "Failed to send agent message", res.status);
+  }
+  return res.json();
 }
 
 export async function deleteThreadsBulk(

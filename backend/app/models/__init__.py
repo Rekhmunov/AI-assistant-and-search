@@ -5,6 +5,7 @@ from app.models.broadcast import Broadcast, BroadcastLog
 from app.models.message import Message
 from app.models.message_feedback import MessageFeedback
 from app.models.subscription import Subscription
+from app.models.agent import AgentInstance, AgentReminder
 from app.models.thread import Thread
 from app.models.uploaded_file import UploadedFile
 from app.models.legal_document import LegalDocument, LegalDocumentVersion, UserLegalConsent
@@ -15,6 +16,8 @@ from app.models.user import User
 __all__ = [
     "User",
     "Thread",
+    "AgentInstance",
+    "AgentReminder",
     "Message",
     "MessageFeedback",
     "Subscription",

@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.limiter import RateLimiter
 from app.models.message import Message, MessageRole
-from app.models.thread import Thread
+from app.models.thread import Thread, ThreadType
 from app.models.user import User
 from app.services.doc_gen_context import prior_assistant_source_text
 from app.services.doc_gen_markdown import plain_answer_to_markdown
@@ -47,6 +47,15 @@ async def stream_export_chat_document_turn(
         thread = result.scalar_one_or_none()
         if not thread:
             yield sse_event("error", {"code": "not_found", "message": "Тред не найден"})
+            return
+        if thread.thread_type != ThreadType.SEARCH:
+            yield sse_event(
+                "error",
+                {
+                    "code": "wrong_thread_type",
+                    "message": "Этот диалог — настройка агента, не поиск.",
+                },
+            )
             return
         msg_result = await db.execute(
             select(Message)

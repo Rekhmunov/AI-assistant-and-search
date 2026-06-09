@@ -1792,6 +1792,15 @@ body:has(.page-thread) {
   cursor: not-allowed;
 }
 
+.composer-icon--agent {
+  color: var(--accent, #5b6cff);
+}
+
+.composer-icon--agent:hover:not(:disabled) {
+  color: var(--accent, #5b6cff);
+  background: rgba(91, 108, 255, 0.12);
+}
+
 .composer-send {
   display: inline-flex;
   align-items: center;
@@ -4867,6 +4876,19 @@ body:has(.page-thread) {
   display: flex;
   flex-direction: column;
   gap: 4px;
+}
+
+.history-card-badge {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 6px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.4;
+  vertical-align: middle;
+  color: var(--accent, #5b6cff);
+  background: rgba(91, 108, 255, 0.12);
 }
 
 .history-card-title {

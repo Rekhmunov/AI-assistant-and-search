@@ -57,6 +57,8 @@ class MessageOut(BaseModel):
 class ThreadListItem(BaseModel):
     id: UUID
     title: str
+    thread_type: str = "search"
+    agent_seq: int | None = None
     message_count: int
     is_saved: bool
     last_message_at: datetime
@@ -67,6 +69,8 @@ class ThreadListItem(BaseModel):
 class ThreadDetail(BaseModel):
     id: UUID
     title: str
+    thread_type: str = "search"
+    agent_seq: int | None = None
     is_saved: bool
     messages: list[MessageOut]
 

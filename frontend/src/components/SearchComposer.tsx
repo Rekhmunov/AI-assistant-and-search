@@ -14,6 +14,7 @@ import { Link } from "react-router-dom";
 import { FileUploadError, uploadFile, fetchMe, fetchSession } from "../api/client";
 import { ComposerModelSelector } from "./ComposerModelSelector";
 import { ComposerAttachMenu } from "./ComposerAttachMenu";
+import { AgentMaxLinkModal } from "./AgentMaxLinkModal";
 import { ProUpgradeModal } from "./ProUpgradeModal";
 import { MobileNewThreadButton } from "./MobileNewThreadButton";
 import {
@@ -62,6 +63,9 @@ interface Props {
   /** Mobile layout: focus toolbar (+/send/mic), mic inline when unfocused */
   layoutMode?: "default" | "threadMobile" | "homeMobile";
   onNewChat?: () => void;
+  onAgentClick?: () => void;
+  /** Тред агента: без вложений, модели и кнопки робота */
+  agentMode?: boolean;
 }
 
 type UploadingItem = {
@@ -85,6 +89,8 @@ export function SearchComposer({
   requireTextWithAttachments = false,
   layoutMode = "default",
   onNewChat,
+  onAgentClick,
+  agentMode = false,
 }: Props) {
   const token = useAuthStore((s) => s.token);
   const isDesktop = useDesktopLayout();
@@ -100,6 +106,8 @@ export function SearchComposer({
   const [attachMenuOpen, setAttachMenuOpen] = useState(false);
   const [modelMenuOpen, setModelMenuOpen] = useState(false);
   const [proUpgradeModalOpen, setProUpgradeModalOpen] = useState(false);
+  const [agentProModalOpen, setAgentProModalOpen] = useState(false);
+  const [agentMaxModalOpen, setAgentMaxModalOpen] = useState(false);
   const blurTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const attachMenuOpenRef = useRef(false);
   const modelMenuOpenRef = useRef(false);
@@ -473,7 +481,35 @@ export function SearchComposer({
     openPicker(allFilesRef);
   };
 
-  const attachMenu = (
+  const handleAgentClick = () => {
+    if (!onAgentClick) return;
+    if (plan !== "pro") {
+      setAgentProModalOpen(true);
+      return;
+    }
+    if (!me?.max_linked) {
+      setAgentMaxModalOpen(true);
+      return;
+    }
+    onAgentClick();
+  };
+
+  const agentButton =
+    !agentMode && onAgentClick ? (
+      <button
+        type="button"
+        className="composer-icon composer-icon--agent"
+        aria-label={t("agentModeButton")}
+        title={t("agentModeButton")}
+        disabled={disabled || isBusy}
+        onPointerDown={isMobileFocusLayout ? keepComposerEngaged : undefined}
+        onClick={handleAgentClick}
+      >
+        <AgentBotIcon />
+      </button>
+    ) : null;
+
+  const attachMenu = agentMode ? null : (
     <ComposerAttachMenu
       disabled={disabled || isBusy || atLimit}
       directPick
@@ -511,7 +547,7 @@ export function SearchComposer({
     </button>
   );
 
-  const modelSelector = (
+  const modelSelector = agentMode ? null : (
     <ComposerModelSelector
       plan={plan}
       onOpenProModal={openProUpgradeModal}
@@ -624,6 +660,7 @@ export function SearchComposer({
             </div>
             <div className="composer-toolbar composer-toolbar--desktop">
               {attachMenu}
+              {agentButton}
               <div className="composer-toolbar-actions">
                 {clearButton}
                 {modelSelector}
@@ -636,6 +673,7 @@ export function SearchComposer({
           <>
             <div className={`composer-row${showComposerToolbar ? " composer-row--text-only" : ""}`}>
               {showDefaultRow && attachMenu}
+              {showDefaultRow && agentButton}
               <div className="composer-input-wrap">
                 {showTypingOverlay && typingPlaceholder && (
                   <span className="composer-placeholder-typing" aria-hidden>
@@ -680,7 +718,7 @@ export function SearchComposer({
                 className="composer-toolbar"
                 onPointerDownCapture={isMobileFocusLayout ? keepComposerEngaged : undefined}
               >
-                {showAttachInToolbar && (
+                {showAttachInToolbar && !agentMode && (
                   <ComposerAttachMenu
                     disabled={disabled || isBusy || atLimit}
                     directPick
@@ -689,6 +727,7 @@ export function SearchComposer({
                     onOpenChange={handleAttachMenuOpenChange}
                   />
                 )}
+                {showComposerToolbar && agentButton}
                 <div className="composer-toolbar-actions">
                   {modelSelector}
                   {renderMicButton(true)}
@@ -708,7 +747,27 @@ export function SearchComposer({
         open={proUpgradeModalOpen}
         onClose={() => setProUpgradeModalOpen(false)}
       />
+      <ProUpgradeModal
+        open={agentProModalOpen}
+        onClose={() => setAgentProModalOpen(false)}
+        title={t("agentProModalTitle")}
+        description={t("agentProModalDescription")}
+      />
+      <AgentMaxLinkModal open={agentMaxModalOpen} onClose={() => setAgentMaxModalOpen(false)} />
     </div>
+  );
+}
+
+function AgentBotIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <rect x="4" y="8" width="16" height="11" rx="3" stroke="currentColor" strokeWidth="1.8" />
+      <circle cx="9" cy="13" r="1.2" fill="currentColor" />
+      <circle cx="15" cy="13" r="1.2" fill="currentColor" />
+      <path d="M12 8V5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      <circle cx="12" cy="4" r="1.2" fill="currentColor" />
+      <path d="M7 11H5M19 11h-2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+    </svg>
   );
 }
 

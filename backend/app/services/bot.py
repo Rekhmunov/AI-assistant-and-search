@@ -38,13 +38,14 @@ class MaxBotService:
         text: str,
         attachments: list[dict] | None = None,
         *,
+        chat_id: int | None = None,
         text_format: str | None = None,
         max_attempts: int = 3,
     ) -> BotSendResult:
         if not self.settings.bot_token.strip():
             return BotSendResult(ok=False, error="bot_token not configured")
-        if user_id is None:
-            return BotSendResult(ok=False, error="no max_user_id")
+        if user_id is None and chat_id is None:
+            return BotSendResult(ok=False, error="no max_user_id or chat_id")
 
         text, text_format = prepare_max_message(text, text_format)
         body: dict = {"text": text}
@@ -53,7 +54,11 @@ class MaxBotService:
         if attachments:
             body["attachments"] = attachments
 
-        params = {"user_id": int(user_id)}
+        params: dict[str, int] = {}
+        if chat_id is not None:
+            params["chat_id"] = int(chat_id)
+        elif user_id is not None:
+            params["user_id"] = int(user_id)
 
         for attempt in range(max_attempts):
             try:

@@ -1,5 +1,7 @@
+import { useMutation } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { createAgentThread } from "../api/client";
 import { GlosixBrand } from "../components/GlosixBrand";
 import { HomeMobileHeader } from "../components/HomeMobileHeader";
 import { SearchComposer, type ComposerAttachment } from "../components/SearchComposer";
@@ -10,6 +12,7 @@ import { useAuthStore } from "../store/authStore";
 export function Home() {
   const navigate = useNavigate();
   const isDesktop = useDesktopLayout();
+  const token = useAuthStore((s) => s.token);
   const userPlan = useAuthStore((s) => s.user?.plan);
   const brandTier = userPlan === "pro" ? "pro" : "free";
   const [query, setQuery] = useState("");
@@ -39,6 +42,18 @@ export function Home() {
     });
   };
 
+  const createAgent = useMutation({
+    mutationFn: () => createAgentThread(token!),
+    onSuccess: (data) => {
+      navigate(`/thread/${data.thread.id}`, { state: { fromHistory: true } });
+    },
+  });
+
+  const startAgent = () => {
+    if (!token || createAgent.isPending) return;
+    createAgent.mutate();
+  };
+
   const hasDraft = Boolean(query.trim() || attachments.length > 0);
   const placeholderPhrases = useMemo(() => getHomePlaceholderPhrases(), []);
 
@@ -56,6 +71,7 @@ export function Home() {
           animatedPlaceholder={!hasDraft}
           placeholderPhrases={placeholderPhrases}
           requireTextWithAttachments
+          onAgentClick={startAgent}
         />
       ) : (
         <div className="home-mobile-main">
@@ -75,6 +91,7 @@ export function Home() {
                 animatedPlaceholder={!hasDraft}
                 placeholderPhrases={placeholderPhrases}
                 requireTextWithAttachments
+                onAgentClick={startAgent}
               />
             </div>
           </div>

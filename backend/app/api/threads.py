@@ -38,6 +38,7 @@ from app.services.service_incidents import record_service_incident
 import redis.asyncio as redis
 from app.models.uploaded_file import UploadedFile
 from app.services.message_attachments import message_attachments_out
+from app.services.agent.lifecycle import on_thread_soft_deleted
 from app.services.upload_lifecycle import purge_generated_files_exclusive_to_threads
 
 router = APIRouter(prefix="/threads", tags=["threads"])
@@ -120,6 +121,7 @@ async def bulk_delete_threads(
     thread_ids = {thread.id for thread in threads}
     for thread in threads:
         thread.deleted_at = now
+        await on_thread_soft_deleted(db, thread)
     if thread_ids:
         await purge_generated_files_exclusive_to_threads(db, user.id, thread_ids)
     deleted = len(threads)
@@ -283,6 +285,8 @@ async def get_thread(
     return ThreadDetail(
         id=thread.id,
         title=thread.title,
+        thread_type=thread.thread_type,
+        agent_seq=thread.agent_seq,
         is_saved=thread.is_saved,
         messages=messages_out,
     )
@@ -328,6 +332,7 @@ async def delete_thread(
     if not thread:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Thread not found")
     thread.deleted_at = datetime.now(timezone.utc)
+    await on_thread_soft_deleted(db, thread)
     await purge_generated_files_exclusive_to_threads(db, user.id, {thread_id})
 
 

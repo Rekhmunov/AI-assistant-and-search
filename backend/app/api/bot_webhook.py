@@ -6,6 +6,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_db
 from app.core.config import get_settings
+from app.services.agent.webhook import (
+    append_group_message,
+    is_bot_added,
+    is_message_created,
+    message_author,
+    message_text,
+    parse_chat_id,
+    register_group_chat_for_user,
+)
 from app.services.bot_welcome import send_bot_welcome
 
 logger = logging.getLogger(__name__)
@@ -102,16 +111,35 @@ async def max_webhook(
     if not isinstance(payload, dict):
         return {"ok": True}
 
-    if not _is_bot_started(payload):
-        return {"ok": True}
-
     max_user_id = _extract_max_user_id(payload)
-    if max_user_id is None:
-        logger.warning("MAX webhook bot_started without user id: %s", payload)
+
+    if _is_bot_started(payload):
+        if max_user_id is None:
+            logger.warning("MAX webhook bot_started without user id: %s", payload)
+            return {"ok": True}
+        sent = await send_bot_welcome(db, max_user_id)
+        if not sent:
+            logger.warning("Welcome not delivered to MAX user %s (check BOT_TOKEN / logs)", max_user_id)
         return {"ok": True}
 
-    sent = await send_bot_welcome(db, max_user_id)
-    if not sent:
-        logger.warning("Welcome not delivered to MAX user %s (check BOT_TOKEN / logs)", max_user_id)
+    if is_bot_added(payload) and max_user_id is not None:
+        chat_id = parse_chat_id(payload)
+        if chat_id is not None:
+            await register_group_chat_for_user(db, max_user_id=max_user_id, chat_id=chat_id)
+            await db.commit()
+        return {"ok": True}
+
+    if is_message_created(payload):
+        chat_id = parse_chat_id(payload)
+        if chat_id is not None:
+            count = await append_group_message(
+                db,
+                chat_id=chat_id,
+                text=message_text(payload),
+                author=message_author(payload),
+            )
+            if count:
+                await db.commit()
+        return {"ok": True}
 
     return {"ok": True}
