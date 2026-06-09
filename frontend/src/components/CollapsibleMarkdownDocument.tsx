@@ -1,9 +1,7 @@
 import { useMemo, useState } from "react";
-import { exportAnswerBlockToDocx, resolveGeneratedDocumentOpenUrl } from "../api/client";
 import { t } from "../i18n";
-import { useAuthStore } from "../store/authStore";
 import { CopyIconButton } from "./CopyIconButton";
-import { DownloadFormatMenu } from "./DownloadFormatMenu";
+import { DocxExportIconButton } from "./DocxExportIconButton";
 
 const COLLAPSE_CHAR_THRESHOLD = 1200;
 const COLLAPSED_MAX_VH = 50;
@@ -15,28 +13,11 @@ type Props = {
 };
 
 export function CollapsibleMarkdownDocument({ title, content, collapsible }: Props) {
-  const token = useAuthStore((s) => s.token);
   const shouldCollapse = useMemo(
     () => collapsible ?? content.length > COLLAPSE_CHAR_THRESHOLD,
     [collapsible, content.length],
   );
   const [expanded, setExpanded] = useState(!shouldCollapse);
-  const [exporting, setExporting] = useState(false);
-
-  const exportDocx = async () => {
-    if (exporting) return;
-    setExporting(true);
-    try {
-      const doc = await exportAnswerBlockToDocx(token, content, title);
-      const url = resolveGeneratedDocumentOpenUrl(doc);
-      window.open(url, "_blank", "noopener,noreferrer");
-    } catch {
-      /* ignore */
-    } finally {
-      setExporting(false);
-    }
-  };
-
   return (
     <div className="markdown-document-block">
       <div className="markdown-document-header">
@@ -45,7 +26,7 @@ export function CollapsibleMarkdownDocument({ title, content, collapsible }: Pro
         </span>
         <div className="markdown-document-actions">
           <CopyIconButton text={content} />
-          <DownloadFormatMenu onDocx={() => void exportDocx()} disabled={exporting} />
+          <DocxExportIconButton content={content} titleHint={title} />
         </div>
       </div>
       <div

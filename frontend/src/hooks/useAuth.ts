@@ -3,7 +3,6 @@ import {
   bindMax,
   completeBindMax,
   fetchMe,
-  fetchSession,
   loginWithInitData,
   logoutSession,
   refreshAccessToken,
@@ -42,14 +41,33 @@ async function refreshAccessTokenWithRetry(): Promise<string> {
   throw last;
 }
 
+async function trySilentRefresh(cancelled: () => boolean): Promise<string | null> {
+  try {
+    const accessToken = await refreshAccessTokenWithRetry();
+    if (!cancelled()) {
+      useAuthStore.getState().setToken(accessToken);
+    }
+    return accessToken;
+  } catch (err) {
+    if (
+      err instanceof HttpResponseError &&
+      !isTransientFailureStatus(err.status) &&
+      !cancelled()
+    ) {
+      useAuthStore.getState().clear();
+    }
+    return null;
+  }
+}
+
 /** JWT, then MAX deeplink bind, then MAX initData login, else guest-ready web session. */
 export function useAuthBootstrap() {
-  const { token, setAuth, setUser, clear } = useAuthStore();
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
+    const isCancelled = () => cancelled;
 
     async function bootstrap() {
       try {
@@ -61,7 +79,7 @@ export function useAuthBootstrap() {
           try {
             const data = await completeBindMax(bindToken, initData);
             if (!cancelled) {
-              setAuth(data.access_token, data.user);
+              useAuthStore.getState().setAuth(data.access_token, data.user);
               setReady(true);
               return;
             }
@@ -74,49 +92,30 @@ export function useAuthBootstrap() {
           }
         }
 
-        let accessToken = token;
+        let accessToken = useAuthStore.getState().token;
         if (!accessToken) {
-          try {
-            const session = await fetchSession(null);
-            if (session.authenticated && session.user) {
-              try {
-                accessToken = await refreshAccessTokenWithRetry();
-                if (!cancelled) {
-                  useAuthStore.getState().setToken(accessToken);
-                  useAuthStore.getState().setUser(session.user);
-                }
-              } catch (err) {
-                if (
-                  err instanceof HttpResponseError &&
-                  isTransientFailureStatus(err.status) &&
-                  !cancelled
-                ) {
-                  useAuthStore.getState().setUser(session.user);
-                }
-              }
-            }
-          } catch {
-            /* session unavailable */
-          }
+          accessToken = await trySilentRefresh(isCancelled);
         }
 
         if (accessToken) {
           try {
             const user = await fetchMe(accessToken);
             if (!cancelled) {
-              setUser(user);
+              useAuthStore.getState().setUser(user);
               await tryBindMax(accessToken);
               setReady(true);
             }
             return;
           } catch (err) {
             if (err instanceof HttpResponseError && isAuthFailureStatus(err.status)) {
-              try {
-                await logoutSession();
-              } catch {
-                /* ignore */
+              if (!cancelled) {
+                try {
+                  await logoutSession();
+                } catch {
+                  /* ignore */
+                }
+                useAuthStore.getState().clear();
               }
-              if (!cancelled) clear();
             } else if (!cancelled) {
               setReady(true);
             }
@@ -128,7 +127,7 @@ export function useAuthBootstrap() {
           try {
             const data = await loginWithInitData(initData);
             if (!cancelled) {
-              setAuth(data.access_token, data.user);
+              useAuthStore.getState().setAuth(data.access_token, data.user);
               setReady(true);
               return;
             }
@@ -154,7 +153,7 @@ export function useAuthBootstrap() {
     return () => {
       cancelled = true;
     };
-  }, [token, clear, setAuth, setUser]);
+  }, []);
 
   return { ready, error };
 }
