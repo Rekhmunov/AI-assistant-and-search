@@ -56,7 +56,7 @@ async def delete_account(
     verify_allowed_origin(request)
     user.deleted_at = datetime.now(timezone.utc)
     await revoke_refresh_tokens(redis_client, str(user.id))
-    clear_refresh_cookie(response)
+    clear_refresh_cookie(response, request)
     clear_guest_cookie(response)
     await db.commit()
     return {"ok": True}

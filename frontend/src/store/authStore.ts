@@ -30,7 +30,25 @@ export const useAuthStore = create<AuthState>()(
     }),
     {
       name: "glosix-auth",
-      partialize: (state) => ({ user: state.user }),
-    }
-  )
+      partialize: (state) => ({ token: state.token, user: state.user }),
+    },
+  ),
 );
+
+/** Wait for localStorage rehydrate before auth bootstrap (avoids racing refresh). */
+export function waitForAuthHydration(): Promise<void> {
+  if (useAuthStore.persist.hasHydrated()) {
+    return Promise.resolve();
+  }
+  return new Promise((resolve) => {
+    const done = () => resolve();
+    const unsub = useAuthStore.persist.onFinishHydration(() => {
+      unsub();
+      done();
+    });
+    if (useAuthStore.persist.hasHydrated()) {
+      unsub();
+      done();
+    }
+  });
+}

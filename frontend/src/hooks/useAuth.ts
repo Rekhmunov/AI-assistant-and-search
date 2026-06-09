@@ -15,7 +15,7 @@ import {
   setMaxLoginError,
 } from "../lib/maxApp";
 import { HttpResponseError, isAuthFailureStatus, isTransientFailureStatus } from "../lib/httpError";
-import { useAuthStore } from "../store/authStore";
+import { useAuthStore, waitForAuthHydration } from "../store/authStore";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -60,6 +60,26 @@ async function trySilentRefresh(cancelled: () => boolean): Promise<string | null
   }
 }
 
+async function resolveAccessToken(cancelled: () => boolean): Promise<string | null> {
+  let accessToken = useAuthStore.getState().token;
+
+  if (accessToken) {
+    try {
+      const user = await fetchMe(accessToken);
+      if (!cancelled()) {
+        useAuthStore.getState().setUser(user);
+      }
+      return accessToken;
+    } catch (err) {
+      if (!(err instanceof HttpResponseError && isAuthFailureStatus(err.status))) {
+        return accessToken;
+      }
+    }
+  }
+
+  return trySilentRefresh(cancelled);
+}
+
 /** JWT, then MAX deeplink bind, then MAX initData login, else guest-ready web session. */
 export function useAuthBootstrap() {
   const [ready, setReady] = useState(false);
@@ -71,6 +91,9 @@ export function useAuthBootstrap() {
 
     async function bootstrap() {
       try {
+        await waitForAuthHydration();
+        if (cancelled) return;
+
         if (window.WebApp?.ready) window.WebApp.ready();
 
         const initData = getMaxInitData();
@@ -92,35 +115,17 @@ export function useAuthBootstrap() {
           }
         }
 
-        let accessToken = useAuthStore.getState().token;
-        if (!accessToken) {
-          accessToken = await trySilentRefresh(isCancelled);
-        }
+        const accessToken = await resolveAccessToken(isCancelled);
+        if (cancelled) return;
 
         if (accessToken) {
           try {
-            const user = await fetchMe(accessToken);
-            if (!cancelled) {
-              useAuthStore.getState().setUser(user);
-              await tryBindMax(accessToken);
-              setReady(true);
-            }
-            return;
-          } catch (err) {
-            if (err instanceof HttpResponseError && isAuthFailureStatus(err.status)) {
-              if (!cancelled) {
-                try {
-                  await logoutSession();
-                } catch {
-                  /* ignore */
-                }
-                useAuthStore.getState().clear();
-              }
-            } else if (!cancelled) {
-              setReady(true);
-            }
-            return;
+            await tryBindMax(accessToken);
+          } catch {
+            /* ignore */
           }
+          if (!cancelled) setReady(true);
+          return;
         }
 
         if (initData) {
