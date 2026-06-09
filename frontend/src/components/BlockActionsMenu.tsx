@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import {
   exportAnswerBlockToDocx,
   exportAnswerBlockToPdf,
@@ -6,6 +6,7 @@ import {
 } from "../api/client";
 import { t } from "../i18n";
 import { isLegalDocumentContent } from "../lib/isLegalDocumentContent";
+import { triggerBrowserDownloadOnce } from "../lib/triggerBrowserDownload";
 import { useAuthStore } from "../store/authStore";
 import { DocumentExportConfirmModal } from "./DocumentExportConfirmModal";
 import { ProUpgradeModal } from "./ProUpgradeModal";
@@ -17,6 +18,7 @@ type Props = {
 };
 
 type ExportFormat = "docx" | "pdf";
+type MenuAction = ExportFormat | "md";
 
 function sanitizeFilename(title: string): string {
   const base = title
@@ -37,24 +39,7 @@ function downloadMarkdownFile(content: string, titleHint?: string) {
   document.body.appendChild(anchor);
   anchor.click();
   anchor.remove();
-  URL.revokeObjectURL(url);
-}
-
-async function downloadExportedFile(url: string, filename: string): Promise<void> {
-  const res = await fetch(url, { credentials: "include" });
-  if (!res.ok) {
-    throw new Error("download failed");
-  }
-  const blob = await res.blob();
-  const blobUrl = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href = blobUrl;
-  anchor.download = filename || "document";
-  anchor.rel = "noopener";
-  document.body.appendChild(anchor);
-  anchor.click();
-  anchor.remove();
-  URL.revokeObjectURL(blobUrl);
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 export function BlockActionsMenu({ content, titleHint, className = "block-actions-menu-btn" }: Props) {
@@ -69,6 +54,7 @@ export function BlockActionsMenu({ content, titleHint, className = "block-action
   const [pendingFormat, setPendingFormat] = useState<ExportFormat | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
   const exportingRef = useRef(false);
+  const menuActionRef = useRef(false);
 
   useEffect(() => {
     if (!open) return;
@@ -101,7 +87,7 @@ export function BlockActionsMenu({ content, titleHint, className = "block-action
           ? await exportAnswerBlockToPdf(token, content, titleHint)
           : await exportAnswerBlockToDocx(token, content, titleHint);
       const url = resolveGeneratedDocumentOpenUrl(doc);
-      await downloadExportedFile(url, doc.filename);
+      triggerBrowserDownloadOnce(url, doc.filename);
     } catch {
       setError(true);
     } finally {
@@ -123,7 +109,7 @@ export function BlockActionsMenu({ content, titleHint, className = "block-action
     void exportFile(format);
   };
 
-  const handleMenuAction = (action: "docx" | "pdf" | "md") => {
+  const handleMenuAction = (action: MenuAction) => {
     setOpen(false);
     if (action === "md") {
       if (!isPro) {
@@ -134,6 +120,18 @@ export function BlockActionsMenu({ content, titleHint, className = "block-action
       return;
     }
     runExport(action);
+  };
+
+  const onMenuItemPointerUp = (action: MenuAction) => (e: ReactPointerEvent<HTMLButtonElement>) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    if (menuActionRef.current || loading !== null) return;
+    menuActionRef.current = true;
+    handleMenuAction(action);
+    window.setTimeout(() => {
+      menuActionRef.current = false;
+    }, 400);
   };
 
   const menuLabel = loading
@@ -173,10 +171,7 @@ export function BlockActionsMenu({ content, titleHint, className = "block-action
               className="block-actions-menu-item"
               role="menuitem"
               disabled={loading !== null}
-              onClick={(e) => {
-                e.stopPropagation();
-                handleMenuAction("docx");
-              }}
+              onPointerUp={onMenuItemPointerUp("docx")}
             >
               {loading === "docx" ? t("loading") : t("exportBlockDocx")}
             </button>
@@ -185,10 +180,7 @@ export function BlockActionsMenu({ content, titleHint, className = "block-action
               className="block-actions-menu-item"
               role="menuitem"
               disabled={loading !== null}
-              onClick={(e) => {
-                e.stopPropagation();
-                handleMenuAction("pdf");
-              }}
+              onPointerUp={onMenuItemPointerUp("pdf")}
             >
               {loading === "pdf" ? t("loading") : t("exportBlockPdf")}
             </button>
@@ -197,10 +189,7 @@ export function BlockActionsMenu({ content, titleHint, className = "block-action
               className="block-actions-menu-item"
               role="menuitem"
               disabled={loading !== null}
-              onClick={(e) => {
-                e.stopPropagation();
-                handleMenuAction("md");
-              }}
+              onPointerUp={onMenuItemPointerUp("md")}
             >
               {t("exportBlockMd")}
             </button>
@@ -222,6 +211,7 @@ export function BlockActionsMenu({ content, titleHint, className = "block-action
           setPendingFormat(null);
         }}
         onConfirm={() => {
+          if (exportingRef.current) return;
           const fmt = pendingFormat;
           setConfirmOpen(false);
           setPendingFormat(null);
