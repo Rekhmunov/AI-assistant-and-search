@@ -33,6 +33,9 @@ export function AnswerBody({
 
   segments.forEach((seg, i) => {
     if (seg.type === "code") {
+      if (!seg.content.trim() && !(seg.partial && revealActive)) {
+        return;
+      }
       children.push(
         <CodeBlock
           key={`code-${i}`}

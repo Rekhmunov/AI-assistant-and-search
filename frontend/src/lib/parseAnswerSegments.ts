@@ -38,9 +38,14 @@ export function parseAnswerSegments(
       segments.push({ type: "text", content: text.slice(last, match.index) });
     }
     const lang = match[1]?.trim().toLowerCase() || undefined;
+    const content = match[2].replace(/\n$/, "");
+    if (!content.trim()) {
+      last = match.index + match[0].length;
+      continue;
+    }
     segments.push({
       type: "code",
-      content: match[2].replace(/\n$/, ""),
+      content,
       lang: lang || undefined,
     });
     last = match.index + match[0].length;
@@ -57,7 +62,9 @@ export function parseAnswerSegments(
       const langMatch = afterFence.match(/^([\w-]*)[ \t]*\r?\n?/);
       const lang = langMatch?.[1]?.trim().toLowerCase() || undefined;
       const code = langMatch ? afterFence.slice(langMatch[0].length) : afterFence;
-      segments.push({ type: "code", content: code, lang, partial: true });
+      if (code.trim()) {
+        segments.push({ type: "code", content: code, lang, partial: true });
+      }
     } else {
       segments.push({ type: "text", content: tail });
     }
