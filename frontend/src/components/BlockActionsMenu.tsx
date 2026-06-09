@@ -40,17 +40,21 @@ function downloadMarkdownFile(content: string, titleHint?: string) {
   URL.revokeObjectURL(url);
 }
 
-function openDownloadUrl(url: string): boolean {
-  const opened = window.open(url, "_blank", "noopener,noreferrer");
-  if (opened) return true;
+async function downloadExportedFile(url: string, filename: string): Promise<void> {
+  const res = await fetch(url, { credentials: "include" });
+  if (!res.ok) {
+    throw new Error("download failed");
+  }
+  const blob = await res.blob();
+  const blobUrl = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.target = "_blank";
-  anchor.rel = "noopener noreferrer";
+  anchor.href = blobUrl;
+  anchor.download = filename || "document";
+  anchor.rel = "noopener";
   document.body.appendChild(anchor);
   anchor.click();
   anchor.remove();
-  return true;
+  URL.revokeObjectURL(blobUrl);
 }
 
 export function BlockActionsMenu({ content, titleHint, className = "answer-icon-btn" }: Props) {
@@ -64,6 +68,7 @@ export function BlockActionsMenu({ content, titleHint, className = "answer-icon-
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [pendingFormat, setPendingFormat] = useState<ExportFormat | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
+  const exportingRef = useRef(false);
 
   useEffect(() => {
     if (!open) return;
@@ -86,7 +91,8 @@ export function BlockActionsMenu({ content, titleHint, className = "answer-icon-
   }, [open]);
 
   const exportFile = async (format: ExportFormat) => {
-    if (!content.trim() || loading) return;
+    if (!content.trim() || loading || exportingRef.current) return;
+    exportingRef.current = true;
     setLoading(format);
     setError(false);
     try {
@@ -95,10 +101,11 @@ export function BlockActionsMenu({ content, titleHint, className = "answer-icon-
           ? await exportAnswerBlockToPdf(token, content, titleHint)
           : await exportAnswerBlockToDocx(token, content, titleHint);
       const url = resolveGeneratedDocumentOpenUrl(doc);
-      openDownloadUrl(url);
+      await downloadExportedFile(url, doc.filename);
     } catch {
       setError(true);
     } finally {
+      exportingRef.current = false;
       setLoading(null);
     }
   };
@@ -155,7 +162,9 @@ export function BlockActionsMenu({ content, titleHint, className = "answer-icon-
           }}
         >
           <span className="block-actions-menu-label">{t("downloadDocument")}</span>
-          <ChevronIcon open={open} />
+          <span className="block-actions-menu-chevron-wrap" aria-hidden>
+            <ChevronIcon open={open} />
+          </span>
         </button>
         {open && isPro ? (
           <div className="block-actions-menu-dropdown" role="menu">
@@ -164,7 +173,10 @@ export function BlockActionsMenu({ content, titleHint, className = "answer-icon-
               className="block-actions-menu-item"
               role="menuitem"
               disabled={loading !== null}
-              onClick={() => handleMenuAction("docx")}
+              onClick={(e) => {
+                e.stopPropagation();
+                handleMenuAction("docx");
+              }}
             >
               {loading === "docx" ? t("loading") : t("exportBlockDocx")}
             </button>
@@ -173,7 +185,10 @@ export function BlockActionsMenu({ content, titleHint, className = "answer-icon-
               className="block-actions-menu-item"
               role="menuitem"
               disabled={loading !== null}
-              onClick={() => handleMenuAction("pdf")}
+              onClick={(e) => {
+                e.stopPropagation();
+                handleMenuAction("pdf");
+              }}
             >
               {loading === "pdf" ? t("loading") : t("exportBlockPdf")}
             </button>
@@ -182,7 +197,10 @@ export function BlockActionsMenu({ content, titleHint, className = "answer-icon-
               className="block-actions-menu-item"
               role="menuitem"
               disabled={loading !== null}
-              onClick={() => handleMenuAction("md")}
+              onClick={(e) => {
+                e.stopPropagation();
+                handleMenuAction("md");
+              }}
             >
               {t("exportBlockMd")}
             </button>

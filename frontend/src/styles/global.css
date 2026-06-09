@@ -3170,7 +3170,7 @@ body:has(.page-thread) {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 6px 10px;
+  padding: 6px 16px 6px 10px;
   border-bottom: 1px solid var(--border-subtle);
   background: var(--bg);
 }
@@ -3198,7 +3198,7 @@ body:has(.page-thread) {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 8px 10px;
+  padding: 8px 16px 8px 10px;
   border-bottom: 1px solid var(--border-subtle);
   background: var(--bg);
 }
@@ -3280,6 +3280,7 @@ body:has(.page-thread) {
 
 .block-toolbar-actions-row .block-actions-menu {
   margin-left: 10px;
+  margin-right: 4px;
   padding-left: 10px;
   border-left: 1px solid var(--border-subtle);
 }
@@ -3291,8 +3292,8 @@ body:has(.page-thread) {
 .block-actions-menu-trigger {
   width: auto;
   min-width: 28px;
-  gap: 4px;
-  padding: 0 8px;
+  gap: 0;
+  padding: 0 4px 0 8px;
 }
 
 .block-actions-download-btn {
@@ -3312,7 +3313,21 @@ body:has(.page-thread) {
   color: var(--text);
 }
 
+.block-actions-menu-chevron-wrap {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 5px;
+  padding-left: 5px;
+  color: var(--muted);
+}
+
+.block-actions-download-btn:hover .block-actions-menu-chevron-wrap {
+  color: var(--text);
+}
+
 .block-actions-menu-chevron {
+  display: block;
   transition: transform 0.15s ease;
   transform: rotate(0deg);
 }
