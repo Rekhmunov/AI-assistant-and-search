@@ -3275,7 +3275,27 @@ body:has(.page-thread) {
 }
 
 .block-actions-menu-trigger {
-  width: 28px;
+  width: auto;
+  min-width: 28px;
+  gap: 4px;
+  padding: 0 8px;
+}
+
+.block-actions-download-btn {
+  width: auto;
+  height: 34px;
+}
+
+.block-actions-menu-label {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--muted);
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.block-actions-download-btn:hover .block-actions-menu-label {
+  color: var(--text);
 }
 
 .block-actions-menu-trigger svg {

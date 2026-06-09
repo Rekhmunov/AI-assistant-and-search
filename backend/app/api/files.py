@@ -32,7 +32,7 @@ from app.services.file_format import (
     resolve_upload_extension,
 )
 from app.services.file_parser import DOCUMENT_EXT, IMAGE_EXT, extract_text, ocr_image_bytes, prepare_image_for_ocr
-from app.services.doc_gen_export import export_chat_text_to_docx
+from app.services.doc_gen_export import export_chat_text_to_docx, export_chat_text_to_pdf
 from app.services.doc_gen_schema import DocumentStructureError
 from app.services.file_share_token import verify_file_share_token
 from app.services.http_disposition import attachment_content_disposition
@@ -195,6 +195,32 @@ class ExportedDocxOut(BaseModel):
     ttl_hours: int
 
 
+class ExportedPdfOut(BaseModel):
+    id: UUID
+    filename: str
+    url: str | None = None
+    share_url: str
+    ttl_hours: int
+
+
+def _export_block_error(exc: DocumentStructureError) -> HTTPException:
+    code = str(exc)
+    if code == "doc_gen_rate_limit":
+        return HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="На сегодня лимит генерации документов исчерпан",
+        )
+    if code == "content_too_short":
+        return HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Слишком мало текста для документа",
+        )
+    return HTTPException(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        detail="Не удалось сформировать документ",
+    )
+
+
 @router.post("/export-docx", response_model=ExportedDocxOut)
 async def export_docx_from_answer_block(
     body: ExportDocxIn,
@@ -218,23 +244,43 @@ async def export_docx_from_answer_block(
             title_hint=body.title,
         )
     except DocumentStructureError as exc:
-        code = str(exc)
-        if code == "doc_gen_rate_limit":
-            raise HTTPException(
-                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                detail="На сегодня лимит генерации документов исчерпан",
-            ) from exc
-        if code == "content_too_short":
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Слишком мало текста для документа",
-            ) from exc
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Не удалось сформировать документ",
-        ) from exc
+        raise _export_block_error(exc) from exc
 
     return ExportedDocxOut(
+        id=file_id,
+        filename=filename,
+        url=download_url,
+        share_url=share_path,
+        ttl_hours=ttl_hours,
+    )
+
+
+@router.post("/export-pdf", response_model=ExportedPdfOut)
+async def export_pdf_from_answer_block(
+    body: ExportDocxIn,
+    response: Response,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    actor: Annotated[SearchUserResult, Depends(get_search_user)],
+    limiter: Annotated[RateLimiter, Depends(get_rate_limiter)],
+):
+    """PDF из markdown-блока ответа по запросу из меню «Скачать»."""
+    redis_client = await get_redis()
+    if actor.new_guest_key:
+        set_guest_cookie(response, actor.new_guest_key)
+
+    try:
+        file_id, filename, download_url, share_path, ttl_hours = await export_chat_text_to_pdf(
+            db,
+            redis_client,
+            actor.user,
+            limiter,
+            content=body.content,
+            title_hint=body.title,
+        )
+    except DocumentStructureError as exc:
+        raise _export_block_error(exc) from exc
+
+    return ExportedPdfOut(
         id=file_id,
         filename=filename,
         url=download_url,

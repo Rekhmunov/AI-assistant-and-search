@@ -868,13 +868,14 @@ function resolveAbsoluteApiUrl(path: string): string {
   return base ? `${base}${normalized}` : normalized;
 }
 
-/** Word из текста блока ответа (```txt), без нового запроса в чат. */
-export async function exportAnswerBlockToDocx(
+async function exportAnswerBlockToFormat(
   token: string | null,
   content: string,
+  format: "docx" | "pdf",
   title?: string,
 ): Promise<GeneratedDocumentInfo> {
-  const res = await fetch(`${API_BASE}/api/files/export-docx`, {
+  const path = format === "pdf" ? "/api/files/export-pdf" : "/api/files/export-docx";
+  const res = await fetch(`${API_BASE}${path}`, {
     method: "POST",
     headers: apiHeaders(token),
     credentials: "include",
@@ -899,6 +900,24 @@ export async function exportAnswerBlockToDocx(
     share_url: data.share_url,
     ttl_hours: data.ttl_hours,
   };
+}
+
+/** Word из markdown-блока ответа по запросу из меню «Скачать». */
+export async function exportAnswerBlockToDocx(
+  token: string | null,
+  content: string,
+  title?: string,
+): Promise<GeneratedDocumentInfo> {
+  return exportAnswerBlockToFormat(token, content, "docx", title);
+}
+
+/** PDF из markdown-блока ответа по запросу из меню «Скачать». */
+export async function exportAnswerBlockToPdf(
+  token: string | null,
+  content: string,
+  title?: string,
+): Promise<GeneratedDocumentInfo> {
+  return exportAnswerBlockToFormat(token, content, "pdf", title);
 }
 
 /** Прямая ссылка на .docx (share предпочтительнее — работает в новой вкладке без Bearer). */

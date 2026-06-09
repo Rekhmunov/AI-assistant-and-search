@@ -1,6 +1,7 @@
 from app.models.message import Message, MessageRole
 from app.services.doc_gen_context import (
     build_doc_gen_user_message,
+    prior_assistant_source_text,
     should_attach_prior_material,
     wants_prior_thread_material,
 )
@@ -34,6 +35,20 @@ def test_build_message_includes_source():
 def test_build_message_query_only_without_prior():
     out = build_doc_gen_user_message("Сделай заявление на отпуск", [])
     assert out == "Сделай заявление на отпуск"
+
+
+def test_prior_source_from_markdown_attachment():
+    short_intro = "Ниже оформлен текст из предыдущего ответа."
+    long_md = "# Оферта\n\n" + "Раздел текста.\n" * 40
+    prior = [
+        _assistant(short_intro),
+    ]
+    prior[-1].attachments = [
+        {"kind": "markdown_document", "content": long_md, "title": "Оферта"},
+    ]
+    source = prior_assistant_source_text(prior)
+    assert source is not None
+    assert source.strip() == long_md.strip()
 
 
 def test_attach_on_text_above_in_document():

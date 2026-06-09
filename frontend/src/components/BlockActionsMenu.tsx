@@ -1,5 +1,9 @@
 import { useEffect, useRef, useState } from "react";
-import { exportAnswerBlockToDocx, resolveGeneratedDocumentOpenUrl } from "../api/client";
+import {
+  exportAnswerBlockToDocx,
+  exportAnswerBlockToPdf,
+  resolveGeneratedDocumentOpenUrl,
+} from "../api/client";
 import { t } from "../i18n";
 import { useAuthStore } from "../store/authStore";
 
@@ -9,10 +13,12 @@ type Props = {
   className?: string;
 };
 
+type ExportFormat = "docx" | "pdf";
+
 export function BlockActionsMenu({ content, titleHint, className = "answer-icon-btn" }: Props) {
   const token = useAuthStore((s) => s.token);
   const [open, setOpen] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState<ExportFormat | null>(null);
   const [error, setError] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
 
@@ -36,19 +42,22 @@ export function BlockActionsMenu({ content, titleHint, className = "answer-icon-
     };
   }, [open]);
 
-  const exportDocx = async () => {
+  const exportFile = async (format: ExportFormat) => {
     if (!content.trim() || loading) return;
-    setLoading(true);
+    setLoading(format);
     setError(false);
     try {
-      const doc = await exportAnswerBlockToDocx(token, content, titleHint);
+      const doc =
+        format === "pdf"
+          ? await exportAnswerBlockToPdf(token, content, titleHint)
+          : await exportAnswerBlockToDocx(token, content, titleHint);
       const url = resolveGeneratedDocumentOpenUrl(doc);
       const opened = window.open(url, "_blank", "noopener,noreferrer");
       if (!opened) setError(true);
     } catch {
       setError(true);
     } finally {
-      setLoading(false);
+      setLoading(null);
     }
   };
 
@@ -56,20 +65,21 @@ export function BlockActionsMenu({ content, titleHint, className = "answer-icon-
     ? t("loading")
     : error
       ? t("downloadDocumentFailed")
-      : t("blockActionsMenu");
+      : t("downloadDocument");
 
   return (
     <div className="block-actions-menu" ref={rootRef}>
       <button
         type="button"
-        className={`${className} block-actions-menu-trigger`}
-        disabled={loading}
+        className={`${className} block-actions-menu-trigger block-actions-download-btn`}
+        disabled={loading !== null}
         aria-label={menuLabel}
         title={menuLabel}
         aria-expanded={open}
         aria-haspopup="menu"
         onClick={() => setOpen((v) => !v)}
       >
+        <span className="block-actions-menu-label">{t("downloadDocument")}</span>
         <ChevronIcon open={open} />
       </button>
       {open ? (
@@ -78,13 +88,25 @@ export function BlockActionsMenu({ content, titleHint, className = "answer-icon-
             type="button"
             className="block-actions-menu-item"
             role="menuitem"
-            disabled={loading}
+            disabled={loading !== null}
             onClick={() => {
               setOpen(false);
-              void exportDocx();
+              void exportFile("docx");
             }}
           >
-            {t("exportBlockDocx")}
+            {loading === "docx" ? t("loading") : t("exportBlockDocx")}
+          </button>
+          <button
+            type="button"
+            className="block-actions-menu-item"
+            role="menuitem"
+            disabled={loading !== null}
+            onClick={() => {
+              setOpen(false);
+              void exportFile("pdf");
+            }}
+          >
+            {loading === "pdf" ? t("loading") : t("exportBlockPdf")}
           </button>
         </div>
       ) : null}

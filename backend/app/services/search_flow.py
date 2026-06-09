@@ -41,7 +41,6 @@ from app.services.message_images_column import messages_have_images_column
 from app.services.entity_image_routing import resolve_entity_image_query, wants_entity_images
 from app.services.image_gen_flow import stream_image_generation_turn
 from app.services.message_attachments import attachments_json_from_files
-from app.services.doc_gen_flow import stream_document_generation_turn
 from app.services.export_chat_document_flow import stream_export_chat_document_turn
 from app.services.llm_flow_router import resolve_service_flow
 from app.services.yandex_image_search import YandexImageSearchService
@@ -167,18 +166,6 @@ class SearchFlowService:
 
         if not attachment_ids and flow.flow == "export_chat_document":
             async for event in stream_export_chat_document_turn(
-                db,
-                user,
-                limiter,
-                query,
-                thread_id,
-                redis_client,
-            ):
-                yield event
-            return
-
-        if not attachment_ids and flow.flow == "document_file":
-            async for event in stream_document_generation_turn(
                 db,
                 user,
                 limiter,
@@ -333,7 +320,8 @@ class SearchFlowService:
                 ):
                     route.needs_search = flow.needs_search or True
                 else:
-                    route.needs_search = False
+                    route.needs_search = flow.needs_search
+                route.answer_model = flow.answer_model
                 route.reason = f"llm_flow:{flow.reason}"
             elif flow.flow == "search_rag":
                 route.needs_search = flow.needs_search

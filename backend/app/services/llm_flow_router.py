@@ -9,6 +9,8 @@ from dataclasses import dataclass
 from typing import Literal
 
 from app.models.user import Plan
+from app.services.doc_gen_context import refers_to_prior_answer
+from app.services.doc_gen_routing import wants_document_generation
 from app.services.providers.factory import ChatLLM
 from app.services.search_query import normalize_user_query
 from app.services.thread_context import ThreadContext, format_history_compact
@@ -19,7 +21,6 @@ ServiceFlow = Literal[
     "search_rag",
     "chat",
     "image_generate",
-    "document_file",
     "export_chat_document",
 ]
 
@@ -38,7 +39,7 @@ _ROUTER_SYSTEM = """Ты маршрутизатор запросов в Glosix (
 
 Верни ТОЛЬКО JSON без markdown:
 {
-  "flow": "search_rag" | "chat" | "image_generate" | "document_file" | "export_chat_document",
+  "flow": "search_rag" | "chat" | "image_generate" | "export_chat_document",
   "needs_search": true/false,
   "answer_model": "lite" | "pro",
   "reason": "кратко по-русски"
@@ -46,16 +47,14 @@ _ROUTER_SYSTEM = """Ты маршрутизатор запросов в Glosix (
 
 Возможности сервиса:
 - search_rag — нужны свежие данные из интернета, новости, цены, факты с источниками.
-- chat — ответ текстом в чате: оферты, договоры, инструкции, объяснения. Длинные документы ассистент пишет в markdown-блоке. Не создаёт файл.
+- chat — ответ текстом в чате: оферты, договоры, заявления, инструкции, объяснения. Длинные документы ассистент пишет в одном блоке ```markdown … ```. Файлы docx/pdf не создаёт — только текст в чате.
 - image_generate — пользователь просит нарисовать/сгенерировать изображение, картинку, логотип.
-- document_file — нужен новый файл Word (.docx) с нуля: явно просят «файл», «документ docx», «скачать заявление» как файл, без опоры на готовый текст выше.
-- export_chat_document — оформить/скачать УЖЕ написанный в переписке текст (ответ выше, текст выше, в docx, преобразуй в документ). Не переписывать содержание.
+- export_chat_document — оформить УЖЕ написанный в переписке текст (ответ выше, текст выше, преобразуй в markdown). Не переписывать содержание.
 
 Правила:
-- «напиши в чат оферту», «сформируй оферту» → chat (needs_search true если нужны примеры с рынка).
-- «сгенерируй текст выше в документ», «оформи ответ в word» → export_chat_document, needs_search false.
-- «сделай заявление на отпуск» без слова файл/документ → chat, не document_file.
-- «создай документ договор» / «скачай docx заявления» → document_file.
+- «напиши оферту», «создай договор», «сделай заявление», «сгенерируй документ» → chat (needs_search true если нужны примеры с рынка). answer_model pro для длинных юридических текстов.
+- «сгенерируй текст выше в документ», «оформи ответ выше» → export_chat_document, needs_search false.
+- Запросы docx/word/pdf/скачать файл как НОВЫЙ документ → chat (markdown в чате), не отдельный файл на сервере.
 - При сомнении между chat и search_rag — search_rag если вопрос про актуальные факты.
 """
 
@@ -72,11 +71,13 @@ def _parse_flow_response(raw: str) -> LlmFlowDecision | None:
     if not isinstance(data, dict):
         return None
     flow = str(data.get("flow") or "").strip()
+    # legacy: document_file → chat
+    if flow == "document_file":
+        flow = "chat"
     if flow not in (
         "search_rag",
         "chat",
         "image_generate",
-        "document_file",
         "export_chat_document",
     ):
         return None
@@ -91,6 +92,36 @@ def _parse_flow_response(raw: str) -> LlmFlowDecision | None:
         answer_model=model,  # type: ignore[arg-type]
         reason=reason,
     )
+
+
+def _normalize_flow(query: str, decision: LlmFlowDecision, user_plan: Plan) -> LlmFlowDecision:
+    q = normalize_user_query(query)
+
+    if wants_document_generation(q) and not refers_to_prior_answer(q):
+        return LlmFlowDecision(
+            flow="chat",
+            needs_search=decision.needs_search,
+            answer_model="pro" if user_plan == Plan.PRO else "lite",
+            reason="document_markdown_chat",
+        )
+
+    if refers_to_prior_answer(q):
+        return LlmFlowDecision(
+            flow="export_chat_document",
+            needs_search=False,
+            answer_model="lite",
+            reason="export_prior_markdown",
+        )
+
+    if decision.flow == "export_chat_document" and not refers_to_prior_answer(q):
+        return LlmFlowDecision(
+            flow="chat",
+            needs_search=decision.needs_search,
+            answer_model=decision.answer_model,
+            reason="export_misroute_to_chat",
+        )
+
+    return decision
 
 
 async def resolve_service_flow(
@@ -131,15 +162,17 @@ async def resolve_service_flow(
         )
         parsed = _parse_flow_response(raw)
         if parsed:
+            parsed = _normalize_flow(q, parsed, user_plan)
             if user_plan != Plan.PRO:
                 parsed.answer_model = "lite"
             return parsed
     except Exception:
         logger.exception("llm flow router failed")
 
-    return LlmFlowDecision(
+    fallback = LlmFlowDecision(
         flow="search_rag",
         needs_search=True,
         answer_model="lite",
         reason="llm_router_fallback",
     )
+    return _normalize_flow(q, fallback, user_plan)

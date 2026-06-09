@@ -25,12 +25,32 @@ def refers_to_prior_answer(query: str) -> bool:
     )
 
 
-def prior_assistant_source_text(prior_messages: list[Message]) -> str | None:
-    parts = _assistant_contents(prior_messages, max_messages=1)
-    if not parts:
+def _markdown_from_attachments(message: Message) -> str | None:
+    raw = message.attachments
+    if not raw or not isinstance(raw, list):
         return None
-    text = parts[-1].strip()
-    return text if len(text) >= 200 else None
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        if item.get("kind") != "markdown_document":
+            continue
+        content = str(item.get("content") or "").strip()
+        if content:
+            return content
+    return None
+
+
+def prior_assistant_source_text(prior_messages: list[Message]) -> str | None:
+    for message in reversed(prior_messages):
+        if message.role != MessageRole.ASSISTANT:
+            continue
+        from_attachments = _markdown_from_attachments(message)
+        if from_attachments and len(from_attachments) >= 200:
+            return from_attachments
+        text = (message.content or "").strip()
+        if len(text) >= 200:
+            return text
+    return None
 
 # Лимит исходника из чата (символы), чтобы влезть в контекст LLM + JSON.
 MAX_SOURCE_MATERIAL_CHARS = 14_000
