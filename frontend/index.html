@@ -23,7 +23,21 @@
       content="Glosix - ИИ ассистент и умный поиск. Ищет в интернете онлайн по источникам и дает готовый ответ. Генерирует документы и картинки, обрабатывает PDF, Word, Excel и фото. Переводит тексты. ИИ чат с нейросетью. Доступен в браузере и мессенджере MAX."
     />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="canonical" href="https://glosix.ru/" />
     <title>Glosix - умный поиск с источниками, ИИ чат</title>
+    <script>
+      (function () {
+        var hash = location.hash || "";
+        if (!/(?:^|[&#])(?:WebAppData|WebAppPlatform|WebAppVersion)=/i.test(hash)) return;
+        var robots = "noindex, nofollow, noarchive";
+        ["robots", "googlebot"].forEach(function (name) {
+          var el = document.createElement("meta");
+          el.setAttribute("name", name);
+          el.setAttribute("content", robots);
+          document.head.appendChild(el);
+        });
+      })();
+    </script>
     <script src="https://st.max.ru/js/max-web-app.js"></script>
   </head>
   <body>

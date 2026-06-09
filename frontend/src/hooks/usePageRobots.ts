@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { useLocation } from "react-router-dom";
+import { hasMaxWebAppHashInUrl, isMaxWebApp } from "../lib/maxApp";
 
 const PRIVATE_ROUTE_PREFIXES = ["/thread", "/history", "/profile", "/login", "/source-view"] as const;
 
@@ -10,6 +11,10 @@ function isPrivateAppRoute(pathname: string): boolean {
   return PRIVATE_ROUTE_PREFIXES.some(
     (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
   );
+}
+
+function isNonIndexableSession(): boolean {
+  return isMaxWebApp() || hasMaxWebAppHashInUrl();
 }
 
 function ensureMeta(name: string, content: string): HTMLMetaElement {
@@ -32,7 +37,7 @@ export function usePageRobots() {
   const { pathname } = useLocation();
 
   useEffect(() => {
-    const isPrivate = isPrivateAppRoute(pathname);
+    const isPrivate = isPrivateAppRoute(pathname) || isNonIndexableSession();
     if (isPrivate) {
       ensureMeta("robots", PRIVATE_ROBOTS);
       ensureMeta("googlebot", PRIVATE_ROBOTS);

@@ -1,3 +1,25 @@
+const MAX_WEBAPP_HASH_RE = /(?:^|[&#])(?:WebAppData|WebAppPlatform|WebAppVersion)=/i;
+
+/** MAX passes init data in the location hash; fragment is not sent to the server. */
+export function hasMaxWebAppHashInUrl(urlLike?: string | URL): boolean {
+  if (typeof urlLike === "string") return MAX_WEBAPP_HASH_RE.test(urlLike);
+  if (urlLike instanceof URL) {
+    const hash = urlLike.hash ?? "";
+    const search = urlLike.search ?? "";
+    return MAX_WEBAPP_HASH_RE.test(`${search}${hash}`);
+  }
+  if (typeof window === "undefined") return false;
+  return MAX_WEBAPP_HASH_RE.test(`${window.location.search}${window.location.hash}`);
+}
+
+/** Remove sensitive WebApp hash from the address bar after the MAX SDK has read it. */
+export function stripMaxWebAppHashFromUrl(): void {
+  if (typeof window === "undefined") return;
+  const { pathname, search, hash } = window.location;
+  if (!hash || !hasMaxWebAppHashInUrl(`${search}${hash}`)) return;
+  window.history.replaceState(window.history.state, "", `${pathname}${search}`);
+}
+
 /** True when opened inside MAX miniapp (WebApp bridge present). */
 export function isMaxWebApp(): boolean {
   if (typeof window === "undefined") return false;
