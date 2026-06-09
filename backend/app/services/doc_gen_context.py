@@ -6,23 +6,24 @@ import re
 
 from app.models.message import Message, MessageRole
 
-REFER_PRIOR_RE = re.compile(
+# Только явная отсылка к уже показанному ответу в треде (не «сделай документ …» с нуля).
+_PRIOR_EXPLICIT_RE = re.compile(
     r"(?i)(?:"
     r"из\s+текста\s+выше|из\s+ответа\s+выше|по\s+тексту\s+выше|"
     r"(?:текст|ответ|материал)\s+выше|выше\s+в\s+документ|"
-    r"на\s+основе\s+(?:текста|ответа|материала|выше)|"
+    r"на\s+основе\s+(?:текста|ответа|материала)\s+выше|"
     r"из\s+предыдущ|из\s+диалог|из\s+чата|"
-    r"оформи\s+(?:в\s+)?(?:word|документ|docx)|"
-    r"сгенерируй\s+документ|сделай\s+документ|в\s+виде\s+документа"
+    r"оформи\s+(?:ответ|текст|материал)\s+выше|"
+    r"оформи\s+выше|"
+    r"(?:сгенерируй|сделай)\s+(?:текст|ответ|материал)\s+выше|"
+    r"(?:текст|ответ)\s+выше\s+в\s+"
     r")",
 )
 
 
 def refers_to_prior_answer(query: str) -> bool:
-    """Запрос на Word из уже показанного ответа в треде."""
-    return wants_prior_thread_material(query) or bool(
-        re.search(r"(?i)\b(?:в|как)\s+(?:файл\s+)?(?:документ|docx|word)\b", query or "")
-    )
+    """Запрос оформить УЖЕ написанный в переписке текст, а не создать новый документ."""
+    return bool(_PRIOR_EXPLICIT_RE.search(query or ""))
 
 
 def _markdown_from_attachments(message: Message) -> str | None:
@@ -40,6 +41,23 @@ def _markdown_from_attachments(message: Message) -> str | None:
     return None
 
 
+def _is_short_export_intro(text: str) -> bool:
+    """Короткое вступление после export_chat_document — не исходник."""
+    body = (text or "").strip()
+    if len(body) >= 200:
+        return False
+    lower = body.lower()
+    markers = (
+        "ниже оформлен",
+        "можно скопировать",
+        "скачать в word",
+        "скачать в docx",
+        "скачать docx",
+        "скачать pdf",
+    )
+    return any(m in lower for m in markers)
+
+
 def prior_assistant_source_text(prior_messages: list[Message]) -> str | None:
     for message in reversed(prior_messages):
         if message.role != MessageRole.ASSISTANT:
@@ -48,6 +66,8 @@ def prior_assistant_source_text(prior_messages: list[Message]) -> str | None:
         if from_attachments and len(from_attachments) >= 200:
             return from_attachments
         text = (message.content or "").strip()
+        if _is_short_export_intro(text):
+            continue
         if len(text) >= 200:
             return text
     return None
@@ -57,7 +77,7 @@ MAX_SOURCE_MATERIAL_CHARS = 14_000
 
 
 def wants_prior_thread_material(query: str) -> bool:
-    return bool(REFER_PRIOR_RE.search(query or ""))
+    return refers_to_prior_answer(query)
 
 
 def _assistant_contents(messages: list[Message], *, max_messages: int = 2) -> list[str]:
@@ -66,7 +86,7 @@ def _assistant_contents(messages: list[Message], *, max_messages: int = 2) -> li
         if m.role != MessageRole.ASSISTANT:
             continue
         text = (m.content or "").strip()
-        if not text:
+        if not text or _is_short_export_intro(text):
             continue
         bodies.append(text)
         if len(bodies) >= max_messages:
@@ -78,8 +98,6 @@ def should_attach_prior_material(query: str, prior_messages: list[Message]) -> b
     if not prior_messages:
         return False
     if refers_to_prior_answer(query):
-        return True
-    if wants_prior_thread_material(query):
         return True
     last = _assistant_contents(prior_messages, max_messages=1)
     if not last or len(last[0]) < 600:
@@ -123,7 +141,7 @@ def build_doc_gen_user_message(query: str, prior_messages: list[Message]) -> str
     source = _trim_source("\n\n---\n\n".join(parts))
     return (
         f"Запрос пользователя: {q}\n\n"
-        "Исходный материал из диалога (оформи как полноценный Word-документ: "
+        "Исходный материал из диалога (оформи как полноценный документ в markdown: "
         "сохрани разделы, формулировки и нумерацию; не заменяй готовый текст "
         "на общие шаблоны):\n"
         f"---\n{source}\n---"

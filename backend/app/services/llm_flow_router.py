@@ -94,18 +94,27 @@ def _parse_flow_response(raw: str) -> LlmFlowDecision | None:
     )
 
 
-def _normalize_flow(query: str, decision: LlmFlowDecision, user_plan: Plan) -> LlmFlowDecision:
+def _normalize_flow(
+    query: str,
+    decision: LlmFlowDecision,
+    user_plan: Plan,
+    *,
+    has_thread_history: bool,
+) -> LlmFlowDecision:
     q = normalize_user_query(query)
 
     if wants_document_generation(q) and not refers_to_prior_answer(q):
+        needs_search = decision.needs_search
+        if decision.flow == "export_chat_document":
+            needs_search = True
         return LlmFlowDecision(
             flow="chat",
-            needs_search=decision.needs_search,
+            needs_search=needs_search,
             answer_model="pro" if user_plan == Plan.PRO else "lite",
             reason="document_markdown_chat",
         )
 
-    if refers_to_prior_answer(q):
+    if refers_to_prior_answer(q) and has_thread_history:
         return LlmFlowDecision(
             flow="export_chat_document",
             needs_search=False,
@@ -113,10 +122,10 @@ def _normalize_flow(query: str, decision: LlmFlowDecision, user_plan: Plan) -> L
             reason="export_prior_markdown",
         )
 
-    if decision.flow == "export_chat_document" and not refers_to_prior_answer(q):
+    if decision.flow == "export_chat_document":
         return LlmFlowDecision(
             flow="chat",
-            needs_search=decision.needs_search,
+            needs_search=decision.needs_search if decision.needs_search else refers_to_prior_answer(q),
             answer_model=decision.answer_model,
             reason="export_misroute_to_chat",
         )
@@ -162,7 +171,12 @@ async def resolve_service_flow(
         )
         parsed = _parse_flow_response(raw)
         if parsed:
-            parsed = _normalize_flow(q, parsed, user_plan)
+            parsed = _normalize_flow(
+                q,
+                parsed,
+                user_plan,
+                has_thread_history=ctx.is_continuation,
+            )
             if user_plan != Plan.PRO:
                 parsed.answer_model = "lite"
             return parsed
@@ -175,4 +189,9 @@ async def resolve_service_flow(
         answer_model="lite",
         reason="llm_router_fallback",
     )
-    return _normalize_flow(q, fallback, user_plan)
+    return _normalize_flow(
+        q,
+        fallback,
+        user_plan,
+        has_thread_history=ctx.is_continuation,
+    )

@@ -15,3 +15,18 @@ def test_resolve_export_structure_from_markdown():
     structure = resolve_export_structure(md)
     assert structure is not None
     assert structure.title == "Договор"
+
+
+def test_structure_parses_markdown_table():
+    md = (
+        "# Отчёт\n\n"
+        "| Параметр | Значение |\n"
+        "| --- | --- |\n"
+        "| Модель | Yandex GPT 5 |\n"
+        "| Контекст | 32K |\n"
+    )
+    structure = structure_from_markdown(md)
+    assert structure is not None
+    assert len(structure.tables) == 1
+    assert structure.tables[0].headers == ["Параметр", "Значение"]
+    assert structure.tables[0].rows[0][0] == "Модель"

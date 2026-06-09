@@ -15,6 +15,13 @@ def test_wants_prior_from_phrase():
     assert wants_prior_thread_material("Сгенерируй документ оферту из текста выше")
 
 
+def test_new_document_not_prior():
+    from app.services.doc_gen_context import refers_to_prior_answer
+
+    assert not refers_to_prior_answer("Сделай документ с характеристикой Yandex GPT 5")
+    assert refers_to_prior_answer("Оформи текст выше в документ")
+
+
 def test_should_attach_with_long_prior_answer():
     prior = [
         _assistant("Короткий ответ"),

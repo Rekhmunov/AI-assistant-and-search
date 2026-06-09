@@ -5,7 +5,10 @@ import {
   resolveGeneratedDocumentOpenUrl,
 } from "../api/client";
 import { t } from "../i18n";
+import { isLegalDocumentContent } from "../lib/isLegalDocumentContent";
 import { useAuthStore } from "../store/authStore";
+import { DocumentExportConfirmModal } from "./DocumentExportConfirmModal";
+import { ProUpgradeModal } from "./ProUpgradeModal";
 
 type Props = {
   content: string;
@@ -15,11 +18,51 @@ type Props = {
 
 type ExportFormat = "docx" | "pdf";
 
+function sanitizeFilename(title: string): string {
+  const base = title
+    .replace(/[^\w\s\-а-яА-ЯёЁ]+/gu, "")
+    .trim()
+    .replace(/\s+/g, "-")
+    .slice(0, 60);
+  return base || "document";
+}
+
+function downloadMarkdownFile(content: string, titleHint?: string) {
+  const blob = new Blob([content], { type: "text/markdown;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = `${sanitizeFilename(titleHint ?? "document")}.md`;
+  anchor.rel = "noopener";
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
+}
+
+function openDownloadUrl(url: string): boolean {
+  const opened = window.open(url, "_blank", "noopener,noreferrer");
+  if (opened) return true;
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.target = "_blank";
+  anchor.rel = "noopener noreferrer";
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  return true;
+}
+
 export function BlockActionsMenu({ content, titleHint, className = "answer-icon-btn" }: Props) {
   const token = useAuthStore((s) => s.token);
+  const plan = useAuthStore((s) => s.user?.plan);
+  const isPro = plan === "pro";
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState<ExportFormat | null>(null);
   const [error, setError] = useState(false);
+  const [proModalOpen, setProModalOpen] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [pendingFormat, setPendingFormat] = useState<ExportFormat | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -52,13 +95,38 @@ export function BlockActionsMenu({ content, titleHint, className = "answer-icon-
           ? await exportAnswerBlockToPdf(token, content, titleHint)
           : await exportAnswerBlockToDocx(token, content, titleHint);
       const url = resolveGeneratedDocumentOpenUrl(doc);
-      const opened = window.open(url, "_blank", "noopener,noreferrer");
-      if (!opened) setError(true);
+      openDownloadUrl(url);
     } catch {
       setError(true);
     } finally {
       setLoading(null);
     }
+  };
+
+  const runExport = (format: ExportFormat) => {
+    if (!isPro) {
+      setProModalOpen(true);
+      return;
+    }
+    if (isLegalDocumentContent(content, titleHint)) {
+      setPendingFormat(format);
+      setConfirmOpen(true);
+      return;
+    }
+    void exportFile(format);
+  };
+
+  const handleMenuAction = (action: "docx" | "pdf" | "md") => {
+    setOpen(false);
+    if (action === "md") {
+      if (!isPro) {
+        setProModalOpen(true);
+        return;
+      }
+      downloadMarkdownFile(content, titleHint);
+      return;
+    }
+    runExport(action);
   };
 
   const menuLabel = loading
@@ -68,49 +136,81 @@ export function BlockActionsMenu({ content, titleHint, className = "answer-icon-
       : t("downloadDocument");
 
   return (
-    <div className="block-actions-menu" ref={rootRef}>
-      <button
-        type="button"
-        className={`${className} block-actions-menu-trigger block-actions-download-btn`}
-        disabled={loading !== null}
-        aria-label={menuLabel}
-        title={menuLabel}
-        aria-expanded={open}
-        aria-haspopup="menu"
-        onClick={() => setOpen((v) => !v)}
-      >
-        <span className="block-actions-menu-label">{t("downloadDocument")}</span>
-        <ChevronIcon open={open} />
-      </button>
-      {open ? (
-        <div className="block-actions-menu-dropdown" role="menu">
-          <button
-            type="button"
-            className="block-actions-menu-item"
-            role="menuitem"
-            disabled={loading !== null}
-            onClick={() => {
-              setOpen(false);
-              void exportFile("docx");
-            }}
-          >
-            {loading === "docx" ? t("loading") : t("exportBlockDocx")}
-          </button>
-          <button
-            type="button"
-            className="block-actions-menu-item"
-            role="menuitem"
-            disabled={loading !== null}
-            onClick={() => {
-              setOpen(false);
-              void exportFile("pdf");
-            }}
-          >
-            {loading === "pdf" ? t("loading") : t("exportBlockPdf")}
-          </button>
-        </div>
-      ) : null}
-    </div>
+    <>
+      <div className="block-actions-menu" ref={rootRef}>
+        <button
+          type="button"
+          className={`${className} block-actions-menu-trigger block-actions-download-btn`}
+          disabled={loading !== null}
+          aria-label={menuLabel}
+          title={menuLabel}
+          aria-expanded={open}
+          aria-haspopup="menu"
+          onClick={() => {
+            if (!isPro && !open) {
+              setProModalOpen(true);
+              return;
+            }
+            setOpen((v) => !v);
+          }}
+        >
+          <span className="block-actions-menu-label">{t("downloadDocument")}</span>
+          <ChevronIcon open={open} />
+        </button>
+        {open && isPro ? (
+          <div className="block-actions-menu-dropdown" role="menu">
+            <button
+              type="button"
+              className="block-actions-menu-item"
+              role="menuitem"
+              disabled={loading !== null}
+              onClick={() => handleMenuAction("docx")}
+            >
+              {loading === "docx" ? t("loading") : t("exportBlockDocx")}
+            </button>
+            <button
+              type="button"
+              className="block-actions-menu-item"
+              role="menuitem"
+              disabled={loading !== null}
+              onClick={() => handleMenuAction("pdf")}
+            >
+              {loading === "pdf" ? t("loading") : t("exportBlockPdf")}
+            </button>
+            <button
+              type="button"
+              className="block-actions-menu-item"
+              role="menuitem"
+              disabled={loading !== null}
+              onClick={() => handleMenuAction("md")}
+            >
+              {t("exportBlockMd")}
+            </button>
+          </div>
+        ) : null}
+      </div>
+
+      <ProUpgradeModal
+        open={proModalOpen}
+        onClose={() => setProModalOpen(false)}
+        title={t("proUpgradeModalTitle")}
+        description={t("documentDownloadProOnly")}
+      />
+
+      <DocumentExportConfirmModal
+        open={confirmOpen}
+        onClose={() => {
+          setConfirmOpen(false);
+          setPendingFormat(null);
+        }}
+        onConfirm={() => {
+          const fmt = pendingFormat;
+          setConfirmOpen(false);
+          setPendingFormat(null);
+          if (fmt) void exportFile(fmt);
+        }}
+      />
+    </>
   );
 }
 
@@ -122,10 +222,10 @@ function ChevronIcon({ open }: { open: boolean }) {
       viewBox="0 0 24 24"
       fill="none"
       aria-hidden
-      className={open ? "block-actions-menu-chevron--open" : undefined}
+      className={`block-actions-menu-chevron${open ? " block-actions-menu-chevron--open" : ""}`}
     >
       <path
-        d="M6 9l6 6 6-6"
+        d="M9 6l6 6-6 6"
         stroke="currentColor"
         strokeWidth="2"
         strokeLinecap="round"

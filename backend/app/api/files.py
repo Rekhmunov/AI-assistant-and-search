@@ -205,6 +205,11 @@ class ExportedPdfOut(BaseModel):
 
 def _export_block_error(exc: DocumentStructureError) -> HTTPException:
     code = str(exc)
+    if code == "doc_gen_pro_only":
+        return HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Скачивание документов доступно только в версии Pro",
+        )
     if code == "doc_gen_rate_limit":
         return HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,

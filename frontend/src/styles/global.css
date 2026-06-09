@@ -3204,7 +3204,10 @@ body:has(.page-thread) {
 }
 
 .markdown-document-title {
-  font-size: 0.875rem;
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 52%;
+  font-size: 0.8125rem;
   font-weight: 600;
   color: var(--text);
   overflow: hidden;
@@ -3263,11 +3266,22 @@ body:has(.page-thread) {
 .markdown-document-actions,
 .answer-code-actions,
 .answer-chart-actions,
-.answer-table-actions {
+.answer-table-actions,
+.block-toolbar-actions-row {
   display: flex;
   align-items: center;
   gap: 2px;
   flex-shrink: 0;
+}
+
+.block-toolbar-actions-row {
+  gap: 0;
+}
+
+.block-toolbar-actions-row .block-actions-menu {
+  margin-left: 10px;
+  padding-left: 10px;
+  border-left: 1px solid var(--border-subtle);
 }
 
 .block-actions-menu {
@@ -3298,12 +3312,86 @@ body:has(.page-thread) {
   color: var(--text);
 }
 
-.block-actions-menu-trigger svg {
+.block-actions-menu-chevron {
   transition: transform 0.15s ease;
+  transform: rotate(0deg);
 }
 
 .block-actions-menu-chevron--open {
-  transform: rotate(180deg);
+  transform: rotate(90deg);
+}
+
+.markdown-document-rendered {
+  padding: 12px 14px;
+  font-size: 0.875rem;
+  line-height: 1.55;
+  color: var(--text);
+}
+
+.markdown-document-heading {
+  margin: 0.75rem 0 0.35rem;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.markdown-document-heading:first-child {
+  margin-top: 0;
+}
+
+.markdown-document-paragraph,
+.markdown-document-paragraph-group {
+  margin: 0.35rem 0;
+}
+
+.markdown-document-list {
+  margin: 0.35rem 0 0.5rem;
+  padding-left: 1.25rem;
+}
+
+.markdown-document-table-wrap {
+  overflow-x: auto;
+  margin: 0.5rem 0;
+}
+
+.markdown-document-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8125rem;
+}
+
+.markdown-document-table th,
+.markdown-document-table td {
+  border: 1px solid var(--border);
+  padding: 6px 8px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.markdown-document-table th {
+  background: var(--bg);
+  font-weight: 600;
+}
+
+.pro-upgrade-modal-description {
+  margin: 0 0 12px;
+  font-size: 0.9375rem;
+  line-height: 1.45;
+  color: var(--text);
+}
+
+.document-export-confirm-text {
+  margin: 0 0 10px;
+  font-size: 0.875rem;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+.document-export-confirm-list {
+  margin: 0 0 16px;
+  padding-left: 1.2rem;
+  font-size: 0.875rem;
+  line-height: 1.45;
+  color: var(--text);
 }
 
 .block-actions-menu-dropdown {

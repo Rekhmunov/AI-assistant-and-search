@@ -83,6 +83,9 @@ async def _export_chat_text(
     if len(text) > MAX_EXPORT_CHARS:
         text = text[:MAX_EXPORT_CHARS]
 
+    if user.plan != Plan.PRO:
+        raise DocumentStructureError("doc_gen_pro_only")
+
     allowed, _, _ = await limiter.check_doc_gen_allowed(user_id_str, user)
     if not allowed:
         raise DocumentStructureError("doc_gen_rate_limit")

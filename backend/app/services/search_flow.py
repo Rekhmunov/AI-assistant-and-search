@@ -42,6 +42,11 @@ from app.services.entity_image_routing import resolve_entity_image_query, wants_
 from app.services.image_gen_flow import stream_image_generation_turn
 from app.services.message_attachments import attachments_json_from_files
 from app.services.export_chat_document_flow import stream_export_chat_document_turn
+from app.services.document_answer_enforce import (
+    document_request_prompt_addon,
+    edit_document_prompt_addon,
+    ensure_markdown_document_answer,
+)
 from app.services.llm_flow_router import resolve_service_flow
 from app.services.yandex_image_search import YandexImageSearchService
 from app.services.perplexity import PERPLEXITY_PROVIDER_ID, PerplexityProvider
@@ -164,7 +169,7 @@ class SearchFlowService:
             user_plan=user.plan,
         )
 
-        if not attachment_ids and flow.flow == "export_chat_document":
+        if not attachment_ids and flow.flow == "export_chat_document" and thread_id:
             async for event in stream_export_chat_document_turn(
                 db,
                 user,
@@ -343,6 +348,12 @@ class SearchFlowService:
 
         if user.plan != Plan.PRO:
             route.answer_model = "lite"
+
+        doc_prompt_addon = document_request_prompt_addon(user_text)
+        if route.intent == "edit_prior":
+            doc_prompt_addon += edit_document_prompt_addon(user_text)
+        if doc_prompt_addon:
+            llm_query = f"{llm_query}{doc_prompt_addon}"
 
         attachments_payload = None
         if has_attachments and bundle.uploaded_files:
@@ -838,6 +849,14 @@ class SearchFlowService:
 
             if entity_images_json and full_answer.strip():
                 yield sse_event("images", {"images": entity_images_json})
+
+            wrapped_answer, answer_wrapped = ensure_markdown_document_answer(
+                full_answer, user_text
+            )
+            if answer_wrapped:
+                yield sse_event("reset_answer", {})
+                full_answer = wrapped_answer
+                yield sse_event("token", {"text": full_answer})
 
             settings = get_settings()
             follow_ups: list[str] = []

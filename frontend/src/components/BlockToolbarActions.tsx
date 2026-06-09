@@ -16,7 +16,7 @@ export function BlockToolbarActions({ copyText, docx, className = "block-toolbar
   const docxPayload = docx?.content?.trim() ? docx : null;
 
   return (
-    <div className={className}>
+    <div className={`${className} block-toolbar-actions-row`}>
       <CopyIconButton text={copyText} />
       {docxPayload ? (
         <BlockActionsMenu content={docxPayload.content} titleHint={docxPayload.titleHint} />

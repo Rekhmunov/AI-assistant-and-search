@@ -4,11 +4,15 @@ from __future__ import annotations
 
 import io
 
+import re
+
 from docx import Document
 from docx.enum.text import WD_PARAGRAPH_ALIGNMENT
 from docx.shared import Pt
 
 from app.services.doc_gen_schema import DocumentStructure
+
+_BOLD_RE = re.compile(r"\*\*(.+?)\*\*")
 
 LEGAL_DISCLAIMER = (
     "Документ подготовлен на основе общедоступных материалов и сформированных моделью данных. "
@@ -16,6 +20,17 @@ LEGAL_DISCLAIMER = (
 )
 
 GLOSIX_FOOTER = "Подготовлено в Glosix"
+
+
+def _add_rich_paragraph(doc: Document, text: str) -> None:
+    para = doc.add_paragraph()
+    parts = _BOLD_RE.split(text)
+    for idx, part in enumerate(parts):
+        if not part:
+            continue
+        run = para.add_run(part)
+        if idx % 2 == 1:
+            run.bold = True
 
 
 def build_docx_bytes(
@@ -34,7 +49,10 @@ def build_docx_bytes(
         if section.heading:
             doc.add_heading(section.heading, level=1)
         for para in section.paragraphs:
-            doc.add_paragraph(para)
+            if "**" in para:
+                _add_rich_paragraph(doc, para)
+            else:
+                doc.add_paragraph(para)
 
     for table_def in structure.tables:
         if table_def.caption:

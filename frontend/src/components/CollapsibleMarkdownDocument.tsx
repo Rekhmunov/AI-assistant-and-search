@@ -1,6 +1,8 @@
 import { useMemo, useState } from "react";
 import { t } from "../i18n";
+import { truncateDocTitle } from "../lib/truncateDocTitle";
 import { BlockToolbarActions } from "./BlockToolbarActions";
+import { MarkdownDocumentPreview } from "./MarkdownDocumentPreview";
 
 const COLLAPSE_CHAR_THRESHOLD = 1200;
 const COLLAPSED_MAX_VH = 50;
@@ -17,11 +19,13 @@ export function CollapsibleMarkdownDocument({ title, content, collapsible }: Pro
     [collapsible, content.length],
   );
   const [expanded, setExpanded] = useState(!shouldCollapse);
+  const displayTitle = useMemo(() => truncateDocTitle(title), [title]);
+
   return (
     <div className="markdown-document-block">
       <div className="markdown-document-header">
         <span className="markdown-document-title" title={title}>
-          {title}
+          {displayTitle}
         </span>
         <BlockToolbarActions
           className="markdown-document-actions"
@@ -37,7 +41,7 @@ export function CollapsibleMarkdownDocument({ title, content, collapsible }: Pro
             : undefined
         }
       >
-        <pre className="markdown-document-pre">{content}</pre>
+        <MarkdownDocumentPreview content={content} />
       </div>
       {shouldCollapse ? (
         <button

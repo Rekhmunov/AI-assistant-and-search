@@ -8,12 +8,14 @@ type Props = {
   open: boolean;
   onClose: () => void;
   title?: string;
+  description?: string;
 };
 
 export function ProUpgradeModal({
   open,
   onClose,
   title = t("proUpgradeModalTitle"),
+  description,
 }: Props) {
   useBodyScrollLock(open);
 
@@ -35,6 +37,9 @@ export function ProUpgradeModal({
         <h2 id="pro-upgrade-modal-title" className="feedback-modal-title">
           {title}
         </h2>
+        {description ? (
+          <p className="pro-upgrade-modal-description">{description}</p>
+        ) : null}
         <ProBenefitsList className="profile-pro-benefits-list pro-upgrade-modal-benefits" />
         <div className="feedback-modal-actions pro-upgrade-modal-actions">
           <Link to="/profile" className="btn-primary btn-block" onClick={onClose}>
