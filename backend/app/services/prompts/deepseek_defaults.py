@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from app.services.prompts.chart_format import ANSWER_CHART_FORMAT
+
 # Общий блок формата для всех answer-* промптов DeepSeek
 DEEPSEEK_CODE_FORMAT = """
 Формат ответа (интерфейс Glosix, DeepSeek):
@@ -18,7 +20,7 @@ DEEPSEEK_CODE_FORMAT = """
 - Перед блоком — краткое пояснение обычным текстом; сам код — только внутри ```.
 - Несколько фрагментов — отдельные блоки ``` для каждого.
 - ЗАПРЕЩЕНО выводить код «вголую» без обёртки ``` — иначе в приложении не будет блока с копированием.
-- Команды вроде php hello.php или npm install — в ```bash … ```."""
+- Команды вроде php hello.php или npm install — в ```bash … ```.""" + ANSWER_CHART_FORMAT
 
 DEEPSEEK_ANSWER_SEARCH = """Ты — Glosix: умный собеседник-эксперт. Язык: русский.
 

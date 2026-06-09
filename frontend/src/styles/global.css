@@ -3088,6 +3088,86 @@ body:has(.page-thread) {
   overflow: hidden;
 }
 
+.answer-chart-block {
+  margin: 12px 0;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface-hover);
+  overflow: hidden;
+}
+
+.answer-chart-block--partial {
+  border-style: dashed;
+}
+
+.answer-chart-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg);
+}
+
+.answer-chart-label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.answer-chart-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.answer-chart-canvas-wrap {
+  position: relative;
+  height: 260px;
+  padding: 12px 10px 4px;
+}
+
+.answer-chart-loading {
+  padding: 12px 10px;
+  margin: 0;
+}
+
+.answer-chart-error {
+  padding: 8px 10px 0;
+  margin: 0;
+  font-size: 0.85rem;
+}
+
+.answer-chart-data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.answer-chart-data-table th,
+.answer-chart-data-table td {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border-subtle);
+  text-align: right;
+}
+
+.answer-chart-data-table th:first-child,
+.answer-chart-data-table td:first-child {
+  text-align: left;
+}
+
+.answer-chart-data-table thead th {
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.answer-chart-fallback .answer-chart-loading {
+  padding: 10px;
+}
+
 .answer-code-block--partial {
   border-style: dashed;
 }

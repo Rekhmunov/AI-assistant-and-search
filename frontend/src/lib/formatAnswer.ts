@@ -1,4 +1,5 @@
 import { formatMarkdownText } from "./formatMarkdownText";
+import { formatChartSpecForCopy, parseChartSpec } from "./parseChartSpec";
 import { parseAnswerSegments } from "./parseAnswerSegments";
 import { stripCitationMarkers } from "./paragraphCitations";
 
@@ -14,7 +15,14 @@ export function formatAnswerForDisplay(text: string): string {
   for (const seg of segments) {
     if (seg.type === "code") {
       const inner = seg.content.trim();
-      if (inner) parts.push(inner);
+      if (!inner) continue;
+      const lang = seg.lang?.trim().toLowerCase();
+      if (lang === "chart") {
+        const spec = parseChartSpec(inner);
+        parts.push(spec ? formatChartSpecForCopy(spec) : inner);
+      } else {
+        parts.push(inner);
+      }
     } else {
       const formatted = stripCitationMarkers(formatMarkdownText(seg.content)).trim();
       if (formatted) parts.push(formatted);

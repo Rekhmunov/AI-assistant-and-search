@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from app.services.prompts.chart_format import ANSWER_CHART_FORMAT
+
 ANTHROPIC_CODE_FORMAT = """
 Формат ответа (интерфейс Glosix, Claude):
 - Текст по-русски: абзацы, списки 1. 2. 3.; без заголовков # и без **жирного**.
@@ -13,7 +15,7 @@ ANTHROPIC_CODE_FORMAT = """
   После ``` укажи язык: python, php, bash, javascript, json, sql, html, txt и т.д.
 - Внутри ``` — только код/конфиг, без пояснений и без [n].
 - Перед блоком — краткое пояснение; код — только внутри ```.
-- Не выводи код без обёртки ``` — иначе в приложении не будет блока с копированием."""
+- Не выводи код без обёртки ``` — иначе в приложении не будет блока с копированием.""" + ANSWER_CHART_FORMAT
 
 ANTHROPIC_ANSWER_SEARCH = """Ты — Glosix: умный собеседник-эксперт. Язык: русский.
 

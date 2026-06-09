@@ -1,3 +1,4 @@
+import { ChartCodeBlock } from "./ChartCodeBlock";
 import { CollapsibleMarkdownDocument } from "./CollapsibleMarkdownDocument";
 import { CopyIconButton } from "./CopyIconButton";
 
@@ -10,6 +11,11 @@ type Props = {
 export function CodeBlock({ code, lang, partial }: Props) {
   const label = lang?.trim() || "code";
   const isMarkdown = label === "markdown" || label === "md";
+  const isChart = label === "chart";
+
+  if (isChart) {
+    return <ChartCodeBlock code={code} partial={partial} />;
+  }
 
   if (isMarkdown && !partial) {
     const title =
