@@ -27,10 +27,15 @@ export function AdminsPage() {
   };
 
   return (
-    <div>
-      <h1>Администраторы</h1>
+    <div className="admin-page admin-page--admins">
+      <header className="admin-page-header">
+        <div>
+          <h1>Администраторы</h1>
+          <p className="admin-page-subtitle">Учётные записи с доступом к панели</p>
+        </div>
+      </header>
       {can("admins:write") && (
-        <form className="card" onSubmit={create}>
+        <form className="card admins-create-form" onSubmit={create}>
           <h2>Новый админ</h2>
           <input type="email" placeholder="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
           <input
@@ -51,26 +56,30 @@ export function AdminsPage() {
           </button>
         </form>
       )}
-      <table className="table">
-        <thead>
-          <tr>
-            <th>Email</th>
-            <th>Роль</th>
-            <th>Активен</th>
-            <th>Последний вход</th>
-          </tr>
-        </thead>
-        <tbody>
-          {admins.map((a) => (
-            <tr key={a.id}>
-              <td>{a.email}</td>
-              <td>{a.role}</td>
-              <td>{a.is_active ? "да" : "нет"}</td>
-              <td>{a.last_login_at ? new Date(a.last_login_at).toLocaleString() : "—"}</td>
+      <div className="admins-table-wrap admin-table-wrap">
+        <table className="table admins-table admin-responsive-table">
+          <thead>
+            <tr>
+              <th>Email</th>
+              <th>Роль</th>
+              <th>Активен</th>
+              <th>Последний вход</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {admins.map((a) => (
+              <tr key={a.id}>
+                <td data-label="Email">{a.email}</td>
+                <td data-label="Роль">{a.role}</td>
+                <td data-label="Активен">{a.is_active ? "да" : "нет"}</td>
+                <td data-label="Последний вход">
+                  {a.last_login_at ? new Date(a.last_login_at).toLocaleString("ru-RU") : "—"}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

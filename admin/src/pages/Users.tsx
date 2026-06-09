@@ -164,8 +164,8 @@ export function UsersPage() {
       )}
 
       {!loading && users.length > 0 && (
-        <div className="users-table-wrap">
-          <table className="users-table">
+        <div className="users-table-wrap admin-table-wrap">
+          <table className="users-table admin-responsive-table">
             <thead>
               <tr>
                 <th>Пользователь</th>
@@ -181,7 +181,7 @@ export function UsersPage() {
                 const highUsage = usage >= 90;
                 return (
                   <tr key={u.id} className={u.deleted_at ? "users-row--banned" : undefined}>
-                    <td>
+                    <td data-label="Пользователь">
                       <div className="users-account-cell">
                         <span className="users-avatar" aria-hidden>
                           {accountInitial(u)}
@@ -194,8 +194,10 @@ export function UsersPage() {
                         </div>
                       </div>
                     </td>
-                    <td className="users-cell-name">{displayName(u)}</td>
-                    <td>
+                    <td className="users-cell-name" data-label="Имя">
+                      {displayName(u)}
+                    </td>
+                    <td data-label="План">
                       <div className="users-plan-cell">
                         <span className={`plan-badge plan-badge--${u.plan}`}>{planLabel(u.plan)}</span>
                         {u.plan_expires_at && (
@@ -205,7 +207,7 @@ export function UsersPage() {
                         )}
                       </div>
                     </td>
-                    <td>
+                    <td data-label="Поиски сегодня">
                       <div className="users-usage">
                         <span className="users-usage-value">
                           {u.searches_today}
@@ -227,7 +229,7 @@ export function UsersPage() {
                         )}
                       </div>
                     </td>
-                    <td className="users-cell-action">
+                    <td className="users-cell-action admin-table-action-cell" data-label="">
                       <Link className="btn-secondary btn-secondary--compact users-open-link" to={`/users/${u.id}`}>
                         Открыть
                       </Link>

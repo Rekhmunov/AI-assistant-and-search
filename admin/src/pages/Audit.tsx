@@ -120,8 +120,8 @@ export function AuditPage() {
 
         {!loading && data && (
           <>
-            <div className="audit-table-wrap">
-              <table className="audit-table">
+            <div className="audit-table-wrap admin-table-wrap">
+              <table className="audit-table admin-responsive-table">
                 <colgroup>
                   <col className="audit-col-time" />
                   <col className="audit-col-admin" />
@@ -148,12 +148,16 @@ export function AuditPage() {
                   )}
                   {data.items.map((log) => (
                     <tr key={log.id}>
-                      <td className="audit-cell-time">{formatDate(log.created_at)}</td>
-                      <td className="audit-cell-admin">{log.admin_email || "—"}</td>
-                      <td className="audit-cell-action">
+                      <td className="audit-cell-time" data-label="Время">
+                        {formatDate(log.created_at)}
+                      </td>
+                      <td className="audit-cell-admin" data-label="Админ">
+                        {log.admin_email || "—"}
+                      </td>
+                      <td className="audit-cell-action" data-label="Действие">
                         <code className="audit-action-code">{log.action}</code>
                       </td>
-                      <td className="audit-cell-resource">
+                      <td className="audit-cell-resource" data-label="Ресурс">
                         <span className="audit-resource-text">{formatResource(log)}</span>
                         {log.details && Object.keys(log.details).length > 0 && (
                           <details className="audit-details">
@@ -162,7 +166,9 @@ export function AuditPage() {
                           </details>
                         )}
                       </td>
-                      <td className="audit-cell-ip">{log.ip_address || "—"}</td>
+                      <td className="audit-cell-ip" data-label="IP">
+                        {log.ip_address || "—"}
+                      </td>
                     </tr>
                   ))}
                 </tbody>

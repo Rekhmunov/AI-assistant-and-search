@@ -250,8 +250,8 @@ export function PaymentsPage() {
       )}
 
       {!loading && items.length > 0 && (
-        <div className="payments-table-wrap">
-          <table className="payments-table">
+        <div className="payments-table-wrap admin-table-wrap">
+          <table className="payments-table admin-responsive-table">
             <thead>
               <tr>
                 {canWrite && (
@@ -276,7 +276,7 @@ export function PaymentsPage() {
               {items.map((s) => (
                 <tr key={s.id} className={selected.has(s.id) ? "payments-row--selected" : undefined}>
                   {canWrite && (
-                    <td className="payments-col-check">
+                    <td className="payments-col-check admin-table-check-cell" data-label="">
                       <input
                         type="checkbox"
                         checked={selected.has(s.id)}
@@ -285,18 +285,26 @@ export function PaymentsPage() {
                       />
                     </td>
                   )}
-                  <td className="payments-col-user">
+                  <td className="payments-col-user" data-label="Пользователь">
                     <Link to={`/users/${s.user_id}`} className="payments-user-link">
                       <span className="payments-user-line">email: {userEmailLine(s)}</span>
                       <span className="payments-user-line">max: {userMaxLine(s)}</span>
                     </Link>
                   </td>
-                  <td className="payments-col-status">{s.status_label || s.status}</td>
-                  <td className="payments-col-amount">{s.amount_rub} ₽</td>
-                  <td className="payments-col-payment-id payments-cell-id">{s.yookassa_payment_id || "—"}</td>
-                  <td className="payments-col-created">{formatDate(s.created_at)}</td>
+                  <td className="payments-col-status" data-label="Статус">
+                    {s.status_label || s.status}
+                  </td>
+                  <td className="payments-col-amount" data-label="Сумма">
+                    {s.amount_rub} ₽
+                  </td>
+                  <td className="payments-col-payment-id payments-cell-id" data-label="Payment ID">
+                    {s.yookassa_payment_id || "—"}
+                  </td>
+                  <td className="payments-col-created" data-label="Создан">
+                    {formatDate(s.created_at)}
+                  </td>
                   {canWrite && (
-                    <td className="payments-col-actions payments-cell-actions">
+                    <td className="payments-col-actions payments-cell-actions admin-table-action-cell" data-label="">
                       <button
                         type="button"
                         className="payments-icon-btn"
