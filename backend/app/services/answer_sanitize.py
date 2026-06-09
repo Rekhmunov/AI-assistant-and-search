@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import re
 
-_TRAILING_EMPTY_FENCE_RE = re.compile(r"(?:\r?\n)?```[ \t]*\r?\n```[ \t]*$")
-_TRAILING_OPEN_FENCE_RE = re.compile(r"(?:\r?\n)?```[ \t]*$")
+# Пустой fenced-блок в конце: ```\n``` (без языка и без тела).
+_TRAILING_EMPTY_FENCE_RE = re.compile(r"(?:\r?\n)+```[ \t]*\r?\n```[ \t]*$")
 
 
 def strip_trailing_empty_code_fences(text: str) -> str:
-    """Убирает пустые ``` … ``` и одиночный ``` в конце (частый артефакт после markdown-документа)."""
+    """Убирает пустые ``` … ``` в конце (частый артефакт LLM после markdown-документа)."""
     body = text or ""
     if not body:
         return body
@@ -17,5 +17,4 @@ def strip_trailing_empty_code_fences(text: str) -> str:
     while prev != body:
         prev = body
         body = _TRAILING_EMPTY_FENCE_RE.sub("", body).rstrip()
-        body = _TRAILING_OPEN_FENCE_RE.sub("", body).rstrip()
     return body
