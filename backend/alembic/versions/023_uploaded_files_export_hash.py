@@ -1,14 +1,14 @@
 """uploaded_files.export_content_hash for export dedupe
 
 Revision ID: 023
-Revises: 022
+Revises: 022_legal_ip_rekhmunov
 """
 
 from alembic import op
 import sqlalchemy as sa
 
 revision = "023"
-down_revision = "022"
+down_revision = "022_legal_ip_rekhmunov"
 branch_labels = None
 depends_on = None
 
