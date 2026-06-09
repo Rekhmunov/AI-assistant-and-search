@@ -3116,13 +3116,6 @@ body:has(.page-thread) {
   color: var(--text);
 }
 
-.answer-chart-actions {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  flex-shrink: 0;
-}
-
 .answer-chart-canvas-wrap {
   position: relative;
   height: 260px;
@@ -3190,13 +3183,6 @@ body:has(.page-thread) {
   letter-spacing: 0.02em;
 }
 
-.answer-code-actions {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  flex-shrink: 0;
-}
-
 .markdown-document-block {
   margin: 12px 0;
   max-width: 100%;
@@ -3224,13 +3210,6 @@ body:has(.page-thread) {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.markdown-document-actions {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  flex-shrink: 0;
 }
 
 .markdown-document-body {
@@ -3280,16 +3259,39 @@ body:has(.page-thread) {
   background: var(--surface-hover);
 }
 
-.download-format-menu {
+.block-toolbar-actions,
+.markdown-document-actions,
+.answer-code-actions,
+.answer-chart-actions,
+.answer-table-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.block-actions-menu {
   position: relative;
 }
 
-.download-format-menu-dropdown {
+.block-actions-menu-trigger {
+  width: 28px;
+}
+
+.block-actions-menu-trigger svg {
+  transition: transform 0.15s ease;
+}
+
+.block-actions-menu-chevron--open {
+  transform: rotate(180deg);
+}
+
+.block-actions-menu-dropdown {
   position: absolute;
   top: calc(100% + 4px);
   right: 0;
   z-index: 20;
-  min-width: 180px;
+  min-width: 200px;
   padding: 4px;
   border-radius: 8px;
   border: 1px solid var(--border);
@@ -3297,7 +3299,7 @@ body:has(.page-thread) {
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
 }
 
-.download-format-menu-item {
+.block-actions-menu-item {
   display: block;
   width: 100%;
   padding: 8px 10px;
@@ -3310,8 +3312,13 @@ body:has(.page-thread) {
   cursor: pointer;
 }
 
-.download-format-menu-item:hover {
+.block-actions-menu-item:hover:not(:disabled) {
   background: var(--surface-hover);
+}
+
+.block-actions-menu-item:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 .answer-code-pre {

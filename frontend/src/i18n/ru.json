@@ -165,6 +165,7 @@
   "downloadDocument": "Скачать",
   "downloadDocumentFailed": "Не удалось скачать файл",
   "exportBlockDocx": "Скачать Word (.docx)",
+  "blockActionsMenu": "Дополнительные действия",
   "downloadFormatDocx": "Скачать в Word (.docx)",
   "markdownDocumentExpand": "Развернуть документ",
   "markdownDocumentCollapse": "Свернуть",

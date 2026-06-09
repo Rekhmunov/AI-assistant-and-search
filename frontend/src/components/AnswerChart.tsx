@@ -17,7 +17,7 @@ import {
   type ChartConfiguration,
 } from "chart.js";
 import { formatChartSpecForCopy, type GlosixChartSpec } from "../lib/parseChartSpec";
-import { CopyIconButton } from "./CopyIconButton";
+import { BlockToolbarActions } from "./BlockToolbarActions";
 
 Chart.register(
   CategoryScale,
@@ -154,9 +154,11 @@ export function AnswerChart({ spec, partial }: Props) {
     <div className={`answer-chart-block${partial ? " answer-chart-block--partial" : ""}`}>
       <div className="answer-chart-header">
         <span className="answer-chart-label">{spec.title || "График"}</span>
-        <div className="answer-chart-actions">
-          <CopyIconButton text={copyText} />
-        </div>
+        <BlockToolbarActions
+          className="answer-chart-actions"
+          copyText={copyText}
+          docx={!partial ? { content: copyText, titleHint: spec.title || "График" } : null}
+        />
       </div>
       <div className="answer-chart-canvas-wrap" aria-hidden={partial}>
         {partial ? (

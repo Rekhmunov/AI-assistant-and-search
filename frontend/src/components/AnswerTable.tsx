@@ -1,6 +1,6 @@
 import { useMemo, type ReactNode } from "react";
 import type { Source } from "../api/client";
-import { CopyIconButton } from "./CopyIconButton";
+import { BlockToolbarActions } from "./BlockToolbarActions";
 import { SourceChipsRow } from "./SourceChipsRow";
 import { formatTableForCopy } from "../lib/formatTableCopy";
 import { renderInlineContent } from "../lib/renderInlineContent";
@@ -47,7 +47,11 @@ export function AnswerTable({ header, rows, sources, keyPrefix }: Props) {
   return (
     <div className="answer-table-wrap">
       <div className="answer-table-header">
-        <CopyIconButton text={copyText} />
+        <BlockToolbarActions
+          className="answer-table-actions"
+          copyText={copyText}
+          docx={copyText.trim() ? { content: copyText, titleHint: "Таблица" } : null}
+        />
       </div>
       <div className="answer-table-scroll">
         <table className="answer-table">

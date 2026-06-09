@@ -1,6 +1,6 @@
 import { parseChartSpec } from "../lib/parseChartSpec";
 import { AnswerChart } from "./AnswerChart";
-import { CopyIconButton } from "./CopyIconButton";
+import { BlockToolbarActions } from "./BlockToolbarActions";
 
 type Props = {
   code: string;
@@ -18,9 +18,11 @@ export function ChartCodeBlock({ code, partial }: Props) {
     <div className={`answer-code-block answer-chart-fallback${partial ? " answer-code-block--partial" : ""}`}>
       <div className="answer-code-header">
         <span className="answer-code-lang">chart</span>
-        <div className="answer-code-actions">
-          <CopyIconButton text={code} />
-        </div>
+        <BlockToolbarActions
+          className="answer-code-actions"
+          copyText={code}
+          docx={!partial && code.trim() ? { content: code, titleHint: "График" } : null}
+        />
       </div>
       {partial ? (
         <p className="answer-chart-loading muted-text">Строим график…</p>

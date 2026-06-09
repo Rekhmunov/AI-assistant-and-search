@@ -1,8 +1,7 @@
 import { isDocxExportableBlock } from "../lib/isDocxExportableBlock";
 import { ChartCodeBlock } from "./ChartCodeBlock";
 import { CollapsibleMarkdownDocument } from "./CollapsibleMarkdownDocument";
-import { CopyIconButton } from "./CopyIconButton";
-import { DocxExportIconButton } from "./DocxExportIconButton";
+import { BlockToolbarActions } from "./BlockToolbarActions";
 
 type Props = {
   code: string;
@@ -41,12 +40,11 @@ export function CodeBlock({ code, lang, partial }: Props) {
     <div className={`answer-code-block${partial ? " answer-code-block--partial" : ""}`}>
       <div className="answer-code-header">
         <span className="answer-code-lang">{label}</span>
-        <div className="answer-code-actions">
-          <CopyIconButton text={code} />
-          {showDocxExport ? (
-            <DocxExportIconButton content={code} titleHint={titleHint} />
-          ) : null}
-        </div>
+        <BlockToolbarActions
+          className="answer-code-actions"
+          copyText={code}
+          docx={showDocxExport ? { content: code, titleHint } : null}
+        />
       </div>
       <pre className="answer-code-pre">
         <code>{code}</code>

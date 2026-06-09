@@ -1,7 +1,6 @@
 import { useMemo, useState } from "react";
 import { t } from "../i18n";
-import { CopyIconButton } from "./CopyIconButton";
-import { DocxExportIconButton } from "./DocxExportIconButton";
+import { BlockToolbarActions } from "./BlockToolbarActions";
 
 const COLLAPSE_CHAR_THRESHOLD = 1200;
 const COLLAPSED_MAX_VH = 50;
@@ -24,10 +23,11 @@ export function CollapsibleMarkdownDocument({ title, content, collapsible }: Pro
         <span className="markdown-document-title" title={title}>
           {title}
         </span>
-        <div className="markdown-document-actions">
-          <CopyIconButton text={content} />
-          <DocxExportIconButton content={content} titleHint={title} />
-        </div>
+        <BlockToolbarActions
+          className="markdown-document-actions"
+          copyText={content}
+          docx={{ content, titleHint: title }}
+        />
       </div>
       <div
         className={`markdown-document-body${shouldCollapse && !expanded ? " markdown-document-body--collapsed" : ""}`}
