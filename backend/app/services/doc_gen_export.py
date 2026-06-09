@@ -15,7 +15,11 @@ from app.services.app_settings import get_setting
 from app.services.doc_gen_llm import generate_document_structure
 from app.services.doc_gen_markdown_structure import resolve_export_structure
 from app.services.doc_gen_schema import DocumentStructure, DocumentStructureError
-from app.services.doc_gen_storage import persist_generated_docx, persist_generated_pdf
+from app.services.doc_gen_storage import (
+    persist_generated_docx,
+    persist_generated_markdown,
+    persist_generated_pdf,
+)
 from app.services.docx_builder import build_docx_bytes
 from app.services.file_share_token import create_file_share_token
 from app.services.pdf_builder import build_pdf_bytes
@@ -171,3 +175,47 @@ async def export_chat_text_to_pdf(
         title_hint=title_hint,
         fmt="pdf",
     )
+
+
+async def export_chat_text_to_markdown(
+    db: AsyncSession,
+    redis_client: redis.Redis,
+    user: User,
+    *,
+    content: str,
+    title_hint: str | None = None,
+) -> tuple[UUID, str, str, str, int]:
+    """Сохранить markdown-блок на сервере для скачивания (MAX WebApp требует https URL)."""
+    settings = get_settings()
+    if user.plan != Plan.PRO:
+        raise DocumentStructureError("doc_gen_pro_only")
+
+    text = (content or "").strip()
+    if not text:
+        raise DocumentStructureError("content_too_short")
+    if len(text) > MAX_EXPORT_CHARS:
+        text = text[:MAX_EXPORT_CHARS]
+
+    ttl_hours = int(
+        await get_setting("generated_doc_ttl_hours", db, redis_client, settings)
+    )
+    ttl_hours = max(1, min(ttl_hours, 24 * 30))
+
+    title = _guess_title(text, title_hint)
+    file_bytes = text.encode("utf-8")
+    file_id, _, download_url = await persist_generated_markdown(
+        db,
+        user,
+        file_bytes,
+        title=title,
+        ttl_hours=ttl_hours,
+    )
+    filename = _safe_filename(title, file_id, "md")
+    share_token, _ = create_file_share_token(
+        file_id,
+        ttl_seconds=ttl_hours * 3600,
+        settings=settings,
+    )
+    share_path = f"/api/files/{file_id}/shared?token={share_token}"
+    await db.commit()
+    return file_id, filename, download_url, share_path, ttl_hours

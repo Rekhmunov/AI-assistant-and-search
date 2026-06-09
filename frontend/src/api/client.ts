@@ -920,6 +920,39 @@ export async function exportAnswerBlockToPdf(
   return exportAnswerBlockToFormat(token, content, "pdf", title);
 }
 
+/** Markdown из блока ответа — для скачивания в MAX WebApp (нужен https URL). */
+export async function exportAnswerBlockToMarkdown(
+  token: string | null,
+  content: string,
+  title?: string,
+): Promise<GeneratedDocumentInfo> {
+  const res = await fetch(`${API_BASE}/api/files/export-markdown`, {
+    method: "POST",
+    headers: apiHeaders(token),
+    credentials: "include",
+    body: JSON.stringify({ content, title: title ?? null }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    const detail = (err as { detail?: string }).detail;
+    throw new Error(typeof detail === "string" ? detail : "Не удалось сформировать документ");
+  }
+  const data = (await res.json()) as {
+    id: string;
+    filename: string;
+    url?: string | null;
+    share_url: string;
+    ttl_hours: number;
+  };
+  return {
+    id: String(data.id),
+    filename: data.filename,
+    url: data.url ?? undefined,
+    share_url: data.share_url,
+    ttl_hours: data.ttl_hours,
+  };
+}
+
 /** Прямая ссылка на .docx (share предпочтительнее — работает в новой вкладке без Bearer). */
 export function resolveGeneratedDocumentOpenUrl(
   doc: Pick<GeneratedDocumentInfo, "id" | "share_url" | "url">,

@@ -32,7 +32,11 @@ from app.services.file_format import (
     resolve_upload_extension,
 )
 from app.services.file_parser import DOCUMENT_EXT, IMAGE_EXT, extract_text, ocr_image_bytes, prepare_image_for_ocr
-from app.services.doc_gen_export import export_chat_text_to_docx, export_chat_text_to_pdf
+from app.services.doc_gen_export import (
+    export_chat_text_to_docx,
+    export_chat_text_to_markdown,
+    export_chat_text_to_pdf,
+)
 from app.services.doc_gen_schema import DocumentStructureError
 from app.services.file_share_token import verify_file_share_token
 from app.services.http_disposition import attachment_content_disposition
@@ -187,6 +191,11 @@ class ExportDocxIn(BaseModel):
     title: str | None = Field(None, max_length=200)
 
 
+class ExportMarkdownIn(BaseModel):
+    content: str = Field(..., min_length=1, max_length=50_000)
+    title: str | None = Field(None, max_length=200)
+
+
 class ExportedDocxOut(BaseModel):
     id: UUID
     filename: str
@@ -196,6 +205,14 @@ class ExportedDocxOut(BaseModel):
 
 
 class ExportedPdfOut(BaseModel):
+    id: UUID
+    filename: str
+    url: str | None = None
+    share_url: str
+    ttl_hours: int
+
+
+class ExportedMarkdownOut(BaseModel):
     id: UUID
     filename: str
     url: str | None = None
@@ -286,6 +303,38 @@ async def export_pdf_from_answer_block(
         raise _export_block_error(exc) from exc
 
     return ExportedPdfOut(
+        id=file_id,
+        filename=filename,
+        url=download_url,
+        share_url=share_path,
+        ttl_hours=ttl_hours,
+    )
+
+
+@router.post("/export-markdown", response_model=ExportedMarkdownOut)
+async def export_markdown_from_answer_block(
+    body: ExportMarkdownIn,
+    response: Response,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    actor: Annotated[SearchUserResult, Depends(get_search_user)],
+):
+    """Markdown из блока ответа — для скачивания в MAX WebApp (нужен https URL)."""
+    redis_client = await get_redis()
+    if actor.new_guest_key:
+        set_guest_cookie(response, actor.new_guest_key)
+
+    try:
+        file_id, filename, download_url, share_path, ttl_hours = await export_chat_text_to_markdown(
+            db,
+            redis_client,
+            actor.user,
+            content=body.content,
+            title_hint=body.title,
+        )
+    except DocumentStructureError as exc:
+        raise _export_block_error(exc) from exc
+
+    return ExportedMarkdownOut(
         id=file_id,
         filename=filename,
         url=download_url,

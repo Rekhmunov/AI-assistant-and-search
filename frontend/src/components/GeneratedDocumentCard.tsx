@@ -1,6 +1,7 @@
 import type { GeneratedDocumentInfo } from "../api/client";
 import { fetchFileContent, resolveGeneratedDocumentOpenUrl } from "../api/client";
 import { t } from "../i18n";
+import { downloadRemoteFile } from "../lib/triggerBrowserDownload";
 
 type Props = {
   document: GeneratedDocumentInfo;
@@ -19,15 +20,13 @@ export function GeneratedDocumentCard({ document: doc }: Props) {
         <span className="generated-document-card-name" title={doc.filename}>
           {doc.filename}
         </span>
-        <a
-          href={openUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          download={filename}
+        <button
+          type="button"
           className="btn btn-secondary generated-document-card-download"
+          onClick={() => void downloadRemoteFile(openUrl, filename)}
         >
           {t("downloadDocument")}
-        </a>
+        </button>
       </div>
     </div>
   );

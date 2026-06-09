@@ -15,6 +15,7 @@ from app.services.upload_storage import save_upload_bytes
 
 _DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 _PDF_MIME = "application/pdf"
+_MD_MIME = "text/markdown; charset=utf-8"
 
 
 def _safe_filename(title: str, file_id: UUID, ext: str) -> str:
@@ -89,4 +90,23 @@ async def persist_generated_pdf(
         ttl_hours=ttl_hours,
         ext="pdf",
         mime_type=_PDF_MIME,
+    )
+
+
+async def persist_generated_markdown(
+    db: AsyncSession,
+    user: User,
+    markdown_bytes: bytes,
+    *,
+    title: str,
+    ttl_hours: int,
+) -> tuple[UUID, str, str]:
+    return await persist_generated_file(
+        db,
+        user,
+        markdown_bytes,
+        title=title,
+        ttl_hours=ttl_hours,
+        ext="md",
+        mime_type=_MD_MIME,
     )

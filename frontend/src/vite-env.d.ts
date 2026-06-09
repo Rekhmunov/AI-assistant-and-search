@@ -70,6 +70,7 @@ interface WebAppBridge {
   version?: string;
   openLink?: (url: string) => void;
   openMaxLink?: (url: string) => void;
+  downloadFile?: (url: string, file_name: string) => Promise<unknown>;
   BackButton?: WebAppBackButton;
 }
 

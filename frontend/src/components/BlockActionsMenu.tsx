@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import {
   exportAnswerBlockToDocx,
+  exportAnswerBlockToMarkdown,
   exportAnswerBlockToPdf,
   resolveGeneratedDocumentOpenUrl,
 } from "../api/client";
 import { t } from "../i18n";
 import { isLegalDocumentContent } from "../lib/isLegalDocumentContent";
-import { triggerBrowserDownloadOnce } from "../lib/triggerBrowserDownload";
+import { isMaxWebApp } from "../lib/maxApp";
+import { downloadRemoteFile } from "../lib/triggerBrowserDownload";
 import { useAuthStore } from "../store/authStore";
 import { DocumentExportConfirmModal } from "./DocumentExportConfirmModal";
 import { ProUpgradeModal } from "./ProUpgradeModal";
@@ -87,7 +89,7 @@ export function BlockActionsMenu({ content, titleHint, className = "block-action
           ? await exportAnswerBlockToPdf(token, content, titleHint)
           : await exportAnswerBlockToDocx(token, content, titleHint);
       const url = resolveGeneratedDocumentOpenUrl(doc);
-      triggerBrowserDownloadOnce(url, doc.filename);
+      await downloadRemoteFile(url, doc.filename);
     } catch {
       setError(true);
     } finally {
@@ -109,6 +111,25 @@ export function BlockActionsMenu({ content, titleHint, className = "block-action
     void exportFile(format);
   };
 
+  const downloadMarkdown = async () => {
+    if (!content.trim() || exportingRef.current) return;
+    exportingRef.current = true;
+    setError(false);
+    try {
+      if (isMaxWebApp()) {
+        const doc = await exportAnswerBlockToMarkdown(token, content, titleHint);
+        const url = resolveGeneratedDocumentOpenUrl(doc);
+        await downloadRemoteFile(url, doc.filename);
+        return;
+      }
+      downloadMarkdownFile(content, titleHint);
+    } catch {
+      setError(true);
+    } finally {
+      exportingRef.current = false;
+    }
+  };
+
   const handleMenuAction = (action: MenuAction) => {
     setOpen(false);
     if (action === "md") {
@@ -116,7 +137,7 @@ export function BlockActionsMenu({ content, titleHint, className = "block-action
         setProModalOpen(true);
         return;
       }
-      downloadMarkdownFile(content, titleHint);
+      void downloadMarkdown();
       return;
     }
     runExport(action);
