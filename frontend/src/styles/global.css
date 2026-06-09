@@ -3198,15 +3198,16 @@ body:has(.page-thread) {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 8px 16px 8px 10px;
+  padding: 8px 12px 8px 10px;
   border-bottom: 1px solid var(--border-subtle);
   background: var(--bg);
+  overflow: visible;
 }
 
 .markdown-document-title {
   flex: 1 1 auto;
   min-width: 0;
-  max-width: 52%;
+  max-width: 42%;
   font-size: 0.8125rem;
   font-weight: 600;
   color: var(--text);
@@ -3280,24 +3281,41 @@ body:has(.page-thread) {
 
 .block-toolbar-actions-row .block-actions-menu {
   margin-left: 10px;
-  margin-right: 4px;
+  margin-right: 0;
   padding-left: 10px;
   border-left: 1px solid var(--border-subtle);
 }
 
 .block-actions-menu {
   position: relative;
+  flex-shrink: 0;
 }
 
+.block-actions-menu-btn,
 .block-actions-menu-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
   width: auto;
-  min-width: 28px;
+  min-width: 0;
+  max-width: none;
   gap: 0;
-  padding: 0 4px 0 8px;
+  padding: 0 6px 0 8px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  overflow: visible;
+}
+
+.block-actions-menu-btn:hover,
+.block-actions-menu-trigger:hover {
+  background: var(--surface-hover);
+  color: var(--text);
 }
 
 .block-actions-download-btn {
-  width: auto;
   height: 34px;
 }
 
@@ -3317,13 +3335,16 @@ body:has(.page-thread) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  margin-left: 5px;
-  padding-left: 5px;
-  color: var(--muted);
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  margin-left: 4px;
+  color: var(--text);
+  opacity: 0.72;
 }
 
 .block-actions-download-btn:hover .block-actions-menu-chevron-wrap {
-  color: var(--text);
+  opacity: 1;
 }
 
 .block-actions-menu-chevron {

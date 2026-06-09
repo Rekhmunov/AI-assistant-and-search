@@ -57,7 +57,7 @@ async function downloadExportedFile(url: string, filename: string): Promise<void
   URL.revokeObjectURL(blobUrl);
 }
 
-export function BlockActionsMenu({ content, titleHint, className = "answer-icon-btn" }: Props) {
+export function BlockActionsMenu({ content, titleHint, className = "block-actions-menu-btn" }: Props) {
   const token = useAuthStore((s) => s.token);
   const plan = useAuthStore((s) => s.user?.plan);
   const isPro = plan === "pro";
@@ -235,20 +235,14 @@ export function BlockActionsMenu({ content, titleHint, className = "answer-icon-
 function ChevronIcon({ open }: { open: boolean }) {
   return (
     <svg
-      width="14"
-      height="14"
+      width="12"
+      height="12"
       viewBox="0 0 24 24"
-      fill="none"
+      fill="currentColor"
       aria-hidden
       className={`block-actions-menu-chevron${open ? " block-actions-menu-chevron--open" : ""}`}
     >
-      <path
-        d="M9 6l6 6-6 6"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
+      <path d="M9 6l6 6-6 6" />
     </svg>
   );
 }
