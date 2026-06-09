@@ -51,15 +51,71 @@ function readSeries(raw: unknown): ChartSeries[] | null {
   return out;
 }
 
+/** Чинит неэкранированные переносы внутри JSON-строк (частая ошибка LLM). */
+function repairJsonStringNewlines(raw: string): string {
+  let out = "";
+  let inString = false;
+  let escaped = false;
+
+  for (let i = 0; i < raw.length; i += 1) {
+    const ch = raw[i];
+    if (!inString) {
+      out += ch;
+      if (ch === '"') inString = true;
+      escaped = false;
+      continue;
+    }
+
+    if (escaped) {
+      out += ch;
+      escaped = false;
+      continue;
+    }
+
+    if (ch === "\\") {
+      out += ch;
+      escaped = true;
+      continue;
+    }
+
+    if (ch === '"') {
+      out += ch;
+      inString = false;
+      continue;
+    }
+
+    if (ch === "\n") {
+      out += "\\n";
+      continue;
+    }
+
+    if (ch === "\r") {
+      continue;
+    }
+
+    out += ch;
+  }
+
+  return out;
+}
+
 function parseJsonObject(raw: string): unknown {
   const trimmed = raw.trim();
-  try {
-    return JSON.parse(trimmed);
-  } catch {
-    const match = trimmed.match(/\{[\s\S]*\}/);
-    if (!match) throw new Error("invalid_json");
-    return JSON.parse(match[0]);
+  const candidates = [trimmed, repairJsonStringNewlines(trimmed)];
+  const blobMatch = trimmed.match(/\{[\s\S]*\}/);
+  if (blobMatch?.[0] && blobMatch[0] !== trimmed) {
+    candidates.push(blobMatch[0], repairJsonStringNewlines(blobMatch[0]));
   }
+
+  let lastError: unknown;
+  for (const candidate of candidates) {
+    try {
+      return JSON.parse(candidate);
+    } catch (e) {
+      lastError = e;
+    }
+  }
+  throw lastError ?? new Error("invalid_json");
 }
 
 export function parseChartSpec(raw: string): GlosixChartSpec | null {

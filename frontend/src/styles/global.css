@@ -3387,6 +3387,19 @@ body:has(.page-thread) {
   font-weight: 600;
 }
 
+.document-answer-slot + .document-answer-slot {
+  margin-top: 12px;
+}
+
+.document-answer-chart {
+  margin: 12px 0 4px;
+}
+
+.document-answer-chart-fallback {
+  margin: 12px 0 4px;
+  font-size: 0.875rem;
+}
+
 .pro-upgrade-modal-description {
   margin: 0 0 12px;
   font-size: 0.9375rem;

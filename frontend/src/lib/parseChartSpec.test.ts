@@ -39,6 +39,18 @@ describe("parseChartSpec", () => {
     ).toBeNull();
   });
 
+  it("repairs unescaped newlines in json strings", () => {
+    const raw = `{
+  "type": "bar",
+  "title": "T",
+  "labels": ["Качество
+(процент)"],
+  "series": [{"name": "S", "values": [1]}]
+}`;
+    const spec = parseChartSpec(raw);
+    expect(spec?.labels[0]).toContain("Качество");
+  });
+
   it("formats copy text", () => {
     const spec = parseChartSpec(BAR_JSON);
     expect(spec).not.toBeNull();

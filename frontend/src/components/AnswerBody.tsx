@@ -1,9 +1,11 @@
 import { useEffect, type ReactNode } from "react";
 import type { Source } from "../api/client";
 import { useStreamingReveal } from "../hooks/useStreamingReveal";
+import { groupAnswerSegments } from "../lib/groupAnswerSegments";
 import { parseAnswerSegments } from "../lib/parseAnswerSegments";
 import { renderAnswerTextSegment } from "../lib/renderAnswerText";
 import { CodeBlock } from "./CodeBlock";
+import { DocumentAnswerBlock } from "./DocumentAnswerBlock";
 
 type Props = {
   text: string;
@@ -28,10 +30,24 @@ export function AnswerBody({
 
   const revealActive = isStreaming || isTyping;
   const rawText = revealActive ? revealed : text;
-  const segments = parseAnswerSegments(rawText, { expandUnfenced: !revealActive });
+  const segments = groupAnswerSegments(
+    parseAnswerSegments(rawText, { expandUnfenced: !revealActive }),
+  );
   const children: ReactNode[] = [];
 
   segments.forEach((seg, i) => {
+    if (seg.type === "document") {
+      children.push(
+        <DocumentAnswerBlock
+          key={`doc-${i}`}
+          markdownParts={seg.markdownParts}
+          charts={seg.charts}
+          partial={seg.partial}
+        />,
+      );
+      return;
+    }
+
     if (seg.type === "code") {
       if (!seg.content.trim() && !(seg.partial && revealActive)) {
         return;

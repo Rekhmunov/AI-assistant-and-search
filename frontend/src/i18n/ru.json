@@ -178,6 +178,7 @@
   "downloadFormatDocx": "Скачать в Word (.docx)",
   "markdownDocumentExpand": "Развернуть документ",
   "markdownDocumentCollapse": "Свернуть",
+  "chartParseFailed": "Не удалось построить график",
   "shareDocumentGlosix": "Документ из Glosix",
   "turnTabAnswer": "Ответ",
   "turnTabImages": "Изображения",
