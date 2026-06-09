@@ -438,6 +438,28 @@ export function SettingsPage() {
                 />
               </label>
               <label>
+                Хранение вложений поиска (часов)
+                <input
+                  type="number"
+                  min={1}
+                  value={String(settings.upload_ttl_hours ?? "")}
+                  onChange={(e) => setSettings({ ...settings, upload_ttl_hours: e.target.value })}
+                  disabled={!can("settings:write")}
+                />
+              </label>
+              <label>
+                Хранение сгенерированных картинок (часов)
+                <input
+                  type="number"
+                  min={1}
+                  value={String(settings.generated_image_ttl_hours ?? "")}
+                  onChange={(e) =>
+                    setSettings({ ...settings, generated_image_ttl_hours: e.target.value })
+                  }
+                  disabled={!can("settings:write")}
+                />
+              </label>
+              <label>
                 Pro генераций картинок / день
                 <input
                   type="number"

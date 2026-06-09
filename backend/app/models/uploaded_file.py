@@ -19,5 +19,6 @@ class UploadedFile(Base):
     media_kind: Mapped[str] = mapped_column(String(16), default="document")
     storage_key: Mapped[str | None] = mapped_column(String(512), nullable=True)
     extracted_text: Mapped[str] = mapped_column(Text, default="")
+    export_content_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

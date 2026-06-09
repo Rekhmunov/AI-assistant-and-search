@@ -36,7 +36,9 @@ from app.services.search_pending import (
 )
 from app.services.service_incidents import record_service_incident
 import redis.asyncio as redis
+from app.models.uploaded_file import UploadedFile
 from app.services.message_attachments import message_attachments_out
+from app.services.upload_lifecycle import purge_generated_files_exclusive_to_threads
 
 router = APIRouter(prefix="/threads", tags=["threads"])
 
@@ -115,8 +117,11 @@ async def bulk_delete_threads(
         )
     )
     threads = result.scalars().all()
+    thread_ids = {thread.id for thread in threads}
     for thread in threads:
         thread.deleted_at = now
+    if thread_ids:
+        await purge_generated_files_exclusive_to_threads(db, user.id, thread_ids)
     deleted = len(threads)
     return ThreadBulkDeleteOut(deleted=deleted, not_found=len(unique_ids) - deleted)
 
@@ -214,6 +219,31 @@ async def get_thread(
             await db.rollback()
 
     settings = get_settings()
+    attachment_file_ids: set[UUID] = set()
+    for m in thread.messages:
+        if not m.attachments:
+            continue
+        for item in m.attachments:
+            if not isinstance(item, dict):
+                continue
+            raw_id = item.get("id")
+            if not raw_id:
+                continue
+            try:
+                attachment_file_ids.add(UUID(str(raw_id)))
+            except ValueError:
+                continue
+
+    files_by_id: dict[UUID, UploadedFile] = {}
+    if attachment_file_ids:
+        file_rows = await db.execute(
+            select(UploadedFile).where(
+                UploadedFile.user_id == user.id,
+                UploadedFile.id.in_(attachment_file_ids),
+            )
+        )
+        files_by_id = {row.id: row for row in file_rows.scalars().all()}
+
     messages_out: list[MessageOut] = []
     for m in thread.messages:
         sources = None
@@ -222,7 +252,11 @@ async def get_thread(
         images = None
         if m.images:
             images = [EntityImageOut(**img) for img in m.images]
-        attachments = message_attachments_out(m.attachments, settings=settings)
+        attachments = message_attachments_out(
+            m.attachments,
+            settings=settings,
+            files_by_id=files_by_id,
+        )
         uf = None
         fb = feedback_by_message.get(m.id)
         if fb:
@@ -294,6 +328,7 @@ async def delete_thread(
     if not thread:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Thread not found")
     thread.deleted_at = datetime.now(timezone.utc)
+    await purge_generated_files_exclusive_to_threads(db, user.id, {thread_id})
 
 
 @router.post("/{thread_id}/save")

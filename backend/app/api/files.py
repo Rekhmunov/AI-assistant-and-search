@@ -4,7 +4,7 @@ from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile, status
 from pydantic import BaseModel, Field
-from sqlalchemy import delete, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import (
@@ -18,11 +18,7 @@ from app.api.deps import (
     set_guest_cookie,
 )
 from app.core.limiter import RateLimiter
-from app.constants.attachments import (
-    UPLOAD_TTL_HOURS,
-    max_upload_bytes,
-    max_upload_mb,
-)
+from app.constants.attachments import max_upload_bytes, max_upload_mb
 from app.models.uploaded_file import UploadedFile
 from app.models.user import Plan, User
 from app.services.file_format import (
@@ -40,7 +36,12 @@ from app.services.doc_gen_export import (
 from app.services.doc_gen_schema import DocumentStructureError
 from app.services.file_share_token import verify_file_share_token
 from app.services.http_disposition import attachment_content_disposition
-from app.services.upload_storage import delete_upload_file, load_upload_bytes, mime_for_ext, save_upload_bytes
+from app.services.upload_lifecycle import (
+    cleanup_expired_uploads,
+    purge_expired_file_if_needed,
+    resolve_upload_ttl_hours,
+)
+from app.services.upload_storage import load_upload_bytes, mime_for_ext, save_upload_bytes
 
 router = APIRouter(prefix="/files", tags=["files"])
 
@@ -73,6 +74,7 @@ class UploadedFileMetaOut(BaseModel):
     filename: str
     media_kind: str
     preview_url: str | None = None
+    expires_at: datetime | None = None
 
 
 @router.get("/{file_id}/meta", response_model=UploadedFileMetaOut)
@@ -93,7 +95,8 @@ async def file_meta(
     row = result.scalar_one_or_none()
     if not row:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="File not found")
-    if row.expires_at and row.expires_at < datetime.now(timezone.utc):
+    if await purge_expired_file_if_needed(db, row):
+        await db.commit()
         raise HTTPException(status_code=status.HTTP_410_GONE, detail="File expired")
     preview = None
     if row.media_kind in ("image", "generated", "generated_doc") and row.storage_key:
@@ -103,6 +106,7 @@ async def file_meta(
         filename=row.filename,
         media_kind=row.media_kind or "document",
         preview_url=preview,
+        expires_at=row.expires_at,
     )
 
 
@@ -122,7 +126,8 @@ async def download_file_content(
     row = result.scalar_one_or_none()
     if not row or not row.storage_key:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="File not found")
-    if row.expires_at and row.expires_at < datetime.now(timezone.utc):
+    if await purge_expired_file_if_needed(db, row):
+        await db.commit()
         raise HTTPException(status_code=status.HTTP_410_GONE, detail="File expired")
     if row.media_kind not in ("image", "generated", "generated_doc"):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="File not found")
@@ -158,7 +163,8 @@ async def download_file_shared(
     row = result.scalar_one_or_none()
     if not row or not row.storage_key:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="File not found")
-    if row.expires_at and row.expires_at < datetime.now(timezone.utc):
+    if await purge_expired_file_if_needed(db, row):
+        await db.commit()
         raise HTTPException(status_code=status.HTTP_410_GONE, detail="File expired")
     if row.media_kind not in ("generated_doc", "generated", "image"):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="File not found")
@@ -317,6 +323,7 @@ async def export_markdown_from_answer_block(
     response: Response,
     db: Annotated[AsyncSession, Depends(get_db)],
     actor: Annotated[SearchUserResult, Depends(get_search_user)],
+    limiter: Annotated[RateLimiter, Depends(get_rate_limiter)],
 ):
     """Markdown из блока ответа — для скачивания в MAX WebApp (нужен https URL)."""
     redis_client = await get_redis()
@@ -328,6 +335,7 @@ async def export_markdown_from_answer_block(
             db,
             redis_client,
             actor.user,
+            limiter,
             content=body.content,
             title_hint=body.title,
         )
@@ -357,23 +365,10 @@ async def upload_file(
     user = actor.user
     max_bytes = max_upload_bytes(user.plan)
     now = datetime.now(timezone.utc)
+    redis_client = await get_redis()
+    upload_ttl_hours = await resolve_upload_ttl_hours(db, redis_client)
 
-    expired_rows = await db.execute(
-        select(UploadedFile).where(
-            UploadedFile.user_id == user.id,
-            UploadedFile.expires_at.isnot(None),
-            UploadedFile.expires_at < now,
-        )
-    )
-    for old in expired_rows.scalars().all():
-        delete_upload_file(old.storage_key)
-    await db.execute(
-        delete(UploadedFile).where(
-            UploadedFile.user_id == user.id,
-            UploadedFile.expires_at.isnot(None),
-            UploadedFile.expires_at < now,
-        )
-    )
+    await cleanup_expired_uploads(db, user_id=user.id)
 
     filename = file.filename or "upload"
     data = await file.read()
@@ -434,7 +429,7 @@ async def upload_file(
             media_kind="image",
             storage_key=storage_key,
             extracted_text=ocr_text,
-            expires_at=now + timedelta(hours=UPLOAD_TTL_HOURS),
+            expires_at=now + timedelta(hours=upload_ttl_hours),
         )
         db.add(row)
         await db.flush()
@@ -475,7 +470,7 @@ async def upload_file(
         media_kind="document",
         storage_key=None,
         extracted_text=text,
-        expires_at=now + timedelta(hours=UPLOAD_TTL_HOURS),
+        expires_at=now + timedelta(hours=upload_ttl_hours),
     )
     db.add(row)
     await db.flush()

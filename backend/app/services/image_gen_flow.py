@@ -20,6 +20,7 @@ from app.services.image_gen_service import (
     resolve_image_gen_provider_id,
     stream_image_generation,
 )
+from app.services.upload_lifecycle import resolve_generated_image_ttl_hours
 from app.services.message_images_column import messages_have_images_column
 from app.services.image_bytes import is_valid_image_bytes
 from app.services.service_incidents import record_service_incident
@@ -194,11 +195,13 @@ async def stream_image_generation_turn(
             )
             return
 
+        image_ttl_hours = await resolve_generated_image_ttl_hours(db, redis_client)
         _file_id, images_json = await persist_generated_image(
             db,
             user,
             image_bytes,
             title=display_content[:120],
+            ttl_hours=image_ttl_hours,
         )
 
         if not assistant_text:

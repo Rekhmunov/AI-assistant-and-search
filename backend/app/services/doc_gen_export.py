@@ -21,6 +21,7 @@ from app.services.doc_gen_storage import (
     persist_generated_pdf,
 )
 from app.services.docx_builder import build_docx_bytes
+from app.services.export_dedupe import export_content_hash, export_result_from_row, find_reusable_export
 from app.services.file_share_token import create_file_share_token
 from app.services.pdf_builder import build_pdf_bytes
 from app.services.providers.factory import resolve_runtime_providers
@@ -69,6 +70,22 @@ async def _resolve_structure(
     )
 
 
+async def _try_reuse_export(
+    db: AsyncSession,
+    user: User,
+    *,
+    fmt: str,
+    content: str,
+    title_hint: str | None,
+) -> tuple[UUID, str, str, str, int] | None:
+    content_hash = export_content_hash(fmt=fmt, content=content, title_hint=title_hint)
+    existing = await find_reusable_export(db, user.id, content_hash)
+    if not existing:
+        return None
+    await db.commit()
+    return export_result_from_row(existing)
+
+
 async def _export_chat_text(
     db: AsyncSession,
     redis_client: redis.Redis,
@@ -90,6 +107,10 @@ async def _export_chat_text(
     if user.plan != Plan.PRO:
         raise DocumentStructureError("doc_gen_pro_only")
 
+    reused = await _try_reuse_export(db, user, fmt=fmt, content=text, title_hint=title_hint)
+    if reused:
+        return reused
+
     allowed, _, _ = await limiter.check_doc_gen_allowed(user_id_str, user)
     if not allowed:
         raise DocumentStructureError("doc_gen_rate_limit")
@@ -101,6 +122,8 @@ async def _export_chat_text(
 
     structure = await _resolve_structure(text, db=db, redis_client=redis_client, user=user)
     show_footer = user.plan != Plan.PRO
+
+    content_hash = export_content_hash(fmt=fmt, content=text, title_hint=title_hint)
 
     if fmt == "pdf":
         file_bytes = build_pdf_bytes(structure, show_glosix_footer=show_footer)
@@ -116,17 +139,18 @@ async def _export_chat_text(
         ext = "docx"
 
     title = _guess_title(text, title_hint or structure.title)
-    file_id, _, download_url = await persist(
+    file_id, filename, download_url = await persist(
         db,
         user,
         file_bytes,
         title=title,
         ttl_hours=ttl_hours,
+        export_content_hash=content_hash,
     )
-    filename = _safe_filename(title, file_id, ext)
+    ttl_seconds = ttl_hours * 3600
     share_token, _ = create_file_share_token(
         file_id,
-        ttl_seconds=ttl_hours * 3600,
+        ttl_seconds=ttl_seconds,
         settings=settings,
     )
     share_path = f"/api/files/{file_id}/shared?token={share_token}"
@@ -181,12 +205,14 @@ async def export_chat_text_to_markdown(
     db: AsyncSession,
     redis_client: redis.Redis,
     user: User,
+    limiter: RateLimiter,
     *,
     content: str,
     title_hint: str | None = None,
 ) -> tuple[UUID, str, str, str, int]:
     """Сохранить markdown-блок на сервере для скачивания (MAX WebApp требует https URL)."""
     settings = get_settings()
+    user_id_str = str(user.id)
     if user.plan != Plan.PRO:
         raise DocumentStructureError("doc_gen_pro_only")
 
@@ -196,26 +222,37 @@ async def export_chat_text_to_markdown(
     if len(text) > MAX_EXPORT_CHARS:
         text = text[:MAX_EXPORT_CHARS]
 
+    reused = await _try_reuse_export(db, user, fmt="md", content=text, title_hint=title_hint)
+    if reused:
+        return reused
+
+    allowed, _, _ = await limiter.check_doc_gen_allowed(user_id_str, user)
+    if not allowed:
+        raise DocumentStructureError("doc_gen_rate_limit")
+
     ttl_hours = int(
         await get_setting("generated_doc_ttl_hours", db, redis_client, settings)
     )
     ttl_hours = max(1, min(ttl_hours, 24 * 30))
 
     title = _guess_title(text, title_hint)
+    content_hash = export_content_hash(fmt="md", content=text, title_hint=title_hint)
     file_bytes = text.encode("utf-8")
-    file_id, _, download_url = await persist_generated_markdown(
+    file_id, filename, download_url = await persist_generated_markdown(
         db,
         user,
         file_bytes,
         title=title,
         ttl_hours=ttl_hours,
+        export_content_hash=content_hash,
     )
-    filename = _safe_filename(title, file_id, "md")
+    ttl_seconds = ttl_hours * 3600
     share_token, _ = create_file_share_token(
         file_id,
-        ttl_seconds=ttl_hours * 3600,
+        ttl_seconds=ttl_seconds,
         settings=settings,
     )
     share_path = f"/api/files/{file_id}/shared?token={share_token}"
+    await limiter.record_doc_gen_success(user_id_str, user)
     await db.commit()
     return file_id, filename, download_url, share_path, ttl_hours

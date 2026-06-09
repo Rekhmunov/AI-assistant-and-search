@@ -6,7 +6,8 @@ MAX_ATTACHMENTS_PER_SEARCH = 10
 MAX_EXTRACT_CHARS_PER_FILE = 32_000
 MAX_TOTAL_ATTACHMENT_CHARS = 96_000
 
-# Срок жизни записи в uploaded_files (только extracted_text, не бинарники).
+# Срок жизни вложений в uploaded_files (текст документов + бинарники фото на диске).
+# Настраивается в админке (upload_ttl_hours); это значение по умолчанию.
 UPLOAD_TTL_HOURS = 24
 
 MAX_UPLOAD_BYTES_FREE = 8 * 1024 * 1024

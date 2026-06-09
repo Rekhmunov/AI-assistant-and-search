@@ -82,6 +82,31 @@ async def api_health_page_cache(_auth: Annotated[None, Depends(require_admin_or_
     }
 
 
+@router.get("/health/storage")
+async def api_health_storage(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    _auth: Annotated[None, Depends(require_admin_or_api_key)],
+):
+    """Статистика uploaded_files, диска, heartbeat очистки и page_cache."""
+    from app.services.page_cache import cache_stats_sample
+    from app.services.upload_lifecycle import maintenance_health, storage_stats
+
+    settings = get_settings()
+    redis = await get_redis()
+    page_cache = await cache_stats_sample()
+    return {
+        "upload_storage_dir": settings.upload_storage_dir,
+        "page_cache": {"enabled": settings.page_cache_enabled, **page_cache},
+        "maintenance": await maintenance_health(redis),
+        "uploaded_files": await storage_stats(db),
+        "ttl_defaults_hours": {
+            "upload": settings.upload_ttl_hours,
+            "generated_image": settings.generated_image_ttl_hours,
+            "generated_doc": settings.generated_doc_ttl_hours,
+        },
+    }
+
+
 @router.get("/health")
 async def api_health(db: Annotated[AsyncSession, Depends(get_db)]):
     """Проверка API и БД (для curl https://glosix.ru/api/health)."""
@@ -143,10 +168,23 @@ async def api_health(db: Annotated[AsyncSession, Depends(get_db)]):
             llm_runtime = await fetch_llm_runtime_status(db, redis, settings)
         except Exception:
             pass
+    storage_maintenance = None
+    if redis_ok:
+        try:
+            from app.services.upload_lifecycle import maintenance_health
+
+            redis = await get_redis()
+            storage_maintenance = await maintenance_health(redis)
+        except Exception:
+            storage_maintenance = {"healthy": False, "error": "check_failed"}
+
     status = "ok" if not missing and not missing_tables and redis_ok and message_images_column else "degraded"
+    if storage_maintenance and not storage_maintenance.get("healthy", True):
+        status = "degraded"
     return {
         "status": status,
         "redis": redis_ok,
+        "storage_maintenance": storage_maintenance,
         "yandex_configured": settings.yandex_configured,
         "anthropic_configured": settings.anthropic_configured,
         "deepseek_configured": settings.deepseek_configured,

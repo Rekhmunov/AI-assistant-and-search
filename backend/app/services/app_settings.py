@@ -48,6 +48,8 @@ BASE_SETTING_KEYS: dict[str, type] = {
     "free_doc_gens_per_day": int,
     "pro_doc_gens_per_day": int,
     "generated_doc_ttl_hours": int,
+    "upload_ttl_hours": int,
+    "generated_image_ttl_hours": int,
     "yandex_metrica_counter_id": str,
     "yandex_webmaster_verification": str,
 }
@@ -67,6 +69,8 @@ ENV_DEFAULTS: dict[str, str] = {
     "free_doc_gens_per_day": "free_doc_gens_per_day",
     "pro_doc_gens_per_day": "pro_doc_gens_per_day",
     "generated_doc_ttl_hours": "generated_doc_ttl_hours",
+    "upload_ttl_hours": "upload_ttl_hours",
+    "generated_image_ttl_hours": "generated_image_ttl_hours",
     "pro_price_rub": "pro_price_rub",
     "global_yandex_requests_per_day": "global_yandex_requests_per_day",
     "maintenance_mode": "false",

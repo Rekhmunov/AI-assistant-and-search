@@ -33,6 +33,7 @@ async def persist_generated_file(
     ttl_hours: int,
     ext: str,
     mime_type: str,
+    export_content_hash: str | None = None,
 ) -> tuple[UUID, str, str]:
     file_id = uuid4()
     now = datetime.now(timezone.utc)
@@ -47,6 +48,7 @@ async def persist_generated_file(
         media_kind="generated_doc",
         storage_key=storage_key,
         extracted_text="",
+        export_content_hash=export_content_hash,
         expires_at=now + timedelta(hours=ttl_hours),
     )
     db.add(row)
@@ -62,6 +64,7 @@ async def persist_generated_docx(
     *,
     title: str,
     ttl_hours: int,
+    export_content_hash: str | None = None,
 ) -> tuple[UUID, str, str]:
     return await persist_generated_file(
         db,
@@ -71,6 +74,7 @@ async def persist_generated_docx(
         ttl_hours=ttl_hours,
         ext="docx",
         mime_type=_DOCX_MIME,
+        export_content_hash=export_content_hash,
     )
 
 
@@ -81,6 +85,7 @@ async def persist_generated_pdf(
     *,
     title: str,
     ttl_hours: int,
+    export_content_hash: str | None = None,
 ) -> tuple[UUID, str, str]:
     return await persist_generated_file(
         db,
@@ -90,6 +95,7 @@ async def persist_generated_pdf(
         ttl_hours=ttl_hours,
         ext="pdf",
         mime_type=_PDF_MIME,
+        export_content_hash=export_content_hash,
     )
 
 
@@ -100,6 +106,7 @@ async def persist_generated_markdown(
     *,
     title: str,
     ttl_hours: int,
+    export_content_hash: str | None = None,
 ) -> tuple[UUID, str, str]:
     return await persist_generated_file(
         db,
@@ -109,4 +116,5 @@ async def persist_generated_markdown(
         ttl_hours=ttl_hours,
         ext="md",
         mime_type=_MD_MIME,
+        export_content_hash=export_content_hash,
     )

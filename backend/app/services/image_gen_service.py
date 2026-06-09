@@ -43,6 +43,7 @@ async def persist_generated_image(
     image_bytes: bytes,
     *,
     title: str,
+    ttl_hours: int | None = None,
 ) -> tuple[UUID, list[dict]]:
     from app.services.image_bytes import detect_image_mime
 
@@ -50,6 +51,8 @@ async def persist_generated_image(
     ext = "png" if mime == "image/png" else "jpg"
     file_id = uuid4()
     now = datetime.now(timezone.utc)
+    hours = ttl_hours if ttl_hours is not None else GENERATED_IMAGE_TTL_HOURS
+    hours = max(1, min(int(hours), 24 * 30))
     storage_key = save_upload_bytes(user.id, file_id, image_bytes, ext)
     row = UploadedFile(
         id=file_id,
@@ -60,7 +63,7 @@ async def persist_generated_image(
         media_kind="generated",
         storage_key=storage_key,
         extracted_text="",
-        expires_at=now + timedelta(hours=GENERATED_IMAGE_TTL_HOURS),
+        expires_at=now + timedelta(hours=hours),
     )
     db.add(row)
     await db.flush()

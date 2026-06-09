@@ -21,7 +21,11 @@ celery.conf.update(
     beat_schedule={
         "cleanup-expired-uploads": {
             "task": "cleanup_expired_uploads",
-            "schedule": crontab(hour=4, minute=15),
+            "schedule": crontab(minute=15, hour="*/6"),
+        },
+        "reconcile-orphan-uploads": {
+            "task": "reconcile_orphan_uploads",
+            "schedule": crontab(hour=5, minute=30, day_of_week=0),
         },
         "purge-deleted-accounts": {
             "task": "purge_deleted_accounts",

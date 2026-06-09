@@ -1,17 +1,20 @@
 import asyncio
 import logging
-from datetime import datetime, timezone
-
-from sqlalchemy import delete, select
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-
-from app.core.config import get_settings
-from app.models.uploaded_file import UploadedFile
-from app.services.account_purge import purge_expired_deleted_accounts
-from app.services.upload_storage import delete_upload_file
-from celery_app import celery
 
 import redis.asyncio as redis
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+
+from app.services.account_purge import purge_expired_deleted_accounts
+from app.services.upload_lifecycle import (
+    CLEANUP_COUNT_KEY,
+    CLEANUP_HEARTBEAT_KEY,
+    RECONCILE_COUNT_KEY,
+    RECONCILE_HEARTBEAT_KEY,
+    cleanup_expired_uploads,
+    reconcile_orphan_disk_files,
+    record_maintenance_run,
+)
+from celery_app import celery
 
 logger = logging.getLogger(__name__)
 
@@ -22,33 +25,60 @@ def cleanup_expired_uploads_task() -> None:
 
 
 async def _cleanup_expired_uploads_async() -> int:
-    settings = get_settings()
+    settings_module = __import__("app.core.config", fromlist=["get_settings"])
+    settings = settings_module.get_settings()
     engine = create_async_engine(settings.database_url)
     session_factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
-    now = datetime.now(timezone.utc)
+    redis_client = redis.from_url(settings.redis_url, decode_responses=True)
     deleted = 0
 
-    async with session_factory() as db:
-        expired = await db.execute(
-            select(UploadedFile).where(
-                UploadedFile.expires_at.isnot(None),
-                UploadedFile.expires_at < now,
-            )
+    try:
+        async with session_factory() as db:
+            deleted = await cleanup_expired_uploads(db)
+            await db.commit()
+        await record_maintenance_run(
+            redis_client,
+            heartbeat_key=CLEANUP_HEARTBEAT_KEY,
+            count_key=CLEANUP_COUNT_KEY,
+            removed=deleted,
         )
-        for row in expired.scalars().all():
-            delete_upload_file(row.storage_key)
-        result = await db.execute(
-            delete(UploadedFile).where(
-                UploadedFile.expires_at.isnot(None),
-                UploadedFile.expires_at < now,
-            )
-        )
-        deleted = result.rowcount or 0
-        await db.commit()
+    finally:
+        await redis_client.aclose()
+        await engine.dispose()
 
-    await engine.dispose()
     logger.info("cleanup_expired_uploads: removed %s rows", deleted)
     return deleted
+
+
+@celery.task(name="reconcile_orphan_uploads")
+def reconcile_orphan_uploads_task() -> None:
+    asyncio.run(_reconcile_orphan_uploads_async())
+
+
+async def _reconcile_orphan_uploads_async() -> int:
+    settings_module = __import__("app.core.config", fromlist=["get_settings"])
+    settings = settings_module.get_settings()
+    engine = create_async_engine(settings.database_url)
+    session_factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    redis_client = redis.from_url(settings.redis_url, decode_responses=True)
+    removed = 0
+
+    try:
+        async with session_factory() as db:
+            removed = await reconcile_orphan_disk_files(db)
+            await db.commit()
+        await record_maintenance_run(
+            redis_client,
+            heartbeat_key=RECONCILE_HEARTBEAT_KEY,
+            count_key=RECONCILE_COUNT_KEY,
+            removed=removed,
+        )
+    finally:
+        await redis_client.aclose()
+        await engine.dispose()
+
+    logger.info("reconcile_orphan_uploads: removed %s orphan files", removed)
+    return removed
 
 
 @celery.task(name="purge_deleted_accounts")
@@ -57,7 +87,8 @@ def purge_deleted_accounts_task() -> None:
 
 
 async def _purge_deleted_accounts_async() -> int:
-    settings = get_settings()
+    settings_module = __import__("app.core.config", fromlist=["get_settings"])
+    settings = settings_module.get_settings()
     engine = create_async_engine(settings.database_url)
     session_factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
     redis_client = redis.from_url(settings.redis_url, decode_responses=True)

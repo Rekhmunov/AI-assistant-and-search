@@ -118,6 +118,8 @@ class Settings(BaseSettings):
     free_doc_gens_per_day: int = 1
     pro_doc_gens_per_day: int = 20
     generated_doc_ttl_hours: int = 72
+    upload_ttl_hours: int = 24
+    generated_image_ttl_hours: int = 72
     global_yandex_requests_per_day: int = 5000
 
     pro_price_rub: int = 299
