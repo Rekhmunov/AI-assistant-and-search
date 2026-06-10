@@ -91,7 +91,9 @@ async def ensure_unique_category_slug(db, base_slug: str, *, exclude_id=None) ->
             raise ValueError("slug_collision")
 
 
-async def ensure_unique_post_slug(db, base_slug: str, *, exclude_id=None) -> str:
+async def ensure_unique_post_slug(
+    db, base_slug: str, *, locale: str = "ru", exclude_id=None
+) -> str:
     from sqlalchemy import select
 
     from app.models.blog import BlogPost
@@ -99,7 +101,7 @@ async def ensure_unique_post_slug(db, base_slug: str, *, exclude_id=None) -> str
     slug = base_slug
     n = 2
     while True:
-        q = select(BlogPost.id).where(BlogPost.slug == slug)
+        q = select(BlogPost.id).where(BlogPost.slug == slug, BlogPost.locale == locale)
         if exclude_id:
             q = q.where(BlogPost.id != exclude_id)
         existing = await db.scalar(q)

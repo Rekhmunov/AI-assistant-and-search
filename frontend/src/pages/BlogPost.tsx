@@ -5,6 +5,7 @@ import {
   fetchBlogPost,
   resolveBlogMediaUrl,
 } from "../api/blog";
+import { BlogComments } from "../components/BlogComments";
 import { useBlogPostMeta } from "../hooks/useBlogMeta";
 
 function formatDate(iso: string | null): string {
@@ -79,6 +80,7 @@ export function BlogPostPage() {
         <h1 className="blog-post-title">{post.title}</h1>
         <p className="blog-post-meta">
           {formatDate(post.published_at)}
+          {post.author_name && ` · ${post.author_name}`}
           {post.reading_time_min > 0 && ` · ${post.reading_time_min} мин чтения`}
         </p>
       </header>
@@ -87,6 +89,8 @@ export function BlogPostPage() {
         className="blog-post-content prose"
         dangerouslySetInnerHTML={{ __html: post.content_html }}
       />
+      {post.comments_enabled && <BlogComments slug={post.slug} />}
+
       <footer className="blog-post-footer">
         <Link to="/blog" className="btn-secondary">
           ← Все статьи

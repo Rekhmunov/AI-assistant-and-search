@@ -24,6 +24,15 @@ type PostForm = {
   og_title: string;
   og_description: string;
   robots_index: boolean;
+  author_name: string;
+  comments_enabled: boolean;
+};
+
+type AdminComment = {
+  id: string;
+  author_name: string;
+  body: string;
+  created_at: string;
 };
 
 const EMPTY: PostForm = {
@@ -41,6 +50,8 @@ const EMPTY: PostForm = {
   og_title: "",
   og_description: "",
   robots_index: true,
+  author_name: "",
+  comments_enabled: false,
 };
 
 function mediaSrc(url: string | undefined): string {
@@ -60,6 +71,7 @@ export function BlogEditPage() {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
   const [aiOpen, setAiOpen] = useState(false);
+  const [comments, setComments] = useState<AdminComment[]>([]);
 
   useEffect(() => {
     apiFetch<Category[]>("/api/admin/blog/categories").then(setCategories);
@@ -83,8 +95,11 @@ export function BlogEditPage() {
         og_title: post.og_title,
         og_description: post.og_description,
         robots_index: post.robots_index,
+        author_name: post.author_name || "",
+        comments_enabled: post.comments_enabled || false,
       });
       setCoverUrl(post.cover_image?.url || "");
+      apiFetch<AdminComment[]>(`/api/admin/blog/posts/${id}/comments`).then(setComments).catch(() => setComments([]));
     });
   }, [id, isNew]);
 
@@ -169,6 +184,16 @@ export function BlogEditPage() {
                 value={form.slug}
                 onChange={(e) => patch({ slug: e.target.value })}
                 placeholder="auto-from-title"
+                disabled={!canWrite}
+              />
+            </label>
+            <label className="field-label">
+              Автор (ФИО)
+              <input
+                className="field-input"
+                value={form.author_name}
+                onChange={(e) => patch({ author_name: e.target.value })}
+                placeholder="Иван Иванов"
                 disabled={!canWrite}
               />
             </label>
@@ -265,6 +290,41 @@ export function BlogEditPage() {
               />
               Индексировать (robots index)
             </label>
+            <label className="field-label checkbox-label">
+              <input
+                type="checkbox"
+                checked={form.comments_enabled}
+                onChange={(e) => patch({ comments_enabled: e.target.checked })}
+                disabled={!canWrite}
+              />
+              Комментарии к статье
+            </label>
+            {!isNew && comments.length > 0 && (
+              <div className="blog-admin-comments">
+                <h3 className="blog-seo-title">Комментарии ({comments.length})</h3>
+                <ul className="blog-admin-comments-list">
+                  {comments.map((c) => (
+                    <li key={c.id}>
+                      <strong>{c.author_name}</strong>
+                      <p>{c.body}</p>
+                      {canWrite && (
+                        <button
+                          type="button"
+                          className="btn-link btn-link--danger"
+                          onClick={async () => {
+                            if (!window.confirm("Удалить комментарий?")) return;
+                            await apiFetch(`/api/admin/blog/posts/${id}/comments/${c.id}`, { method: "DELETE" });
+                            setComments((prev) => prev.filter((x) => x.id !== c.id));
+                          }}
+                        >
+                          Удалить
+                        </button>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </aside>
         </div>
         {msg && <p className="form-msg">{msg}</p>}

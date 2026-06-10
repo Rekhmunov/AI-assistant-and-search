@@ -6,8 +6,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_db
 from app.models.blog import BlogMedia
-from app.schemas.blog import BlogCategoryOut, BlogPostListItem, BlogPostPublic
+from app.schemas.blog import BlogCategoryOut, BlogCommentCreate, BlogCommentOut, BlogPostListItem
+from app.services.blog_comments import add_comment, list_approved_comments
 from app.services.blog_posts import (
+    DEFAULT_LOCALE,
     blog_media_url,
     get_category_by_slug,
     get_post_by_slug,
@@ -51,9 +53,32 @@ async def public_posts(
     ]
 
 
+@router.get("/posts/{slug}/comments", response_model=list[BlogCommentOut])
+async def public_post_comments(slug: str, db: Annotated[AsyncSession, Depends(get_db)]):
+    post = await get_post_by_slug(db, slug, locale=DEFAULT_LOCALE)
+    if not post or post.status != "published" or not post.comments_enabled:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Статья не найдена")
+    return await list_approved_comments(db, post.id)
+
+
+@router.post("/posts/{slug}/comments", response_model=BlogCommentOut)
+async def public_post_add_comment(
+    slug: str,
+    body: BlogCommentCreate,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    post = await get_post_by_slug(db, slug, locale=DEFAULT_LOCALE)
+    if not post or post.status != "published" or not post.comments_enabled:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Комментарии отключены")
+    comment = await add_comment(db, post, author_name=body.author_name, body=body.body)
+    await db.commit()
+    await db.refresh(comment)
+    return comment
+
+
 @router.get("/posts/{slug}")
 async def public_post(slug: str, db: Annotated[AsyncSession, Depends(get_db)]):
-    post = await get_post_by_slug(db, slug)
+    post = await get_post_by_slug(db, slug, locale=DEFAULT_LOCALE)
     if not post or post.status != "published":
         redirect_post = await resolve_slug_redirect(db, slug)
         if redirect_post and redirect_post.status == "published":

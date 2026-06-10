@@ -78,7 +78,7 @@ async def generate_blog_article(
     content_html = sanitize_blog_html(str(data.get("content_html") or "<p></p>"))
     slug = slugify_title(title)
     if generate_slug:
-        slug = await ensure_unique_post_slug(db, slug)
+        slug = await ensure_unique_post_slug(db, slug, locale="ru")
     meta_title = str(data.get("meta_title") or title).strip() if fill_seo else ""
     meta_description = str(data.get("meta_description") or excerpt).strip() if fill_seo else ""
     meta_keywords = str(data.get("meta_keywords") or "").strip() if fill_seo else ""

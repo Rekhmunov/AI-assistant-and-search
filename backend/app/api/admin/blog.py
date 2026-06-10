@@ -34,6 +34,8 @@ from app.services.blog_posts import (
     update_post,
 )
 from app.services.blog_slug import ensure_unique_category_slug, ensure_unique_post_slug, is_valid_slug, slugify_title
+from app.services.blog_comments import delete_comment, list_post_comments_admin
+from app.services.blog_prerender import rebuild_all_prerender, refresh_blog_prerender_for_post
 from app.services.blog_storage import save_blog_image
 import redis.asyncio as redis
 
@@ -212,6 +214,8 @@ async def admin_create_post(
     )
     await db.commit()
     post = await _load_post(db, post.id)
+    if post.status == "published":
+        await refresh_blog_prerender_for_post(db, post)
     return post_to_admin(post, author_email=admin.email)
 
 
@@ -241,6 +245,7 @@ async def admin_update_post(
     )
     await db.commit()
     post = await _load_post(db, post_id)
+    await refresh_blog_prerender_for_post(db, post)
     return post_to_admin(post, author_email=admin.email)
 
 
@@ -263,6 +268,59 @@ async def admin_delete_post(
         ip=request.client.host if request.client else None,
     )
     await db.commit()
+    await rebuild_all_prerender(db)
+
+
+@router.get("/posts/{post_id}/comments")
+async def admin_list_comments(
+    post_id: UUID,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    _admin=Depends(require_permission("blog:read")),
+):
+    await _load_post(db, post_id)
+    return await list_post_comments_admin(db, post_id)
+
+
+@router.delete("/posts/{post_id}/comments/{comment_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def admin_delete_comment(
+    post_id: UUID,
+    comment_id: UUID,
+    request: Request,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    admin: Annotated[AdminUser, Depends(require_permission("blog:write"))],
+):
+    if not await delete_comment(db, comment_id, post_id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Комментарий не найден")
+    await log_admin_action(
+        db,
+        admin=admin,
+        action="blog.comment.delete",
+        resource_type="blog_comment",
+        resource_id=str(comment_id),
+        details={"post_id": str(post_id)},
+        ip=request.client.host if request.client else None,
+    )
+    await db.commit()
+
+
+@router.post("/rebuild-prerender")
+async def admin_rebuild_prerender(
+    request: Request,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    admin: Annotated[AdminUser, Depends(require_permission("blog:write"))],
+):
+    count = await rebuild_all_prerender(db)
+    await log_admin_action(
+        db,
+        admin=admin,
+        action="blog.prerender.rebuild",
+        resource_type="blog",
+        resource_id=None,
+        details={"files": count},
+        ip=request.client.host if request.client else None,
+    )
+    await db.commit()
+    return {"ok": True, "files": count}
 
 
 @router.post("/media", response_model=BlogMediaUploadOut)

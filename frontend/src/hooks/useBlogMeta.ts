@@ -94,6 +94,9 @@ export function useBlogPostMeta(post: BlogPostPublic | null) {
       dateModified: post.updated_at,
       mainEntityOfPage: canonical,
       image: ogImage ? [ogImage] : undefined,
+      author: post.author_name
+        ? { "@type": "Person", name: post.author_name }
+        : { "@type": "Organization", name: "Glosix", url: SITE },
       publisher: { "@type": "Organization", name: "Glosix", url: SITE },
     };
     const script = document.createElement("script");

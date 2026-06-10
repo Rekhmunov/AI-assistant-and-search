@@ -6739,3 +6739,46 @@ body:has(.page-thread) {
   padding-top: 24px;
   border-top: 1px solid var(--border, #d8e0e3);
 }
+
+.blog-comments {
+  margin-top: 40px;
+  padding-top: 24px;
+  border-top: 1px solid var(--border, #d8e0e3);
+}
+
+.blog-comments-title {
+  margin: 0 0 16px;
+  font-size: 1.25rem;
+}
+
+.blog-comments-list {
+  list-style: none;
+  margin: 0 0 20px;
+  padding: 0;
+}
+
+.blog-comment {
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border, #d8e0e3);
+}
+
+.blog-comment-date {
+  margin-left: 8px;
+  font-size: 0.82rem;
+  color: var(--text-muted, #5c6b73);
+}
+
+.blog-comment-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: 520px;
+}
+
+.blog-comment-input {
+  padding: 10px 12px;
+  border: 1px solid var(--border, #d8e0e3);
+  border-radius: 8px;
+  font: inherit;
+  background: var(--surface, #fff);
+}

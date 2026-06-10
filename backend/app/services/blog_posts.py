@@ -41,10 +41,19 @@ async def get_category_by_slug(db: AsyncSession, slug: str) -> BlogCategory | No
     return result.scalar_one_or_none()
 
 
-async def get_post_by_slug(db: AsyncSession, slug: str) -> BlogPost | None:
+DEFAULT_LOCALE = "ru"
+
+
+def blog_canonical_path(slug: str, locale: str = DEFAULT_LOCALE) -> str:
+    if locale == "ru":
+        return f"/blog/{slug}"
+    return f"/{locale}/blog/{slug}"
+
+
+async def get_post_by_slug(db: AsyncSession, slug: str, *, locale: str = DEFAULT_LOCALE) -> BlogPost | None:
     result = await db.execute(
         select(BlogPost)
-        .where(BlogPost.slug == slug)
+        .where(BlogPost.slug == slug, BlogPost.locale == locale)
         .options(
             selectinload(BlogPost.category),
             selectinload(BlogPost.cover_image),
@@ -94,7 +103,10 @@ def post_to_public(post: BlogPost) -> dict:
         "og_title": og_title,
         "og_description": og_desc,
         "og_image": media_out(og),
-        "canonical_path": f"/blog/{post.slug}",
+        "author_name": post.author_name or "",
+        "comments_enabled": bool(post.comments_enabled),
+        "locale": post.locale or DEFAULT_LOCALE,
+        "canonical_path": blog_canonical_path(post.slug, post.locale or DEFAULT_LOCALE),
         "robots_index": post.robots_index and post.status == "published",
     }
 
@@ -123,6 +135,9 @@ def post_to_admin(post: BlogPost, *, author_email: str | None = None) -> dict:
         "created_at": post.created_at,
         "updated_at": post.updated_at,
         "author_email": author_email,
+        "author_name": post.author_name or "",
+        "comments_enabled": bool(post.comments_enabled),
+        "locale": post.locale or DEFAULT_LOCALE,
     }
 
 
@@ -165,11 +180,17 @@ async def list_posts_public(
 ) -> tuple[list[BlogPost], int]:
     q = (
         select(BlogPost)
-        .where(BlogPost.status == "published", BlogPost.published_at.is_not(None))
+        .where(
+            BlogPost.status == "published",
+            BlogPost.published_at.is_not(None),
+            BlogPost.locale == DEFAULT_LOCALE,
+        )
         .options(selectinload(BlogPost.category), selectinload(BlogPost.cover_image))
     )
     count_q = select(func.count()).select_from(BlogPost).where(
-        BlogPost.status == "published", BlogPost.published_at.is_not(None)
+        BlogPost.status == "published",
+        BlogPost.published_at.is_not(None),
+        BlogPost.locale == DEFAULT_LOCALE,
     )
     if category_slug:
         cat = await get_category_by_slug(db, category_slug)
@@ -201,7 +222,8 @@ async def create_post(db: AsyncSession, data: dict, *, admin_id: UUID | None) ->
         raise ValueError("invalid_slug")
     if slug_input and is_valid_slug(slug_input):
         base_slug = slug_input
-    slug = await ensure_unique_post_slug(db, base_slug)
+    locale = (data.get("locale") or DEFAULT_LOCALE).strip() or DEFAULT_LOCALE
+    slug = await ensure_unique_post_slug(db, base_slug, locale=locale)
     content = sanitize_blog_html(data.get("content_html") or "<p></p>")
     status = data.get("status") or "draft"
     post = BlogPost(
@@ -214,6 +236,9 @@ async def create_post(db: AsyncSession, data: dict, *, admin_id: UUID | None) ->
         cover_image_id=data.get("cover_image_id"),
         og_image_id=data.get("og_image_id"),
         author_admin_id=admin_id,
+        author_name=(data.get("author_name") or "").strip(),
+        comments_enabled=bool(data.get("comments_enabled", False)),
+        locale=locale,
         meta_title=(data.get("meta_title") or "").strip(),
         meta_description=(data.get("meta_description") or "").strip(),
         meta_keywords=(data.get("meta_keywords") or "").strip(),
@@ -236,7 +261,9 @@ async def update_post(db: AsyncSession, post: BlogPost, data: dict) -> BlogPost:
         if not is_valid_slug(new_slug):
             raise ValueError("invalid_slug")
         if new_slug != post.slug:
-            unique = await ensure_unique_post_slug(db, new_slug, exclude_id=post.id)
+            unique = await ensure_unique_post_slug(
+                db, new_slug, locale=post.locale or DEFAULT_LOCALE, exclude_id=post.id
+            )
             old = post.slug
             post.slug = unique
             db.add(BlogSlugRedirect(old_slug=old, post_id=post.id))
@@ -260,6 +287,9 @@ async def update_post(db: AsyncSession, post: BlogPost, data: dict) -> BlogPost:
         "og_title",
         "og_description",
         "robots_index",
+        "author_name",
+        "comments_enabled",
+        "locale",
     ):
         if field in data and data[field] is not None:
             setattr(post, field, data[field])

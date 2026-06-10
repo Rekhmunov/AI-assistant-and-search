@@ -26,9 +26,19 @@ export type BlogPostListItem = {
   cover_image: BlogMedia | null;
 };
 
+export type BlogComment = {
+  id: string;
+  author_name: string;
+  body: string;
+  created_at: string;
+};
+
 export type BlogPostPublic = BlogPostListItem & {
   content_html: string;
   updated_at: string;
+  author_name: string;
+  comments_enabled: boolean;
+  locale: string;
   meta_title: string;
   meta_description: string;
   meta_keywords: string;
@@ -103,4 +113,29 @@ export async function fetchBlogPost(slug: string): Promise<BlogPostPublic> {
     cover_image: post.cover_image ? { ...post.cover_image, url: mediaUrl(post.cover_image.url) } : null,
     og_image: post.og_image ? { ...post.og_image, url: mediaUrl(post.og_image.url) } : null,
   };
+}
+
+export async function fetchBlogComments(slug: string): Promise<BlogComment[]> {
+  const res = await fetch(`${API_BASE}/api/blog/posts/${encodeURIComponent(slug)}/comments`, {
+    credentials: "include",
+  });
+  if (!res.ok) throw new Error("Не удалось загрузить комментарии");
+  return res.json();
+}
+
+export async function createBlogComment(
+  slug: string,
+  payload: { author_name: string; body: string },
+): Promise<BlogComment> {
+  const res = await fetch(`${API_BASE}/api/blog/posts/${encodeURIComponent(slug)}/comments`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(typeof body.detail === "string" ? body.detail : "Не удалось отправить комментарий");
+  }
+  return res.json();
 }

@@ -50,6 +50,20 @@ class BlogPostListItem(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class BlogCommentOut(BaseModel):
+    id: UUID
+    author_name: str
+    body: str
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class BlogCommentCreate(BaseModel):
+    author_name: str = Field(min_length=2, max_length=120)
+    body: str = Field(min_length=2, max_length=4000)
+
+
 class BlogPostPublic(BaseModel):
     id: UUID
     slug: str
@@ -59,6 +73,9 @@ class BlogPostPublic(BaseModel):
     published_at: datetime | None
     updated_at: datetime
     reading_time_min: int
+    author_name: str = ""
+    comments_enabled: bool = False
+    locale: str = "ru"
     category: BlogCategoryOut | None = None
     cover_image: BlogMediaOut | None = None
     meta_title: str
@@ -86,6 +103,9 @@ class BlogPostAdminOut(BlogPostListItem):
     created_at: datetime
     updated_at: datetime
     author_email: str | None = None
+    author_name: str = ""
+    comments_enabled: bool = False
+    locale: str = "ru"
 
 
 class BlogPostCreate(BaseModel):
@@ -104,6 +124,9 @@ class BlogPostCreate(BaseModel):
     og_description: str = ""
     robots_index: bool = True
     published_at: datetime | None = None
+    author_name: str = ""
+    comments_enabled: bool = False
+    locale: str = "ru"
 
 
 class BlogPostUpdate(BaseModel):
@@ -122,6 +145,9 @@ class BlogPostUpdate(BaseModel):
     og_description: str | None = None
     robots_index: bool | None = None
     published_at: datetime | None = None
+    author_name: str | None = None
+    comments_enabled: bool | None = None
+    locale: str | None = None
 
 
 class BlogMediaUploadOut(BaseModel):

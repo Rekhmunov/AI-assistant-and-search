@@ -89,6 +89,18 @@ export function BlogPage() {
         <Link to="/blog/categories" className="btn-secondary">
           Категории
         </Link>
+        {canWrite && (
+          <button
+            type="button"
+            className="btn-secondary"
+            onClick={async () => {
+              await apiFetch("/api/admin/blog/rebuild-prerender", { method: "POST" });
+              alert("Prerender обновлён");
+            }}
+          >
+            Обновить prerender
+          </button>
+        )}
       </div>
       {loading ? (
         <p>Загрузка…</p>

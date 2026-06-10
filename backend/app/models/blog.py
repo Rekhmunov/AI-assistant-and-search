@@ -60,6 +60,9 @@ class BlogPost(Base):
     author_admin_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("admin_users.id", ondelete="SET NULL"), nullable=True
     )
+    author_name: Mapped[str] = mapped_column(String(255), default="")
+    comments_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    locale: Mapped[str] = mapped_column(String(8), default="ru", index=True)
     published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     reading_time_min: Mapped[int] = mapped_column(Integer, default=1)
     meta_title: Mapped[str] = mapped_column(String(255), default="")
@@ -76,6 +79,22 @@ class BlogPost(Base):
     category: Mapped[BlogCategory | None] = relationship(back_populates="posts")
     cover_image: Mapped[BlogMedia | None] = relationship(foreign_keys=[cover_image_id])
     og_image: Mapped[BlogMedia | None] = relationship(foreign_keys=[og_image_id])
+    comments: Mapped[list["BlogComment"]] = relationship(back_populates="post", cascade="all, delete-orphan")
+
+
+class BlogComment(Base):
+    __tablename__ = "blog_comments"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    post_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("blog_posts.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    author_name: Mapped[str] = mapped_column(String(120), nullable=False)
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(String(20), default="approved")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    post: Mapped[BlogPost] = relationship(back_populates="comments")
 
 
 class BlogSlugRedirect(Base):
