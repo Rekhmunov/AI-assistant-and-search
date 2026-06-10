@@ -156,6 +156,13 @@ def _extract_quoted_reminder_text(clean: str) -> str | None:
     return None
 
 
+def user_wants_today_run(text: str) -> bool:
+    low = (text or "").lower()
+    return _has_any(low, "сегодня") and _has_any(
+        low, "сделай", "сделать", "отправ", "пришли", "запусти", "выполни", "сработ"
+    )
+
+
 def _normalize_schedule_text(clean: str) -> str | None:
     from app.services.agent.schedule import normalize_schedule_phrase
 
@@ -209,11 +216,20 @@ def infer_checklist_fields(text: str, data: dict[str, Any]) -> dict[str, Any]:
     elif not data.get("role"):
         pass
 
-    sched_text = _normalize_schedule_text(clean)
-    if sched_text:
-        data["schedule_text"] = sched_text
+    if user_wants_today_run(clean):
+        hm = _TIME_ONLY_RE.search(clean) or _TIME_ONLY_RE.search(str(data.get("schedule_text") or ""))
+        if hm:
+            data["schedule_text"] = f"сегодня в {int(hm.group(1))}:{hm.group(2)}"
+        else:
+            data["schedule_text"] = "через 2 минуты"
         if not data.get("timezone"):
             data["timezone"] = DEFAULT_AGENT_TIMEZONE
+    else:
+        sched_text = _normalize_schedule_text(clean)
+        if sched_text:
+            data["schedule_text"] = sched_text
+            if not data.get("timezone"):
+                data["timezone"] = DEFAULT_AGENT_TIMEZONE
 
     tz = _TZ_RE.search(clean)
     if tz:

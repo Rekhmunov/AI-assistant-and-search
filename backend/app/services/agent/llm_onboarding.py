@@ -387,14 +387,15 @@ def enrich_schedule_from_history(
     checklist: ChecklistState,
     history: list[dict[str, str]],
 ) -> ChecklistState:
+    from app.services.agent.intent_hints import user_wants_today_run
+
     data = checklist.to_dict()
     sched = str(data.get("schedule_text") or "")
     tz = data.get("timezone")
-    needs_better = (
-        not sched
-        or not is_schedule_parseable(sched, tz)
-        or ("сегодня" in sched.lower() and not _schedule_has_recurrence(sched))
-    )
+    last_user = next((m.get("text") or "" for m in reversed(history) if m.get("role") == "user"), "")
+    if user_wants_today_run(last_user):
+        return checklist
+    needs_better = not sched or not is_schedule_parseable(sched, tz)
     if not needs_better:
         return checklist
 
@@ -714,8 +715,19 @@ async def run_llm_turn(
                 "(или привяжите существующий аккаунт)."
             )
 
-    if user_wants_confirm(last_user) and ready:
+    missing = checklist_missing_fields(merged)
+    if user_wants_confirm(last_user) and not missing:
         activate = True
+        ready = True
+    else:
+        from app.services.agent.intent_hints import user_wants_today_run
+
+        if user_wants_today_run(last_user) and not missing:
+            activate = True
+
+    if activate and missing:
+        activate = False
+        reply = build_parse_fallback_reply(merged.to_dict(), last_user)
 
     return LlmTurnResult(
         reply=reply,

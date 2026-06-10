@@ -54,6 +54,15 @@ def test_normalize_daily_with_time():
 def test_normalize_rejects_bare_today():
     assert normalize_schedule_phrase("сегодня") is None
     assert normalize_schedule_phrase("сегодня в 16:35") == "сегодня в 16:35"
+    assert normalize_schedule_phrase("сегодня сделать") == "через 2 минуты"
+
+
+def test_parse_today_run_soon():
+    now = datetime(2026, 6, 3, 12, 0, tzinfo=MSK)
+    run_at, recurrence = parse_reminder_schedule("сегодня сделать", now=now)
+    assert recurrence is None
+    delta = run_at.astimezone(MSK) - now
+    assert 1 <= delta.total_seconds() / 60 <= 3
 
 
 def test_is_schedule_parseable():

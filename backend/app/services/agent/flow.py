@@ -18,14 +18,18 @@ from app.models.user import User
 from app.services.agent.constants import AGENT_WELCOME
 from app.services.agent.dispatch import dispatch_due_reminders
 from app.services.agent.lifecycle import cancel_agent, get_agent_for_thread
+from app.services.agent.capabilities import reply_claims_activation
+from app.services.agent.intent_hints import user_wants_today_run
 from app.services.agent.llm_onboarding import (
     apply_checklist_to_agent,
     build_confirmation_prompt,
+    build_parse_fallback_reply,
     checklist_missing_fields,
     load_checklist,
     run_llm_turn,
     try_validate_checklist,
     user_wants_cancel,
+    user_wants_confirm,
 )
 from app.services.agent.onboarding import activation_summary
 from app.services.agent.profile import EVENT_DRIVEN_ROLES, SCHEDULED_ROLES
@@ -189,7 +193,16 @@ async def handle_agent_message(
     cfg = dict(agent.config or {})
     missing = checklist_missing_fields(llm_result.checklist)
 
-    if llm_result.activate and not missing:
+    should_activate = llm_result.activate
+    if not should_activate and not missing:
+        if user_wants_confirm(text) and (
+            cfg.get("awaiting_confirmation") or llm_result.ready_for_confirmation
+        ):
+            should_activate = True
+        elif user_wants_today_run(text):
+            should_activate = True
+
+    if should_activate and not missing:
         try:
             try_validate_checklist(llm_result.checklist)
             if user.max_user_id:
@@ -242,7 +255,22 @@ async def handle_agent_message(
             await db.commit()
             return user_msg, assistant, agent
 
-    if llm_result.ready_for_confirmation and not missing:
+    if should_activate and missing:
+        llm_result.reply = build_parse_fallback_reply(
+            llm_result.checklist.to_dict(),
+            text,
+        )
+    elif reply_claims_activation(llm_result.reply) and not should_activate:
+        llm_result.reply = (
+            build_confirmation_prompt(
+                llm_result.confirmation_summary,
+                llm_result.checklist,
+            )
+            if not missing
+            else build_parse_fallback_reply(llm_result.checklist.to_dict(), text)
+        )
+
+    if llm_result.ready_for_confirmation and not missing and not should_activate:
         cfg["awaiting_confirmation"] = True
         agent.config = cfg
         if "подтверж" not in llm_result.reply.lower() and "запустить" not in llm_result.reply.lower():

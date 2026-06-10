@@ -104,6 +104,9 @@ def parse_reminder_schedule(
             if run <= now_local:
                 run += timedelta(minutes=2)
             return run.astimezone(timezone.utc), None
+        if any(word in raw for word in ("сделай", "сделать", "отправ", "пришли", "запусти", "выполни")):
+            run = now_local + timedelta(minutes=2)
+            return run.astimezone(timezone.utc), None
 
     if "завтра" in raw:
         hm = _parse_time_hm(raw) or (9, 0)
@@ -157,7 +160,11 @@ def normalize_schedule_phrase(text: str) -> str | None:
             return f"каждый {name} в {time_part}" if time_part else f"каждый {name}"
 
     if "сегодня" in low:
-        return f"сегодня в {time_part}" if time_part else None
+        if time_part:
+            return f"сегодня в {time_part}"
+        if any(word in low for word in ("сделай", "сделать", "отправ", "пришли", "запусти", "выполни")):
+            return "через 2 минуты"
+        return None
 
     if "завтра" in low:
         return f"завтра в {time_part}" if time_part else "завтра"

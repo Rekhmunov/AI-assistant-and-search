@@ -12,6 +12,14 @@ from app.services.agent.profile import USER_TASK_LABELS
 
 GROUP_ROLES = PROFILE_GROUP_ROLES
 
+_ACTIVATION_CLAIM_MARKERS = (
+    "агент запущен",
+    "агент активирован",
+    "принято!",
+    "запущен.",
+    "уже работает",
+)
+
 _CAPABILITIES_TEMPLATE_MARKERS = (
     "сейчас агент glosix в max умеет",
     "присылать уведомления и напоминания в личный чат",
@@ -180,6 +188,11 @@ def _ensure_timezone(checklist: dict[str, Any]) -> dict[str, Any]:
     if data.get("schedule_text") and not data.get("timezone"):
         data["timezone"] = DEFAULT_AGENT_TIMEZONE
     return data
+
+
+def reply_claims_activation(reply: str) -> bool:
+    low = (reply or "").lower()
+    return any(marker in low for marker in _ACTIVATION_CLAIM_MARKERS)
 
 
 def reply_looks_like_capabilities_template(reply: str) -> bool:

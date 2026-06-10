@@ -8,7 +8,11 @@ from app.services.agent.capabilities import (
     try_local_onboarding_reply,
     user_wants_continue,
 )
-from app.services.agent.intent_hints import infer_role_from_text, infer_checklist_fields
+from app.services.agent.intent_hints import (
+    infer_checklist_fields,
+    infer_role_from_text,
+    user_wants_today_run,
+)
 
 
 def test_infer_personal_reminder():
@@ -71,6 +75,30 @@ def test_daily_schedule_includes_time():
 def test_bare_today_not_extracted_without_time():
     data = infer_checklist_fields("сегодня", {"role": AgentRole.PERSONAL_REMINDER.value})
     assert "schedule_text" not in data or data.get("schedule_text") is None
+
+
+def test_today_run_intent():
+    assert user_wants_today_run("сегодня сделать")
+    data = infer_checklist_fields(
+        "сегодня сделать",
+        {
+            "role": AgentRole.PERSONAL_REMINDER.value,
+            "schedule_text": "каждый день в 16:35",
+            "reminder_message": "Привет",
+        },
+    )
+    assert data["schedule_text"] == "сегодня в 16:35"
+
+
+def test_today_run_without_time_is_soon():
+    data = infer_checklist_fields(
+        "сегодня сделай",
+        {
+            "role": AgentRole.PERSONAL_REMINDER.value,
+            "reminder_message": "Привет",
+        },
+    )
+    assert data["schedule_text"] == "через 2 минуты"
 
 
 def test_bare_time_gets_default_timezone():

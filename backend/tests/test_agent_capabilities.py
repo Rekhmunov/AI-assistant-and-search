@@ -8,6 +8,7 @@ from app.services.agent.capabilities import (
     build_parse_fallback_reply,
     compose_feasibility_reply,
     explain_next_step,
+    reply_claims_activation,
     reply_looks_like_capabilities_template,
     try_local_onboarding_reply,
     user_asks_capabilities,
@@ -144,6 +145,22 @@ def test_merge_protects_schedule_on_confirm():
     assert merged.schedule_text == "каждый день в 16:35"
 
 
+def test_finalize_keeps_today_run_when_user_asks():
+    checklist = ChecklistState(
+        role=AgentRole.PERSONAL_REMINDER.value,
+        schedule_text="сегодня в 16:35",
+        timezone="Europe/Moscow",
+        reminder_message="Привет",
+    )
+    history = [
+        {"role": "user", "text": "каждый день в 16:35"},
+        {"role": "assistant", "text": "Подтверждаете?"},
+        {"role": "user", "text": "сегодня сделать"},
+    ]
+    fixed = finalize_checklist(checklist, history=history)
+    assert fixed.schedule_text == "сегодня в 16:35"
+
+
 def test_finalize_restores_schedule_from_history():
     checklist = ChecklistState(
         role=AgentRole.PERSONAL_REMINDER.value,
@@ -161,6 +178,11 @@ def test_finalize_restores_schedule_from_history():
     fixed = finalize_checklist(checklist, history=history)
     assert fixed.schedule_text == "каждый день в 16:35"
     assert "schedule" not in checklist_missing_fields(fixed)
+
+
+def test_reply_claims_activation():
+    assert reply_claims_activation("Принято! Агент запущен.")
+    assert not reply_claims_activation("Запустить агента? Ответьте «да».")
 
 
 def test_detect_capabilities_template():
