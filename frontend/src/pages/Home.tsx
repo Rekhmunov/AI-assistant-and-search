@@ -1,7 +1,7 @@
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { createAgentThread } from "../api/client";
+import { createAgentThread, fetchSession } from "../api/client";
 import { GlosixBrand } from "../components/GlosixBrand";
 import { HomeMobileHeader } from "../components/HomeMobileHeader";
 import { SearchComposer, type ComposerAttachment } from "../components/SearchComposer";
@@ -17,6 +17,12 @@ export function Home() {
   const brandTier = userPlan === "pro" ? "pro" : "free";
   const [query, setQuery] = useState("");
   const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
+  const [agentError, setAgentError] = useState<string | null>(null);
+
+  const { data: session } = useQuery({
+    queryKey: ["session", token],
+    queryFn: () => fetchSession(token),
+  });
 
   const startSearch = (payload: {
     query: string;
@@ -43,16 +49,25 @@ export function Home() {
   };
 
   const createAgent = useMutation({
-    mutationFn: () => createAgentThread(token!),
+    mutationFn: () => createAgentThread(token),
     onSuccess: (data) => {
+      setAgentError(null);
       navigate(`/thread/${data.thread.id}`, {
         state: { fromHistory: true, agentRevealWelcome: true },
       });
     },
+    onError: (err) => {
+      setAgentError(
+        err instanceof Error ? err.message : "Не удалось создать агента. Попробуйте ещё раз.",
+      );
+    },
   });
 
   const startAgent = () => {
-    if (!token || createAgent.isPending) return;
+    if (createAgent.isPending) return;
+    const canStart = Boolean(token) || session?.authenticated === true;
+    if (!canStart) return;
+    setAgentError(null);
     createAgent.mutate();
   };
 
@@ -74,6 +89,8 @@ export function Home() {
           placeholderPhrases={placeholderPhrases}
           requireTextWithAttachments
           onAgentClick={startAgent}
+          agentStarting={createAgent.isPending}
+          agentError={agentError}
         />
       ) : (
         <div className="home-mobile-main">
@@ -94,6 +111,8 @@ export function Home() {
                 placeholderPhrases={placeholderPhrases}
                 requireTextWithAttachments
                 onAgentClick={startAgent}
+                agentStarting={createAgent.isPending}
+                agentError={agentError}
               />
             </div>
           </div>

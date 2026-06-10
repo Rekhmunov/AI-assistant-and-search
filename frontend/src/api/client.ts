@@ -553,7 +553,7 @@ async function fetchAgentWithRetry(
   throw new HttpResponseError(message, lastRes.status);
 }
 
-export async function createAgentThread(token: string): Promise<AgentThreadCreateResponse> {
+export async function createAgentThread(token: string | null): Promise<AgentThreadCreateResponse> {
   const res = await fetchAgentWithRetry(
     `${API_BASE}/api/agent/threads`,
     {

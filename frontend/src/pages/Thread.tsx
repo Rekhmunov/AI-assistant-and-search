@@ -173,6 +173,8 @@ export function Thread() {
   const [needsSearch, setNeedsSearch] = useState(true);
   const [searchPhase, setSearchPhase] = useState<SearchPhase>("idle");
   const [composerQuery, setComposerQuery] = useState("");
+  const [agentError, setAgentError] = useState<string | null>(null);
+  const [agentStarting, setAgentStarting] = useState(false);
   const [activeTab, setActiveTab] = useState<ThreadTab>("answer");
   const started = useRef(false);
   const pendingPollStartedAtRef = useRef<number | null>(null);
@@ -981,14 +983,26 @@ export function Thread() {
   };
 
   const startNewAgentThread = useCallback(async () => {
-    if (!token) return;
-    const data = await createAgentThread(token);
-    queryClient.invalidateQueries({ queryKey: ["threads"] });
-    navigate(`/thread/${data.thread.id}`, {
-      replace: true,
-      state: { fromHistory: true, agentRevealWelcome: true },
-    });
-  }, [token, navigate, queryClient]);
+    if (agentStarting) return;
+    const canStart = Boolean(token) || session?.authenticated === true;
+    if (!canStart) return;
+    setAgentError(null);
+    setAgentStarting(true);
+    try {
+      const data = await createAgentThread(token);
+      queryClient.invalidateQueries({ queryKey: ["threads"] });
+      navigate(`/thread/${data.thread.id}`, {
+        replace: true,
+        state: { fromHistory: true, agentRevealWelcome: true },
+      });
+    } catch (err) {
+      setAgentError(
+        err instanceof Error ? err.message : "Не удалось создать агента. Попробуйте ещё раз.",
+      );
+    } finally {
+      setAgentStarting(false);
+    }
+  }, [token, session?.authenticated, agentStarting, navigate, queryClient]);
 
   const lastCompletedIndex = findLastIndex(
     turns,
@@ -1298,6 +1312,8 @@ export function Thread() {
         layoutMode={isDesktop ? "default" : "threadMobile"}
         onNewChat={isDesktop ? undefined : () => navigate("/")}
         onAgentClick={startNewAgentThread}
+        agentStarting={agentStarting}
+        agentError={agentError}
         agentMode={isAgentThread}
       />
       </div>

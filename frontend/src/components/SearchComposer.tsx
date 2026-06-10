@@ -63,6 +63,10 @@ interface Props {
   layoutMode?: "default" | "threadMobile" | "homeMobile";
   onNewChat?: () => void;
   onAgentClick?: () => void;
+  /** Создание треда агента в процессе — блокируем повторный клик */
+  agentStarting?: boolean;
+  /** Ошибка запуска агента (показывается над композером) */
+  agentError?: string | null;
   /** Тред агента: без модели и кнопки робота; вложения — для базы знаний и документов */
   agentMode?: boolean;
 }
@@ -89,9 +93,12 @@ export function SearchComposer({
   layoutMode = "default",
   onNewChat,
   onAgentClick,
+  agentStarting = false,
+  agentError = null,
   agentMode = false,
 }: Props) {
   const token = useAuthStore((s) => s.token);
+  const authPlan = useAuthStore((s) => s.user?.plan);
   const isDesktop = useDesktopLayout();
   const isMobileFocusLayout =
     (layoutMode === "threadMobile" || layoutMode === "homeMobile") && !isDesktop;
@@ -163,7 +170,8 @@ export function SearchComposer({
     queryFn: () => fetchMe(token!),
     enabled: !!token,
   });
-  const plan = me?.plan === "pro" || session?.user?.plan === "pro" ? "pro" : "free";
+  const plan =
+    me?.plan === "pro" || session?.user?.plan === "pro" || authPlan === "pro" ? "pro" : "free";
   const isGuest = session?.is_guest === true;
   const canAttachFiles = Boolean(token) || isGuest;
   const voiceBlockedForNonPro = plan !== "pro";
@@ -206,7 +214,7 @@ export function SearchComposer({
   };
 
   const totalCount = attachments.length + uploading.length;
-  const isBusy = uploading.length > 0;
+  const isBusy = uploading.length > 0 || agentStarting;
   const atLimit = totalCount >= MAX_ATTACHMENTS;
 
   const handleSubmit = (e: FormEvent) => {
@@ -571,9 +579,9 @@ export function SearchComposer({
       ref={composerWrapRef}
       className={`composer-wrap${docked ? " composer-wrap--docked" : " composer-wrap--inline"}${isMobileFocusLayout ? " composer-wrap--thread-mobile" : ""}${composerExpanded && isMobileFocusLayout ? " composer-wrap--focused" : ""}`}
     >
-      {(uploadError || voice.error) && (
+      {(uploadError || voice.error || agentError) && (
         <div className="composer-error-wrap">
-          <p className="composer-error">{uploadError || voice.error}</p>
+          <p className="composer-error">{agentError || uploadError || voice.error}</p>
           {uploadSuggestPro && uploadError && (
             <Link to="/profile" className="composer-error-upgrade">
               {t("upgradePro")}
