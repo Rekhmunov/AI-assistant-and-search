@@ -151,9 +151,12 @@ async def handle_agent_message(
         await db.commit()
         return user_msg, assistant, agent
 
-    prior_messages = [m for m in thread.messages if m.id != user_msg.id]
+    msgs_result = await db.execute(
+        select(Message).where(Message.thread_id == thread.id).order_by(Message.created_at.asc())
+    )
+    all_messages = list(msgs_result.scalars().all())
     try:
-        llm_result = await run_llm_turn(db, redis_client, user, agent, prior_messages, text)
+        llm_result = await run_llm_turn(db, redis_client, user, agent, all_messages)
     except Exception as exc:
         logger.exception("Agent LLM turn failed thread=%s", thread_id)
         assistant = await _assistant_reply(
@@ -177,13 +180,19 @@ async def handle_agent_message(
             try_validate_checklist(llm_result.checklist)
             if user.max_user_id:
                 agent.max_user_id = int(user.max_user_id)
+            elif not agent.max_user_id:
+                raise ValueError("max_required")
             await activate_agent_reminders(db, agent)
+            await db.commit()
             sent = await dispatch_due_reminders(db, agent_id=agent.id)
+            await db.commit()
             summary = activation_summary(agent)
             if sent:
                 summary += "\n\nПервое напоминание уже отправлено в MAX."
             else:
                 summary += "\n\nНапоминание запланировано — бот напишет в MAX в указанное время."
+                if not effective_max_user_id(agent):
+                    summary += "\n\n⚠️ Аккаунт MAX не привязан — привяжите в Профиле, иначе напоминания не дойдут."
             assistant = await _assistant_reply(db, thread, summary)
             await db.commit()
             return user_msg, assistant, agent

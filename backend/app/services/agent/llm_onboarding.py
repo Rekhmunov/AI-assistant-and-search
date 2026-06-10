@@ -48,7 +48,8 @@ AGENT_SYSTEM_PROMPT = """Ты — ассистент настройки аген
 
 Чеклист (заполняй по мере диалога, null если неизвестно):
 - role: personal_reminder | group_reminder | group_message_log | null
-- schedule_text: когда срабатывать (естественный язык, MSK): «завтра в 9:00», «каждый понедельник в 10:00», «через 15 минут», «сегодня в 18:30»
+- schedule_text: когда срабатывать (естественный язык): «завтра в 9:00», «каждый понедельник в 10:00», «через 15 минут»
+- timezone: часовой пояс пользователя (IANA, напр. Europe/Moscow, Asia/Yekaterinburg) или UTC+3 — ОБЯЗАТЕЛЬНО уточни, если в расписании есть время суток
 - reminder_message: текст напоминания или сводки
 - max_chat_id: числовой ID группового чата (только для group_*)
 - bot_is_group_admin: true/false/null — бот Glosix назначен админом группы
@@ -66,9 +67,10 @@ AGENT_SYSTEM_PROMPT = """Ты — ассистент настройки аген
 Формат ответа:
 {
   "reply": "текст",
-  "checklist": {
+    "checklist": {
     "role": null,
     "schedule_text": null,
+    "timezone": null,
     "reminder_message": null,
     "max_chat_id": null,
     "bot_is_group_admin": null,
@@ -85,6 +87,7 @@ AGENT_SYSTEM_PROMPT = """Ты — ассистент настройки аген
 class ChecklistState:
     role: str | None = None
     schedule_text: str | None = None
+    timezone: str | None = None
     reminder_message: str | None = None
     max_chat_id: int | None = None
     bot_is_group_admin: bool | None = None
@@ -94,6 +97,7 @@ class ChecklistState:
         return {
             "role": self.role,
             "schedule_text": self.schedule_text,
+            "timezone": self.timezone,
             "reminder_message": self.reminder_message,
             "max_chat_id": self.max_chat_id,
             "bot_is_group_admin": self.bot_is_group_admin,
@@ -115,6 +119,7 @@ class ChecklistState:
         return cls(
             role=role,
             schedule_text=_str_or_none(raw.get("schedule_text")),
+            timezone=_str_or_none(raw.get("timezone")),
             reminder_message=_str_or_none(raw.get("reminder_message")),
             max_chat_id=chat_id,
             bot_is_group_admin=_bool_or_none(raw.get("bot_is_group_admin")),
@@ -193,6 +198,7 @@ def apply_checklist_to_agent(agent: AgentInstance, checklist: ChecklistState) ->
     cfg = dict(agent.config or {})
     cfg["checklist"] = checklist.to_dict()
     cfg["schedule_text"] = checklist.schedule_text
+    cfg["timezone"] = checklist.timezone or cfg.get("timezone") or "Europe/Moscow"
     cfg["reminder_message"] = checklist.reminder_message
     cfg["bot_is_group_admin"] = checklist.bot_is_group_admin
     cfg["bot_can_read_messages"] = checklist.bot_can_read_messages
@@ -219,6 +225,8 @@ def checklist_missing_fields(checklist: ChecklistState) -> list[str]:
         missing.append("role")
     if not checklist.schedule_text:
         missing.append("schedule")
+    if checklist.schedule_text and not checklist.timezone:
+        missing.append("timezone")
     if not checklist.reminder_message:
         missing.append("message")
     if checklist.role in {AgentRole.GROUP_REMINDER.value, AgentRole.GROUP_MESSAGE_LOG.value}:
@@ -255,7 +263,7 @@ def _history_messages(messages: list[Message]) -> list[dict[str, str]]:
             out.append({"role": "user", "text": m.content})
         elif m.role == MessageRole.ASSISTANT:
             out.append({"role": "assistant", "text": m.content})
-    return out[-20:]
+    return out
 
 
 def _context_block(user: User, agent: AgentInstance, checklist: ChecklistState) -> str:
@@ -267,6 +275,7 @@ def _context_block(user: User, agent: AgentInstance, checklist: ChecklistState) 
         f"agent_status: {agent.status}",
         f"registered_group_chat_id: {registered or 'нет'}",
         f"current_checklist: {json.dumps(checklist.to_dict(), ensure_ascii=False)}",
+        f"default_timezone: Europe/Moscow",
         "supported_roles: " + ", ".join(SUPPORTED_ROLE_LABELS.keys()),
     ]
     return "\n".join(lines)
@@ -278,16 +287,17 @@ async def run_llm_turn(
     user: User,
     agent: AgentInstance,
     messages: list[Message],
-    user_text: str,
 ) -> LlmTurnResult:
     checklist = load_checklist(agent)
     llm, _, _, _, _ = await resolve_runtime_providers(db, redis_client, user=user)
+    history = _history_messages(messages)
+    if not history or history[-1]["role"] != "user":
+        logger.warning("Agent LLM turn without trailing user message")
 
     payload_messages: list[dict[str, str]] = [
         {"role": "system", "text": AGENT_SYSTEM_PROMPT},
         {"role": "system", "text": _context_block(user, agent, checklist)},
-        *_history_messages(messages),
-        {"role": "user", "text": user_text},
+        *history,
     ]
 
     raw = ""
@@ -331,7 +341,8 @@ async def run_llm_turn(
                 "(или привяжите существующий аккаунт)."
             )
 
-    if user_wants_confirm(user_text) and ready:
+    last_user = history[-1]["text"] if history and history[-1]["role"] == "user" else ""
+    if user_wants_confirm(last_user) and ready:
         activate = True
 
     return LlmTurnResult(
@@ -351,6 +362,7 @@ def build_confirmation_prompt(summary: str | None, checklist: ChecklistState) ->
         "Проверьте настройки перед запуском:\n"
         f"• Задача: {role_label}\n"
         f"• Расписание: {checklist.schedule_text or '—'}\n"
+        f"• Часовой пояс: {checklist.timezone or 'Europe/Moscow'}\n"
         f"• Текст: {checklist.reminder_message or '—'}\n"
         + (f"• Группа MAX: {checklist.max_chat_id}\n" if checklist.max_chat_id else "")
         + "\nЗапустить агента? Ответьте «да» или «подтверждаю»."

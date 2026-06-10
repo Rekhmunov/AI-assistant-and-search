@@ -189,6 +189,8 @@ export function Thread() {
   const imageGenActiveRef = useRef(false);
   const docGenActiveRef = useRef(false);
   const [docGenStatus, setDocGenStatus] = useState<string | undefined>();
+  const [agentLoading, setAgentLoading] = useState(false);
+  const [agentStatusText, setAgentStatusText] = useState<string | null>(null);
   const [showScrollDown, setShowScrollDown] = useState(false);
   const isDesktop = useDesktopLayout();
 
@@ -337,10 +339,6 @@ export function Thread() {
           }
           return prev;
         });
-        if (streamingRef.current) {
-          streamingRef.current = false;
-          setStreaming(false);
-        }
         if (!streamingRef.current) {
           setTurns((prev) => {
             const idx = findLastIndex(
@@ -421,9 +419,9 @@ export function Thread() {
       const tid = existingThreadId ?? threadId;
       if (!tid) return;
 
-      streamingRef.current = true;
-      setStreaming(true);
-      setSearchPhase("idle");
+      setAgentLoading(true);
+      setAgentStatusText(t("agentStatusThinking"));
+      setSearchPhase("routing");
       const pendingKey = `agent-${Date.now()}`;
       setTurns((prev) => [
         ...prev,
@@ -444,6 +442,8 @@ export function Thread() {
         const result = await postAgentMessage(token, tid, text);
         queryClient.invalidateQueries({ queryKey: ["thread", tid] });
         queryClient.invalidateQueries({ queryKey: ["threads"] });
+        setAgentStatusText(t("agentStatusConfiguring"));
+        setSearchPhase("answering");
         setTurns((prev) =>
           prev.map((turn) =>
             turn.key === pendingKey
@@ -457,10 +457,14 @@ export function Thread() {
               : turn,
           ),
         );
+        setAgentLoading(false);
+        setAgentStatusText(null);
+        setSearchPhase("idle");
       } catch (err) {
         const msg = err instanceof Error ? err.message : "Не удалось отправить сообщение";
-        streamingRef.current = false;
-        setStreaming(false);
+        setAgentLoading(false);
+        setAgentStatusText(null);
+        setSearchPhase("idle");
         setTurns((prev) =>
           prev.map((turn) =>
             turn.key === pendingKey
@@ -1030,10 +1034,17 @@ export function Thread() {
             const preparingNeedsSearch =
               turnAnswerStatus?.needs_search ?? turn.needsSearch ?? needsSearch;
             const showInterrupted = turn.errorCode === "search_interrupted";
+            const showAgentStatus =
+              isAgentThread &&
+              isLastTurn &&
+              agentLoading &&
+              !answerHasText(turn.answer) &&
+              !turn.errorCode;
             const showStatus =
+              showAgentStatus ||
               showPreparing ||
               (isActive &&
-                streaming &&
+                (isAgentThread || streaming) &&
                 !turn.errorCode &&
                 (isDocumentGenTurn
                   ? !answerHasText(turn.answer) && !turn.generatedDocument
@@ -1084,6 +1095,12 @@ export function Thread() {
                     <DocGenStatusLine active={Boolean(isActive && streaming)} status={docGenStatus} />
                   ) : isImageGenTurn ? (
                     <ImageGenStatusLine active={streaming} />
+                  ) : showAgentStatus ? (
+                    <SearchStatusLine
+                      phase="routing"
+                      needsSearch={false}
+                      customStatus={agentStatusText ?? t("agentStatusThinking")}
+                    />
                   ) : (
                     <SearchStatusLine phase={searchPhase} needsSearch={needsSearch} />
                   ))}
@@ -1226,7 +1243,7 @@ export function Thread() {
           setComposerQuery("");
           onComposerSubmit(p);
         }}
-        disabled={streaming}
+        disabled={isAgentThread ? agentLoading : streaming}
         placeholder={isAgentThread ? t("agentComposerPlaceholder") : t("askFollowUp")}
         attachments={attachments}
         onAttachmentsChange={setAttachments}

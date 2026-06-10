@@ -309,5 +309,7 @@
   "agentMaxModalDescription": "Чтобы создать агента, войдите через MAX или привяжите аккаунт в профиле. Без привязки агент не сможет писать вам в чат.",
   "agentMaxModalCta": "Перейти в профиль",
   "agentThreadBadge": "Агент",
-  "agentComposerPlaceholder": "Опишите задачу агента…"
+  "agentComposerPlaceholder": "Опишите задачу агента…",
+  "agentStatusThinking": "Анализирую задачу…",
+  "agentStatusConfiguring": "Настраиваю агента…"
 }

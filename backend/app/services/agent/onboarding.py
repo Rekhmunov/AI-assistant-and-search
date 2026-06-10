@@ -152,7 +152,10 @@ def validate_activation(agent: AgentInstance) -> None:
         raise ValueError("schedule_missing")
     if not cfg.get("reminder_message"):
         raise ValueError("message_missing")
-    parse_reminder_schedule(str(cfg["schedule_text"]))
+    parse_reminder_schedule(
+        str(cfg["schedule_text"]),
+        tz_name=str(cfg.get("timezone") or "Europe/Moscow"),
+    )
     if agent.role in {AgentRole.GROUP_REMINDER.value, AgentRole.GROUP_MESSAGE_LOG.value}:
         if not agent.max_chat_id:
             raise ValueError("group_chat_missing")
@@ -161,14 +164,31 @@ def validate_activation(agent: AgentInstance) -> None:
 def activation_summary(agent: AgentInstance) -> str:
     cfg = _config(agent)
     role_label = SUPPORTED_ROLE_LABELS.get(agent.role or "", agent.role or "агент")
+    from app.services.agent.schedule import format_run_at_local
+
     schedule = cfg.get("schedule_text", "—")
+    tz_name = str(cfg.get("timezone") or "Europe/Moscow")
     message = cfg.get("reminder_message", "—")
     lines = [
         "Агент активирован.",
         f"Задача: {role_label}.",
         f"Расписание: {schedule}.",
+        f"Часовой пояс: {tz_name}.",
         f"Текст: {message}.",
     ]
+    next_run_raw = cfg.get("next_run_at")
+    if next_run_raw:
+        try:
+            from datetime import datetime
+
+            run_dt = datetime.fromisoformat(str(next_run_raw))
+            if run_dt.tzinfo is None:
+                from datetime import timezone as dt_tz
+
+                run_dt = run_dt.replace(tzinfo=dt_tz.utc)
+            lines.append(f"Ближайший запуск: {format_run_at_local(run_dt, tz_name)}.")
+        except ValueError:
+            pass
     if agent.max_chat_id:
         lines.append(f"Групповой чат MAX: {agent.max_chat_id}.")
     lines.append("Напишите «отключи агента», чтобы остановить.")

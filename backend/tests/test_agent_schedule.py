@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta, timezone
 
-from app.services.agent.schedule import MSK, next_weekly_run, parse_reminder_schedule
+from app.services.agent.schedule import MSK, next_weekly_run, parse_reminder_schedule, resolve_user_timezone
 
 
 def test_parse_tomorrow():
@@ -29,6 +29,14 @@ def test_parse_in_minutes():
     assert recurrence is None
     delta = run_at.astimezone(MSK) - now
     assert 14 <= delta.total_seconds() / 60 <= 16
+
+
+def test_timezone_utc_plus5():
+    tz = resolve_user_timezone("UTC+5")
+    now = datetime(2026, 6, 3, 12, 0, tzinfo=tz)
+    run_at, _ = parse_reminder_schedule("завтра в 10:00", now=now, tz_name="UTC+5")
+    local = run_at.astimezone(tz)
+    assert local.hour == 10
 
 
 def test_next_weekly_run_skips_past_today():

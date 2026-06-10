@@ -53,9 +53,11 @@ async def dispatch_due_reminders(
             reminder.status = "cancelled"
             continue
 
-        if not agent.max_user_id:
+        max_uid = int(agent.max_user_id) if agent.max_user_id else 0
+        if max_uid <= 0:
             reminder.last_error = "max_user_id missing"
             reminder.status = "failed"
+            logger.warning("Agent reminder skipped: no max_user_id agent=%s", agent.id)
             continue
 
         user_id, chat_id = delivery_target(agent)
@@ -75,7 +77,11 @@ async def dispatch_due_reminders(
                 cfg["message_buffer"] = []
                 agent.config = cfg
 
-        send_result = await bot.send_message(user_id, text, chat_id=chat_id)
+        send_result = await bot.send_message(
+            int(user_id) if user_id else None,
+            text,
+            chat_id=int(chat_id) if chat_id else None,
+        )
         if send_result.ok:
             reminder.status = "sent"
             reminder.sent_at = datetime.now(timezone.utc)
