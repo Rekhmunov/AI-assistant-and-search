@@ -15,7 +15,7 @@ type ArticleResult = {
   og_description: string;
 };
 
-type CoverResult = {
+type MediaResult = {
   media: {
     id: string;
     url: string;
@@ -28,14 +28,23 @@ type Props = {
   onClose: () => void;
   onApplyArticle: (data: ArticleResult) => void;
   onApplyCover: (mediaId: string, url: string) => void;
+  onApplyInlineImage: (url: string, altText: string) => void;
   defaultTopic?: string;
 };
 
-export function BlogAiModal({ open, onClose, onApplyArticle, onApplyCover, defaultTopic = "" }: Props) {
+export function BlogAiModal({
+  open,
+  onClose,
+  onApplyArticle,
+  onApplyCover,
+  onApplyInlineImage,
+  defaultTopic = "",
+}: Props) {
   const [topic, setTopic] = useState(defaultTopic);
   const [requirements, setRequirements] = useState("");
   const [coverPrompt, setCoverPrompt] = useState("");
-  const [busy, setBusy] = useState<"article" | "cover" | null>(null);
+  const [inlinePrompt, setInlinePrompt] = useState("");
+  const [busy, setBusy] = useState<"article" | "cover" | "inline" | null>(null);
   const [error, setError] = useState("");
 
   if (!open) return null;
@@ -72,7 +81,7 @@ export function BlogAiModal({ open, onClose, onApplyArticle, onApplyCover, defau
     setBusy("cover");
     setError("");
     try {
-      const data = await apiFetch<CoverResult>("/api/admin/blog/generate-cover", {
+      const data = await apiFetch<MediaResult>("/api/admin/blog/generate-cover", {
         method: "POST",
         body: JSON.stringify({ prompt, alt_text: topic.trim() }),
       });
@@ -85,8 +94,31 @@ export function BlogAiModal({ open, onClose, onApplyArticle, onApplyCover, defau
     }
   };
 
+  const generateInlineImage = async () => {
+    const prompt = inlinePrompt.trim();
+    if (prompt.length < 3) {
+      setError("Введите промпт для картинки (минимум 3 символа)");
+      return;
+    }
+    setBusy("inline");
+    setError("");
+    try {
+      const data = await apiFetch<MediaResult>("/api/admin/blog/generate-inline-image", {
+        method: "POST",
+        body: JSON.stringify({ prompt, alt_text: prompt.slice(0, 200) }),
+      });
+      onApplyInlineImage(data.media.url, data.media.alt_text || prompt.slice(0, 200));
+      setInlinePrompt("");
+      setError("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Ошибка генерации изображения");
+    } finally {
+      setBusy(null);
+    }
+  };
+
   return createPortal(
-    <AdminModal title="AI: статья и обложка" onClose={onClose}>
+    <AdminModal title="AI: статья, обложка и картинки" onClose={onClose}>
       <form className="blog-ai-form" onSubmit={generateArticle}>
         <label className="blog-field blog-field--wide">
           <span className="blog-field-label">Тема / заголовок</span>
@@ -115,6 +147,17 @@ export function BlogAiModal({ open, onClose, onApplyArticle, onApplyCover, defau
             placeholder="Минималистичная иллюстрация, бирюзовые тона…"
           />
         </label>
+        <label className="blog-field blog-field--wide">
+          <span className="blog-field-label">Картинка в текст статьи</span>
+          <input
+            value={inlinePrompt}
+            onChange={(e) => setInlinePrompt(e.target.value)}
+            placeholder="Схема работы ИИ-поиска, плоский стиль, светлый фон…"
+          />
+          <span className="hint">
+            Вставится в позицию курсора в редакторе (отметьте место перед открытием окна).
+          </span>
+        </label>
         {error && <p className="error">{error}</p>}
         <div className="blog-ai-actions">
           <button type="submit" className="btn-primary" disabled={busy !== null}>
@@ -122,6 +165,9 @@ export function BlogAiModal({ open, onClose, onApplyArticle, onApplyCover, defau
           </button>
           <button type="button" className="btn-secondary" disabled={busy !== null} onClick={generateCover}>
             {busy === "cover" ? "Генерация…" : "Сгенерировать обложку"}
+          </button>
+          <button type="button" className="btn-secondary" disabled={busy !== null} onClick={generateInlineImage}>
+            {busy === "inline" ? "Генерация…" : "Вставить картинку в статью"}
           </button>
           <button type="button" className="btn-secondary" onClick={onClose}>
             Отмена

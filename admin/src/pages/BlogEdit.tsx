@@ -1,9 +1,9 @@
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { apiFetch, apiUpload } from "../api";
 import { useAuth } from "../AuthContext";
 import { BlogAiModal } from "../components/BlogAiModal";
-import { BlogRichTextEditor } from "../components/BlogRichTextEditor";
+import { BlogRichTextEditor, type BlogRichTextEditorHandle } from "../components/BlogRichTextEditor";
 
 const API = import.meta.env.VITE_API_URL || "";
 const PUBLIC_SITE = import.meta.env.VITE_PUBLIC_URL || "https://glosix.ru";
@@ -99,6 +99,7 @@ export function BlogEditPage() {
   const [aiOpen, setAiOpen] = useState(false);
   const [comments, setComments] = useState<AdminComment[]>([]);
   const [seoOpen, setSeoOpen] = useState(false);
+  const editorRef = useRef<BlogRichTextEditorHandle>(null);
 
   useEffect(() => {
     apiFetch<Category[]>("/api/admin/blog/categories").then(setCategories);
@@ -208,7 +209,15 @@ export function BlogEditPage() {
         </div>
         <div className="blog-edit-header-actions">
           {canWrite && (
-            <button type="button" className="btn-secondary" onClick={() => setAiOpen(true)}>
+            <button
+              type="button"
+              className="btn-secondary"
+              onMouseDown={(e) => {
+                e.preventDefault();
+                editorRef.current?.markCaret();
+              }}
+              onClick={() => setAiOpen(true)}
+            >
               AI-черновик
             </button>
           )}
@@ -275,6 +284,7 @@ export function BlogEditPage() {
           <section className="card blog-edit-section">
             <h2 className="blog-section-title">Текст статьи</h2>
             <BlogRichTextEditor
+              ref={editorRef}
               value={form.content_html}
               onChange={(html) => patch({ content_html: html })}
               disabled={!canWrite}
@@ -488,6 +498,16 @@ export function BlogEditPage() {
           patch({ cover_image_id: mediaId, og_image_id: mediaId });
           setCoverUrl(url);
           setMsg("Обложка от AI загружена");
+        }}
+        onApplyInlineImage={(url, altText) => {
+          const src = mediaSrc(url);
+          const imgHtml = `<p><img src="${src}" alt="${altText.replace(/"/g, "&quot;")}" loading="lazy" style="max-width:100%;height:auto;border-radius:8px;" /></p>`;
+          const inserted = editorRef.current?.insertImageHtml(imgHtml);
+          setMsg(
+            inserted
+              ? "Картинка вставлена в статью — сохраните изменения"
+              : "Картинка добавлена в конец статьи — сохраните изменения",
+          );
         }}
       />
     </div>

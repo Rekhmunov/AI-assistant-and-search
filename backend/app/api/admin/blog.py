@@ -24,7 +24,13 @@ from app.schemas.blog import (
     BlogPostUpdate,
 )
 from app.services.admin_audit import log_admin_action
-from app.services.blog_ai import generate_blog_article, generate_blog_cover, media_upload_out
+from app.services.blog_ai import (
+    generate_blog_article,
+    generate_blog_cover,
+    generate_blog_inline_image,
+    media_upload_out,
+)
+from app.services.gigachat_image_gen import ImageGenerationError
 from app.services.blog_image import ALLOWED_UPLOAD_MIME, process_blog_image
 from app.services.blog_posts import (
     create_post,
@@ -369,6 +375,17 @@ async def upload_blog_media(
     return media_upload_out(media)
 
 
+def _blog_ai_http_error(exc: Exception, *, kind: str) -> HTTPException:
+    if isinstance(exc, ImageGenerationError):
+        return HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc))
+    if isinstance(exc, ValueError):
+        return HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc))
+    return HTTPException(
+        status_code=status.HTTP_502_BAD_GATEWAY,
+        detail=f"Не удалось сгенерировать {kind}: {exc}",
+    )
+
+
 @router.post("/generate-article", response_model=BlogGenerateArticleOut)
 async def admin_generate_article(
     body: BlogGenerateArticleIn,
@@ -386,22 +403,22 @@ async def admin_generate_article(
             fill_seo=body.fill_seo,
             generate_slug=body.generate_slug,
         )
+        await log_admin_action(
+            db,
+            admin=admin,
+            action="blog.ai.generate_article",
+            resource_type="blog_post",
+            resource_id=None,
+            details={"topic": body.topic[:120]},
+            ip=request.client.host if request.client else None,
+        )
+        await db.commit()
+        return result
+    except HTTPException:
+        raise
     except Exception as exc:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"Не удалось сгенерировать статью: {exc}",
-        ) from exc
-    await log_admin_action(
-        db,
-        admin=admin,
-        action="blog.ai.generate_article",
-        resource_type="blog_post",
-        resource_id=None,
-        details={"topic": body.topic[:120]},
-        ip=request.client.host if request.client else None,
-    )
-    await db.commit()
-    return result
+        await db.rollback()
+        raise _blog_ai_http_error(exc, kind="статью") from exc
 
 
 @router.post("/generate-cover", response_model=BlogGenerateCoverOut)
@@ -420,19 +437,53 @@ async def admin_generate_cover(
             alt_text=body.alt_text,
             admin_id=admin.id,
         )
+        await log_admin_action(
+            db,
+            admin=admin,
+            action="blog.ai.generate_cover",
+            resource_type="blog_media",
+            resource_id=str(media.id),
+            details={"prompt": body.prompt[:120]},
+            ip=request.client.host if request.client else None,
+        )
+        await db.commit()
+        return {"media": media_upload_out(media)}
+    except HTTPException:
+        raise
     except Exception as exc:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"Не удалось сгенерировать обложку: {exc}",
-        ) from exc
-    await log_admin_action(
-        db,
-        admin=admin,
-        action="blog.ai.generate_cover",
-        resource_type="blog_media",
-        resource_id=str(media.id),
-        details={"prompt": body.prompt[:120]},
-        ip=request.client.host if request.client else None,
-    )
-    await db.commit()
-    return {"media": media_upload_out(media)}
+        await db.rollback()
+        raise _blog_ai_http_error(exc, kind="обложку") from exc
+
+
+@router.post("/generate-inline-image", response_model=BlogGenerateCoverOut)
+async def admin_generate_inline_image(
+    body: BlogGenerateCoverIn,
+    request: Request,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    redis_client: Annotated[redis.Redis, Depends(get_redis)],
+    admin: Annotated[AdminUser, Depends(require_permission("blog:write"))],
+):
+    try:
+        media = await generate_blog_inline_image(
+            db,
+            redis_client,
+            prompt=body.prompt,
+            alt_text=body.alt_text,
+            admin_id=admin.id,
+        )
+        await log_admin_action(
+            db,
+            admin=admin,
+            action="blog.ai.generate_inline_image",
+            resource_type="blog_media",
+            resource_id=str(media.id),
+            details={"prompt": body.prompt[:120]},
+            ip=request.client.host if request.client else None,
+        )
+        await db.commit()
+        return {"media": media_upload_out(media)}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        await db.rollback()
+        raise _blog_ai_http_error(exc, kind="изображение") from exc

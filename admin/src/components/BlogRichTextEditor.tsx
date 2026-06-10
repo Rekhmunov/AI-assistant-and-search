@@ -1,8 +1,12 @@
-import { useCallback, useRef } from "react";
+import { forwardRef, useCallback, useImperativeHandle, useRef } from "react";
 import { apiUpload } from "../api";
-import { RichTextEditor } from "./RichTextEditor";
+import { RichTextEditor, type RichTextEditorHandle } from "./RichTextEditor";
 
 const API = import.meta.env.VITE_API_URL || "";
+
+export type BlogRichTextEditorHandle = RichTextEditorHandle & {
+  insertImageHtml: (html: string) => boolean;
+};
 
 type Props = {
   value: string;
@@ -10,8 +14,27 @@ type Props = {
   disabled?: boolean;
 };
 
-export function BlogRichTextEditor({ value, onChange, disabled }: Props) {
+export const BlogRichTextEditor = forwardRef<BlogRichTextEditorHandle, Props>(function BlogRichTextEditor(
+  { value, onChange, disabled },
+  ref,
+) {
+  const editorRef = useRef<RichTextEditorHandle>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  const insertImageHtml = useCallback(
+    (html: string) => editorRef.current?.insertHtmlAtCaret(html) ?? false,
+    [],
+  );
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      markCaret: () => editorRef.current?.markCaret() ?? false,
+      insertHtmlAtCaret: (html: string) => editorRef.current?.insertHtmlAtCaret(html) ?? false,
+      insertImageHtml,
+    }),
+    [insertImageHtml],
+  );
 
   const insertImage = useCallback(
     async (file: File) => {
@@ -23,10 +46,12 @@ export function BlogRichTextEditor({ value, onChange, disabled }: Props) {
       );
       const src = media.url.startsWith("http") ? media.url : `${API}${media.url}`;
       const imgHtml = `<p><img src="${src}" alt="${media.alt_text || ""}" loading="lazy" style="max-width:100%;height:auto;border-radius:8px;" /></p>`;
-      const next = (value || "<p></p>").replace(/<\/p>\s*$/, "") + imgHtml;
-      onChange(next.endsWith("</p>") ? next : `${next}<p></p>`);
+      if (!insertImageHtml(imgHtml)) {
+        const next = (value || "<p></p>").replace(/<\/p>\s*$/, "") + imgHtml;
+        onChange(next.endsWith("</p>") ? next : `${next}<p></p>`);
+      }
     },
-    [value, onChange],
+    [insertImageHtml, onChange, value],
   );
 
   const onPickImage = () => fileRef.current?.click();
@@ -64,8 +89,14 @@ export function BlogRichTextEditor({ value, onChange, disabled }: Props) {
         onChange={onFileChange}
       />
       <div className="blog-rte-editor-wrap">
-        <RichTextEditor value={value} onChange={onChange} disabled={disabled} allowHtmlSource />
+        <RichTextEditor
+          ref={editorRef}
+          value={value}
+          onChange={onChange}
+          disabled={disabled}
+          allowHtmlSource
+        />
       </div>
     </div>
   );
-}
+});

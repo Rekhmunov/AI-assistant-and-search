@@ -1,6 +1,21 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import {
+  forwardRef,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 
 type EditorMode = "visual" | "html";
+
+export type RichTextEditorHandle = {
+  /** Запомнить позицию курсора в визуальном режиме. */
+  markCaret: () => boolean;
+  /** Вставить HTML в место, отмеченное markCaret. */
+  insertHtmlAtCaret: (html: string) => boolean;
+};
 
 type Props = {
   value: string;
@@ -9,6 +24,8 @@ type Props = {
   /** Режим редактирования исходного HTML (для юридических документов). */
   allowHtmlSource?: boolean;
 };
+
+const CARET_ATTR = "data-glosix-caret";
 
 const FONT_SIZES = [
   { label: "Мелкий", value: "2" },
@@ -22,15 +39,15 @@ const EMOJIS = [
   "🚀", "✨", "👍", "🙏", "💬", "📎", "🔗", "😉", "🤝", "📣",
 ];
 
-export function RichTextEditor({
-  value,
-  onChange,
-  disabled = false,
-  allowHtmlSource = false,
-}: Props) {
+export const RichTextEditor = forwardRef<RichTextEditorHandle, Props>(function RichTextEditor(
+  { value, onChange, disabled = false, allowHtmlSource = false },
+  ref,
+) {
   const editorRef = useRef<HTMLDivElement>(null);
+  const htmlSourceRef = useRef<HTMLTextAreaElement>(null);
   const emojiWrapRef = useRef<HTMLDivElement>(null);
   const lastValue = useRef(value);
+  const htmlCaretRef = useRef<number | null>(null);
   const [emojiOpen, setEmojiOpen] = useState(false);
   const [mode, setMode] = useState<EditorMode>("visual");
 
@@ -55,6 +72,67 @@ export function RichTextEditor({
     lastValue.current = html;
     onChange(html);
   }, [onChange]);
+
+  const clearCaretMarkers = useCallback(() => {
+    editorRef.current?.querySelectorAll(`[${CARET_ATTR}]`).forEach((node) => node.remove());
+  }, []);
+
+  const markCaret = useCallback((): boolean => {
+    if (disabled) return false;
+    if (mode === "html") {
+      const ta = htmlSourceRef.current;
+      if (!ta) return false;
+      htmlCaretRef.current = ta.selectionStart ?? ta.value.length;
+      return true;
+    }
+    const root = editorRef.current;
+    const sel = window.getSelection();
+    if (!root || !sel || sel.rangeCount === 0) return false;
+    const range = sel.getRangeAt(0);
+    if (!root.contains(range.commonAncestorContainer)) return false;
+    clearCaretMarkers();
+    const marker = document.createElement("span");
+    marker.setAttribute(CARET_ATTR, "1");
+    marker.style.display = "none";
+    range.collapse(true);
+    range.insertNode(marker);
+    emitChange();
+    return true;
+  }, [clearCaretMarkers, disabled, emitChange, mode]);
+
+  const insertHtmlAtCaret = useCallback(
+    (html: string): boolean => {
+      if (disabled) return false;
+      if (mode === "html") {
+        const ta = htmlSourceRef.current;
+        if (!ta) return false;
+        const pos = htmlCaretRef.current ?? ta.value.length;
+        const next = `${ta.value.slice(0, pos)}${html}${ta.value.slice(pos)}`;
+        htmlCaretRef.current = pos + html.length;
+        onChange(next.trim() || "<p></p>");
+        return true;
+      }
+      const root = editorRef.current;
+      if (!root) return false;
+      const marker = root.querySelector(`[${CARET_ATTR}]`);
+      if (!marker || !marker.parentNode) {
+        onChange((value || "<p></p>") + html);
+        return false;
+      }
+      const wrapper = document.createElement("div");
+      wrapper.innerHTML = html;
+      const parent = marker.parentNode;
+      while (wrapper.firstChild) {
+        parent.insertBefore(wrapper.firstChild, marker);
+      }
+      marker.remove();
+      emitChange();
+      return true;
+    },
+    [disabled, emitChange, mode, onChange, value],
+  );
+
+  useImperativeHandle(ref, () => ({ markCaret, insertHtmlAtCaret }), [insertHtmlAtCaret, markCaret]);
 
   const switchMode = (next: EditorMode) => {
     if (disabled || next === mode) return;
@@ -231,6 +309,7 @@ export function RichTextEditor({
       </div>
       {allowHtmlSource && (
         <textarea
+          ref={htmlSourceRef}
           className={`rte-html-source${mode !== "html" ? " rte-html-source--hidden" : ""}`}
           hidden={mode !== "html"}
           value={value === "<p></p>" ? "" : value}
@@ -248,4 +327,4 @@ export function RichTextEditor({
       )}
     </div>
   );
-}
+});
