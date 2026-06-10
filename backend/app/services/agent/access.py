@@ -8,13 +8,13 @@ from app.models.thread import Thread, ThreadType
 from app.models.user import Plan, User
 
 
-def require_agent_eligible(user: User) -> None:
-    if user.max_user_id is None:
+def require_agent_eligible(user: User, *, require_max: bool = False) -> None:
+    if require_max and user.max_user_id is None:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail={
                 "code": "agent_max_required",
-                "message": "Создание агента доступно только с привязанным аккаунтом MAX.",
+                "message": "Для запуска агента привяжите аккаунт MAX в профиле.",
             },
         )
     if user.plan != Plan.PRO:

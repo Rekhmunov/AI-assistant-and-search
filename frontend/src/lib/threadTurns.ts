@@ -33,6 +33,8 @@ export type ThreadTurn = {
   /** Вопрос сохранён, ответ ассистента ещё не появился в API (вернулись на тред). */
   preparing?: boolean;
   errorCode?: string;
+  /** Приветствие агента без предшествующего вопроса пользователя */
+  agentWelcome?: boolean;
 };
 
 function normalizeMessageAttachments(
@@ -134,22 +136,37 @@ export function messagesToTurns(messages: Message[]): ThreadTurn[] {
   for (const m of sorted) {
     if (m.role === "user") {
       pendingUser = m;
-    } else if (m.role === "assistant" && pendingUser) {
-      turns.push({
-        key: m.id,
-        messageId: m.id,
-        query: stripUserQueryDisplay(pendingUser.content),
-        attachments: normalizeMessageAttachments(pendingUser.attachments),
-        answer: normalizeAnswerText(m.content),
-        sources: m.sources ?? [],
-        images: m.images ?? [],
-        followUps: (m.follow_up_questions ?? []).slice(0, 3),
-        needsSearch: (m.sources?.length ?? 0) > 0 || (m.images?.length ?? 0) > 0,
-        userFeedback: m.user_feedback ?? null,
-        generatedDocument: pickGeneratedDocument(m.attachments),
-        markdownDocument: pickMarkdownDocument(m.attachments),
-      });
-      pendingUser = null;
+    } else if (m.role === "assistant") {
+      if (pendingUser) {
+        turns.push({
+          key: m.id,
+          messageId: m.id,
+          query: stripUserQueryDisplay(pendingUser.content),
+          attachments: normalizeMessageAttachments(pendingUser.attachments),
+          answer: normalizeAnswerText(m.content),
+          sources: m.sources ?? [],
+          images: m.images ?? [],
+          followUps: (m.follow_up_questions ?? []).slice(0, 3),
+          needsSearch: (m.sources?.length ?? 0) > 0 || (m.images?.length ?? 0) > 0,
+          userFeedback: m.user_feedback ?? null,
+          generatedDocument: pickGeneratedDocument(m.attachments),
+          markdownDocument: pickMarkdownDocument(m.attachments),
+        });
+        pendingUser = null;
+      } else {
+        turns.push({
+          key: m.id,
+          messageId: m.id,
+          query: "",
+          attachments: [],
+          answer: normalizeAnswerText(m.content),
+          sources: [],
+          images: [],
+          followUps: [],
+          needsSearch: false,
+          agentWelcome: true,
+        });
+      }
     }
   }
 

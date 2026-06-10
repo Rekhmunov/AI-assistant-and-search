@@ -25,9 +25,8 @@ async def create_agent_thread_endpoint(
     user: Annotated[User, Depends(get_current_user)],
 ):
     require_agent_eligible(user)
-    assert user.max_user_id is not None
 
-    thread, _agent, welcome = await create_agent_thread(db, user, max_user_id=int(user.max_user_id))
+    thread, _agent, welcome = await create_agent_thread(db, user)
     await db.commit()
     await db.refresh(thread)
     await db.refresh(welcome)

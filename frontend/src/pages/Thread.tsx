@@ -109,6 +109,7 @@ function updateLastActiveTurn(
 type ThreadLocationState = {
   fromHistory?: boolean;
   pendingAttachments?: MessageAttachment[];
+  agentRevealWelcome?: boolean;
 };
 
 const PENDING_ANSWER_POLL_MS = 4000;
@@ -340,6 +341,21 @@ export function Thread() {
     }
   }, [thread, syncTurnsFromThread]);
 
+  useEffect(() => {
+    const state = location.state as ThreadLocationState | null;
+    if (!state?.agentRevealWelcome || !thread || thread.thread_type !== "agent") return;
+    setTurns((prev) => {
+      if (!prev.length) return prev;
+      const first = prev[0];
+      if (!first.agentWelcome || first.streaming) return prev;
+      return [{ ...first, streaming: true }, ...prev.slice(1)];
+    });
+    navigate(location.pathname + location.search, {
+      replace: true,
+      state: { ...state, agentRevealWelcome: false },
+    });
+  }, [thread, location.pathname, location.search, location.state, navigate]);
+
   const updateScrollDownVisible = useCallback(() => {
     const el = getAnswerScrollEl();
     if (!el || turns.length === 0 || activeTab !== "answer") {
@@ -419,7 +435,7 @@ export function Thread() {
                   key: result.assistant_message.id,
                   messageId: result.assistant_message.id,
                   answer: result.assistant_message.content,
-                  streaming: false,
+                  streaming: true,
                 }
               : turn,
           ),
@@ -913,7 +929,10 @@ export function Thread() {
     if (!token) return;
     const data = await createAgentThread(token);
     queryClient.invalidateQueries({ queryKey: ["threads"] });
-    navigate(`/thread/${data.thread.id}`, { replace: true, state: { fromHistory: true } });
+    navigate(`/thread/${data.thread.id}`, {
+      replace: true,
+      state: { fromHistory: true, agentRevealWelcome: true },
+    });
   }, [token, navigate, queryClient]);
 
   const lastCompletedIndex = findLastIndex(
@@ -1034,7 +1053,9 @@ export function Thread() {
 
             return (
               <article key={turn.key} id={`turn-${turn.key}`} className="thread-turn">
-                <ThreadQuery query={turn.query} attachments={turn.attachments} />
+                {(turn.query.trim() || turn.attachments.length > 0) && (
+                  <ThreadQuery query={turn.query} attachments={turn.attachments} />
+                )}
 
                 {showStatus &&
                   (showPreparing ? (

@@ -45,7 +45,9 @@ export function Home() {
   const createAgent = useMutation({
     mutationFn: () => createAgentThread(token!),
     onSuccess: (data) => {
-      navigate(`/thread/${data.thread.id}`, { state: { fromHistory: true } });
+      navigate(`/thread/${data.thread.id}`, {
+        state: { fromHistory: true, agentRevealWelcome: true },
+      });
     },
   });
 

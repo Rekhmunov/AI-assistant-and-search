@@ -43,6 +43,24 @@ async def activate_agent_reminders(db: AsyncSession, agent: AgentInstance) -> Ag
 
 
 async def schedule_next_recurrence(db: AsyncSession, reminder: AgentReminder) -> AgentReminder | None:
+    from datetime import timedelta
+
+    from app.services.agent.schedule import MSK, next_weekly_run
+
+    if reminder.recurrence == "daily":
+        prev_msk = reminder.run_at.astimezone(MSK)
+        next_run = (prev_msk + timedelta(days=1)).astimezone(timezone.utc)
+        new_reminder = AgentReminder(
+            agent_id=reminder.agent_id,
+            run_at=next_run,
+            message_text=reminder.message_text,
+            recurrence="daily",
+            status="pending",
+        )
+        db.add(new_reminder)
+        await db.flush()
+        return new_reminder
+
     if not reminder.recurrence or not reminder.recurrence.startswith("weekly:"):
         return None
     try:
@@ -50,15 +68,11 @@ async def schedule_next_recurrence(db: AsyncSession, reminder: AgentReminder) ->
     except (IndexError, ValueError):
         return None
 
-    from app.services.agent.schedule import next_weekly_run
-
-    prev = reminder.run_at.astimezone(timezone.utc)
-    hour = prev.hour
-    minute = prev.minute
-    next_run = next_weekly_run(weekday, hour, minute, now=prev)
+    prev_msk = reminder.run_at.astimezone(MSK)
+    next_run = next_weekly_run(weekday, prev_msk.hour, prev_msk.minute, now=prev_msk)
     new_reminder = AgentReminder(
         agent_id=reminder.agent_id,
-        run_at=next_run,
+        run_at=next_run.astimezone(timezone.utc),
         message_text=reminder.message_text,
         recurrence=reminder.recurrence,
         status="pending",

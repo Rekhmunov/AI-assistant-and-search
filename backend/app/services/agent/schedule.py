@@ -54,10 +54,30 @@ def parse_reminder_schedule(schedule_text: str, *, now: datetime | None = None) 
     if not raw:
         raise ValueError("schedule_empty")
 
+    rel_min = re.search(r"через\s+(\d+)\s*(?:мин|минут)", raw)
+    if rel_min:
+        run = now_msk + timedelta(minutes=int(rel_min.group(1)))
+        return run.astimezone(timezone.utc), None
+
+    if "сегодня" in raw:
+        hm = _parse_time_hm(raw)
+        if hm:
+            run = now_msk.replace(hour=hm[0], minute=hm[1], second=0, microsecond=0)
+            if run <= now_msk:
+                run += timedelta(minutes=2)
+            return run.astimezone(timezone.utc), None
+
     if "завтра" in raw:
         hm = _parse_time_hm(raw) or (9, 0)
         run = (now_msk + timedelta(days=1)).replace(hour=hm[0], minute=hm[1], second=0, microsecond=0)
         return run.astimezone(timezone.utc), None
+
+    if "каждый день" in raw or "ежедневно" in raw:
+        hm = _parse_time_hm(raw) or (9, 0)
+        run = now_msk.replace(hour=hm[0], minute=hm[1], second=0, microsecond=0)
+        if run <= now_msk:
+            run += timedelta(days=1)
+        return run.astimezone(timezone.utc), "daily"
 
     for name, wd in _WEEKDAY_MAP.items():
         if name in raw:

@@ -14,7 +14,6 @@ import { Link } from "react-router-dom";
 import { FileUploadError, uploadFile, fetchMe, fetchSession } from "../api/client";
 import { ComposerModelSelector } from "./ComposerModelSelector";
 import { ComposerAttachMenu } from "./ComposerAttachMenu";
-import { AgentMaxLinkModal } from "./AgentMaxLinkModal";
 import { ProUpgradeModal } from "./ProUpgradeModal";
 import { MobileNewThreadButton } from "./MobileNewThreadButton";
 import {
@@ -107,7 +106,6 @@ export function SearchComposer({
   const [modelMenuOpen, setModelMenuOpen] = useState(false);
   const [proUpgradeModalOpen, setProUpgradeModalOpen] = useState(false);
   const [agentProModalOpen, setAgentProModalOpen] = useState(false);
-  const [agentMaxModalOpen, setAgentMaxModalOpen] = useState(false);
   const blurTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const attachMenuOpenRef = useRef(false);
   const modelMenuOpenRef = useRef(false);
@@ -487,10 +485,6 @@ export function SearchComposer({
       setAgentProModalOpen(true);
       return;
     }
-    if (!me?.max_linked) {
-      setAgentMaxModalOpen(true);
-      return;
-    }
     onAgentClick();
   };
 
@@ -753,7 +747,6 @@ export function SearchComposer({
         title={t("agentProModalTitle")}
         description={t("agentProModalDescription")}
       />
-      <AgentMaxLinkModal open={agentMaxModalOpen} onClose={() => setAgentMaxModalOpen(false)} />
     </div>
   );
 }

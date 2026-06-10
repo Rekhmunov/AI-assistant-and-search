@@ -1,4 +1,4 @@
-"""Обработка сообщений в треде агента (без поискового SSE)."""
+"""Обработка сообщений в треде агента (LLM-диалог, без поискового SSE)."""
 
 from __future__ import annotations
 
@@ -8,6 +8,7 @@ from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.core.limiter import RateLimiter
 from app.models.agent import AgentInstance, AgentStatus
@@ -15,10 +16,19 @@ from app.models.message import Message, MessageRole
 from app.models.thread import Thread, ThreadType
 from app.models.user import User
 from app.services.agent.constants import AGENT_WELCOME
+from app.services.agent.dispatch import dispatch_due_reminders
 from app.services.agent.lifecycle import cancel_agent, get_agent_for_thread
-from app.services.agent.onboarding import activation_summary, apply_user_message, user_wants_cancel
+from app.services.agent.llm_onboarding import (
+    apply_checklist_to_agent,
+    build_confirmation_prompt,
+    checklist_missing_fields,
+    load_checklist,
+    run_llm_turn,
+    try_validate_checklist,
+    user_wants_cancel,
+)
+from app.services.agent.onboarding import activation_summary
 from app.services.agent.reminders import activate_agent_reminders
-from app.services.providers.factory import resolve_runtime_providers
 
 logger = logging.getLogger(__name__)
 
@@ -44,8 +54,6 @@ async def _user_message(db: AsyncSession, thread: Thread, content: str) -> Messa
 async def create_agent_thread(
     db: AsyncSession,
     user: User,
-    *,
-    max_user_id: int,
 ) -> tuple[Thread, AgentInstance, Message]:
     from app.services.thread_factory import create_thread, next_agent_seq
 
@@ -58,11 +66,13 @@ async def create_agent_thread(
         thread_type=ThreadType.AGENT,
         agent_seq=seq,
     )
+    max_uid = int(user.max_user_id) if user.max_user_id else 0
     agent = AgentInstance(
         thread_id=thread.id,
         user_id=user.id,
-        max_user_id=max_user_id,
+        max_user_id=max_uid,
         status=AgentStatus.DRAFT.value,
+        config={"checklist": {}},
     )
     db.add(agent)
     await db.flush()
@@ -80,12 +90,14 @@ async def handle_agent_message(
     redis_client,
 ) -> tuple[Message, Message, AgentInstance]:
     result = await db.execute(
-        select(Thread).where(
+        select(Thread)
+        .where(
             Thread.id == thread_id,
             Thread.user_id == user.id,
             Thread.deleted_at.is_(None),
             Thread.thread_type == ThreadType.AGENT,
         )
+        .options(selectinload(Thread.messages))
     )
     thread = result.scalar_one_or_none()
     if not thread:
@@ -98,13 +110,10 @@ async def handle_agent_message(
     if agent.user_id != user.id:
         raise ValueError("agent_owner_mismatch")
 
-    if user.max_user_id is None:
-        raise ValueError("max_required")
-
-    if agent.max_user_id != int(user.max_user_id):
+    if agent.max_user_id and user.max_user_id and agent.max_user_id != int(user.max_user_id):
         raise ValueError("max_user_mismatch")
 
-    allowed, used, limit = await limiter.check_search_limit(str(user.id), user.plan)
+    allowed, _used, _limit = await limiter.check_search_limit(str(user.id), user.plan)
     if not allowed:
         raise ValueError("rate_limit")
 
@@ -134,7 +143,7 @@ async def handle_agent_message(
             db,
             thread,
             (
-                "Агент уже работает. "
+                "Агент уже работает.\n"
                 f"{activation_summary(agent)}\n\n"
                 "Чтобы изменить параметры, отключите агента фразой «отключи агента» и создайте нового."
             ),
@@ -142,50 +151,50 @@ async def handle_agent_message(
         await db.commit()
         return user_msg, assistant, agent
 
-    follow_up = apply_user_message(agent, text)
-    if follow_up:
-        assistant = await _assistant_reply(db, thread, follow_up)
-        agent.status = AgentStatus.COLLECTING.value
-        await db.commit()
-        return user_msg, assistant, agent
+    prior_messages = list(thread.messages)
+    llm_result = await run_llm_turn(db, redis_client, user, agent, prior_messages, text)
+    apply_checklist_to_agent(agent, llm_result.checklist)
+    agent.status = AgentStatus.COLLECTING.value
 
-    try:
-        await activate_agent_reminders(db, agent)
-        assistant = await _assistant_reply(db, thread, activation_summary(agent))
-    except ValueError as exc:
-        code = str(exc)
-        if code == "schedule_unparseable":
-            assistant = await _assistant_reply(
-                db,
-                thread,
-                "Не удалось разобрать расписание. Укажите день и время, например «каждый понедельник в 10:00».",
+    cfg = dict(agent.config or {})
+    missing = checklist_missing_fields(llm_result.checklist)
+
+    if llm_result.activate and not missing:
+        try:
+            try_validate_checklist(llm_result.checklist)
+            if user.max_user_id:
+                agent.max_user_id = int(user.max_user_id)
+            await activate_agent_reminders(db, agent)
+            sent = await dispatch_due_reminders(db, agent_id=agent.id)
+            summary = activation_summary(agent)
+            if sent:
+                summary += "\n\nПервое напоминание уже отправлено в MAX."
+            else:
+                summary += "\n\nНапоминание запланировано — бот напишет в MAX в указанное время."
+            assistant = await _assistant_reply(db, thread, summary)
+            await db.commit()
+            return user_msg, assistant, agent
+        except ValueError as exc:
+            logger.warning("Agent activation validation failed: %s", exc)
+            llm_result.reply = (
+                f"{llm_result.reply}\n\nНе удалось запустить: уточните расписание "
+                "(например «завтра в 9:00» или «через 10 минут») и текст напоминания."
             )
-        elif code == "group_chat_missing":
-            assistant = await _assistant_reply(db, thread, "Укажите ID группового чата MAX.")
-        else:
-            logger.warning("Agent activation failed: %s", exc)
-            assistant = await _assistant_reply(db, thread, "Не хватает данных для активации. Уточните параметры.")
-        await db.commit()
-        return user_msg, assistant, agent
-    except Exception as exc:
-        logger.exception("Agent activation error")
-        llm, _, _, _, _ = await resolve_runtime_providers(db, redis_client, user=user)
-        fallback = "Произошла ошибка при активации. Попробуйте переформулировать расписание."
-        if hasattr(llm, "complete_text"):
-            try:
-                fallback = await llm.complete_text(  # type: ignore[attr-defined]
-                    [
-                        {"role": "system", "content": "Кратко объясни пользователю проблему с настройкой напоминания."},
-                        {"role": "user", "content": text},
-                    ],
-                    model="lite",
-                    max_tokens=120,
-                )
-            except Exception:
-                pass
-        assistant = await _assistant_reply(db, thread, fallback)
-        await db.commit()
-        return user_msg, assistant, agent
+            cfg["awaiting_confirmation"] = False
+            agent.config = cfg
 
+    if llm_result.ready_for_confirmation and not missing:
+        cfg["awaiting_confirmation"] = True
+        agent.config = cfg
+        if "подтверж" not in llm_result.reply.lower() and "запустить" not in llm_result.reply.lower():
+            llm_result.reply = build_confirmation_prompt(
+                llm_result.confirmation_summary,
+                llm_result.checklist,
+            )
+    else:
+        cfg["awaiting_confirmation"] = False
+        agent.config = cfg
+
+    assistant = await _assistant_reply(db, thread, llm_result.reply)
     await db.commit()
     return user_msg, assistant, agent

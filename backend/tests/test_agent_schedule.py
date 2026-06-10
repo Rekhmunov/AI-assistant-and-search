@@ -23,6 +23,14 @@ def test_parse_weekly():
     assert local.minute == 30
 
 
+def test_parse_in_minutes():
+    now = datetime(2026, 6, 3, 12, 0, tzinfo=MSK)
+    run_at, recurrence = parse_reminder_schedule("через 15 минут", now=now)
+    assert recurrence is None
+    delta = run_at.astimezone(MSK) - now
+    assert 14 <= delta.total_seconds() / 60 <= 16
+
+
 def test_next_weekly_run_skips_past_today():
     now = datetime(2026, 6, 2, 11, 0, tzinfo=MSK)  # Monday 11:00
     run = next_weekly_run(0, 10, 0, now=now)
