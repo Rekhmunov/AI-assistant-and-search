@@ -6,6 +6,7 @@ import {
   resolveBlogMediaUrl,
 } from "../api/blog";
 import { BlogComments } from "../components/BlogComments";
+import { BlogTrySearch } from "../components/BlogTrySearch";
 import { useBlogPostMeta } from "../hooks/useBlogMeta";
 
 function formatDate(iso: string | null): string {
@@ -90,6 +91,8 @@ export function BlogPostPage() {
         dangerouslySetInnerHTML={{ __html: post.content_html }}
       />
       {post.comments_enabled && <BlogComments slug={post.slug} />}
+
+      <BlogTrySearch />
 
       <footer className="blog-post-footer">
         <Link to="/blog" className="btn-secondary">

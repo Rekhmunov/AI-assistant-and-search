@@ -56,6 +56,14 @@ h1{font-size:clamp(1.5rem,4vw,2rem);line-height:1.25;margin:0 0 10px}
 .comment strong{display:block;margin-bottom:4px}
 .comment-form{display:flex;flex-direction:column;gap:8px;margin-top:16px}
 .comment-form input,.comment-form textarea{padding:10px;border:1px solid #d8e0e3;border-radius:8px;font:inherit}
+.blog-try-search{margin-top:40px;padding:24px 20px;border-radius:12px;border:1px solid #d8e0e3;background:linear-gradient(180deg,#f7fafb 0%,#fff 100%)}
+.blog-try-search h2{margin:0 0 8px;font-size:1.2rem;line-height:1.3}
+.blog-try-search-lead{margin:0 0 16px;color:#5c6b73;font-size:.95rem;line-height:1.5}
+.blog-try-search-form{display:flex;flex-wrap:wrap;gap:10px;align-items:stretch}
+.blog-try-search-form input{flex:1 1 220px;min-width:0;padding:12px 14px;border:1px solid #d8e0e3;border-radius:10px;font:inherit}
+.blog-try-search-form input:focus{outline:none;border-color:#20808d;box-shadow:0 0 0 3px rgba(32,128,141,.12)}
+.blog-try-search-form button{padding:12px 20px;border:none;border-radius:10px;background:#20808d;color:#fff;font:inherit;font-weight:600;cursor:pointer}
+.blog-try-search-form button:hover{background:#1a6b76}
 .cat-chips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:24px}
 .cat-chip{padding:6px 12px;border-radius:999px;border:1px solid #d8e0e3;font-size:.9rem}
 """
@@ -132,9 +140,17 @@ _POST_TEMPLATE = """<!DOCTYPE html>
     })();
     </script>
     {% endif %}
+    <section class="blog-try-search">
+      <h2>Попробуйте Glosix прямо сейчас</h2>
+      <p class="blog-try-search-lead">Умный поиск с источниками и готовым ответом. Введите вопрос — откроется чат. Без регистрации можно искать как гость.</p>
+      <form class="blog-try-search-form" action="/thread" method="get">
+        <input type="search" name="q" placeholder="Например: как настроить VPN на роутере" required maxlength="2000" autocomplete="off" />
+        <button type="submit">Искать</button>
+      </form>
+    </section>
     <footer class="footer">
       <a class="btn btn-secondary" href="{{ blog_url }}">← Все статьи</a>
-      <a class="btn btn-primary" href="{{ site_url }}">Попробовать Glosix</a>
+      <a class="btn btn-primary" href="{{ site_url }}">На главную</a>
     </footer>
   </div>
 </body>
