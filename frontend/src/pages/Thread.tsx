@@ -361,6 +361,21 @@ export function Thread() {
     [resolveFeedbackMessageId],
   );
 
+  const handleWelcomeTypingChange = useCallback((typing: boolean) => {
+    if (typing) {
+      isRevealingRef.current = true;
+      setLastTurnRevealing(true);
+      return;
+    }
+    isRevealingRef.current = false;
+    setLastTurnRevealing(false);
+    setTurns((prev) =>
+      prev.map((turn) =>
+        turn.agentWelcome && turn.streaming ? { ...turn, streaming: false } : turn,
+      ),
+    );
+  }, []);
+
   useEffect(() => {
     if (id) activeThreadIdRef.current = id;
   }, [id]);
@@ -1152,8 +1167,13 @@ export function Thread() {
                             !isImageGenTurn &&
                             !isDocumentGenTurn
                           }
+                          revealByAnimationOnly={isAgentThread}
                           onTypingChange={
-                            index === turns.length - 1 ? handleAnswerTypingChange : undefined
+                            turn.agentWelcome
+                              ? handleWelcomeTypingChange
+                              : index === turns.length - 1
+                                ? handleAnswerTypingChange
+                                : undefined
                           }
                         />
                       )}

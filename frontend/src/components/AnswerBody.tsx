@@ -12,6 +12,11 @@ type Props = {
   sources?: Source[];
   /** Плавное появление текста во время SSE-стрима */
   isStreaming?: boolean;
+  /**
+   * Статичный текст с эффектом печати (приветствие агента, ответ без SSE):
+   * курсор и onTypingChange зависят только от анимации, не от isStreaming.
+   */
+  revealByAnimationOnly?: boolean;
   /** false — когда догоняющая печать закончилась (можно синхронизировать тред с API) */
   onTypingChange?: (typing: boolean) => void;
 };
@@ -20,15 +25,17 @@ export function AnswerBody({
   text,
   sources = [],
   isStreaming = false,
+  revealByAnimationOnly = false,
   onTypingChange,
 }: Props) {
   const { text: revealed, isTyping } = useStreamingReveal(text, isStreaming);
+  const isAnimating = revealed.length < text.length;
+  const revealActive = revealByAnimationOnly ? isAnimating : isStreaming || isTyping;
+  const typingActive = revealByAnimationOnly ? isAnimating : isTyping;
 
   useEffect(() => {
-    onTypingChange?.(isTyping);
-  }, [isTyping, onTypingChange]);
-
-  const revealActive = isStreaming || isTyping;
+    onTypingChange?.(typingActive);
+  }, [typingActive, onTypingChange]);
   const rawText = revealActive ? revealed : text;
   const segments = groupAnswerSegments(
     parseAnswerSegments(rawText, { expandUnfenced: !revealActive }),
