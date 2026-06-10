@@ -49,14 +49,29 @@ async def stream_export_chat_document_turn(
             yield sse_event("error", {"code": "not_found", "message": "Тред не найден"})
             return
         if thread.thread_type != ThreadType.SEARCH:
-            yield sse_event(
-                "error",
-                {
-                    "code": "wrong_thread_type",
-                    "message": "Этот диалог — настройка агента, не поиск.",
-                },
-            )
-            return
+            if thread.thread_type != ThreadType.AGENT:
+                yield sse_event(
+                    "error",
+                    {
+                        "code": "wrong_thread_type",
+                        "message": "Этот диалог — настройка агента, не поиск.",
+                    },
+                )
+                return
+            from app.services.agent.doc_routing import agent_message_uses_search_flow
+
+            if not agent_message_uses_search_flow(display_content, has_attachments=False):
+                yield sse_event(
+                    "error",
+                    {
+                        "code": "wrong_thread_type",
+                        "message": (
+                            "В этом диалоге настраивается агент MAX. "
+                            "Для оформления документа напишите, например: «оформи текст выше в документ»."
+                        ),
+                    },
+                )
+                return
         msg_result = await db.execute(
             select(Message)
             .where(Message.thread_id == thread.id)

@@ -303,14 +303,35 @@ class SearchFlowService:
                 yield sse_event("error", {"code": "not_found", "message": "Тред не найден"})
                 return
             if thread.thread_type != ThreadType.SEARCH:
-                yield sse_event(
-                    "error",
-                    {
-                        "code": "wrong_thread_type",
-                        "message": "Этот диалог — настройка агента, не поиск.",
-                    },
-                )
-                return
+                if thread.thread_type == ThreadType.AGENT:
+                    from app.services.agent.doc_routing import agent_thread_allows_search_flow
+
+                    if not agent_thread_allows_search_flow(
+                        user_text_preview,
+                        has_attachments=bool(attachment_ids),
+                        flow_name=flow.flow,
+                    ):
+                        yield sse_event(
+                            "error",
+                            {
+                                "code": "wrong_thread_type",
+                                "message": (
+                                    "В этом диалоге настраивается агент MAX. "
+                                    "Для документов напишите, например: «создай документ …» "
+                                    "или «оформи текст выше»."
+                                ),
+                            },
+                        )
+                        return
+                else:
+                    yield sse_event(
+                        "error",
+                        {
+                            "code": "wrong_thread_type",
+                            "message": "Этот диалог — настройка агента, не поиск.",
+                        },
+                    )
+                    return
         else:
             thread = Thread(
                 user_id=user_uuid,

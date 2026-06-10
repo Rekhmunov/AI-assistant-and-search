@@ -63,7 +63,7 @@ interface Props {
   layoutMode?: "default" | "threadMobile" | "homeMobile";
   onNewChat?: () => void;
   onAgentClick?: () => void;
-  /** Тред агента: без вложений, модели и кнопки робота */
+  /** Тред агента: без модели и кнопки робота; вложения — для базы знаний и документов */
   agentMode?: boolean;
 }
 
@@ -715,7 +715,7 @@ export function SearchComposer({
                 className="composer-toolbar"
                 onPointerDownCapture={isMobileFocusLayout ? keepComposerEngaged : undefined}
               >
-                {showAttachInToolbar && !agentMode && (
+                {showAttachInToolbar && (
                   <ComposerAttachMenu
                     disabled={disabled || isBusy || atLimit}
                     directPick

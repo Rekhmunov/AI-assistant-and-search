@@ -41,6 +41,7 @@ import {
   countThreadImages,
   threadHasSearchTurns,
 } from "../lib/threadImageGroups";
+import { agentMessageUsesSearchFlow } from "../lib/agentDocRouting";
 import { answerHasText, normalizeAnswerText } from "../lib/answerText";
 import { renderAnswerTextSegment } from "../lib/renderAnswerText";
 import { resolveUnifiedDocument } from "../lib/resolveUnifiedDocument";
@@ -959,7 +960,16 @@ export function Thread() {
     attachments: ComposerAttachment[];
   }) => {
     if (isAgentThread) {
-      void runAgentMessage(payload.query, threadId, payload.attachmentIds);
+      if (agentMessageUsesSearchFlow(payload.query, payload.attachmentIds)) {
+        runSearch(
+          payload.query,
+          threadId,
+          payload.attachmentIds,
+          mapComposerAttachments(payload.attachments),
+        );
+      } else {
+        void runAgentMessage(payload.query, threadId, payload.attachmentIds);
+      }
       return;
     }
     runSearch(
