@@ -71,7 +71,8 @@ AGENT_SYSTEM_PROMPT = """Ты — ассистент настройки аген
 - role — см. выше
 - schedule_text — для scheduled-ролей (не для dm_assistant / group_moderation)
 - timezone — только если пользователь сам назвал пояс; иначе Europe/Moscow (не спрашивай)
-- reminder_message — текст/заголовок сообщения
+- reminder_message — текст сообщения ИЛИ инструкция для генерации (напр. «напиши стишок на 4 строки»)
+- content_pipeline: static | llm_generate — static: отправить текст как есть; llm_generate: при срабатывании сгенерировать текст по инструкции из reminder_message (стишок, шутка, совет и т.п.)
 - search_topic — тема для news_digest или dm_assistant с веб-сводкой
 - image_prompt — описание картинки для image_post / dm_assistant
 - dm_command — команда без слэша, напр. news (dm_assistant, если interaction_mode command/both)
@@ -96,7 +97,8 @@ AGENT_SYSTEM_PROMPT = """Ты — ассистент настройки аген
 - Короткие «ок», «продолжим», «дальше» — объясни ОДИН следующий шаг по missing_fields, не начинай диалог заново.
 
 Примеры (пользователь → role + поля):
-- «напоминай каждый день в 9 про встречу» → personal_reminder, schedule_text, reminder_message
+- «напоминай каждый день в 9 про встречу» → personal_reminder, schedule_text, reminder_message, content_pipeline=static
+- «через 2 минуты напиши стишок на 4 строки» → personal_reminder, schedule_text, reminder_message=инструкция, content_pipeline=llm_generate (НЕ дословная цитата инструкции в MAX)
 - «пиши в группу каждый вечер итог дня» → group_reminder или group_message_log
 - «новости про ИИ каждое утро» → news_digest, search_topic, schedule_text
 - «отвечай в группе на вопросы, переводи текст с фото» → dm_assistant, scope=group, interaction_mode=support
@@ -437,6 +439,22 @@ def apply_checklist_to_agent(agent: AgentInstance, checklist: ChecklistState) ->
     cfg["schedule_text"] = checklist.schedule_text
     cfg["timezone"] = checklist.timezone or cfg.get("timezone") or "Europe/Moscow"
     cfg["reminder_message"] = checklist.reminder_message
+    if checklist.role in {
+        AgentRole.PERSONAL_REMINDER.value,
+        AgentRole.GROUP_REMINDER.value,
+    }:
+        from app.services.agent.generate_content import (
+            generation_instruction,
+            wants_llm_generated_content,
+        )
+
+        msg = checklist.reminder_message or ""
+        if wants_llm_generated_content(msg):
+            cfg["content_pipeline"] = "llm_generate"
+            cfg["generation_prompt"] = generation_instruction(msg)
+        else:
+            cfg["content_pipeline"] = "static"
+            cfg.pop("generation_prompt", None)
     cfg["search_topic"] = checklist.search_topic
     cfg["image_prompt"] = checklist.image_prompt
     cfg["dm_command"] = checklist.dm_command
@@ -762,7 +780,12 @@ def build_confirmation_prompt(summary: str | None, checklist: ChecklistState) ->
     if checklist.support_instructions:
         lines.append(f"• Поддержка: {checklist.support_instructions[:120]}")
     if checklist.reminder_message:
-        lines.append(f"• Текст: {checklist.reminder_message}")
+        from app.services.agent.generate_content import wants_llm_generated_content
+
+        if wants_llm_generated_content(checklist.reminder_message):
+            lines.append(f"• Контент: генерируется по запросу «{checklist.reminder_message}»")
+        else:
+            lines.append(f"• Текст: {checklist.reminder_message}")
     if checklist.max_chat_id:
         lines.append(f"• Группа MAX: {checklist.max_chat_id}")
     if checklist.moderation_stop_words or checklist.moderation_block_links:

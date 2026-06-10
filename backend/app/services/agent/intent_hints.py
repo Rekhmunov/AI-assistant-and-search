@@ -277,6 +277,14 @@ def infer_checklist_fields(text: str, data: dict[str, Any]) -> dict[str, Any]:
             data["reminder_message"] = data["support_instructions"][:500]
 
     if role in {AgentRole.PERSONAL_REMINDER.value, AgentRole.GROUP_REMINDER.value}:
+        msg = data.get("reminder_message") or ""
+        if msg:
+            from app.services.agent.generate_content import wants_llm_generated_content
+
+            if wants_llm_generated_content(msg):
+                data["content_pipeline"] = "llm_generate"
+            elif not data.get("content_pipeline"):
+                data["content_pipeline"] = "static"
         if quoted:
             pass
         elif _has_any(low, "текст напоминан") and not data.get("reminder_message"):

@@ -278,7 +278,13 @@ def _checklist_intro(checklist: dict[str, Any]) -> str:
     if checklist.get("schedule_text"):
         parts.append(f"Расписание: {checklist['schedule_text']}.")
     if checklist.get("reminder_message"):
-        parts.append(f"Текст: {str(checklist['reminder_message'])[:80]}.")
+        from app.services.agent.generate_content import wants_llm_generated_content
+
+        msg = str(checklist["reminder_message"])[:80]
+        if wants_llm_generated_content(str(checklist["reminder_message"])):
+            parts.append(f"Контент: генерируется — «{msg}».")
+        else:
+            parts.append(f"Текст: {msg}.")
     return " ".join(parts)
 
 

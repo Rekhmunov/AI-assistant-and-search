@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.agent import AgentInstance, AgentReminder
 from app.models.user import User
+from app.services.agent.generate_content import generate_reminder_text
 from app.services.agent.image_delivery import build_image_attachments
 from app.services.agent.profile import agent_config, agent_profile
 from app.services.agent.summarize import summarize_group_buffer
@@ -63,6 +64,11 @@ async def build_delivery_content(
         prompt = str(cfg.get("image_prompt") or base_text or "").strip()
         text, attachments = await build_image_attachments(prompt, bot=bot)
         return DeliveryContent(text=text, attachments=attachments)
+
+    if profile.content_pipeline == "llm_generate":
+        instruction = str(cfg.get("generation_prompt") or base_text or "").strip()
+        text = await generate_reminder_text(db, redis_client, user, instruction)
+        return DeliveryContent(text=text, attachments=[])
 
     return DeliveryContent(text=base_text or "—", attachments=[])
 

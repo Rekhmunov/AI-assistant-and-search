@@ -124,7 +124,13 @@ def activation_summary(agent: AgentInstance) -> str:
     if cfg.get("image_prompt"):
         lines.append(f"Промпт изображения: {str(cfg['image_prompt'])[:120]}.")
     if cfg.get("reminder_message"):
-        lines.append(f"Текст: {cfg['reminder_message']}.")
+        from app.services.agent.generate_content import wants_llm_generated_content
+
+        msg = str(cfg["reminder_message"])
+        if cfg.get("content_pipeline") == "llm_generate" or wants_llm_generated_content(msg):
+            lines.append(f"Контент: бот сгенерирует текст по запросу «{msg}».")
+        else:
+            lines.append(f"Текст: {msg}.")
     if normalize_dm_command(cfg.get("dm_command")):
         lines.append(f"Команда в MAX: /{normalize_dm_command(cfg.get('dm_command'))}.")
     if agent.max_chat_id:

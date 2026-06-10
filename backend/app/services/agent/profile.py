@@ -50,7 +50,7 @@ USER_TASK_LABELS: dict[str, str] = {
 @dataclass(frozen=True)
 class AgentProfile:
     role: str
-    content_pipeline: str  # static | group_summary | web_digest | image_gen
+    content_pipeline: str  # static | llm_generate | group_summary | web_digest | image_gen
     delivery_mode: str  # dm | group
     needs_schedule: bool
     needs_group: bool
@@ -73,6 +73,8 @@ class AgentProfile:
             caps.add("web_search")
         if self.content_pipeline == "image_gen":
             caps.add("image_gen")
+        if self.content_pipeline == "llm_generate":
+            caps.add("llm_generate")
         if self.role == AgentRole.GROUP_MODERATION.value:
             caps.add("moderate")
         return frozenset(caps)
@@ -89,8 +91,14 @@ def _delivery_mode(role: str, cfg: dict[str, Any]) -> str:
 
 def _content_pipeline(role: str, cfg: dict[str, Any]) -> str:
     explicit = str(cfg.get("content_pipeline") or "").strip().lower()
-    if explicit in {"static", "group_summary", "web_digest", "image_gen"}:
+    if explicit in {"static", "llm_generate", "group_summary", "web_digest", "image_gen"}:
         return explicit
+    if role in {AgentRole.PERSONAL_REMINDER.value, AgentRole.GROUP_REMINDER.value}:
+        from app.services.agent.generate_content import wants_llm_generated_content
+
+        msg = str(cfg.get("reminder_message") or cfg.get("generation_prompt") or "")
+        if wants_llm_generated_content(msg):
+            return "llm_generate"
     if role == AgentRole.GROUP_MESSAGE_LOG.value:
         return "group_summary"
     if role in {AgentRole.NEWS_DIGEST.value, AgentRole.DM_ASSISTANT.value} and cfg.get("search_topic"):
