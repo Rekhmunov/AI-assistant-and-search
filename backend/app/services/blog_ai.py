@@ -30,18 +30,17 @@ _HTML_DELIM = "---HTML---"
 _BLOG_SYSTEM = f"""Ты редактор блога Glosix — ИИ-поиска и ассистента.
 Пиши на русском, информативно и без воды. Структура: вступление, H2-разделы, вывод.
 
-Верни ответ СТРОГО в формате (без markdown-обёртки):
+Верни ответ СТРОГО в формате (без markdown, без пояснений до/после):
 
 {_META_DELIM}
 {{"title":"...","excerpt":"1-2 предложения","meta_title":"до 60 символов","meta_description":"до 160 символов","meta_keywords":"через запятую","og_title":"...","og_description":"..."}}
-
 {_HTML_DELIM}
 <p>Вступление</p><h2>Раздел</h2><p>...</p>
 
 Правила:
-- В JSON НЕ включай content_html и не используй многострочные строки.
-- HTML пиши после {_HTML_DELIM} отдельно: теги p, h2, h3, ul, ol, strong, em, a.
-- Объём статьи: 800–1200 слов."""
+- JSON в ОДНУ строку, только двойные кавычки, без content_html внутри JSON.
+- HTML только после {_HTML_DELIM}: теги p, h2, h3, ul, ol, strong, em, a.
+- Объём статьи: 700–1000 слов."""
 
 
 async def _admin_pro_llm(db: AsyncSession, redis_client):
@@ -79,33 +78,162 @@ def _extract_braced_json(raw: str) -> str | None:
     return None
 
 
-def _parse_json_blob(text: str) -> dict:
-    raw = text.strip()
-    fence = re.search(r"```(?:json)?\s*([\s\S]*?)```", raw)
-    if fence:
-        raw = fence.group(1).strip()
+def _normalize_delimiters(raw: str) -> str:
+    text = (raw or "").replace("\ufeff", "").strip()
+    text = re.sub(r"---\s*META\s*---", _META_DELIM, text, flags=re.I)
+    text = re.sub(r"---\s*HTML\s*---", _HTML_DELIM, text, flags=re.I)
+    return text
 
-    if _META_DELIM in raw and _HTML_DELIM in raw:
-        meta_raw = raw.split(_META_DELIM, 1)[1].split(_HTML_DELIM, 1)[0].strip()
-        html_raw = raw.split(_HTML_DELIM, 1)[1].strip()
-        meta_json = _extract_braced_json(meta_raw) or meta_raw
-        data = json.loads(meta_json)
+
+def _sanitize_json_text(raw: str) -> str:
+    text = raw.strip()
+    text = text.replace("\u201c", '"').replace("\u201d", '"')
+    text = text.replace("\u00ab", '"').replace("\u00bb", '"')
+    text = text.replace("\u2018", "'").replace("\u2019", "'")
+    text = re.sub(r",\s*}", "}", text)
+    text = re.sub(r",\s*]", "]", text)
+    return text
+
+
+def _repair_truncated_json(blob: str) -> str:
+    text = _sanitize_json_text(blob).strip()
+    if text.count('"') % 2 == 1:
+        text += '"'
+    text = re.sub(r',\s*"[^"]*"\s*:\s*"[^"]*$', "", text)
+    text = re.sub(r',\s*"[^"]*"\s*:\s*$', "", text)
+    text = text.rstrip().rstrip(",")
+    if not text.endswith("}"):
+        text += "}"
+    return text
+
+
+def _loads_json_object(raw: str) -> dict:
+    cleaned = _sanitize_json_text(raw)
+    attempts = [cleaned]
+    blob = _extract_braced_json(cleaned)
+    if blob and blob not in attempts:
+        attempts.append(blob)
+        attempts.append(_repair_truncated_json(blob))
+    last_exc: json.JSONDecodeError | None = None
+    for candidate in attempts:
+        try:
+            data = json.loads(candidate)
+        except json.JSONDecodeError as exc:
+            last_exc = exc
+            continue
         if isinstance(data, dict):
+            return data
+        raise TypeError("expected JSON object")
+    if last_exc is not None:
+        raise last_exc
+    raise json.JSONDecodeError("no JSON object", raw, 0)
+
+
+def _strip_html_tail(raw: str) -> str:
+    html = raw.strip()
+    html = re.sub(r"^```(?:html)?\s*", "", html, flags=re.I)
+    html = re.sub(r"\s*```\s*$", "", html)
+    return html.strip()
+
+
+def _extract_json_field(raw: str, key: str) -> str:
+    pattern = rf'"{re.escape(key)}"\s*:\s*"((?:[^"\\]|\\.)*)"'
+    match = re.search(pattern, raw, re.DOTALL)
+    if not match:
+        return ""
+    try:
+        return str(json.loads(f'"{match.group(1)}"')).strip()
+    except json.JSONDecodeError:
+        return match.group(1).replace('\\"', '"').strip()
+
+
+def _extract_article_fallback(raw: str) -> dict:
+    text = _normalize_delimiters(raw)
+    html = ""
+    if _HTML_DELIM in text:
+        html = _strip_html_tail(text.split(_HTML_DELIM, 1)[1])
+    meta_src = text.split(_META_DELIM, 1)[1].split(_HTML_DELIM, 1)[0] if _META_DELIM in text else text
+    title = _extract_json_field(meta_src, "title") or _extract_json_field(text, "title")
+    if not title and not html:
+        raise ValueError("no parseable fields")
+    return {
+        "title": title,
+        "excerpt": _extract_json_field(meta_src, "excerpt") or _extract_json_field(text, "excerpt"),
+        "meta_title": _extract_json_field(meta_src, "meta_title") or _extract_json_field(text, "meta_title"),
+        "meta_description": _extract_json_field(meta_src, "meta_description")
+        or _extract_json_field(text, "meta_description"),
+        "meta_keywords": _extract_json_field(meta_src, "meta_keywords") or _extract_json_field(text, "meta_keywords"),
+        "og_title": _extract_json_field(meta_src, "og_title") or _extract_json_field(text, "og_title"),
+        "og_description": _extract_json_field(meta_src, "og_description") or _extract_json_field(text, "og_description"),
+        "content_html": html or _extract_json_field(text, "content_html"),
+    }
+
+
+def _parse_delimiter_format(raw: str) -> dict | None:
+    text = _normalize_delimiters(raw)
+    if _META_DELIM not in text or _HTML_DELIM not in text:
+        return None
+    meta_raw = text.split(_META_DELIM, 1)[1].split(_HTML_DELIM, 1)[0].strip()
+    html_raw = _strip_html_tail(text.split(_HTML_DELIM, 1)[1])
+    meta_json = _extract_braced_json(meta_raw) or meta_raw
+    try:
+        data = _loads_json_object(meta_json)
+    except (json.JSONDecodeError, TypeError, ValueError):
+        data = _extract_article_fallback(text)
+    if not isinstance(data, dict):
+        return None
+    if html_raw:
+        data["content_html"] = html_raw
+    return data
+
+
+def _parse_json_blob(text: str) -> dict:
+    raw = _normalize_delimiters(text)
+    delimited = _parse_delimiter_format(raw)
+    if delimited is not None:
+        return delimited
+
+    if _HTML_DELIM in raw:
+        html_raw = _strip_html_tail(raw.split(_HTML_DELIM, 1)[1])
+        head = raw.split(_HTML_DELIM, 1)[0]
+        try:
+            data = _loads_json_object(head)
             data["content_html"] = html_raw
             return data
+        except (json.JSONDecodeError, TypeError, ValueError):
+            data = _extract_article_fallback(raw)
+            if data.get("title") or data.get("content_html"):
+                return data
+
+    fence = re.search(r"```(?:json)?\s*([\s\S]*?)```", raw)
+    if fence and _META_DELIM not in raw:
+        try:
+            return _loads_json_object(fence.group(1).strip())
+        except (json.JSONDecodeError, TypeError, ValueError):
+            pass
 
     try:
-        return json.loads(raw)
-    except json.JSONDecodeError:
-        blob = _extract_braced_json(raw)
-        if blob:
-            return json.loads(blob)
+        return _loads_json_object(raw)
+    except (json.JSONDecodeError, TypeError, ValueError):
+        data = _extract_article_fallback(raw)
+        if data.get("title") or data.get("content_html"):
+            return data
         raise
 
 
 def _string_field(data: dict, key: str, default: str = "") -> str:
     value = data.get(key, default)
     return str(value or default).strip()
+
+
+def _parse_article_response(text: str, *, topic: str) -> dict:
+    try:
+        return _parse_json_blob(text)
+    except (json.JSONDecodeError, TypeError, ValueError) as exc:
+        logger.warning("Blog article JSON parse failed: %s; head=%r", exc, (text or "")[:400])
+        raise ValueError(
+            "Модель вернула некорректный формат. Попробуйте ещё раз или упростите требования."
+        ) from exc
 
 
 async def generate_blog_article(
@@ -121,23 +249,35 @@ async def generate_blog_article(
     user_prompt = f"Тема: {topic.strip()}\n"
     if requirements.strip():
         user_prompt += f"Требования: {requirements.strip()}\n"
-    user_prompt += "Объём: 800–1200 слов. HTML: p, h2, h3, ul, ol, strong, em, a."
+    user_prompt += "Объём: 700–1000 слов. HTML: p, h2, h3, ul, ol, strong, em, a."
+    messages = [
+        {"role": "system", "text": _BLOG_SYSTEM},
+        {"role": "user", "text": user_prompt[:4000]},
+    ]
     text = await llm.complete_text(
-        [
-            {"role": "system", "text": _BLOG_SYSTEM},
-            {"role": "user", "text": user_prompt[:4000]},
-        ],
+        messages,
         model="pro",
-        max_tokens=4000,
-        temperature=0.65,
+        max_tokens=8192,
+        temperature=0.55,
     )
     try:
-        data = _parse_json_blob(text)
-    except (json.JSONDecodeError, TypeError, ValueError) as exc:
-        logger.warning("Blog article JSON parse failed: %s; head=%r", exc, (text or "")[:400])
-        raise ValueError(
-            "Модель вернула некорректный формат. Попробуйте ещё раз или упростите требования."
-        ) from exc
+        data = _parse_article_response(text, topic=topic)
+    except ValueError:
+        repair_user = (
+            "Исправь формат ответа. Верни ТОЛЬКО блоки META и HTML как в инструкции.\n"
+            f"Тема: {topic.strip()}\n"
+            f"Исходный ответ модели:\n{(text or '')[:7000]}"
+        )
+        repaired = await llm.complete_text(
+            [
+                {"role": "system", "text": _BLOG_SYSTEM},
+                {"role": "user", "text": repair_user[:8000]},
+            ],
+            model="pro",
+            max_tokens=8192,
+            temperature=0.2,
+        )
+        data = _parse_article_response(repaired, topic=topic)
     if not isinstance(data, dict):
         raise ValueError("Модель вернула не объект JSON")
 
