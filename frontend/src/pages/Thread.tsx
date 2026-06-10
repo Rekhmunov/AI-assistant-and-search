@@ -278,8 +278,25 @@ export function Thread() {
 
   const syncTurnsFromThread = useCallback(() => {
     if (!thread) return;
-    setTurns((prev) => mergeThreadTurns(prev, messagesToTurns(thread.messages)));
-  }, [thread]);
+    const state = location.state as ThreadLocationState | null;
+    const revealWelcome = Boolean(state?.agentRevealWelcome);
+    setTurns((prev) => {
+      const apiTurns = messagesToTurns(thread.messages);
+      const prevWelcome = prev.find((t) => t.agentWelcome);
+      const shouldStreamWelcome =
+        revealWelcome || Boolean(prevWelcome?.streaming && apiTurns[0]?.agentWelcome);
+      if (shouldStreamWelcome && apiTurns[0]?.agentWelcome) {
+        apiTurns[0] = { ...apiTurns[0], streaming: true };
+      }
+      return mergeThreadTurns(prev, apiTurns);
+    });
+    if (revealWelcome) {
+      navigate(location.pathname + location.search, {
+        replace: true,
+        state: { ...(state ?? {}), agentRevealWelcome: false },
+      });
+    }
+  }, [thread, location.pathname, location.search, location.state, navigate]);
 
   const resolveFeedbackMessageId = useCallback(
     async (threadIdToFetch: string) => {
@@ -310,21 +327,36 @@ export function Thread() {
     (typing: boolean) => {
       isRevealingRef.current = typing;
       setLastTurnRevealing(typing);
-      if (!typing && !streamingRef.current) {
+      if (!typing) {
         setTurns((prev) => {
-          const idx = findLastIndex(
-            prev,
-            (turn) => !turn.streaming && !!turn.messageId && turn.key.startsWith("stream-"),
-          );
-          if (idx < 0) return prev;
-          const turn = prev[idx];
-          const next = [...prev];
-          next[idx] = { ...turn, key: turn.messageId! };
-          return next;
+          const streamingIdx = findLastIndex(prev, (turn) => turn.streaming);
+          if (streamingIdx >= 0) {
+            const next = [...prev];
+            next[streamingIdx] = { ...next[streamingIdx], streaming: false };
+            return next;
+          }
+          return prev;
         });
-        const tid = activeThreadIdRef.current;
-        if (tid) {
-          void resolveFeedbackMessageId(tid);
+        if (streamingRef.current) {
+          streamingRef.current = false;
+          setStreaming(false);
+        }
+        if (!streamingRef.current) {
+          setTurns((prev) => {
+            const idx = findLastIndex(
+              prev,
+              (turn) => !turn.streaming && !!turn.messageId && turn.key.startsWith("stream-"),
+            );
+            if (idx < 0) return prev;
+            const turn = prev[idx];
+            const next = [...prev];
+            next[idx] = { ...turn, key: turn.messageId! };
+            return next;
+          });
+          const tid = activeThreadIdRef.current;
+          if (tid) {
+            void resolveFeedbackMessageId(tid);
+          }
         }
       }
     },
@@ -340,21 +372,6 @@ export function Thread() {
       syncTurnsFromThread();
     }
   }, [thread, syncTurnsFromThread]);
-
-  useEffect(() => {
-    const state = location.state as ThreadLocationState | null;
-    if (!state?.agentRevealWelcome || !thread || thread.thread_type !== "agent") return;
-    setTurns((prev) => {
-      if (!prev.length) return prev;
-      const first = prev[0];
-      if (!first.agentWelcome || first.streaming) return prev;
-      return [{ ...first, streaming: true }, ...prev.slice(1)];
-    });
-    navigate(location.pathname + location.search, {
-      replace: true,
-      state: { ...state, agentRevealWelcome: false },
-    });
-  }, [thread, location.pathname, location.search, location.state, navigate]);
 
   const updateScrollDownVisible = useCallback(() => {
     const el = getAnswerScrollEl();
@@ -442,6 +459,8 @@ export function Thread() {
         );
       } catch (err) {
         const msg = err instanceof Error ? err.message : "Не удалось отправить сообщение";
+        streamingRef.current = false;
+        setStreaming(false);
         setTurns((prev) =>
           prev.map((turn) =>
             turn.key === pendingKey
@@ -449,9 +468,6 @@ export function Thread() {
               : turn,
           ),
         );
-      } finally {
-        streamingRef.current = false;
-        setStreaming(false);
       }
     },
     [token, threadId, queryClient],
@@ -1114,7 +1130,10 @@ export function Thread() {
                           text={normalizeAnswerText(turn.answer)}
                           sources={sources}
                           isStreaming={
-                            isActive && streaming && !isImageGenTurn && !isDocumentGenTurn
+                            isActive &&
+                            (isAgentThread || streaming) &&
+                            !isImageGenTurn &&
+                            !isDocumentGenTurn
                           }
                           onTypingChange={
                             index === turns.length - 1 ? handleAnswerTypingChange : undefined

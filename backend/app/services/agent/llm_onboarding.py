@@ -252,9 +252,9 @@ def _history_messages(messages: list[Message]) -> list[dict[str, str]]:
     out: list[dict[str, str]] = []
     for m in sorted(messages, key=lambda x: x.created_at):
         if m.role == MessageRole.USER:
-            out.append({"role": "user", "content": m.content})
+            out.append({"role": "user", "text": m.content})
         elif m.role == MessageRole.ASSISTANT:
-            out.append({"role": "assistant", "content": m.content})
+            out.append({"role": "assistant", "text": m.content})
     return out[-20:]
 
 
@@ -284,24 +284,28 @@ async def run_llm_turn(
     llm, _, _, _, _ = await resolve_runtime_providers(db, redis_client, user=user)
 
     payload_messages: list[dict[str, str]] = [
-        {"role": "system", "content": AGENT_SYSTEM_PROMPT},
-        {"role": "system", "content": _context_block(user, agent, checklist)},
+        {"role": "system", "text": AGENT_SYSTEM_PROMPT},
+        {"role": "system", "text": _context_block(user, agent, checklist)},
         *_history_messages(messages),
-        {"role": "user", "content": user_text},
+        {"role": "user", "text": user_text},
     ]
 
     raw = ""
-    if hasattr(llm, "complete_text"):
-        raw = await llm.complete_text(payload_messages, model="pro", max_tokens=900, temperature=0.3)  # type: ignore[attr-defined]
-    else:
-        raw = json.dumps(
-            {
-                "reply": "Расскажите, какую задачу вы хотите поручить агенту в MAX?",
-                "checklist": checklist.to_dict(),
-                "ready_for_confirmation": False,
-                "activate": False,
-            },
-            ensure_ascii=False,
+    try:
+        if hasattr(llm, "complete_text"):
+            raw = await llm.complete_text(  # type: ignore[attr-defined]
+                payload_messages, model="pro", max_tokens=900, temperature=0.3
+            )
+        else:
+            raise AttributeError("complete_text unavailable")
+    except Exception as exc:
+        logger.exception("Agent LLM complete_text failed: %s", exc)
+        return LlmTurnResult(
+            reply=(
+                "Сейчас не могу обработать запрос через ИИ. "
+                "Опишите задачу: напоминание в личный чат MAX, в группу или учёт сообщений группы."
+            ),
+            checklist=checklist,
         )
 
     data = _parse_llm_json(raw)

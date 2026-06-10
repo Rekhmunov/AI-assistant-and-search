@@ -151,8 +151,21 @@ async def handle_agent_message(
         await db.commit()
         return user_msg, assistant, agent
 
-    prior_messages = list(thread.messages)
-    llm_result = await run_llm_turn(db, redis_client, user, agent, prior_messages, text)
+    prior_messages = [m for m in thread.messages if m.id != user_msg.id]
+    try:
+        llm_result = await run_llm_turn(db, redis_client, user, agent, prior_messages, text)
+    except Exception as exc:
+        logger.exception("Agent LLM turn failed thread=%s", thread_id)
+        assistant = await _assistant_reply(
+            db,
+            thread,
+            (
+                "Сейчас не удалось обработать запрос. Попробуйте ещё раз через минуту "
+                "или переформулируйте задачу для агента."
+            ),
+        )
+        await db.commit()
+        return user_msg, assistant, agent
     apply_checklist_to_agent(agent, llm_result.checklist)
     agent.status = AgentStatus.COLLECTING.value
 

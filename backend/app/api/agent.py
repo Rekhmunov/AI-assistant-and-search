@@ -77,6 +77,12 @@ async def post_agent_message(
             )
         logger.warning("Agent message error: %s", exc)
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Не удалось обработать сообщение")
+    except Exception as exc:
+        logger.exception("Agent message unhandled error thread=%s", thread_id)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Сервис агента временно недоступен. Попробуйте ещё раз.",
+        ) from exc
 
     return AgentMessageOut(
         user_message=MessageOut.model_validate(user_msg),
