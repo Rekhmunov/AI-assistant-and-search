@@ -79,9 +79,22 @@ def _is_personal_max_chat(low: str) -> bool:
 
 def _is_user_group(low: str) -> bool:
     """Группа пользователей в MAX (не личка с ботом)."""
-    return _has_any(low, "моей групп", "нашей групп", "в группе", "групповой чат") and not _is_personal_max_chat(
-        low
-    )
+    if _is_personal_max_chat(low):
+        return False
+    if _has_any(
+        low,
+        "моей групп",
+        "нашей групп",
+        "в группе",
+        "в группу",
+        "эту групп",
+        "эта групп",
+        "групповой чат",
+        "web.max.ru",
+        "max.ru/-",
+    ):
+        return True
+    return bool(re.search(r"\bгрупп[уыаеой]", low))
 
 
 def infer_role_from_text(text: str) -> str | None:
@@ -133,7 +146,10 @@ def infer_role_from_text(text: str) -> str | None:
     if _has_any(low, "сводк", "итог дня", "резюме") and _has_any(low, "групп", "чат"):
         return AgentRole.GROUP_MESSAGE_LOG.value
 
-    if _is_user_group(low) and _has_any(low, "сообщ", "пиши", "отправ"):
+    if _is_user_group(low) and _has_any(low, "сообщ", "пиши", "напис", "отправ", "пост", "провер"):
+        return AgentRole.GROUP_REMINDER.value
+
+    if _has_any(low, "групп") and _has_any(low, "напиши", "пиши", "напис", "отправ", "пост"):
         return AgentRole.GROUP_REMINDER.value
 
     if _has_any(low, "пинг", "напиши мне", "присылай мне"):
@@ -161,6 +177,23 @@ def user_wants_today_run(text: str) -> bool:
     return _has_any(low, "сегодня") and _has_any(
         low, "сделай", "сделать", "отправ", "пришли", "запусти", "выполни", "сработ"
     )
+
+
+def user_wants_immediate_run(text: str) -> bool:
+    """Одноразовый запуск «прямо сейчас», без ожидания подтверждения расписания."""
+    low = (text or "").lower()
+    if _has_any(
+        low,
+        "прямо сейчас",
+        "сейчас напиши",
+        "сейчас отправ",
+        "немедленно",
+        "сразу напиши",
+        "сразу отправ",
+        "прямо сейчас напиши",
+    ):
+        return True
+    return _has_any(low, "сейчас", "сразу") and _has_any(low, "напиши", "напис", "отправ", "пришли", "пост")
 
 
 def _normalize_schedule_text(clean: str) -> str | None:
@@ -216,7 +249,11 @@ def infer_checklist_fields(text: str, data: dict[str, Any]) -> dict[str, Any]:
     elif not data.get("role"):
         pass
 
-    if user_wants_today_run(clean):
+    if user_wants_immediate_run(clean):
+        data["schedule_text"] = "через 2 минуты"
+        if not data.get("timezone"):
+            data["timezone"] = DEFAULT_AGENT_TIMEZONE
+    elif user_wants_today_run(clean):
         hm = _TIME_ONLY_RE.search(clean) or _TIME_ONLY_RE.search(str(data.get("schedule_text") or ""))
         if hm:
             data["schedule_text"] = f"сегодня в {int(hm.group(1))}:{hm.group(2)}"
@@ -303,4 +340,34 @@ def infer_checklist_fields(text: str, data: dict[str, Any]) -> dict[str, Any]:
     if data.get("schedule_text") and not data.get("timezone"):
         data["timezone"] = DEFAULT_AGENT_TIMEZONE
 
+    chat_id = _extract_max_chat_id(clean)
+    if chat_id is not None:
+        data["max_chat_id"] = chat_id
+
+    role = data.get("role")
+    if role in {
+        AgentRole.GROUP_REMINDER.value,
+        AgentRole.GROUP_MESSAGE_LOG.value,
+        AgentRole.GROUP_MODERATION.value,
+    }:
+        if _mentions_admin_in_text(low) and not _denies_admin(low):
+            data["bot_is_group_admin"] = True
+
     return data
+
+
+def _extract_max_chat_id(text: str) -> int | None:
+    for match in re.finditer(r"-?\d{5,}", text or ""):
+        try:
+            return int(match.group(0))
+        except ValueError:
+            continue
+    return None
+
+
+def _mentions_admin_in_text(low: str) -> bool:
+    return _has_any(low, "админ", "администратор", "admin")
+
+
+def _denies_admin(low: str) -> bool:
+    return _has_any(low, "не админ", "не является", "неявляется", "не администратор")

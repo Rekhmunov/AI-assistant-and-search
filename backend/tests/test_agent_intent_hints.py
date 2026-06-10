@@ -11,6 +11,7 @@ from app.services.agent.capabilities import (
 from app.services.agent.intent_hints import (
     infer_checklist_fields,
     infer_role_from_text,
+    user_wants_immediate_run,
     user_wants_today_run,
 )
 
@@ -99,6 +100,21 @@ def test_today_run_without_time_is_soon():
         },
     )
     assert data["schedule_text"] == "через 2 минуты"
+
+
+def test_group_post_with_link_and_immediate():
+    text = (
+        'Давай проверим, умеешь ли ты писать в группу. Напиши в эту группу "Привет" '
+        "https://web.max.ru/-75602062003657 Я тебя сделал администратором. Прямо сейчас напиши"
+    )
+    assert infer_role_from_text(text) == AgentRole.GROUP_REMINDER.value
+    assert user_wants_immediate_run(text)
+    data = infer_checklist_fields(text, {})
+    assert data["role"] == AgentRole.GROUP_REMINDER.value
+    assert data["max_chat_id"] == -75602062003657
+    assert data["reminder_message"] == "Привет"
+    assert data["schedule_text"] == "через 2 минуты"
+    assert data["bot_is_group_admin"] is True
 
 
 def test_bare_time_gets_default_timezone():

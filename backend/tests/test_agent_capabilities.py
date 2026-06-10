@@ -92,6 +92,18 @@ def test_explain_next_step_group_admin():
     assert "администратор" in reply.lower()
 
 
+def test_feasibility_group_post_with_full_fields():
+    text = (
+        'умеешь ли писать в группу Напиши "Привет" '
+        "https://web.max.ru/-75602062003657 администратором. Прямо сейчас"
+    )
+    reply = compose_feasibility_reply({}, text)
+    assert reply is not None
+    assert "Привет" in reply
+    assert "75602062003657" in reply
+    assert "Опишите задачу одним сообщением" not in reply
+
+
 def test_feasibility_fallback_not_template():
     q = "Ты можешь сделать напоминание в своем чате?"
     reply = build_parse_fallback_reply({}, q)

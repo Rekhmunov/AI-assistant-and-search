@@ -219,9 +219,24 @@ def compose_feasibility_reply(checklist: dict[str, Any], user_text: str) -> str 
             "Напишите, когда и с каким текстом — например «каждый день в 9:00, текст: встреча»."
         )
     if role == AgentRole.GROUP_REMINDER.value:
+        if (
+            hinted.get("max_chat_id")
+            and hinted.get("reminder_message")
+            and hinted.get("schedule_text")
+        ):
+            return (
+                f"Да, отправлю «{hinted['reminder_message']}» в группу MAX "
+                f"({hinted['max_chat_id']}), {hinted['schedule_text']}. "
+                "Если всё верно — напишите «да»."
+            )
+        if hinted.get("max_chat_id") and hinted.get("reminder_message"):
+            return (
+                f"Да, напишу «{hinted['reminder_message']}» в группу {hinted['max_chat_id']}. "
+                "Когда отправить — сейчас или по расписанию?"
+            )
         return (
-            "Да, могу публиковать сообщения в группу MAX по расписанию — бот должен быть админом. "
-            "Напишите расписание и текст сообщения."
+            "Да, могу публиковать сообщения в группу MAX — бот должен быть админом. "
+            "Пришлите ссылку на группу и текст сообщения."
         )
     return (
         "Да, в MAX это можно настроить — напоминания, посты в группу, новости, модерация, "

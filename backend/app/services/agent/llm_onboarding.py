@@ -104,6 +104,7 @@ AGENT_SYSTEM_PROMPT = """Ты — ассистент настройки аген
 - «отвечай в группе на вопросы, переводи текст с фото» → dm_assistant, scope=group, interaction_mode=support
 - «удаляй спам и ссылки в группе» → group_moderation, moderation_stop_words/block_links
 - «ты можешь сделать напоминание в личке?» → reply: да; role=personal_reminder; спроси когда и о чём
+- «напиши в группу "Привет"» + ссылка max.ru/-ID + «прямо сейчас» → group_reminder, max_chat_id, reminder_message, schedule_text=через 2 минуты, bot_is_group_admin=true если пользователь сказал что бот админ; ready_for_confirmation если всё заполнено
 - Различай «нужно настроить» и «не поддерживается»:
   • Нужно настроить — помоги пошагово, не отказывай: бот не админ в группе (как добавить в админы),
     нет права читать сообщения (как включить), не привязан MAX, не хватает ID группы, расписания,
@@ -738,10 +739,11 @@ async def run_llm_turn(
         activate = True
         ready = True
     else:
-        from app.services.agent.intent_hints import user_wants_today_run
+        from app.services.agent.intent_hints import user_wants_immediate_run, user_wants_today_run
 
-        if user_wants_today_run(last_user) and not missing:
+        if (user_wants_today_run(last_user) or user_wants_immediate_run(last_user)) and not missing:
             activate = True
+            ready = True
 
     if activate and missing:
         activate = False

@@ -19,7 +19,7 @@ from app.services.agent.constants import AGENT_WELCOME
 from app.services.agent.dispatch import dispatch_due_reminders
 from app.services.agent.lifecycle import cancel_agent, get_agent_for_thread
 from app.services.agent.capabilities import reply_claims_activation
-from app.services.agent.intent_hints import user_wants_today_run
+from app.services.agent.intent_hints import user_wants_immediate_run, user_wants_today_run
 from app.services.agent.llm_onboarding import (
     apply_checklist_to_agent,
     build_confirmation_prompt,
@@ -240,7 +240,7 @@ async def _handle_agent_message_body(
             cfg.get("awaiting_confirmation") or llm_result.ready_for_confirmation
         ):
             should_activate = True
-        elif user_wants_today_run(text):
+        elif user_wants_today_run(text) or user_wants_immediate_run(text):
             should_activate = True
 
     if should_activate and not missing:
