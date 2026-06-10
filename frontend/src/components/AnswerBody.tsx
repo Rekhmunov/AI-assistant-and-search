@@ -31,7 +31,10 @@ export function AnswerBody({
   const { text: revealed, isTyping } = useStreamingReveal(text, isStreaming);
   const isAnimating = revealed.length < text.length;
   const revealActive = revealByAnimationOnly ? isAnimating : isStreaming || isTyping;
-  const typingActive = revealByAnimationOnly ? isAnimating : isTyping;
+  /** Не сигнализируем «печать» для пустого ответа (ожидание API агента). */
+  const typingActive = revealByAnimationOnly
+    ? text.length > 0 && isAnimating
+    : isTyping;
 
   useEffect(() => {
     onTypingChange?.(typingActive);

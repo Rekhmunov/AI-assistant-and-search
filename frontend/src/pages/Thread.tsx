@@ -361,20 +361,27 @@ export function Thread() {
     [resolveFeedbackMessageId],
   );
 
-  const handleWelcomeTypingChange = useCallback((typing: boolean) => {
-    if (typing) {
-      isRevealingRef.current = true;
-      setLastTurnRevealing(true);
-      return;
-    }
-    isRevealingRef.current = false;
-    setLastTurnRevealing(false);
-    setTurns((prev) =>
-      prev.map((turn) =>
-        turn.agentWelcome && turn.streaming ? { ...turn, streaming: false } : turn,
-      ),
-    );
-  }, []);
+  const handleAgentTurnTypingChange = useCallback(
+    (turnKey: string, typing: boolean, isLastTurn: boolean) => {
+      if (typing) {
+        if (isLastTurn) {
+          isRevealingRef.current = true;
+          setLastTurnRevealing(true);
+        }
+        return;
+      }
+      if (isLastTurn) {
+        isRevealingRef.current = false;
+        setLastTurnRevealing(false);
+      }
+      setTurns((prev) =>
+        prev.map((turn) =>
+          turn.key === turnKey && turn.streaming ? { ...turn, streaming: false } : turn,
+        ),
+      );
+    },
+    [],
+  );
 
   useEffect(() => {
     if (id) activeThreadIdRef.current = id;
@@ -1163,14 +1170,21 @@ export function Thread() {
                           sources={sources}
                           isStreaming={
                             isActive &&
-                            (isAgentThread || streaming) &&
+                            (isAgentThread ? answerHasText(turn.answer) : streaming) &&
                             !isImageGenTurn &&
                             !isDocumentGenTurn
                           }
                           revealByAnimationOnly={isAgentThread}
                           onTypingChange={
-                            turn.agentWelcome
-                              ? handleWelcomeTypingChange
+                            isAgentThread &&
+                            turn.streaming &&
+                            (turn.agentWelcome || answerHasText(turn.answer))
+                              ? (typing) =>
+                                  handleAgentTurnTypingChange(
+                                    turn.key,
+                                    typing,
+                                    index === turns.length - 1,
+                                  )
                               : index === turns.length - 1
                                 ? handleAnswerTypingChange
                                 : undefined
