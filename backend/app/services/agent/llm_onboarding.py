@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from dataclasses import dataclass
 from typing import Any
 
@@ -11,11 +12,12 @@ from app.models.agent import AgentInstance, AgentRole, AgentStatus
 from app.models.message import Message, MessageRole
 from app.models.user import User
 from app.services.agent.capabilities import (
-    CAPABILITIES_REPLY,
     apply_message_hints,
     build_parse_fallback_reply,
+    try_local_onboarding_reply,
     user_asks_capabilities,
     user_needs_clarification,
+    user_wants_continue,
 )
 from app.services.agent.constants import CANCEL_PHRASES, SUPPORTED_ROLE_LABELS
 from app.services.agent.onboarding import validate_activation
@@ -80,7 +82,17 @@ AGENT_SYSTEM_PROMPT = """Ты — ассистент настройки аген
 
 Правила диалога:
 - Принимай задачу своими словами. НЕ заставляй выбирать из списка и НЕ называй «whitelist».
-- Если пользователь спрашивает «что умеешь» / «что можешь» — кратко 3–4 примера возможностей.
+- Как только пользователь описал задачу — СРАЗУ заполни role и все уже понятные поля в checklist. Не переспрашивай то, что уже сказано.
+- НЕ повторяй один и тот же вопрос дважды подряд. Смотри history и current_checklist.
+- Если пользователь спрашивает «что умеешь» / «что можешь» — кратко 3–4 примера и попроси описать задачу одной фразой.
+- Короткие «ок», «продолжим», «дальше» — объясни ОДИН следующий шаг по missing_fields, не начинай диалог заново.
+
+Примеры (пользователь → role + поля):
+- «напоминай каждый день в 9 про встречу» → personal_reminder, schedule_text, reminder_message
+- «пиши в группу каждый вечер итог дня» → group_reminder или group_message_log
+- «новости про ИИ каждое утро» → news_digest, search_topic, schedule_text
+- «отвечай в группе на вопросы, переводи текст с фото» → dm_assistant, scope=group, interaction_mode=support
+- «удаляй спам и ссылки в группе» → group_moderation, moderation_stop_words/block_links
 - Различай «нужно настроить» и «не поддерживается»:
   • Нужно настроить — помоги пошагово, не отказывай: бот не админ в группе (как добавить в админы),
     нет права читать сообщения (как включить), не привязан MAX, не хватает ID группы, расписания,
@@ -405,6 +417,9 @@ def checklist_missing_fields(checklist: ChecklistState) -> list[str]:
 
 def _parse_llm_json(raw: str) -> dict[str, Any] | None:
     text = (raw or "").strip()
+    if text.startswith("```"):
+        text = re.sub(r"^```(?:json)?\s*", "", text, flags=re.I)
+        text = re.sub(r"\s*```\s*$", "", text)
     start = text.find("{")
     if start < 0:
         return None
@@ -457,7 +472,11 @@ def _context_block(
         )
     if user_asks_capabilities(last_user_text):
         lines.append(
-            "user_signal: asks_capabilities — кратко перечисли 3–4 примера того, что умеет агент"
+            "user_signal: asks_capabilities — кратко 3–4 примера и попроси описать задачу одной фразой"
+        )
+    if user_wants_continue(last_user_text):
+        lines.append(
+            "user_signal: wants_continue — один конкретный следующий шаг по missing_fields, без сброса"
         )
     return "\n".join(lines)
 
@@ -475,13 +494,19 @@ async def run_llm_turn(
     if not history or history[-1]["role"] != "user":
         logger.warning("Agent LLM turn without trailing user message")
 
-    if user_asks_capabilities(last_user):
-        hinted = ChecklistState.from_dict(apply_message_hints(checklist.to_dict(), last_user))
-        return LlmTurnResult(reply=CAPABILITIES_REPLY, checklist=hinted)
-
-    checklist = ChecklistState.from_dict(
-        apply_message_hints(checklist.to_dict(), last_user),
+    enriched = ChecklistState.from_dict(apply_message_hints(checklist.to_dict(), last_user))
+    local_reply = try_local_onboarding_reply(checklist.to_dict(), last_user)
+    use_local = local_reply is not None and (
+        user_asks_capabilities(last_user)
+        or user_needs_clarification(last_user)
+        or user_wants_continue(last_user)
+        or (enriched.role and enriched.role != checklist.role)
+        or (enriched.role and len(last_user.strip()) >= 15)
     )
+    if use_local:
+        return LlmTurnResult(reply=local_reply, checklist=enriched)
+
+    checklist = enriched
 
     llm, _, _, _, _ = await resolve_runtime_providers(db, redis_client, user=user)
 
@@ -501,17 +526,23 @@ async def run_llm_turn(
             raise AttributeError("complete_text unavailable")
     except Exception as exc:
         logger.exception("Agent LLM complete_text failed: %s", exc)
+        fallback_checklist = ChecklistState.from_dict(
+            apply_message_hints(checklist.to_dict(), last_user),
+        )
         return LlmTurnResult(
-            reply=build_parse_fallback_reply(checklist.to_dict(), last_user),
-            checklist=checklist,
+            reply=build_parse_fallback_reply(fallback_checklist.to_dict(), last_user),
+            checklist=fallback_checklist,
         )
 
     data = _parse_llm_json(raw)
     if not data:
         logger.warning("Agent LLM JSON parse failed: %s", raw[:300])
+        fallback_checklist = ChecklistState.from_dict(
+            apply_message_hints(checklist.to_dict(), last_user),
+        )
         return LlmTurnResult(
-            reply=build_parse_fallback_reply(checklist.to_dict(), last_user),
-            checklist=checklist,
+            reply=build_parse_fallback_reply(fallback_checklist.to_dict(), last_user),
+            checklist=fallback_checklist,
         )
 
     patch = ChecklistState.from_dict(data.get("checklist") if isinstance(data.get("checklist"), dict) else {})

@@ -17,8 +17,21 @@ CAPABILITIES_REPLY = (
     "• публиковать сообщения и картинки в группе (бот — администратор);\n"
     "• собирать сводки из группы и новости по теме из интернета;\n"
     "• модерировать группу (удалять сообщения по правилам);\n"
+    "• отвечать в личке и в группе как поддержка — в том числе распознавать текст с фото;\n"
     "• выполнять команды в личке (например /новости — если настроите команду).\n\n"
-    "Опишите задачу своими словами — помогу настроить."
+    "Напишите **одним сообщением**, что нужно вам — например:\n"
+    "• «напоминай мне каждый день в 9:00 про встречу»\n"
+    "• «отвечай в группе на вопросы по FAQ, распознавай текст с фото»\n"
+    "• «присылай новости про ИИ каждое утро»"
+)
+
+_CONTINUE_MARKERS = (
+    "продолж",
+    "дальше",
+    "поехали",
+    "давай",
+    "начн",
+    "готов",
 )
 
 _CLARIFICATION_MARKERS = (
@@ -67,6 +80,15 @@ def user_needs_clarification(text: str) -> bool:
     if not low:
         return False
     return any(marker in low for marker in _CLARIFICATION_MARKERS)
+
+
+def user_wants_continue(text: str) -> bool:
+    low = (text or "").strip().lower()
+    if not low:
+        return False
+    if low in {"ок", "okay", "ok", "да", "ага", "угу"}:
+        return True
+    return any(marker in low for marker in _CONTINUE_MARKERS)
 
 
 def user_asks_capabilities(text: str) -> bool:
@@ -131,10 +153,14 @@ def _mentions_read_access(text: str) -> bool:
 
 def apply_message_hints(checklist: dict[str, Any], text: str) -> dict[str, Any]:
     """Извлекает из реплики пользователя поля чеклиста без участия LLM."""
+    from app.services.agent.intent_hints import infer_checklist_fields
+
     data = dict(checklist)
     clean = (text or "").strip()
     if not clean:
         return data
+
+    data = infer_checklist_fields(clean, data)
 
     chat_id = extract_chat_id(clean)
     if chat_id is not None:
@@ -159,32 +185,105 @@ def apply_message_hints(checklist: dict[str, Any], text: str) -> dict[str, Any]:
     return data
 
 
-def explain_next_step(checklist: dict[str, Any]) -> str:
+def _checklist_intro(checklist: dict[str, Any]) -> str:
+    role = checklist.get("role")
+    task = USER_TASK_LABELS.get(role or "", "")
+    parts: list[str] = []
+    if role and task:
+        parts.append(f"Понял задачу: **{task}**.")
+    if checklist.get("scope"):
+        parts.append(f"Где работает: {checklist['scope']}.")
+    if checklist.get("interaction_mode"):
+        parts.append(f"Режим: {checklist['interaction_mode']}.")
+    if checklist.get("max_chat_id"):
+        parts.append(f"Группа MAX: {checklist['max_chat_id']}.")
+    if checklist.get("schedule_text"):
+        parts.append(f"Расписание: {checklist['schedule_text']}.")
+    if checklist.get("reminder_message"):
+        parts.append(f"Текст: {str(checklist['reminder_message'])[:80]}.")
+    if checklist.get("timezone"):
+        parts.append(f"Часовой пояс: {checklist['timezone']}.")
+    return " ".join(parts)
+
+
+def explain_next_step(checklist: dict[str, Any], *, user_text: str = "") -> str:
     """Пояснение следующего шага без сброса диалога (fallback при сбое LLM)."""
     role = checklist.get("role")
-    task = USER_TASK_LABELS.get(role or "", "настройку агента")
-    known: list[str] = []
-    if role:
-        known.append(f"Задача: {task}.")
-    if checklist.get("max_chat_id"):
-        known.append(f"Группа MAX: {checklist['max_chat_id']}.")
-    if checklist.get("schedule_text"):
-        known.append(f"Расписание: {checklist['schedule_text']}.")
-    if checklist.get("reminder_message"):
-        known.append(f"Текст сообщения: {checklist['reminder_message']}.")
-    if checklist.get("timezone"):
-        known.append(f"Часовой пояс: {checklist['timezone']}.")
-
-    intro = " ".join(known) if known else "Продолжаем настройку агента."
+    intro = _checklist_intro(checklist)
 
     if not role:
+        if user_wants_continue(user_text) or user_needs_clarification(user_text):
+            return (
+                (intro + "\n\n" if intro else "")
+                + "Чтобы продолжить, опишите задачу **одним сообщением**. Примеры:\n"
+                "• «напоминай мне в 9:00 каждый день»\n"
+                "• «отвечай в группе на вопросы, умеешь читать текст с фото»\n"
+                "• «удаляй спам и ссылки в группе»"
+            )
         return (
-            f"{intro}\n\n"
-            "Опишите, что должен делать агент — например, напоминать вам в личку "
-            "или писать в группу MAX."
+            (intro + "\n\n" if intro else "")
+            + "Опишите задачу **своими словами** — что бот должен делать в MAX. "
+            "Можно одной фразой: напоминания, группа, новости, поддержка, модерация."
         )
 
-    if not checklist.get("schedule_text"):
+    if role == AgentRole.DM_ASSISTANT.value:
+        scope = str(checklist.get("scope") or "dm").lower()
+        mode = str(checklist.get("interaction_mode") or "command").lower()
+        if scope in {"group", "both"} and not checklist.get("max_chat_id"):
+            return (
+                f"{intro}\n\n"
+                "Добавьте бота Glosix в **группу MAX** (как администратора) "
+                "или пришлите **ID группы** — подтянется автоматически."
+            )
+        if scope in {"group", "both"} and checklist.get("bot_is_group_admin") is not True:
+            return (
+                f"{intro}\n\n"
+                "Сделайте **Glosix администратором** группы в MAX и напишите «да»."
+            )
+        if mode in {"command", "both"} and not checklist.get("dm_command"):
+            return (
+                f"{intro}\n\n"
+                "Придумайте **команду** для бота (латиницей), например `faq` или `news` — "
+                "пользователи будут писать `/faq`."
+            )
+        if mode in {"support", "both"} and not (
+            checklist.get("support_instructions") or checklist.get("reminder_message")
+        ):
+            return (
+                f"{intro}\n\n"
+                "Опишите, **как бот должен отвечать**: тон, темы, что делать с фото. "
+                "Можно прикрепить FAQ-документ кнопкой «+» в этом треде."
+            )
+        return f"{intro}\n\nЕсли всё верно — напишите «да» или «подтверждаю»."
+
+    if role == AgentRole.GROUP_MODERATION.value:
+        if not checklist.get("moderation_stop_words") and not checklist.get("moderation_block_links"):
+            return (
+                f"{intro}\n\n"
+                "Какие **правила модерации**? Например: стоп-слова через запятую "
+                "или «блокировать ссылки»."
+            )
+        if not checklist.get("max_chat_id"):
+            return (
+                f"{intro}\n\n"
+                "Укажите группу MAX — добавьте бота в группу или пришлите ID чата."
+            )
+        if checklist.get("bot_is_group_admin") is not True:
+            return f"{intro}\n\nНазначьте **Glosix администратором** группы и напишите «да»."
+
+    if role == AgentRole.NEWS_DIGEST.value and not (
+        checklist.get("search_topic") or checklist.get("reminder_message")
+    ):
+        return f"{intro}\n\nПо **какой теме** собирать новости? Например: «нейросети», «курс доллара»."
+
+    if role == AgentRole.IMAGE_POST.value and not (
+        checklist.get("image_prompt") or checklist.get("reminder_message")
+    ):
+        return f"{intro}\n\n**Что рисовать** на картинках? Опишите стиль и сюжет."
+
+    from app.services.agent.profile import SCHEDULED_ROLES
+
+    if role in SCHEDULED_ROLES and not checklist.get("schedule_text"):
         return (
             f"{intro}\n\n"
             "Уточните, **когда** агент должен срабатывать: например «каждый день в 9:00», "
@@ -198,12 +297,14 @@ def explain_next_step(checklist: dict[str, Any]) -> str:
             "чтобы время срабатывания было верным."
         )
 
-    if not checklist.get("reminder_message"):
-        label = "сводки" if role == AgentRole.GROUP_MESSAGE_LOG.value else "сообщения"
-        return (
-            f"{intro}\n\n"
-            f"Напишите **текст {label}**, который бот будет отправлять."
-        )
+    if role in SCHEDULED_ROLES and not checklist.get("reminder_message"):
+        if role == AgentRole.GROUP_MESSAGE_LOG.value:
+            label = "заголовка сводки"
+        elif role in {AgentRole.NEWS_DIGEST.value, AgentRole.IMAGE_POST.value}:
+            label = "сообщения (или оставьте пустым — подставим тему)"
+        else:
+            label = "сообщения"
+        return f"{intro}\n\nНапишите **текст {label}**, который бот будет отправлять."
 
     if role in GROUP_ROLES and not checklist.get("max_chat_id"):
         return (
@@ -246,18 +347,36 @@ def explain_next_step(checklist: dict[str, Any]) -> str:
     )
 
 
-def build_parse_fallback_reply(checklist: dict[str, Any], user_text: str) -> str:
+def try_local_onboarding_reply(checklist: dict[str, Any], user_text: str) -> str | None:
+    """
+    Ответ без LLM, если из текста уже понятен следующий шаг.
+    Возвращает None, если лучше вызвать LLM.
+    """
+    hinted = apply_message_hints(checklist, user_text)
     if user_asks_capabilities(user_text):
         return CAPABILITIES_REPLY
-    if user_needs_clarification(user_text):
-        return (
-            "Поясню проще, без начала сначала.\n\n"
-            + explain_next_step(checklist)
-        )
-    missing_reply = explain_next_step(checklist)
-    if "Продолжаем настройку агента" not in missing_reply:
-        return missing_reply
-    return (
-        "Продолжим настройку с того места, где остановились.\n\n"
-        + explain_next_step(checklist)
-    )
+
+    step = explain_next_step(hinted, user_text=user_text)
+    intro = _checklist_intro(hinted)
+
+    if hinted.get("role") and hinted.get("role") != checklist.get("role"):
+        return f"Записал.\n\n{step}"
+
+    if user_needs_clarification(user_text) or user_wants_continue(user_text):
+        prefix = "Поясню проще.\n\n" if user_needs_clarification(user_text) else ""
+        return prefix + step
+
+    if hinted.get("role") and intro:
+        return step
+
+    if len((user_text or "").strip()) >= 12 and not hinted.get("role"):
+        return step
+
+    return None
+
+
+def build_parse_fallback_reply(checklist: dict[str, Any], user_text: str) -> str:
+    local = try_local_onboarding_reply(checklist, user_text)
+    if local:
+        return local
+    return explain_next_step(apply_message_hints(checklist, user_text), user_text=user_text)
