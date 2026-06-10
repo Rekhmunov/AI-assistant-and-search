@@ -2,6 +2,7 @@ import { FormEvent, useState } from "react";
 import { createPortal } from "react-dom";
 import { apiFetch } from "../api";
 import { AdminModal } from "./AdminModal";
+import { GenerationStatusLine } from "./GenerationStatusLine";
 
 type ArticleResult = {
   title: string;
@@ -159,6 +160,10 @@ export function BlogAiModal({
           </span>
         </label>
         {error && <p className="error">{error}</p>}
+        {(busy === "cover" || busy === "inline") && <GenerationStatusLine active />}
+        {busy === "article" && (
+          <GenerationStatusLine active status="Составляем статью…" />
+        )}
         <div className="blog-ai-actions">
           <button type="submit" className="btn-primary" disabled={busy !== null}>
             {busy === "article" ? "Генерация…" : "Сгенерировать статью"}

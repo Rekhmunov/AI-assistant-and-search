@@ -192,6 +192,7 @@ export function Thread() {
   const imageGenActiveRef = useRef(false);
   const docGenActiveRef = useRef(false);
   const [docGenStatus, setDocGenStatus] = useState<string | undefined>();
+  const [imageGenStatus, setImageGenStatus] = useState<string | undefined>();
   const [agentLoading, setAgentLoading] = useState(false);
   const [agentStatusText, setAgentStatusText] = useState<string | null>(null);
   const [showScrollDown, setShowScrollDown] = useState(false);
@@ -539,6 +540,7 @@ export function Thread() {
       imageGenActiveRef.current = imageGenQuery;
       docGenActiveRef.current = false;
       setDocGenStatus(undefined);
+      setImageGenStatus(undefined);
       streamingRef.current = true;
       setStreaming(true);
       setNeedsSearch(!imageGenQuery);
@@ -636,11 +638,13 @@ export function Thread() {
             }),
           );
         },
-        onImageGenStart: () => {
+        onImageGenStart: (status) => {
           setSearchPhase("image_generating");
+          if (status?.trim()) setImageGenStatus(status.trim());
         },
-        onImageGenStatus: () => {
+        onImageGenStatus: (status) => {
           setSearchPhase("image_generating");
+          if (status?.trim()) setImageGenStatus(status.trim());
         },
         onSources: (list) => {
           setSearchPhase("answering");
@@ -683,6 +687,7 @@ export function Thread() {
           imageGenActiveRef.current = false;
           docGenActiveRef.current = false;
           setDocGenStatus(undefined);
+          setImageGenStatus(undefined);
           setStreaming(false);
           setSearchPhase("idle");
           answerResetPendingRef.current = false;
@@ -718,6 +723,7 @@ export function Thread() {
           imageGenActiveRef.current = false;
           docGenActiveRef.current = false;
           setDocGenStatus(undefined);
+          setImageGenStatus(undefined);
           setStreaming(false);
           setSearchPhase("idle");
           const threadMissing =
@@ -1132,7 +1138,12 @@ export function Thread() {
                 )}
 
                 {showStatus &&
-                  (showPreparing ? (
+                  (showPreparing && preparingPhase === "image_generating" ? (
+                    <ImageGenStatusLine
+                      active
+                      status={imageGenStatus ?? turnAnswerStatus?.custom_status ?? undefined}
+                    />
+                  ) : showPreparing ? (
                     <SearchStatusLine
                       phase={preparingPhase}
                       needsSearch={preparingNeedsSearch}
@@ -1141,7 +1152,10 @@ export function Thread() {
                   ) : isDocumentGenTurn ? (
                     <DocGenStatusLine active={Boolean(isActive && streaming)} status={docGenStatus} />
                   ) : isImageGenTurn ? (
-                    <ImageGenStatusLine active={streaming} />
+                    <ImageGenStatusLine
+                      active={Boolean(isActive && streaming)}
+                      status={imageGenStatus ?? turnAnswerStatus?.custom_status ?? undefined}
+                    />
                   ) : showAgentStatus ? (
                     <SearchStatusLine
                       phase="routing"

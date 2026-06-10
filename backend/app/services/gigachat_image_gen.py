@@ -134,6 +134,36 @@ async def _completion_with_models(
     return "", ""
 
 
+_STATUS_ROTATE = (
+    "Делаем шедевр…",
+    "Смешиваем краски…",
+    "Почти готово…",
+    "Дорисовываем детали…",
+)
+
+
+async def _stream_completion_text(
+    prompt: str,
+    *,
+    settings: Settings,
+    model: str,
+) -> AsyncIterator[tuple[str, str]]:
+    """Yields (event, text): status lines from text2image progress or content chunks."""
+    parts: list[str] = []
+    rotate_idx = 0
+    payload = _image_gen_payload(prompt, model, stream=True)
+    async for data in iter_chat_completion_chunks(payload, settings=settings):
+        role, content, name = _content_from_chunk(data)
+        if role == "function_in_progress" and name == "text2image":
+            msg = (content or "").strip() or _STATUS_ROTATE[rotate_idx % len(_STATUS_ROTATE)]
+            rotate_idx += 1
+            yield ("status", msg)
+            continue
+        if content:
+            parts.append(content)
+    yield ("done", "".join(parts).strip())
+
+
 async def stream_gigachat_image_generation(
     prompt: str,
     *,
@@ -152,38 +182,50 @@ async def stream_gigachat_image_generation(
 
     full_text = ""
     model_used = ""
-    try:
-        model_used, full_text = await _completion_with_models(
-            prompt,
-            settings=settings,
-            stream=False,
-        )
-    except Exception as exc:
-        logger.exception("GigaChat image completion failed")
-        if _is_gigachat_pro_payment_error(exc):
-            yield ("error", "Лимит GigaChat Pro исчерпан. Попробуйте позже.")
-            return
+    last_exc: Exception | None = None
+    for model in _models_for_image_gen(settings):
         try:
-            raise _gigachat_service_error(exc) from exc
-        except Exception as e:
-            yield ("error", str(e))
-            return
+            async for event, payload in _stream_completion_text(prompt, settings=settings, model=model):
+                if event == "status":
+                    yield ("status", payload)
+                elif event == "done":
+                    full_text = payload
+            model_used = model
+            break
+        except Exception as exc:
+            last_exc = exc
+            if _is_gigachat_pro_payment_error(exc) and model == settings.gigachat_model_pro.strip():
+                logger.warning("GigaChat image stream: pro 402, trying lite model")
+                continue
+            logger.exception("GigaChat image stream completion failed")
+            if _is_gigachat_pro_payment_error(exc):
+                yield ("error", "Лимит GigaChat Pro исчерпан. Попробуйте позже.")
+                return
+            try:
+                raise _gigachat_service_error(exc) from exc
+            except Exception as e:
+                yield ("error", str(e))
+                return
+
+    if not full_text and last_exc:
+        yield ("error", str(last_exc))
+        return
 
     file_id = _extract_file_id(full_text)
 
     if not file_id:
         yield ("status", "Повторяем запрос…")
         try:
-            model_used, stream_text = await _completion_with_models(
+            model_used, retry_text = await _completion_with_models(
                 prompt,
                 settings=settings,
-                stream=True,
+                stream=False,
             )
-            if stream_text:
-                full_text = stream_text
+            if retry_text:
+                full_text = retry_text
             file_id = _extract_file_id(full_text)
         except Exception as exc:
-            logger.exception("GigaChat image stream retry failed")
+            logger.exception("GigaChat image non-stream retry failed")
             if not _is_gigachat_pro_payment_error(exc):
                 try:
                     raise _gigachat_service_error(exc) from exc

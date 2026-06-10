@@ -3674,6 +3674,58 @@ pre.small {
   margin-right: 0;
 }
 
+.blog-gen-status {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 4px 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.blog-gen-status-dot {
+  flex-shrink: 0;
+  width: 7px;
+  height: 7px;
+  margin-top: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: blog-gen-status-pulse 1.2s ease-in-out infinite;
+}
+
+.blog-gen-status-text--typing::after {
+  content: "";
+  display: inline-block;
+  width: 2px;
+  height: 0.95em;
+  margin-left: 2px;
+  vertical-align: text-bottom;
+  background: var(--muted);
+  animation: blog-gen-status-caret 1s step-end infinite;
+}
+
+@keyframes blog-gen-status-pulse {
+  0%,
+  100% {
+    opacity: 0.35;
+    transform: scale(0.9);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes blog-gen-status-caret {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0;
+  }
+}
+
 .blog-admin-comments-list {
   list-style: none;
   margin: 0;

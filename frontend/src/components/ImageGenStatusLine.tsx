@@ -4,19 +4,24 @@ import { t } from "../i18n";
 
 type Props = {
   active: boolean;
+  /** Статус из SSE (GigaChat text2image). */
+  status?: string;
 };
 
-export function ImageGenStatusLine({ active }: Props) {
-  const messages = useMemo(
-    () => [
+export function ImageGenStatusLine({ active, status }: Props) {
+  const messages = useMemo(() => {
+    const base = [
       t("imageGenStatus1"),
       t("imageGenStatus2"),
       t("imageGenStatus3"),
       t("imageGenStatus4"),
       t("imageGenStatus5"),
-    ],
-    [],
-  );
+    ];
+    const fromServer = status?.trim();
+    if (!fromServer) return base;
+    if (base.includes(fromServer)) return base;
+    return [fromServer, ...base];
+  }, [status]);
 
   const { text, isTyping, label } = useRotatingTypewriterStatus(messages, active, {
     holdMs: 4400,
