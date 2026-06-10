@@ -186,3 +186,19 @@ class BlogGenerateCoverIn(BaseModel):
 
 class BlogGenerateCoverOut(BaseModel):
     media: BlogMediaUploadOut
+
+
+class BlogGenerateMetaIn(BaseModel):
+    field: str = Field(description="meta_title | meta_description | meta_keywords | og_title | og_description")
+    title: str = Field(min_length=1, max_length=500)
+    excerpt: str = ""
+    content_html: str = ""
+
+
+class BlogGenerateMetaOut(BaseModel):
+    field: str
+    value: str
+    max_length: int
+    min_length: int
+    length: int
+    hint: str

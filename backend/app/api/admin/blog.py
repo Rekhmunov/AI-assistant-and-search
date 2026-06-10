@@ -18,6 +18,8 @@ from app.schemas.blog import (
     BlogGenerateArticleOut,
     BlogGenerateCoverIn,
     BlogGenerateCoverOut,
+    BlogGenerateMetaIn,
+    BlogGenerateMetaOut,
     BlogMediaUploadOut,
     BlogPostAdminOut,
     BlogPostCreate,
@@ -30,6 +32,7 @@ from app.services.blog_ai import (
     generate_blog_inline_image,
     media_upload_out,
 )
+from app.services.blog_seo_meta import VALID_META_FIELDS, generate_blog_meta_field
 from app.services.gigachat_image_gen import ImageGenerationError
 from app.services.blog_image import ALLOWED_UPLOAD_MIME, process_blog_image
 from app.services.blog_posts import (
@@ -487,3 +490,41 @@ async def admin_generate_inline_image(
     except Exception as exc:
         await db.rollback()
         raise _blog_ai_http_error(exc, kind="изображение") from exc
+
+
+@router.post("/generate-meta", response_model=BlogGenerateMetaOut)
+async def admin_generate_meta(
+    body: BlogGenerateMetaIn,
+    request: Request,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    redis_client: Annotated[redis.Redis, Depends(get_redis)],
+    admin: Annotated[AdminUser, Depends(require_permission("blog:write"))],
+):
+    field = body.field.strip()
+    if field not in VALID_META_FIELDS:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Некорректное поле meta")
+    try:
+        result = await generate_blog_meta_field(
+            db,
+            redis_client,
+            field=field,
+            title=body.title,
+            excerpt=body.excerpt,
+            content_html=body.content_html,
+        )
+        await log_admin_action(
+            db,
+            admin=admin,
+            action="blog.ai.generate_meta",
+            resource_type="blog_post",
+            resource_id=None,
+            details={"field": field, "title": body.title[:80]},
+            ip=request.client.host if request.client else None,
+        )
+        await db.commit()
+        return result
+    except HTTPException:
+        raise
+    except Exception as exc:
+        await db.rollback()
+        raise _blog_ai_http_error(exc, kind="meta-тег") from exc

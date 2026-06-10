@@ -3721,6 +3721,51 @@ pre.small {
   color: #991b1b;
 }
 
+.blog-meta-field {
+  gap: 6px;
+}
+
+.blog-meta-field-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.blog-meta-hint {
+  margin: 0;
+  font-size: 0.75rem;
+}
+
+.blog-meta-counter {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.blog-meta-counter--ok {
+  color: #15803d;
+}
+
+.blog-meta-counter--short {
+  color: #9a6700;
+}
+
+.blog-meta-counter--over {
+  color: #b91c1c;
+}
+
+.blog-meta-generate-btn {
+  align-self: flex-start;
+  margin-top: 4px;
+}
+
+.blog-meta-error {
+  font-size: 0.8125rem;
+  color: #b91c1c;
+}
+
 @media (max-width: 1024px) {
   .blog-edit-layout {
     grid-template-columns: 1fr;

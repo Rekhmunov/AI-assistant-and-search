@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { apiFetch, apiUpload } from "../api";
 import { useAuth } from "../AuthContext";
 import { BlogAiModal } from "../components/BlogAiModal";
+import { BlogMetaField } from "../components/BlogMetaField";
 import { BlogRichTextEditor, type BlogRichTextEditorHandle } from "../components/BlogRichTextEditor";
 
 const API = import.meta.env.VITE_API_URL || "";
@@ -380,48 +381,56 @@ export function BlogEditPage() {
             </button>
             {seoOpen && (
               <div className="blog-panel-body">
-                <label className="blog-field">
-                  <span className="blog-field-label">Meta title</span>
-                  <input
-                    value={form.meta_title}
-                    onChange={(e) => patch({ meta_title: e.target.value })}
-                    disabled={!canWrite}
-                  />
-                </label>
-                <label className="blog-field">
-                  <span className="blog-field-label">Meta description</span>
-                  <textarea
-                    rows={3}
-                    value={form.meta_description}
-                    onChange={(e) => patch({ meta_description: e.target.value })}
-                    disabled={!canWrite}
-                  />
-                </label>
-                <label className="blog-field">
-                  <span className="blog-field-label">Keywords</span>
-                  <input
-                    value={form.meta_keywords}
-                    onChange={(e) => patch({ meta_keywords: e.target.value })}
-                    disabled={!canWrite}
-                  />
-                </label>
-                <label className="blog-field">
-                  <span className="blog-field-label">OG title</span>
-                  <input
-                    value={form.og_title}
-                    onChange={(e) => patch({ og_title: e.target.value })}
-                    disabled={!canWrite}
-                  />
-                </label>
-                <label className="blog-field">
-                  <span className="blog-field-label">OG description</span>
-                  <textarea
-                    rows={3}
-                    value={form.og_description}
-                    onChange={(e) => patch({ og_description: e.target.value })}
-                    disabled={!canWrite}
-                  />
-                </label>
+                <BlogMetaField
+                  field="meta_title"
+                  value={form.meta_title}
+                  onChange={(v) => patch({ meta_title: v })}
+                  articleTitle={form.title}
+                  excerpt={form.excerpt}
+                  contentHtml={form.content_html}
+                  canWrite={canWrite}
+                  disabled={!canWrite}
+                />
+                <BlogMetaField
+                  field="meta_description"
+                  value={form.meta_description}
+                  onChange={(v) => patch({ meta_description: v })}
+                  articleTitle={form.title}
+                  excerpt={form.excerpt}
+                  contentHtml={form.content_html}
+                  canWrite={canWrite}
+                  disabled={!canWrite}
+                />
+                <BlogMetaField
+                  field="meta_keywords"
+                  value={form.meta_keywords}
+                  onChange={(v) => patch({ meta_keywords: v })}
+                  articleTitle={form.title}
+                  excerpt={form.excerpt}
+                  contentHtml={form.content_html}
+                  canWrite={canWrite}
+                  disabled={!canWrite}
+                />
+                <BlogMetaField
+                  field="og_title"
+                  value={form.og_title}
+                  onChange={(v) => patch({ og_title: v })}
+                  articleTitle={form.title}
+                  excerpt={form.excerpt}
+                  contentHtml={form.content_html}
+                  canWrite={canWrite}
+                  disabled={!canWrite}
+                />
+                <BlogMetaField
+                  field="og_description"
+                  value={form.og_description}
+                  onChange={(v) => patch({ og_description: v })}
+                  articleTitle={form.title}
+                  excerpt={form.excerpt}
+                  contentHtml={form.content_html}
+                  canWrite={canWrite}
+                  disabled={!canWrite}
+                />
                 <label className="blog-toggle">
                   <input
                     type="checkbox"
