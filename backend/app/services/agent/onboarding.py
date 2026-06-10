@@ -69,8 +69,7 @@ def _missing_fields(agent: AgentInstance) -> list[str]:
 
 def _question_for(field: str, agent: AgentInstance) -> str:
     if field == "role":
-        lines = "\n".join(f"• {label}" for label in SUPPORTED_ROLE_LABELS.values())
-        return f"Выберите задачу агента:\n{lines}"
+        return "Опишите, что должен делать агент — своими словами."
     if field == "schedule":
         return (
             "Когда напоминать? Например: «каждый понедельник в 10:00», "

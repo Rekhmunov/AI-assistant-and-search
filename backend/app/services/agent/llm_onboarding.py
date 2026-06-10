@@ -10,6 +10,13 @@ from typing import Any
 from app.models.agent import AgentInstance, AgentRole, AgentStatus
 from app.models.message import Message, MessageRole
 from app.models.user import User
+from app.services.agent.capabilities import (
+    CAPABILITIES_REPLY,
+    apply_message_hints,
+    build_parse_fallback_reply,
+    user_asks_capabilities,
+    user_needs_clarification,
+)
 from app.services.agent.constants import CANCEL_PHRASES, SUPPORTED_ROLE_LABELS
 from app.services.agent.onboarding import validate_activation
 from app.services.providers.factory import resolve_runtime_providers
@@ -39,35 +46,46 @@ VALID_ROLES = frozenset(
 )
 
 AGENT_SYSTEM_PROMPT = """Ты — ассистент настройки агента Glosix для мессенджера MAX.
-Веди живой диалог на русском. Отвечай только валидным JSON (без markdown).
+Веди живой диалог на русском. Отвечай только валидным JSON (без markdown-обёртки).
 
-Доступные сценарии (whitelist):
-1) personal_reminder — личное напоминание пользователю в чат Glosix в MAX.
-2) group_reminder — напоминание в групповом чате MAX (бот должен быть администратором).
-3) group_message_log — бот читает сообщения группы и присылает сводки в личный чат пользователя.
+Что технически доступно (внутренняя модель — НЕ озвучивай списком без запроса):
+• Писать пользователю в личный чат MAX (dm_out).
+• Писать в группу MAX, где бот Glosix — администратор (group_out).
+• Читать сообщения группы и присылать сводку/отчёт в личный чат (group_in + dm_out).
+• Срабатывание по расписанию или разово («завтра в 9:00», «через 15 минут», «каждый понедельник»).
 
-Чеклист (заполняй по мере диалога, null если неизвестно):
+Внутренние role (определи сам по смыслу запроса пользователя):
+- personal_reminder — уведомления/напоминания в личный чат пользователя.
+- group_reminder — сообщения/напоминания в группу MAX.
+- group_message_log — чтение группы + сводка в личный чат.
+
+Чеклист (заполняй по мере диалога, null если неизвестно; уже заполненное из current_checklist сохраняй):
 - role: personal_reminder | group_reminder | group_message_log | null
-- schedule_text: когда срабатывать (естественный язык): «завтра в 9:00», «каждый понедельник в 10:00», «через 15 минут»
-- timezone: часовой пояс пользователя (IANA, напр. Europe/Moscow, Asia/Yekaterinburg) или UTC+3 — ОБЯЗАТЕЛЬНО уточни, если в расписании есть время суток
-- reminder_message: текст напоминания или сводки
-- max_chat_id: числовой ID группового чата (только для group_*)
-- bot_is_group_admin: true/false/null — бот Glosix назначен админом группы
-- bot_can_read_messages: true/false/null — у бота есть право читать сообщения (для group_message_log)
+- schedule_text: когда срабатывать (естественный язык)
+- timezone: IANA (Europe/Moscow) или UTC+N — уточни, если в расписании есть время суток
+- reminder_message: текст сообщения или сводки
+- max_chat_id: числовой ID группы (для group_*)
+- bot_is_group_admin: true/false/null
+- bot_can_read_messages: true/false/null (обязательно true для group_message_log)
 
-Правила:
-- Если max_linked=false, объясни привязку MAX: Профиль → войти через MAX / привязать аккаунт. Не активируй агента.
-- Для group_* задавай наводящие вопросы, пока чеклист не полон.
-- Если пользователь сразу дал всё — заполни чеклист и переходи к подтверждению.
-- Когда все обязательные поля заполнены, ready_for_confirmation=true и напиши итог в confirmation_summary.
-- activate=true только если пользователь явно подтвердил итог (да/подтверждаю) И max_linked=true.
-- Если запрос вне whitelist — вежливо откажи и предложи один из трёх сценариев.
-- reply — текст пользователю (можно markdown), без дублирования всего JSON.
+Правила диалога:
+- Принимай задачу своими словами. НЕ заставляй выбирать из списка и НЕ называй «whitelist».
+- Если пользователь спрашивает «что умеешь» / «что можешь» — кратко 3–4 примера возможностей.
+- Если просят невозможное (бот не админ в группе, чтение без прав, сторонние сервисы, диалог-бот в MAX) —
+  скажи, что сейчас это не поддерживается, без перечисления всего whitelist.
+- Если пользователь не понял («не понял», «не совсем понял», «поясни», «что дальше») —
+  НЕ сбрасывай диалог; переформулируй последний шаг проще, опираясь на current_checklist.
+  Объясняй один следующий шаг, не сваливай все вопросы разом.
+- Задавай по одному недостающему параметру за раз (кроме случая, когда пользователь сам дал всё сразу).
+- Если max_linked=false — объясни привязку MAX (Профиль → войти через MAX). Не активируй агента.
+- Когда обязательные поля заполнены: ready_for_confirmation=true и confirmation_summary с итогом.
+- activate=true только при явном подтверждении (да/подтверждаю) И max_linked=true.
+- reply — текст пользователю (можно markdown), без дублирования JSON.
 
 Формат ответа:
 {
   "reply": "текст",
-    "checklist": {
+  "checklist": {
     "role": null,
     "schedule_text": null,
     "timezone": null,
@@ -266,18 +284,33 @@ def _history_messages(messages: list[Message]) -> list[dict[str, str]]:
     return out
 
 
-def _context_block(user: User, agent: AgentInstance, checklist: ChecklistState) -> str:
+def _context_block(
+    user: User,
+    agent: AgentInstance,
+    checklist: ChecklistState,
+    last_user_text: str = "",
+) -> str:
     cfg = dict(agent.config or {})
     registered = cfg.get("registered_group_chat_id")
+    missing = checklist_missing_fields(checklist)
     lines = [
         f"max_linked: {bool(user.max_user_id)}",
         f"max_user_id: {user.max_user_id or 'нет'}",
         f"agent_status: {agent.status}",
         f"registered_group_chat_id: {registered or 'нет'}",
         f"current_checklist: {json.dumps(checklist.to_dict(), ensure_ascii=False)}",
-        f"default_timezone: Europe/Moscow",
-        "supported_roles: " + ", ".join(SUPPORTED_ROLE_LABELS.keys()),
+        f"missing_fields: {', '.join(missing) if missing else 'нет'}",
+        "default_timezone: Europe/Moscow",
     ]
+    if user_needs_clarification(last_user_text):
+        lines.append(
+            "user_signal: needs_clarification — переформулируй последний шаг проще, "
+            "сохрани current_checklist, не начинай диалог заново"
+        )
+    if user_asks_capabilities(last_user_text):
+        lines.append(
+            "user_signal: asks_capabilities — кратко перечисли 3–4 примера того, что умеет агент"
+        )
     return "\n".join(lines)
 
 
@@ -289,14 +322,24 @@ async def run_llm_turn(
     messages: list[Message],
 ) -> LlmTurnResult:
     checklist = load_checklist(agent)
-    llm, _, _, _, _ = await resolve_runtime_providers(db, redis_client, user=user)
     history = _history_messages(messages)
+    last_user = history[-1]["text"] if history and history[-1]["role"] == "user" else ""
     if not history or history[-1]["role"] != "user":
         logger.warning("Agent LLM turn without trailing user message")
 
+    if user_asks_capabilities(last_user):
+        hinted = ChecklistState.from_dict(apply_message_hints(checklist.to_dict(), last_user))
+        return LlmTurnResult(reply=CAPABILITIES_REPLY, checklist=hinted)
+
+    checklist = ChecklistState.from_dict(
+        apply_message_hints(checklist.to_dict(), last_user),
+    )
+
+    llm, _, _, _, _ = await resolve_runtime_providers(db, redis_client, user=user)
+
     payload_messages: list[dict[str, str]] = [
         {"role": "system", "text": AGENT_SYSTEM_PROMPT},
-        {"role": "system", "text": _context_block(user, agent, checklist)},
+        {"role": "system", "text": _context_block(user, agent, checklist, last_user)},
         *history,
     ]
 
@@ -311,10 +354,7 @@ async def run_llm_turn(
     except Exception as exc:
         logger.exception("Agent LLM complete_text failed: %s", exc)
         return LlmTurnResult(
-            reply=(
-                "Сейчас не могу обработать запрос через ИИ. "
-                "Опишите задачу: напоминание в личный чат MAX, в группу или учёт сообщений группы."
-            ),
+            reply=build_parse_fallback_reply(checklist.to_dict(), last_user),
             checklist=checklist,
         )
 
@@ -322,7 +362,7 @@ async def run_llm_turn(
     if not data:
         logger.warning("Agent LLM JSON parse failed: %s", raw[:300])
         return LlmTurnResult(
-            reply="Не совсем понял. Опишите задачу агента своими словами — напоминание в личный чат или работу с группой в MAX.",
+            reply=build_parse_fallback_reply(checklist.to_dict(), last_user),
             checklist=checklist,
         )
 
@@ -341,7 +381,6 @@ async def run_llm_turn(
                 "(или привяжите существующий аккаунт)."
             )
 
-    last_user = history[-1]["text"] if history and history[-1]["role"] == "user" else ""
     if user_wants_confirm(last_user) and ready:
         activate = True
 
