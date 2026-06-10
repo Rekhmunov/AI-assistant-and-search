@@ -12,7 +12,7 @@ SUPPORTED_ROLE_LABELS = {
     "personal_reminder": "уведомления в личный чат MAX",
     "group_reminder": "сообщения в группу MAX",
     "group_message_log": "сводки из группы в личный чат MAX",
-    "news_digest": "новостная сводка из интернета в MAX",
+    "news_digest": "публикация новостей из интернета в MAX (текст и фото)",
     "image_post": "генерация и отправка изображений в MAX",
     "group_moderation": "модерация сообщений в группе MAX",
     "dm_assistant": "интерактивный помощник в MAX",

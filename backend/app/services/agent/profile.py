@@ -40,7 +40,7 @@ USER_TASK_LABELS: dict[str, str] = {
     AgentRole.PERSONAL_REMINDER.value: "уведомления в ваш личный чат MAX",
     AgentRole.GROUP_REMINDER.value: "сообщения в группу MAX",
     AgentRole.GROUP_MESSAGE_LOG.value: "сводки из группы в ваш личный чат MAX",
-    AgentRole.NEWS_DIGEST.value: "новостная сводка из интернета",
+    AgentRole.NEWS_DIGEST.value: "публикация новостей из интернета в MAX",
     AgentRole.IMAGE_POST.value: "генерация и отправка изображений",
     AgentRole.GROUP_MODERATION.value: "модерация сообщений в группе",
     AgentRole.DM_ASSISTANT.value: "интерактивный помощник в MAX (личка и/или группа)",
@@ -50,7 +50,7 @@ USER_TASK_LABELS: dict[str, str] = {
 @dataclass(frozen=True)
 class AgentProfile:
     role: str
-    content_pipeline: str  # static | llm_generate | group_summary | web_digest | image_gen
+    content_pipeline: str  # static | llm_generate | group_summary | web_digest | web_digest_images | image_gen
     delivery_mode: str  # dm | group
     needs_schedule: bool
     needs_group: bool
@@ -69,8 +69,10 @@ class AgentProfile:
             caps.add("group_in")
         if self.listens_dm_commands:
             caps.add("dm_in")
-        if self.content_pipeline == "web_digest":
+        if self.content_pipeline in {"web_digest", "web_digest_images"}:
             caps.add("web_search")
+        if self.content_pipeline == "web_digest_images":
+            caps.add("image_gen")
         if self.content_pipeline == "image_gen":
             caps.add("image_gen")
         if self.content_pipeline == "llm_generate":
@@ -91,7 +93,7 @@ def _delivery_mode(role: str, cfg: dict[str, Any]) -> str:
 
 def _content_pipeline(role: str, cfg: dict[str, Any]) -> str:
     explicit = str(cfg.get("content_pipeline") or "").strip().lower()
-    if explicit in {"static", "llm_generate", "group_summary", "web_digest", "image_gen"}:
+    if explicit in {"static", "llm_generate", "group_summary", "web_digest", "web_digest_images", "image_gen"}:
         return explicit
     if role in {AgentRole.PERSONAL_REMINDER.value, AgentRole.GROUP_REMINDER.value}:
         from app.services.agent.generate_content import wants_llm_generated_content

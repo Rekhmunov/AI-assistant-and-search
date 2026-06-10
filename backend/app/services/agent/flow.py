@@ -284,7 +284,7 @@ async def _handle_agent_message_body(
             if code in {"schedule_unparseable", "schedule_missing"}:
                 error_reply = (
                     "Не удалось разобрать расписание. Напишите, когда срабатывать — "
-                    "например «каждый день в 16:35»."
+                    "например «каждый час», «каждый день в 16:35» или «через 30 минут»."
                 )
             elif code == "max_required":
                 error_reply = (

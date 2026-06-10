@@ -97,6 +97,15 @@ def parse_reminder_schedule(
         run = now_local + timedelta(minutes=int(rel_min.group(1)))
         return run.astimezone(timezone.utc), None
 
+    rel_hour = re.search(r"через\s+(\d+)\s*(?:час|часа|часов)", raw)
+    if rel_hour:
+        run = now_local + timedelta(hours=int(rel_hour.group(1)))
+        return run.astimezone(timezone.utc), None
+
+    if re.search(r"(?:раз\s+в\s+час|кажд\w+\s+час|every\s+hour|hourly)", raw):
+        run = now_local + timedelta(hours=1)
+        return run.astimezone(timezone.utc), "hourly"
+
     if "сегодня" in raw:
         hm = _parse_time_hm(raw)
         if hm:
@@ -171,6 +180,9 @@ def normalize_schedule_phrase(text: str) -> str | None:
 
     if re.search(r"через\s+\d+", low):
         return raw
+
+    if re.search(r"(?:раз\s+в\s+час|кажд\w+\s+час|every\s+hour|hourly)", low):
+        return "каждый час"
 
     if time_part:
         return f"каждый день в {time_part}"

@@ -64,6 +64,10 @@ async def summarize_group_buffer(
 _NEWS_SUMMARY_PROMPT = """Составь краткую новостную сводку на русском по результатам поиска.
 3–6 пунктов, только факты из источников, без выдумок. Укажи тему в первой строке."""
 
+_NEWS_POST_PROMPT = """Составь новостной пост на русском по результатам поиска для публикации в мессенджере.
+Связный текст из 2–4 абзацев, только факты из источников, без выдумок.
+Длина: от {min_chars} до {max_chars} символов. Заголовок темы в первой строке."""
+
 
 async def summarize_search_sources(
     db,
@@ -73,6 +77,8 @@ async def summarize_search_sources(
     sources: list[Any],
     *,
     header: str = "",
+    min_chars: int | None = None,
+    max_chars: int | None = None,
 ) -> str:
     if not sources:
         return f"По теме «{topic}» свежих результатов не найдено."
@@ -88,18 +94,24 @@ async def summarize_search_sources(
     from app.services.providers.factory import resolve_runtime_providers
 
     llm, _, _, _, _ = await resolve_runtime_providers(db, redis_client, user=user)
+    if min_chars and max_chars and max_chars >= min_chars:
+        system_prompt = _NEWS_POST_PROMPT.format(min_chars=min_chars, max_chars=max_chars)
+        max_tokens = min(1200, max(600, max_chars // 2))
+    else:
+        system_prompt = _NEWS_SUMMARY_PROMPT
+        max_tokens = 500
     try:
         if hasattr(llm, "complete_text"):
             body = await llm.complete_text(  # type: ignore[attr-defined]
                 [
-                    {"role": "system", "text": _NEWS_SUMMARY_PROMPT},
+                    {"role": "system", "text": system_prompt},
                     {
                         "role": "user",
                         "text": f"Тема: {topic[:200]}\n\nИсточники:\n{context[:4000]}",
                     },
                 ],
                 model="pro",
-                max_tokens=500,
+                max_tokens=max_tokens,
                 temperature=0.2,
             )
         else:

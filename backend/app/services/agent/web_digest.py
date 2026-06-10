@@ -16,6 +16,8 @@ async def build_web_digest_text(
     *,
     topic: str,
     header: str = "",
+    min_chars: int | None = None,
+    max_chars: int | None = None,
 ) -> str:
     topic = (topic or "").strip()
     if not topic:
@@ -31,4 +33,6 @@ async def build_web_digest_text(
         topic,
         sources,
         header=header,
+        min_chars=min_chars,
+        max_chars=max_chars,
     )

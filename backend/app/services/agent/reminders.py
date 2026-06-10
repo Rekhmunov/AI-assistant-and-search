@@ -90,6 +90,19 @@ async def schedule_next_recurrence(db: AsyncSession, reminder: AgentReminder) ->
         await db.flush()
         return new_reminder
 
+    if reminder.recurrence == "hourly":
+        next_run = reminder.run_at + timedelta(hours=1)
+        new_reminder = AgentReminder(
+            agent_id=reminder.agent_id,
+            run_at=next_run,
+            message_text=reminder.message_text,
+            recurrence="hourly",
+            status="pending",
+        )
+        db.add(new_reminder)
+        await db.flush()
+        return new_reminder
+
     if not reminder.recurrence or not reminder.recurrence.startswith("weekly:"):
         return None
     try:

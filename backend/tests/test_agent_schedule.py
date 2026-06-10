@@ -79,6 +79,20 @@ def test_parse_bare_time_daily():
     assert local.minute == 10
 
 
+def test_parse_hourly():
+    now = datetime(2026, 6, 3, 12, 0, tzinfo=MSK)
+    for phrase in ("раз в час", "каждый час", "every hour", "hourly"):
+        run_at, recurrence = parse_reminder_schedule(phrase, now=now)
+        assert recurrence == "hourly"
+        delta = run_at.astimezone(MSK) - now
+        assert 59 <= delta.total_seconds() / 60 <= 61
+
+
+def test_normalize_hourly():
+    assert normalize_schedule_phrase("раз в час") == "каждый час"
+    assert is_schedule_parseable("каждый час")
+
+
 def test_next_weekly_run_skips_past_today():
     now = datetime(2026, 6, 2, 11, 0, tzinfo=MSK)  # Monday 11:00
     run = next_weekly_run(0, 10, 0, now=now)

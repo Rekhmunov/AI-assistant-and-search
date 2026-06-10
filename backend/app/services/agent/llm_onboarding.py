@@ -62,8 +62,8 @@ AGENT_SYSTEM_PROMPT = """Ты — ассистент настройки аген
 - personal_reminder — текст в личку по расписанию
 - group_reminder — текст в группу по расписанию
 - group_message_log — сводка сообщений группы в личку (LLM) по расписанию
-- news_digest — поиск новостей по теме + сводка (личка или группа: delivery_mode)
-- image_post — генерация картинки по промпту (личка или группа)
+- news_digest — поиск новостей по теме + пост в MAX (личка или группа: delivery_mode). Может быть текст + 1–3 фото (content_pipeline=web_digest_images)
+- image_post — только генерация картинки по промпту (личка или группа), без новостного текста
 - group_moderation — удаление сообщений в группе по правилам (стоп-слова, ссылки)
 - dm_assistant — интерактивный помощник: личка и/или группа, vision (фото/OCR/перевод), база знаний из документов
 
@@ -72,8 +72,10 @@ AGENT_SYSTEM_PROMPT = """Ты — ассистент настройки аген
 - schedule_text — для scheduled-ролей (не для dm_assistant / group_moderation)
 - timezone — только если пользователь сам назвал пояс; иначе Europe/Moscow (не спрашивай)
 - reminder_message — текст сообщения ИЛИ инструкция для генерации (напр. «напиши стишок на 4 строки»)
-- content_pipeline: static | llm_generate — static: отправить текст как есть; llm_generate: при срабатывании сгенерировать текст по инструкции из reminder_message (стишок, шутка, совет и т.п.)
+- content_pipeline: static | llm_generate | web_digest | web_digest_images — static/llm_generate для напоминаний; web_digest — новости текстом; web_digest_images — новостной пост 500–1000 символов + 1–3 иллюстрации
 - search_topic — тема для news_digest или dm_assistant с веб-сводкой
+- post_min_chars / post_max_chars — длина новостного поста (по умолчанию 500–1000)
+- post_image_count_min / post_image_count_max — число фото в посте (1–3)
 - image_prompt — описание картинки для image_post / dm_assistant
 - dm_command — команда без слэша, напр. news (dm_assistant, если interaction_mode command/both)
 - scope: dm | group | both — где слушать (dm_assistant): личка, группа или оба
@@ -101,6 +103,8 @@ AGENT_SYSTEM_PROMPT = """Ты — ассистент настройки аген
 - «через 2 минуты напиши стишок на 4 строки» → personal_reminder, schedule_text, reminder_message=инструкция, content_pipeline=llm_generate (НЕ дословная цитата инструкции в MAX)
 - «пиши в группу каждый вечер итог дня» → group_reminder или group_message_log
 - «новости про ИИ каждое утро» → news_digest, search_topic, schedule_text
+- «публикуй в группу -ID новости про ИИ раз в час: текст 500–1000 символов, 1–3 фото» → news_digest, delivery_mode=group, max_chat_id, search_topic, schedule_text=каждый час, content_pipeline=web_digest_images, post_min_chars=500, post_max_chars=1000, post_image_count_min=1, post_image_count_max=3
+- «раз в час» / «каждый час» / «every hour» → schedule_text=каждый час (НЕ переспрашивай расписание)
 - «отвечай в группе на вопросы, переводи текст с фото» → dm_assistant, scope=group, interaction_mode=support
 - «удаляй спам и ссылки в группе» → group_moderation, moderation_stop_words/block_links
 - «ты можешь сделать напоминание в личке?» → reply: да; role=personal_reminder; спроси когда и о чём
@@ -169,6 +173,11 @@ class ChecklistState:
     bot_can_read_messages: bool | None = None
     moderation_stop_words: str | None = None
     moderation_block_links: bool | None = None
+    content_pipeline: str | None = None
+    post_min_chars: int | None = None
+    post_max_chars: int | None = None
+    post_image_count_min: int | None = None
+    post_image_count_max: int | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -188,6 +197,11 @@ class ChecklistState:
             "bot_can_read_messages": self.bot_can_read_messages,
             "moderation_stop_words": self.moderation_stop_words,
             "moderation_block_links": self.moderation_block_links,
+            "content_pipeline": self.content_pipeline,
+            "post_min_chars": self.post_min_chars,
+            "post_max_chars": self.post_max_chars,
+            "post_image_count_min": self.post_image_count_min,
+            "post_image_count_max": self.post_image_count_max,
         }
 
     @classmethod
@@ -241,6 +255,11 @@ class ChecklistState:
             bot_can_read_messages=_bool_or_none(raw.get("bot_can_read_messages")),
             moderation_stop_words=_str_or_none(raw.get("moderation_stop_words")),
             moderation_block_links=_bool_or_none(raw.get("moderation_block_links")),
+            content_pipeline=_str_or_none(raw.get("content_pipeline")),
+            post_min_chars=_int_or_none(raw.get("post_min_chars")),
+            post_max_chars=_int_or_none(raw.get("post_max_chars")),
+            post_image_count_min=_int_or_none(raw.get("post_image_count_min")),
+            post_image_count_max=_int_or_none(raw.get("post_image_count_max")),
         )
 
 
@@ -258,6 +277,16 @@ def _str_or_none(value: Any) -> str | None:
         return None
     text = str(value).strip()
     return text or None
+
+
+def _int_or_none(value: Any) -> int | None:
+    if value is None:
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str) and value.strip().isdigit():
+        return int(value.strip())
+    return None
 
 
 def _bool_or_none(value: Any) -> bool | None:
@@ -346,6 +375,9 @@ def _schedule_has_recurrence(text: str) -> bool:
             "пятниц",
             "суббот",
             "воскресен",
+            "час",
+            "hour",
+            "hourly",
         )
     )
 
@@ -483,6 +515,16 @@ def apply_checklist_to_agent(agent: AgentInstance, checklist: ChecklistState) ->
         rules = dict(cfg.get("moderation_rules") or {})
         rules["block_links"] = checklist.moderation_block_links
         cfg["moderation_rules"] = rules
+    if checklist.content_pipeline:
+        cfg["content_pipeline"] = checklist.content_pipeline
+    if checklist.post_min_chars is not None:
+        cfg["post_min_chars"] = checklist.post_min_chars
+    if checklist.post_max_chars is not None:
+        cfg["post_max_chars"] = checklist.post_max_chars
+    if checklist.post_image_count_min is not None:
+        cfg["post_image_count_min"] = checklist.post_image_count_min
+    if checklist.post_image_count_max is not None:
+        cfg["post_image_count_max"] = checklist.post_image_count_max
     if checklist.max_chat_id is not None:
         cfg["max_chat_id"] = checklist.max_chat_id
         agent.max_chat_id = checklist.max_chat_id

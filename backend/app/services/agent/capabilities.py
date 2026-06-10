@@ -238,6 +238,21 @@ def compose_feasibility_reply(checklist: dict[str, Any], user_text: str) -> str 
             "Да, могу публиковать сообщения в группу MAX — бот должен быть админом. "
             "Пришлите ссылку на группу и текст сообщения."
         )
+    if role == AgentRole.NEWS_DIGEST.value:
+        parts = ["Да, могу публиковать новости в MAX"]
+        if hinted.get("delivery_mode") == "group":
+            parts.append("в группу")
+        if hinted.get("content_pipeline") == "web_digest_images":
+            parts.append("с текстом и иллюстрациями")
+        if hinted.get("schedule_text"):
+            return (
+                f"{' '.join(parts)} — {hinted['schedule_text']}. "
+                "Если всё верно — напишите «да»."
+            )
+        return (
+            f"{' '.join(parts)}. "
+            "Укажите тему, группу (если нужно) и расписание — например «раз в час»."
+        )
     return (
         "Да, в MAX это можно настроить — напоминания, посты в группу, новости, модерация, "
         "ответы с распознаванием текста с фото. Опишите задачу одним сообщением."
@@ -373,6 +388,15 @@ def explain_next_step(checklist: dict[str, Any], *, user_text: str = "") -> str:
     ):
         return f"{intro}\n\nПо **какой теме** собирать новости? Например: «нейросети», «курс доллара»."
 
+    if role == AgentRole.NEWS_DIGEST.value and str(checklist.get("content_pipeline") or "") == "web_digest_images":
+        if checklist.get("delivery_mode") == "group" and not checklist.get("max_chat_id"):
+            return (
+                f"{intro}\n\n"
+                "Пришлите **ссылку на группу MAX** (web.max.ru/-ID) или добавьте бота Glosix в группу."
+            )
+        if checklist.get("delivery_mode") == "group" and checklist.get("bot_is_group_admin") is not True:
+            return f"{intro}\n\nСделайте **Glosix администратором** группы в MAX и напишите «да»."
+
     if role == AgentRole.IMAGE_POST.value and not (
         checklist.get("image_prompt") or checklist.get("reminder_message")
     ):
@@ -383,8 +407,8 @@ def explain_next_step(checklist: dict[str, Any], *, user_text: str = "") -> str:
     if role in SCHEDULED_ROLES and not checklist.get("schedule_text"):
         return (
             f"{intro}\n\n"
-            "Уточните, **когда** агент должен срабатывать: например «каждый день в 9:00», "
-            "«завтра в 10:15» или «через 30 минут»."
+            "Уточните, **когда** агент должен срабатывать: например «каждый час», "
+            "«каждый день в 9:00», «завтра в 10:15» или «через 30 минут»."
         )
 
     if role in SCHEDULED_ROLES and not checklist.get("reminder_message"):

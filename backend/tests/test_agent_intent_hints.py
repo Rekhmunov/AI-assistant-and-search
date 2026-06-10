@@ -120,3 +120,35 @@ def test_group_post_with_link_and_immediate():
 def test_bare_time_gets_default_timezone():
     data = infer_checklist_fields("каждый день в 16:10", {"role": AgentRole.PERSONAL_REMINDER.value})
     assert data["timezone"] == "Europe/Moscow"
+
+
+def test_hourly_news_post_to_group():
+    text = (
+        "Нужно в группу https://web.max.ru/-75735901261257 раз в час публиковать "
+        "актуальные новости об ИИ. Количество символов в статье от 500 до 1000. "
+        "В посте так же от 1 до 3 фото."
+    )
+    assert infer_role_from_text(text) == AgentRole.NEWS_DIGEST.value
+    data = infer_checklist_fields(text, {})
+    assert data["role"] == AgentRole.NEWS_DIGEST.value
+    assert data["delivery_mode"] == "group"
+    assert data["max_chat_id"] == -75735901261257
+    assert data["schedule_text"] == "каждый час"
+    assert data["content_pipeline"] == "web_digest_images"
+    assert data["post_min_chars"] == 500
+    assert data["post_max_chars"] == 1000
+    assert data["post_image_count_min"] == 1
+    assert data["post_image_count_max"] == 3
+    assert "искусствен" in (data.get("search_topic") or "").lower()
+
+
+def test_hourly_schedule_followup():
+    base = {
+        "role": AgentRole.NEWS_DIGEST.value,
+        "delivery_mode": "group",
+        "max_chat_id": -75735901261257,
+        "search_topic": "новости искусственного интеллекта",
+        "content_pipeline": "web_digest_images",
+    }
+    data = infer_checklist_fields("Раз в час", base)
+    assert data["schedule_text"] == "каждый час"

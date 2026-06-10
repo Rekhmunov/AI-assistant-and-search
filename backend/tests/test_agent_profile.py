@@ -30,6 +30,22 @@ def test_news_digest_group_delivery():
     assert profile.needs_group is True
 
 
+def test_news_digest_images_pipeline():
+    agent = SimpleNamespace(
+        role=AgentRole.NEWS_DIGEST.value,
+        max_chat_id=-75735901261257,
+        config={
+            "delivery_mode": "group",
+            "search_topic": "новости ИИ",
+            "content_pipeline": "web_digest_images",
+        },
+    )
+    profile = agent_profile(agent)  # type: ignore[arg-type]
+    assert profile.content_pipeline == "web_digest_images"
+    assert "image_gen" in profile.capabilities
+    assert "web_search" in profile.capabilities
+
+
 def test_dm_assistant_profile():
     agent = SimpleNamespace(
         role=AgentRole.DM_ASSISTANT.value,

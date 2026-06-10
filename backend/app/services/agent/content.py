@@ -13,6 +13,7 @@ from app.services.agent.generate_content import generate_reminder_text
 from app.services.agent.image_delivery import build_image_attachments
 from app.services.agent.profile import agent_config, agent_profile
 from app.services.agent.summarize import summarize_group_buffer
+from app.services.agent.news_post_delivery import build_news_post_content
 from app.services.agent.web_digest import build_web_digest_text
 from app.services.bot import MaxBotService
 
@@ -48,6 +49,22 @@ async def build_delivery_content(
         cfg["message_buffer"] = []
         agent.config = cfg
         return DeliveryContent(text=text, attachments=[])
+
+    if profile.content_pipeline == "web_digest_images":
+        topic = str(cfg.get("search_topic") or base_text or "новости").strip()
+        text, attachments = await build_news_post_content(
+            db,
+            redis_client,
+            user,
+            topic=topic,
+            header=base_text if base_text != topic else "",
+            min_chars=int(cfg.get("post_min_chars") or 500),
+            max_chars=int(cfg.get("post_max_chars") or 1000),
+            image_min=int(cfg.get("post_image_count_min") or 1),
+            image_max=int(cfg.get("post_image_count_max") or 3),
+            bot=bot,
+        )
+        return DeliveryContent(text=text, attachments=attachments)
 
     if profile.content_pipeline == "web_digest":
         topic = str(cfg.get("search_topic") or base_text or "новости").strip()
