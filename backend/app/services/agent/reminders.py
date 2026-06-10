@@ -87,6 +87,10 @@ async def schedule_next_recurrence(db: AsyncSession, reminder: AgentReminder) ->
             status="pending",
         )
         db.add(new_reminder)
+        if agent_result:
+            cfg = dict(agent_result.config or {})
+            cfg["next_run_at"] = next_run.isoformat()
+            agent_result.config = cfg
         await db.flush()
         return new_reminder
 
@@ -100,6 +104,10 @@ async def schedule_next_recurrence(db: AsyncSession, reminder: AgentReminder) ->
             status="pending",
         )
         db.add(new_reminder)
+        if agent_result:
+            cfg = dict(agent_result.config or {})
+            cfg["next_run_at"] = next_run.isoformat()
+            agent_result.config = cfg
         await db.flush()
         return new_reminder
 
@@ -120,6 +128,10 @@ async def schedule_next_recurrence(db: AsyncSession, reminder: AgentReminder) ->
         status="pending",
     )
     db.add(new_reminder)
+    if agent_result:
+        cfg = dict(agent_result.config or {})
+        cfg["next_run_at"] = next_run.astimezone(timezone.utc).isoformat()
+        agent_result.config = cfg
     await db.flush()
     return new_reminder
 

@@ -6,6 +6,7 @@ import type {
   Source,
   EntityImage,
 } from "../api/client";
+import { isAgentActivityLogContent } from "../components/AgentActivityLogPanel";
 import { answerHasText, normalizeAnswerText } from "./answerText";
 import { stripUserQueryDisplay } from "./userQueryDisplay";
 
@@ -35,6 +36,9 @@ export type ThreadTurn = {
   errorCode?: string;
   /** Приветствие агента без предшествующего вопроса пользователя */
   agentWelcome?: boolean;
+  /** Служебный журнал отладки агента (свёрнутый треугольник) */
+  agentActivityLog?: boolean;
+  agentActivityLogSummary?: string;
 };
 
 function normalizeMessageAttachments(
@@ -154,17 +158,21 @@ export function messagesToTurns(messages: Message[]): ThreadTurn[] {
         });
         pendingUser = null;
       } else {
+        const answer = normalizeAnswerText(m.content);
+        const activityLog = isAgentActivityLogContent(answer);
         turns.push({
           key: m.id,
           messageId: m.id,
           query: "",
           attachments: [],
-          answer: normalizeAnswerText(m.content),
+          answer,
           sources: [],
           images: [],
           followUps: [],
           needsSearch: false,
-          agentWelcome: true,
+          agentWelcome: !activityLog,
+          agentActivityLog: activityLog,
+          agentActivityLogSummary: activityLog ? answer.split("\n")[0]?.trim() : undefined,
         });
       }
     }

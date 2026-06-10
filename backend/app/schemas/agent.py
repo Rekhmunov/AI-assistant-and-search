@@ -1,3 +1,5 @@
+from datetime import datetime
+from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel, Field, model_validator
@@ -26,3 +28,18 @@ class AgentMessageOut(BaseModel):
     assistant_message: MessageOut
     agent_status: str
     agent_role: str | None = None
+
+
+class AgentActivityLogOut(BaseModel):
+    id: UUID
+    event: str
+    level: str
+    details: dict[str, Any]
+    reminder_id: UUID | None = None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class AgentActivityLogsOut(BaseModel):
+    items: list[AgentActivityLogOut]

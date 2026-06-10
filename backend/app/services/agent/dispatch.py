@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.agent import AgentInstance, AgentReminder, AgentStatus
 from app.models.user import User
+from app.services.agent.activity_log import append_agent_activity_log
 from app.services.agent.content import build_delivery_content
 from app.services.agent.max_compliance import dispatch_stagger
 from app.services.agent.profile import agent_profile
@@ -23,6 +24,18 @@ logger = logging.getLogger(__name__)
 async def _resolve_user(db: AsyncSession, agent: AgentInstance) -> User | None:
     result = await db.execute(select(User).where(User.id == agent.user_id))
     return result.scalar_one_or_none()
+
+
+def _delivery_ready(agent: AgentInstance) -> tuple[bool, str | None]:
+    profile = agent_profile(agent)
+    user_id, chat_id = delivery_target(agent)
+    if profile.delivery_mode == "group" or chat_id is not None:
+        if not chat_id:
+            return False, "max_chat_id missing"
+        return True, None
+    if not user_id:
+        return False, "max_user_id missing"
+    return True, None
 
 
 async def dispatch_due_reminders(
@@ -72,20 +85,53 @@ async def dispatch_due_reminders(
             reminder.status = "cancelled"
             continue
 
-        max_uid = int(agent.max_user_id) if agent.max_user_id else 0
-        if max_uid <= 0:
-            reminder.last_error = "max_user_id missing"
+        ready, ready_err = _delivery_ready(agent)
+        if not ready:
+            reminder.last_error = ready_err
             reminder.status = "failed"
-            logger.warning("Agent reminder skipped: no max_user_id agent=%s", agent.id)
+            logger.warning(
+                "Agent reminder skipped: %s agent=%s reminder=%s",
+                ready_err,
+                agent.id,
+                reminder.id,
+            )
+            await append_agent_activity_log(
+                db,
+                agent,
+                "dispatch_skipped",
+                reminder_id=reminder.id,
+                details={"error": ready_err},
+                level="error",
+            )
             continue
 
         user = await _resolve_user(db, agent)
         if not user:
             reminder.last_error = "user missing"
             reminder.status = "failed"
+            await append_agent_activity_log(
+                db,
+                agent,
+                "dispatch_skipped",
+                reminder_id=reminder.id,
+                details={"error": "user missing"},
+                level="error",
+            )
             continue
 
         user_id, chat_id = delivery_target(agent)
+        await append_agent_activity_log(
+            db,
+            agent,
+            "dispatch_started",
+            reminder_id=reminder.id,
+            details={
+                "run_at": reminder.run_at.isoformat(),
+                "chat_id": chat_id,
+                "user_id": user_id,
+                "recurrence": reminder.recurrence,
+            },
+        )
         try:
             content = await build_delivery_content(
                 db,
@@ -99,7 +145,26 @@ async def dispatch_due_reminders(
             logger.exception("Agent content build failed agent=%s: %s", agent.id, exc)
             reminder.last_error = str(exc)[:500]
             reminder.status = "failed"
+            await append_agent_activity_log(
+                db,
+                agent,
+                "content_build_failed",
+                reminder_id=reminder.id,
+                details={"error": str(exc)[:500]},
+                level="error",
+            )
             continue
+
+        await append_agent_activity_log(
+            db,
+            agent,
+            "content_ready",
+            reminder_id=reminder.id,
+            details={
+                "text_len": len(content.text or ""),
+                "attachments": len(content.attachments or []),
+            },
+        )
 
         send_result = await bot.send_message(
             int(user_id) if user_id else None,
@@ -110,9 +175,19 @@ async def dispatch_due_reminders(
         if send_result.ok:
             reminder.status = "sent"
             reminder.sent_at = datetime.now(timezone.utc)
-            await schedule_next_recurrence(db, reminder)
+            next_reminder = await schedule_next_recurrence(db, reminder)
             sent_count += 1
             logger.info("Agent reminder sent agent=%s reminder=%s", agent.id, reminder.id)
+            await append_agent_activity_log(
+                db,
+                agent,
+                "dispatch_sent",
+                reminder_id=reminder.id,
+                details={
+                    "max_message_id": send_result.message_id,
+                    "next_run_at": next_reminder.run_at.isoformat() if next_reminder else None,
+                },
+            )
         else:
             reminder.last_error = (send_result.error or "send failed")[:500]
             logger.warning(
@@ -120,6 +195,14 @@ async def dispatch_due_reminders(
                 agent.id,
                 reminder.id,
                 reminder.last_error,
+            )
+            await append_agent_activity_log(
+                db,
+                agent,
+                "dispatch_failed",
+                reminder_id=reminder.id,
+                details={"error": reminder.last_error},
+                level="error",
             )
             if send_result.retry_after_sec:
                 reminder.run_at = now + timedelta(seconds=send_result.retry_after_sec)

@@ -54,6 +54,27 @@ class AgentInstance(Base):
     )
 
 
+class AgentActivityLog(Base):
+    __tablename__ = "agent_activity_logs"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    agent_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("agent_instances.id", ondelete="CASCADE"), nullable=False
+    )
+    thread_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("threads.id", ondelete="CASCADE"), nullable=False
+    )
+    reminder_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("agent_reminders.id", ondelete="SET NULL"), nullable=True
+    )
+    event: Mapped[str] = mapped_column(String(128), nullable=False)
+    level: Mapped[str] = mapped_column(String(16), default="info")
+    details: Mapped[dict] = mapped_column(JSONB, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    agent: Mapped["AgentInstance"] = relationship()
+
+
 class AgentReminder(Base):
     __tablename__ = "agent_reminders"
 

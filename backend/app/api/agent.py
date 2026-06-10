@@ -7,10 +7,20 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from app.api.deps import get_current_user, get_db, get_rate_limiter, get_redis
 from app.core.limiter import RateLimiter
 from app.models.user import User
-from app.schemas.agent import AgentMessageIn, AgentMessageOut, AgentThreadCreateOut
+from app.schemas.agent import (
+    AgentActivityLogOut,
+    AgentActivityLogsOut,
+    AgentMessageIn,
+    AgentMessageOut,
+    AgentThreadCreateOut,
+)
 from app.schemas.thread import MessageOut, ThreadListItem
 from app.services.agent.access import require_agent_eligible
+from app.services.agent.activity_log import list_agent_activity_logs
 from app.services.agent.flow import create_agent_thread, handle_agent_message
+from app.services.agent.lifecycle import get_agent_for_thread
+from app.models.thread import Thread, ThreadType
+from sqlalchemy import select
 import redis.asyncio as redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -93,3 +103,29 @@ async def post_agent_message(
         agent_status=agent.status,
         agent_role=agent.role,
     )
+
+
+@router.get("/threads/{thread_id}/activity-logs", response_model=AgentActivityLogsOut)
+async def get_agent_activity_logs(
+    thread_id: UUID,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+):
+    require_agent_eligible(user)
+    result = await db.execute(
+        select(Thread).where(
+            Thread.id == thread_id,
+            Thread.user_id == user.id,
+            Thread.deleted_at.is_(None),
+            Thread.thread_type == ThreadType.AGENT,
+        )
+    )
+    thread = result.scalar_one_or_none()
+    if not thread:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Тред не найден")
+    agent = await get_agent_for_thread(db, thread.id)
+    if not agent:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Агент не найден")
+
+    rows = await list_agent_activity_logs(db, thread_id=thread_id, user_id=user.id)
+    return AgentActivityLogsOut(items=[AgentActivityLogOut.model_validate(r) for r in rows])

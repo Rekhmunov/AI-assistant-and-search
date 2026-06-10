@@ -16,7 +16,10 @@ from app.models.message import Message, MessageRole
 from app.models.thread import Thread, ThreadType
 from app.models.user import User
 from app.services.agent.constants import AGENT_WELCOME
+from app.services.agent.activity_log import append_agent_activity_log
 from app.services.agent.dispatch import dispatch_due_reminders
+from app.services.agent.max_group import enrich_group_admin_status
+from app.services.agent.profile import agent_profile
 from app.services.agent.lifecycle import cancel_agent, get_agent_for_thread
 from app.services.agent.capabilities import reply_claims_activation
 from app.services.agent.intent_hints import user_wants_immediate_run, user_wants_today_run
@@ -232,6 +235,10 @@ async def _handle_agent_message_body(
     agent.status = AgentStatus.COLLECTING.value
 
     cfg = dict(agent.config or {})
+    await enrich_group_admin_status(agent, llm_result.checklist)
+    if llm_result.checklist.bot_is_group_admin is not None:
+        cfg["bot_is_group_admin"] = llm_result.checklist.bot_is_group_admin
+        agent.config = cfg
     missing = checklist_missing_fields(llm_result.checklist)
 
     should_activate = llm_result.activate
@@ -251,6 +258,18 @@ async def _handle_agent_message_body(
             elif not agent.max_user_id:
                 raise ValueError("max_required")
             await activate_agent_reminders(db, agent)
+            active_cfg = dict(agent.config or {})
+            await append_agent_activity_log(
+                db,
+                agent,
+                "agent_activated",
+                details={
+                    "role": agent.role,
+                    "schedule": active_cfg.get("schedule_text"),
+                    "max_chat_id": agent.max_chat_id,
+                    "next_run_at": active_cfg.get("next_run_at"),
+                },
+            )
             await db.commit()
             sent = 0
             if agent.role in SCHEDULED_ROLES:
@@ -268,7 +287,13 @@ async def _handle_agent_message_body(
                     summary += "\n\nПервый запуск уже выполнен — проверьте MAX."
                 else:
                     summary += "\n\nЗапуск запланирован — бот напишет в MAX в указанное время."
-                    if not effective_max_user_id(agent):
+                    profile = agent_profile(agent)
+                    if profile.delivery_mode == "group":
+                        if not agent.max_chat_id:
+                            summary += (
+                                "\n\n⚠️ ID группы MAX не указан — сообщения в группу не дойдут."
+                            )
+                    elif not effective_max_user_id(agent):
                         summary += (
                             "\n\n⚠️ Аккаунт MAX не привязан — привяжите в Профиле, "
                             "иначе сообщения не дойдут."

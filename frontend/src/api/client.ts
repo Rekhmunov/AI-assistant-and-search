@@ -136,6 +136,19 @@ export interface AgentMessageResponse {
   agent_role: string | null;
 }
 
+export interface AgentActivityLogItem {
+  id: string;
+  event: string;
+  level: string;
+  details: Record<string, unknown>;
+  reminder_id: string | null;
+  created_at: string;
+}
+
+export interface AgentActivityLogsResponse {
+  items: AgentActivityLogItem[];
+}
+
 export interface AnswerStatus {
   pending: boolean;
   active: boolean;
@@ -601,6 +614,19 @@ export async function postAgentMessage(
       body: JSON.stringify({ text, file_ids: fileIds }),
     },
     "Не удалось отправить сообщение. Попробуйте ещё раз.",
+  );
+  return res.json();
+}
+
+export async function fetchAgentActivityLogs(
+  token: string | null,
+  threadId: string,
+): Promise<AgentActivityLogsResponse> {
+  const res = await fetchAgentWithRetry(
+    `${API_BASE}/api/agent/threads/${threadId}/activity-logs`,
+    token,
+    { method: "GET" },
+    "Не удалось загрузить журнал агента.",
   );
   return res.json();
 }

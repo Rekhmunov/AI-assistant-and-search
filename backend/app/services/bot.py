@@ -23,6 +23,7 @@ class BotSendResult:
     ok: bool
     error: str | None = None
     retry_after_sec: float | None = None
+    message_id: str | None = None
 
 
 class MaxBotService:
@@ -86,7 +87,20 @@ class MaxBotService:
                 return BotSendResult(ok=False, error=str(exc))
 
             if response.is_success:
-                return BotSendResult(ok=True)
+                message_id = None
+                try:
+                    payload = response.json()
+                    if isinstance(payload, dict):
+                        message = payload.get("message")
+                        if isinstance(message, dict):
+                            mid = message.get("message_id") or message.get("id")
+                            if mid is not None:
+                                message_id = str(mid)
+                        elif payload.get("message_id") is not None:
+                            message_id = str(payload["message_id"])
+                except ValueError:
+                    pass
+                return BotSendResult(ok=True, message_id=message_id)
 
             if response.status_code == 429:
                 retry_after = response.headers.get("Retry-After")
@@ -272,3 +286,131 @@ class MaxBotService:
                 pass
         logger.warning("MAX download_url HTTP %s for %s", response.status_code, url[:80])
         return None
+
+    async def get_me(self) -> dict | None:
+        if not self.settings.bot_token.strip():
+            return None
+
+        async def _get():
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                return await client.get(
+                    f"{BOT_API_BASE}/me",
+                    headers=self._auth_headers(json_body=False),
+                )
+
+        try:
+            response = await self._request_with_rate_limit(_get)
+        except httpx.HTTPError as exc:
+            logger.warning("MAX get_me network error: %s", exc)
+            return None
+        if not response.is_success:
+            logger.warning("MAX get_me failed HTTP %s: %s", response.status_code, response.text[:300])
+            return None
+        try:
+            data = response.json()
+        except ValueError:
+            return None
+        return data if isinstance(data, dict) else None
+
+    async def get_chat(self, chat_id: int) -> dict | None:
+        if not self.settings.bot_token.strip():
+            return None
+
+        async def _get():
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                return await client.get(
+                    f"{BOT_API_BASE}/chats/{int(chat_id)}",
+                    headers=self._auth_headers(json_body=False),
+                )
+
+        try:
+            response = await self._request_with_rate_limit(_get)
+        except httpx.HTTPError as exc:
+            logger.warning("MAX get_chat network error chat_id=%s: %s", chat_id, exc)
+            return None
+        if not response.is_success:
+            logger.warning(
+                "MAX get_chat failed chat_id=%s HTTP %s: %s",
+                chat_id,
+                response.status_code,
+                response.text[:300],
+            )
+            return None
+        try:
+            data = response.json()
+        except ValueError:
+            return None
+        return data if isinstance(data, dict) else None
+
+    async def get_chat_members(
+        self,
+        chat_id: int,
+        *,
+        user_ids: list[int] | None = None,
+        count: int = 20,
+    ) -> list[dict]:
+        """
+        GET /chats/{chatId}/members — бот должен быть админом чата, иначе API вернёт ошибку.
+        """
+        if not self.settings.bot_token.strip():
+            return []
+        params: dict[str, int | str] = {"count": max(1, min(100, count))}
+        if user_ids:
+            params["user_ids"] = ",".join(str(int(uid)) for uid in user_ids)
+
+        async def _get():
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                return await client.get(
+                    f"{BOT_API_BASE}/chats/{int(chat_id)}/members",
+                    params=params,
+                    headers=self._auth_headers(json_body=False),
+                )
+
+        try:
+            response = await self._request_with_rate_limit(_get)
+        except httpx.HTTPError as exc:
+            logger.warning("MAX get_chat_members network error chat_id=%s: %s", chat_id, exc)
+            return []
+        if not response.is_success:
+            logger.warning(
+                "MAX get_chat_members failed chat_id=%s HTTP %s: %s",
+                chat_id,
+                response.status_code,
+                response.text[:300],
+            )
+            return []
+        try:
+            data = response.json()
+        except ValueError:
+            return []
+        members = data.get("members") if isinstance(data, dict) else None
+        return members if isinstance(members, list) else []
+
+    async def check_bot_is_group_admin(self, chat_id: int) -> bool | None:
+        """
+        Проверяет, является ли бот администратором группы/канала.
+        True/False — по данным API; None — не удалось проверить (нет токена, бот не в чате, нет прав на members).
+        """
+        me = await self.get_me()
+        if not me:
+            return None
+        bot_user_id = me.get("user_id")
+        if bot_user_id is None:
+            return None
+        members = await self.get_chat_members(int(chat_id), user_ids=[int(bot_user_id)], count=1)
+        if not members:
+            chat = await self.get_chat(int(chat_id))
+            if isinstance(chat, dict):
+                status = str(chat.get("status") or "").lower()
+                if status in {"removed", "left", "closed"}:
+                    return False
+            return None
+        member = members[0] if isinstance(members[0], dict) else {}
+        if member.get("is_admin") is True or member.get("is_owner") is True:
+            return True
+        if member.get("is_admin") is False and member.get("is_owner") is False:
+            return False
+        permissions = member.get("permissions")
+        if isinstance(permissions, list) and permissions:
+            return True
+        return False

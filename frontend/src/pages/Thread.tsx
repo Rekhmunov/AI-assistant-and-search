@@ -23,6 +23,7 @@ import { ChatGeneratedImages } from "../components/ChatGeneratedImages";
 import { ImageGenProNotice } from "../components/ImageGenProNotice";
 import { ImageGenStatusLine } from "../components/ImageGenStatusLine";
 import { DocGenStatusLine } from "../components/DocGenStatusLine";
+import { AgentActivityLogPanel } from "../components/AgentActivityLogPanel";
 import { CollapsibleMarkdownDocument } from "../components/CollapsibleMarkdownDocument";
 import { GeneratedDocumentCard } from "../components/GeneratedDocumentCard";
 import { SearchComposer, type ComposerAttachment } from "../components/SearchComposer";
@@ -1130,6 +1131,18 @@ export function Thread() {
               turn.followUps.length > 0 &&
               !streaming &&
               !isActive;
+
+            if (turn.agentActivityLog && threadId) {
+              return (
+                <article key={turn.key} id={`turn-${turn.key}`} className="thread-turn thread-turn--agent-log">
+                  <AgentActivityLogPanel
+                    threadId={threadId}
+                    token={token}
+                    summaryLabel={turn.agentActivityLogSummary}
+                  />
+                </article>
+              );
+            }
 
             return (
               <article key={turn.key} id={`turn-${turn.key}`} className="thread-turn">

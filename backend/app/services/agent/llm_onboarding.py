@@ -83,7 +83,9 @@ AGENT_SYSTEM_PROMPT = """Ты — ассистент настройки аген
 - support_instructions — как отвечать в режиме поддержки (тон, правила, FAQ-логика). Можно взять из reminder_message
 - delivery_mode: dm | group — куда отправлять (news_digest, image_post)
 - max_chat_id — ID группы
-- bot_is_group_admin / bot_can_read_messages
+- bot_is_group_admin / bot_can_read_messages — для групп Glosix при активации сам проверяет через MAX API
+  (GET /chats/{chatId}/members, поля is_admin/is_owner у бота). Не спрашивай «бот админ?», если chat_id уже известен —
+  оставь null; сервер проверит. Спрашивай только если проверка недоступна (бот не в группе / нет прав на members).
 - moderation_stop_words — через запятую (group_moderation)
 - moderation_block_links: true/false
 

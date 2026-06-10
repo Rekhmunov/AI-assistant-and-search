@@ -152,6 +152,8 @@ def group_setup_roles() -> list[str]:
         AgentRole.GROUP_MESSAGE_LOG.value,
         AgentRole.GROUP_MODERATION.value,
         AgentRole.DM_ASSISTANT.value,
+        AgentRole.NEWS_DIGEST.value,
+        AgentRole.IMAGE_POST.value,
     ]
 
 

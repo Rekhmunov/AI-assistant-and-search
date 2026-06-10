@@ -311,5 +311,13 @@
   "agentThreadBadge": "Агент",
   "agentComposerPlaceholder": "Опишите задачу агента…",
   "agentStatusThinking": "Анализирую задачу…",
-  "agentStatusConfiguring": "Настраиваю агента…"
+  "agentStatusConfiguring": "Настраиваю агента…",
+  "agentLogTitle": "Журнал агента (24 ч)",
+  "agentLogTitleCount": "Журнал агента ({count} за 24 ч)",
+  "agentLogLoading": "Загрузка журнала…",
+  "agentLogEmpty": "За последние 24 часа событий нет.",
+  "agentLogError": "Не удалось загрузить журнал.",
+  "agentLogColTime": "Время",
+  "agentLogColEvent": "Событие",
+  "agentLogColDetails": "Детали"
 }

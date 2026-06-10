@@ -23,6 +23,10 @@ celery.conf.update(
             "task": "dispatch_agent_reminders",
             "schedule": crontab(minute="*"),
         },
+        "purge-agent-activity-logs": {
+            "task": "purge_agent_activity_logs",
+            "schedule": crontab(minute=5, hour="*"),
+        },
         "cleanup-expired-uploads": {
             "task": "cleanup_expired_uploads",
             "schedule": crontab(minute=15, hour="*/6"),
