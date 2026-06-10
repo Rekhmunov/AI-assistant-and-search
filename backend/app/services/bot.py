@@ -414,3 +414,68 @@ class MaxBotService:
         if isinstance(permissions, list) and permissions:
             return True
         return False
+
+    async def get_chat_by_link(self, link: str) -> dict | None:
+        """GET /chats/{link} — канал по публичной ссылке."""
+        if not self.settings.bot_token.strip():
+            return None
+        slug = (link or "").strip().lstrip("@").strip("/")
+        if not slug or len(slug) > 256:
+            return None
+
+        async def _get():
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                return await client.get(
+                    f"{BOT_API_BASE}/chats/{slug}",
+                    headers=self._auth_headers(json_body=False),
+                )
+
+        try:
+            response = await self._request_with_rate_limit(_get)
+        except httpx.HTTPError as exc:
+            logger.warning("MAX get_chat_by_link network error link=%s: %s", slug[:40], exc)
+            return None
+        if not response.is_success:
+            logger.warning(
+                "MAX get_chat_by_link failed link=%s HTTP %s: %s",
+                slug[:40],
+                response.status_code,
+                response.text[:300],
+            )
+            return None
+        try:
+            data = response.json()
+        except ValueError:
+            return None
+        return data if isinstance(data, dict) else None
+
+    async def list_subscriptions(self) -> list[dict]:
+        """GET /subscriptions — webhook-подписки (содержат chat_id чатов бота)."""
+        if not self.settings.bot_token.strip():
+            return []
+
+        async def _get():
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                return await client.get(
+                    f"{BOT_API_BASE}/subscriptions",
+                    headers=self._auth_headers(json_body=False),
+                )
+
+        try:
+            response = await self._request_with_rate_limit(_get)
+        except httpx.HTTPError as exc:
+            logger.warning("MAX list_subscriptions network error: %s", exc)
+            return []
+        if not response.is_success:
+            logger.warning(
+                "MAX list_subscriptions failed HTTP %s: %s",
+                response.status_code,
+                response.text[:300],
+            )
+            return []
+        try:
+            data = response.json()
+        except ValueError:
+            return []
+        subs = data.get("subscriptions") if isinstance(data, dict) else None
+        return subs if isinstance(subs, list) else []

@@ -7,7 +7,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_db
 from app.core.config import get_settings
 from app.services.agent.webhook import (
+    handle_bot_removed_from_chat,
     is_bot_added,
+    is_bot_removed,
     is_bot_sender,
     is_direct_message,
     is_message_created,
@@ -137,6 +139,13 @@ async def max_webhook(
         chat_id = parse_chat_id(payload)
         if chat_id is not None:
             await register_group_chat_for_user(db, max_user_id=max_user_id, chat_id=chat_id)
+            await db.commit()
+        return {"ok": True}
+
+    if is_bot_removed(payload):
+        chat_id = parse_chat_id(payload)
+        if chat_id is not None:
+            await handle_bot_removed_from_chat(db, chat_id=chat_id)
             await db.commit()
         return {"ok": True}
 

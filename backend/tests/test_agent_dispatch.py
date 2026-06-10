@@ -67,6 +67,11 @@ def test_dispatch_group_without_max_user_id_sends_to_chat():
     with (
         patch("app.services.agent.dispatch.append_agent_activity_log", new_callable=AsyncMock),
         patch(
+            "app.services.agent.dispatch.probe_max_chat",
+            new_callable=AsyncMock,
+            return_value={"ok": True, "explanation": "ok"},
+        ),
+        patch(
             "app.services.agent.dispatch.build_delivery_content",
             new_callable=AsyncMock,
             return_value=DeliveryContent(text="Новости", attachments=[]),

@@ -23,17 +23,19 @@ from app.services.agent.profile import agent_profile
 from app.services.agent.lifecycle import cancel_agent, get_agent_for_thread
 from app.services.agent.capabilities import reply_claims_activation
 from app.services.agent.intent_hints import user_wants_immediate_run, user_wants_today_run
+from app.services.agent.agent_orchestrator import run_agent_turn, user_wants_diagnostic
 from app.services.agent.llm_onboarding import (
     apply_checklist_to_agent,
     build_confirmation_prompt,
     build_parse_fallback_reply,
     checklist_missing_fields,
     load_checklist,
-    run_llm_turn,
     try_validate_checklist,
     user_wants_cancel,
     user_wants_confirm,
 )
+from app.services.agent.max_probe import probe_max_chat
+from app.services.bot import MaxBotService
 from app.services.agent.onboarding import activation_summary
 from app.services.agent.profile import EVENT_DRIVEN_ROLES, SCHEDULED_ROLES
 from app.services.agent.knowledge import ingest_agent_files
@@ -143,6 +145,7 @@ async def handle_agent_message(
             text,
             redis_client,
             user_msg,
+            limiter,
             file_ids=file_ids,
         )
     except ValueError:
@@ -171,6 +174,7 @@ async def _handle_agent_message_body(
     text: str,
     redis_client,
     user_msg: Message,
+    limiter: RateLimiter,
     *,
     file_ids: list[UUID] | None = None,
 ) -> tuple[Message, Message, AgentInstance]:
@@ -200,14 +204,17 @@ async def _handle_agent_message_body(
         await db.commit()
         return user_msg, assistant, agent
 
-    if agent.status == AgentStatus.ACTIVE.value:
+    diagnostic_mode = agent.status == AgentStatus.ACTIVE.value and user_wants_diagnostic(text)
+
+    if agent.status == AgentStatus.ACTIVE.value and not diagnostic_mode:
         assistant = await _assistant_reply(
             db,
             thread,
             (
                 "Агент уже работает.\n"
                 f"{activation_summary(agent)}\n\n"
-                "Чтобы изменить параметры, отключите агента фразой «отключи агента» и создайте нового."
+                "Чтобы изменить параметры, отключите агента фразой «отключи агента» и создайте нового.\n"
+                "Если что-то не так с отправкой — спросите «почему не отправляет» или «проверь группу»."
             ),
         )
         await db.commit()
@@ -218,7 +225,16 @@ async def _handle_agent_message_body(
     )
     all_messages = list(msgs_result.scalars().all())
     try:
-        llm_result = await run_llm_turn(db, redis_client, user, agent, all_messages)
+        llm_result = await run_agent_turn(
+            db,
+            redis_client,
+            user,
+            agent,
+            all_messages,
+            limiter,
+            thread_id=thread.id,
+            diagnostic_mode=diagnostic_mode,
+        )
     except Exception as exc:
         logger.exception("Agent LLM turn failed thread=%s", thread_id)
         assistant = await _assistant_reply(
@@ -232,7 +248,8 @@ async def _handle_agent_message_body(
         await db.commit()
         return user_msg, assistant, agent
     apply_checklist_to_agent(agent, llm_result.checklist)
-    agent.status = AgentStatus.COLLECTING.value
+    if not diagnostic_mode:
+        agent.status = AgentStatus.COLLECTING.value
 
     cfg = dict(agent.config or {})
     await enrich_group_admin_status(agent, llm_result.checklist)
@@ -257,6 +274,28 @@ async def _handle_agent_message_body(
                 agent.max_user_id = int(user.max_user_id)
             elif not agent.max_user_id:
                 raise ValueError("max_required")
+            if agent.max_chat_id:
+                bot = MaxBotService()
+                probe = await probe_max_chat(bot, int(agent.max_chat_id), send_test=False)
+                await append_agent_activity_log(
+                    db,
+                    agent,
+                    "preflight_on_activate",
+                    details=probe,
+                    level="info" if probe.get("ok") else "error",
+                )
+                if not probe.get("ok"):
+                    explanation = probe.get("explanation") or "Не удалось проверить группу MAX."
+                    cfg = dict(agent.config or {})
+                    cfg["awaiting_confirmation"] = True
+                    agent.config = cfg
+                    assistant = await _assistant_reply(
+                        db,
+                        thread,
+                        f"Перед запуском проверил группу MAX:\n\n{explanation}",
+                    )
+                    await db.commit()
+                    return user_msg, assistant, agent
             await activate_agent_reminders(db, agent)
             active_cfg = dict(agent.config or {})
             await append_agent_activity_log(

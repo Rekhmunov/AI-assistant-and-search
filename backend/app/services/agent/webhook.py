@@ -121,9 +121,22 @@ def is_bot_added(payload: dict[str, Any]) -> bool:
     return update_type in {"bot_added", "bot.added"} or payload.get("event") == "bot_added"
 
 
+def is_bot_removed(payload: dict[str, Any]) -> bool:
+    update_type = str(payload.get("update_type") or payload.get("type") or "").lower()
+    return update_type in {"bot_removed", "bot.removed"} or payload.get("event") == "bot_removed"
+
+
 def is_message_created(payload: dict[str, Any]) -> bool:
     update_type = str(payload.get("update_type") or payload.get("type") or "").lower()
     return update_type in {"message_created", "message.created"} or payload.get("event") == "message_created"
+
+
+def _bind_chat_to_agent(agent: AgentInstance, chat_id: int) -> None:
+    cfg = dict(agent.config or {})
+    cfg["registered_group_chat_id"] = chat_id
+    agent.config = cfg
+    if not agent.max_chat_id:
+        agent.max_chat_id = chat_id
 
 
 async def register_group_chat_for_user(
@@ -131,54 +144,72 @@ async def register_group_chat_for_user(
     *,
     max_user_id: int,
     chat_id: int,
+    include_active: bool = True,
 ) -> None:
+    statuses = [AgentStatus.DRAFT.value, AgentStatus.COLLECTING.value]
+    if include_active:
+        statuses.append(AgentStatus.ACTIVE.value)
+
     roles = group_setup_roles()
     result = await db.execute(
         select(AgentInstance).where(
             AgentInstance.max_user_id == max_user_id,
-            AgentInstance.status.in_([AgentStatus.DRAFT.value, AgentStatus.COLLECTING.value]),
+            AgentInstance.status.in_(statuses),
             AgentInstance.role.in_(roles),
         )
     )
     agents = result.scalars().all()
     for agent in agents:
-        cfg = dict(agent.config or {})
-        cfg["registered_group_chat_id"] = chat_id
-        agent.config = cfg
-        if not agent.max_chat_id:
-            agent.max_chat_id = chat_id
+        _bind_chat_to_agent(agent, chat_id)
 
-    # Групповая доставка news/image при настройке
     result_dm = await db.execute(
         select(AgentInstance).where(
             AgentInstance.max_user_id == max_user_id,
-            AgentInstance.status.in_([AgentStatus.DRAFT.value, AgentStatus.COLLECTING.value]),
+            AgentInstance.status.in_(statuses),
             AgentInstance.role == AgentRole.DM_ASSISTANT.value,
         )
     )
     for agent in result_dm.scalars().all():
-        cfg = dict(agent.config or {})
-        scope = str(cfg.get("scope") or "").lower()
+        scope = str((agent.config or {}).get("scope") or "").lower()
         if scope in {"group", "both"}:
-            cfg["registered_group_chat_id"] = chat_id
-            agent.config = cfg
-            if not agent.max_chat_id:
-                agent.max_chat_id = chat_id
+            _bind_chat_to_agent(agent, chat_id)
 
     result2 = await db.execute(
         select(AgentInstance).where(
             AgentInstance.max_user_id == max_user_id,
-            AgentInstance.status.in_([AgentStatus.DRAFT.value, AgentStatus.COLLECTING.value]),
+            AgentInstance.status.in_(statuses),
             AgentInstance.role.in_([AgentRole.NEWS_DIGEST.value, AgentRole.IMAGE_POST.value]),
         )
     )
     for agent in result2.scalars().all():
-        cfg = dict(agent.config or {})
+        cfg = agent.config if isinstance(agent.config, dict) else {}
         if str(cfg.get("delivery_mode") or "").lower() == "group":
-            cfg["registered_group_chat_id"] = chat_id
-            agent.config = cfg
-            if not agent.max_chat_id:
-                agent.max_chat_id = chat_id
+            _bind_chat_to_agent(agent, chat_id)
+
+
+async def handle_bot_removed_from_chat(
+    db: AsyncSession,
+    *,
+    chat_id: int,
+) -> int:
+    """Помечает агентов, привязанных к чату, что бот удалён из группы."""
+    result = await db.execute(
+        select(AgentInstance).where(
+            AgentInstance.max_chat_id == chat_id,
+            AgentInstance.status == AgentStatus.ACTIVE.value,
+        )
+    )
+    updated = 0
+    for agent in result.scalars().all():
+        cfg = dict(agent.config or {})
+        cfg["bot_removed_from_chat"] = True
+        cfg["bot_removed_at"] = datetime.now(timezone.utc).isoformat()
+        cfg["last_dispatch_explanation"] = (
+            f"Бот удалён из чата {chat_id}. Добавьте Glosix в группу снова."
+        )
+        agent.config = cfg
+        updated += 1
+    return updated
 
 
 async def append_group_message(

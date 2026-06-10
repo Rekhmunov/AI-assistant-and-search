@@ -24,3 +24,12 @@
 - Метод `/chats/{chatId}/members` доступен, если бот **уже в чате**; для проверки прав на members бот должен быть **админом** (иначе API вернёт ошибку — трактуем как «проверить не удалось», спрашиваем пользователя).
 - Для **исходящих** постов в группу (news_digest, group_reminder) админ **не обязателен**; для модерации, чтения всех сообщений и `group_message_log` — нужен.
 - Реализация: `MaxBotService.check_bot_is_group_admin()`, вызов при онбординге в `enrich_group_admin_status()`.
+
+## Агент-оркестратор (инструменты + тарификация)
+
+- Диалог агента: `run_agent_turn()` в `agent_orchestrator.py` — цикл LLM + `tool_calls`.
+- **Тарификация:** 1-й LLM-запрос входит в стоимость сообщения пользователя (`check_search_limit` в `flow.py`); каждая **следующая итерация** LLM в том же ответе — отдельный `check_search_limit`.
+- Инструменты (allowlist в `agent_security.py`): `max_probe_chat`, `max_send_test`, `max_get_chat`, `max_list_bot_chats`, `max_resolve_channel_link`, `max_read_activity_logs`, `web_search`, `read_thread_summary`.
+- Безопасность: отправка только в `chat_id`, привязанные к агентам пользователя; тестовое сообщение — только с явного согласия в тексте; лимит итераций и tool_calls.
+- Dispatch: при ошибке recurring-напоминания создаётся следующий слот (`schedule_next_recurrence`); preflight `probe_max_chat` перед отправкой в группу.
+- Активный агент: диагностика по фразам «почему не отправляет», «проверь группу» — оркестратор с `diagnostic_mode`.

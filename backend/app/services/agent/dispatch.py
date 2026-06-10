@@ -14,6 +14,8 @@ from app.models.user import User
 from app.services.agent.activity_log import append_agent_activity_log
 from app.services.agent.content import build_delivery_content
 from app.services.agent.max_compliance import dispatch_stagger
+from app.services.agent.max_errors import explain_max_send_error
+from app.services.agent.max_probe import probe_max_chat
 from app.services.agent.profile import agent_profile
 from app.services.agent.reminders import delivery_target, schedule_next_recurrence
 from app.services.bot import MaxBotService
@@ -38,6 +40,14 @@ def _delivery_ready(agent: AgentInstance) -> tuple[bool, str | None]:
     return True, None
 
 
+async def _record_dispatch_error(agent: AgentInstance, error: str, explanation: str) -> None:
+    cfg = dict(agent.config or {})
+    cfg["last_dispatch_error"] = error[:500]
+    cfg["last_dispatch_explanation"] = explanation[:800]
+    cfg["last_dispatch_at"] = datetime.now(timezone.utc).isoformat()
+    agent.config = cfg
+
+
 async def dispatch_due_reminders(
     db: AsyncSession,
     *,
@@ -45,6 +55,7 @@ async def dispatch_due_reminders(
     bot: MaxBotService | None = None,
     redis_client=None,
     limit: int = 20,
+    skip_preflight: bool = False,
 ) -> int:
     """Отправляет просроченные pending-напоминания. Возвращает число обработанных."""
     bot = bot or MaxBotService()
@@ -89,6 +100,8 @@ async def dispatch_due_reminders(
         if not ready:
             reminder.last_error = ready_err
             reminder.status = "failed"
+            explanation = explain_max_send_error(ready_err, chat_id=agent.max_chat_id)
+            await _record_dispatch_error(agent, ready_err or "", explanation)
             logger.warning(
                 "Agent reminder skipped: %s agent=%s reminder=%s",
                 ready_err,
@@ -100,9 +113,11 @@ async def dispatch_due_reminders(
                 agent,
                 "dispatch_skipped",
                 reminder_id=reminder.id,
-                details={"error": ready_err},
+                details={"error": ready_err, "explanation": explanation},
                 level="error",
             )
+            if reminder.recurrence:
+                await schedule_next_recurrence(db, reminder)
             continue
 
         user = await _resolve_user(db, agent)
@@ -117,9 +132,35 @@ async def dispatch_due_reminders(
                 details={"error": "user missing"},
                 level="error",
             )
+            if reminder.recurrence:
+                await schedule_next_recurrence(db, reminder)
             continue
 
         user_id, chat_id = delivery_target(agent)
+
+        if chat_id and not skip_preflight:
+            probe = await probe_max_chat(bot, int(chat_id), send_test=False)
+            if not probe.get("ok"):
+                err = str(probe.get("error") or "preflight_failed")
+                explanation = str(probe.get("explanation") or explain_max_send_error(err, chat_id=chat_id))
+                reminder.last_error = err[:500]
+                await _record_dispatch_error(agent, err, explanation)
+                await append_agent_activity_log(
+                    db,
+                    agent,
+                    "preflight_failed",
+                    reminder_id=reminder.id,
+                    details={"error": err, "explanation": explanation, "probe": probe},
+                    level="error",
+                )
+                if probe.get("status") in {"removed", "left", "closed"}:
+                    reminder.status = "failed"
+                    if reminder.recurrence:
+                        await schedule_next_recurrence(db, reminder)
+                    continue
+                reminder.run_at = now + timedelta(minutes=10)
+                continue
+
         await append_agent_activity_log(
             db,
             agent,
@@ -143,16 +184,21 @@ async def dispatch_due_reminders(
             )
         except Exception as exc:
             logger.exception("Agent content build failed agent=%s: %s", agent.id, exc)
-            reminder.last_error = str(exc)[:500]
+            err = str(exc)[:500]
+            reminder.last_error = err
+            explanation = f"Не удалось подготовить контент: {err}"
+            await _record_dispatch_error(agent, err, explanation)
             reminder.status = "failed"
             await append_agent_activity_log(
                 db,
                 agent,
                 "content_build_failed",
                 reminder_id=reminder.id,
-                details={"error": str(exc)[:500]},
+                details={"error": err, "explanation": explanation},
                 level="error",
             )
+            if reminder.recurrence:
+                await schedule_next_recurrence(db, reminder)
             continue
 
         await append_agent_activity_log(
@@ -177,6 +223,10 @@ async def dispatch_due_reminders(
             reminder.sent_at = datetime.now(timezone.utc)
             next_reminder = await schedule_next_recurrence(db, reminder)
             sent_count += 1
+            cfg = dict(agent.config or {})
+            cfg.pop("last_dispatch_error", None)
+            cfg.pop("last_dispatch_explanation", None)
+            agent.config = cfg
             logger.info("Agent reminder sent agent=%s reminder=%s", agent.id, reminder.id)
             await append_agent_activity_log(
                 db,
@@ -189,7 +239,10 @@ async def dispatch_due_reminders(
                 },
             )
         else:
-            reminder.last_error = (send_result.error or "send failed")[:500]
+            raw_err = (send_result.error or "send failed")[:500]
+            explanation = explain_max_send_error(raw_err, chat_id=chat_id, user_id=user_id)
+            reminder.last_error = raw_err
+            await _record_dispatch_error(agent, raw_err, explanation)
             logger.warning(
                 "Agent reminder failed agent=%s reminder=%s err=%s",
                 agent.id,
@@ -201,13 +254,15 @@ async def dispatch_due_reminders(
                 agent,
                 "dispatch_failed",
                 reminder_id=reminder.id,
-                details={"error": reminder.last_error},
+                details={"error": raw_err, "explanation": explanation},
                 level="error",
             )
             if send_result.retry_after_sec:
                 reminder.run_at = now + timedelta(seconds=send_result.retry_after_sec)
             else:
                 reminder.status = "failed"
+                if reminder.recurrence:
+                    await schedule_next_recurrence(db, reminder)
 
     if reminders:
         await db.flush()
