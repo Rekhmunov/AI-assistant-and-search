@@ -440,10 +440,13 @@ export function Thread() {
 
   const runAgentMessage = useCallback(
     async (text: string, existingThreadId: string | null, fileIds: string[] = []) => {
-      if ((!text.trim() && fileIds.length === 0) || !token || streamingRef.current) return;
+      if ((!text.trim() && fileIds.length === 0) || streamingRef.current) return;
+      const canSend = Boolean(token) || session?.authenticated === true;
+      if (!canSend) return;
       const tid = existingThreadId ?? threadId;
       if (!tid) return;
 
+      setAgentError(null);
       setAgentLoading(true);
       setAgentStatusText(t("agentStatusThinking"));
       setSearchPhase("routing");
@@ -493,16 +496,11 @@ export function Thread() {
         setAgentLoading(false);
         setAgentStatusText(null);
         setSearchPhase("idle");
-        setTurns((prev) =>
-          prev.map((turn) =>
-            turn.key === pendingKey
-              ? { ...turn, answer: msg, streaming: false }
-              : turn,
-          ),
-        );
+        setTurns((prev) => prev.filter((turn) => turn.key !== pendingKey));
+        setAgentError(msg);
       }
     },
-    [token, threadId, queryClient],
+    [token, session?.authenticated, threadId, queryClient],
   );
 
   const runSearch = useCallback(

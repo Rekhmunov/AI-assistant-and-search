@@ -204,7 +204,7 @@ async def resolve_search_user(
         return SearchUserResult(user=guest)
 
     if not create_guest:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Сессия недействительна")
 
     if limiter is not None and request is not None:
         await limiter.check_guest_creation_limit(client_ip(request))
@@ -270,7 +270,7 @@ async def get_current_user(
     user = await _resolve_authenticated_user(db, creds, refresh_token, redis_client)
     if user:
         return user
-    raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
+    raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Сессия недействительна")
 
 
 async def get_file_access_user(
@@ -293,7 +293,7 @@ async def get_current_admin(
         token = admin_token
 
     if not token:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Сессия недействительна")
 
     payload = decode_token(token, "admin", settings)
     if not payload or not payload.get("sub"):

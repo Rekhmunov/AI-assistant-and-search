@@ -1,3 +1,16 @@
+/** Англоязычные системные ответы API → понятный русский текст. */
+export function humanizeApiError(message: string, status?: number): string {
+  const trimmed = message.trim();
+  if (!trimmed) return message;
+  if (status === 401) {
+    const lower = trimmed.toLowerCase();
+    if (lower === "not authenticated" || lower === "unauthorized") {
+      return "Сессия истекла. Обновите страницу или откройте приложение заново из MAX.";
+    }
+  }
+  return trimmed;
+}
+
 /** Текст ошибки из ответа FastAPI (detail: string | object[]). */
 export function formatApiErrorDetail(body: unknown, fallback: string): string {
   if (typeof body === "string" && body.trim()) return body.trim();

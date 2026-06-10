@@ -1,6 +1,7 @@
-import { formatApiErrorDetail } from "../lib/apiErrorDetail";
+import { formatApiErrorDetail, humanizeApiError } from "../lib/apiErrorDetail";
 import { HttpResponseError, isAuthFailureStatus, isTransientFailureStatus } from "../lib/httpError";
 import { clearGuestSession, getGuestSessionHeader, saveGuestSession } from "../lib/guestSession";
+import { useAuthStore } from "../store/authStore";
 
 const API_BASE = import.meta.env.VITE_API_URL || "";
 
@@ -530,54 +531,73 @@ async function parseApiErrorResponse(res: Response, fallback: string): Promise<s
 
 async function fetchAgentWithRetry(
   url: string,
-  init: RequestInit,
+  token: string | null,
+  init: Omit<RequestInit, "headers">,
   fallback: string,
 ): Promise<Response> {
   const maxAttempts = 3;
+  let accessToken = token;
   let lastRes: Response | null = null;
+
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
-    const res = await fetch(url, init);
+    const res = await fetch(url, {
+      ...init,
+      headers: apiHeaders(accessToken),
+      credentials: "include",
+    });
     if (res.ok) return res;
     lastRes = res;
+
+    if (res.status === 401 && attempt === 0) {
+      try {
+        const refreshed = await refreshAccessToken();
+        accessToken = refreshed.access_token;
+        useAuthStore.getState().setToken(accessToken);
+        continue;
+      } catch {
+        accessToken = null;
+        continue;
+      }
+    }
+
     if (attempt < maxAttempts - 1 && isTransientFailureStatus(res.status)) {
       await new Promise((resolve) => window.setTimeout(resolve, 700 * (attempt + 1)));
       continue;
     }
-    const message = await parseApiErrorResponse(res, fallback);
-    throw new HttpResponseError(message, res.status);
+    break;
   }
+
   if (!lastRes) {
     throw new HttpResponseError(fallback, 0);
   }
-  const message = await parseApiErrorResponse(lastRes, fallback);
+  const message = humanizeApiError(
+    await parseApiErrorResponse(lastRes, fallback),
+    lastRes.status,
+  );
   throw new HttpResponseError(message, lastRes.status);
 }
 
 export async function createAgentThread(token: string | null): Promise<AgentThreadCreateResponse> {
   const res = await fetchAgentWithRetry(
     `${API_BASE}/api/agent/threads`,
-    {
-      method: "POST",
-      headers: apiHeaders(token),
-      credentials: "include",
-    },
+    token,
+    { method: "POST" },
     "Не удалось создать агента. Попробуйте ещё раз.",
   );
   return res.json();
 }
 
 export async function postAgentMessage(
-  token: string,
+  token: string | null,
   threadId: string,
   text: string,
   fileIds: string[] = [],
 ): Promise<AgentMessageResponse> {
   const res = await fetchAgentWithRetry(
     `${API_BASE}/api/agent/threads/${threadId}/messages`,
+    token,
     {
       method: "POST",
-      headers: apiHeaders(token),
-      credentials: "include",
       body: JSON.stringify({ text, file_ids: fileIds }),
     },
     "Не удалось отправить сообщение. Попробуйте ещё раз.",
