@@ -95,7 +95,7 @@ async def create_category(
         resource_type="blog_category",
         resource_id=str(cat.id),
         details={"slug": slug},
-        ip=request.client.host if request.client else None,
+        ip_address=request.client.host if request.client else None,
     )
     await db.commit()
     await db.refresh(cat)
@@ -136,7 +136,7 @@ async def patch_category(
         resource_type="blog_category",
         resource_id=str(category_id),
         details={},
-        ip=request.client.host if request.client else None,
+        ip_address=request.client.host if request.client else None,
     )
     await db.commit()
     await db.refresh(cat)
@@ -161,7 +161,7 @@ async def delete_category(
         resource_type="blog_category",
         resource_id=str(category_id),
         details={},
-        ip=request.client.host if request.client else None,
+        ip_address=request.client.host if request.client else None,
     )
     await db.commit()
 
@@ -219,7 +219,7 @@ async def admin_create_post(
         resource_type="blog_post",
         resource_id=str(post.id),
         details={"slug": post.slug, "status": post.status},
-        ip=request.client.host if request.client else None,
+        ip_address=request.client.host if request.client else None,
     )
     await db.commit()
     post = await _load_post(db, post.id)
@@ -250,7 +250,7 @@ async def admin_update_post(
         resource_type="blog_post",
         resource_id=str(post_id),
         details={"slug": post.slug, "status": post.status},
-        ip=request.client.host if request.client else None,
+        ip_address=request.client.host if request.client else None,
     )
     await db.commit()
     post = await _load_post(db, post_id)
@@ -274,7 +274,7 @@ async def admin_delete_post(
         resource_type="blog_post",
         resource_id=str(post_id),
         details={"slug": post.slug},
-        ip=request.client.host if request.client else None,
+        ip_address=request.client.host if request.client else None,
     )
     await db.commit()
     await rebuild_all_prerender(db)
@@ -307,7 +307,7 @@ async def admin_delete_comment(
         resource_type="blog_comment",
         resource_id=str(comment_id),
         details={"post_id": str(post_id)},
-        ip=request.client.host if request.client else None,
+        ip_address=request.client.host if request.client else None,
     )
     await db.commit()
 
@@ -326,7 +326,7 @@ async def admin_rebuild_prerender(
         resource_type="blog",
         resource_id=None,
         details={"files": count},
-        ip=request.client.host if request.client else None,
+        ip_address=request.client.host if request.client else None,
     )
     await db.commit()
     return {"ok": True, "files": count}
@@ -372,7 +372,7 @@ async def upload_blog_media(
         resource_type="blog_media",
         resource_id=str(media_id),
         details={"size_bytes": media.size_bytes, "purpose": purpose},
-        ip=request.client.host if request.client else None,
+        ip_address=request.client.host if request.client else None,
     )
     await db.commit()
     return media_upload_out(media)
@@ -413,7 +413,7 @@ async def admin_generate_article(
             resource_type="blog_post",
             resource_id=None,
             details={"topic": body.topic[:120]},
-            ip=request.client.host if request.client else None,
+            ip_address=request.client.host if request.client else None,
         )
         await db.commit()
         return result
@@ -447,7 +447,7 @@ async def admin_generate_cover(
             resource_type="blog_media",
             resource_id=str(media.id),
             details={"prompt": body.prompt[:120]},
-            ip=request.client.host if request.client else None,
+            ip_address=request.client.host if request.client else None,
         )
         await db.commit()
         return {"media": media_upload_out(media)}
@@ -481,7 +481,7 @@ async def admin_generate_inline_image(
             resource_type="blog_media",
             resource_id=str(media.id),
             details={"prompt": body.prompt[:120]},
-            ip=request.client.host if request.client else None,
+            ip_address=request.client.host if request.client else None,
         )
         await db.commit()
         return {"media": media_upload_out(media)}
@@ -519,7 +519,7 @@ async def admin_generate_meta(
             resource_type="blog_post",
             resource_id=None,
             details={"field": field, "title": body.title[:80]},
-            ip=request.client.host if request.client else None,
+            ip_address=request.client.host if request.client else None,
         )
         await db.commit()
         return result
