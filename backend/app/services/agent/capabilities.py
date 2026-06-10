@@ -222,19 +222,32 @@ def explain_next_step(checklist: dict[str, Any]) -> str:
         )
 
     if role in GROUP_ROLES and checklist.get("bot_is_group_admin") is not True:
-        return (
-            f"{intro}\n\n"
-            "Проверьте, что **бот Glosix — администратор** группы: "
-            "MAX → группа → «Информация о группе» → «Администраторы». "
-            "Напишите «да», когда бот добавлен."
-        )
+        if checklist.get("bot_is_group_admin") is False:
+            lead = (
+                "Бот пока не администратор — это можно исправить за минуту.\n\n"
+                "1. Откройте группу в MAX.\n"
+                "2. «Информация о группе» → «Администраторы».\n"
+                "3. Добавьте **Glosix** в администраторы.\n\n"
+            )
+        else:
+            lead = (
+                "Проверьте, что **бот Glosix — администратор** группы: "
+                "MAX → группа → «Информация о группе» → «Администраторы».\n\n"
+            )
+        return f"{intro}\n\n{lead}Напишите «да», когда бот добавлен."
 
     if role == AgentRole.GROUP_MESSAGE_LOG.value and checklist.get("bot_can_read_messages") is not True:
-        return (
-            f"{intro}\n\n"
-            "Для сводок боту нужно **право читать сообщения** в группе. "
-            "Включите его в настройках администратора бота и напишите «да»."
-        )
+        if checklist.get("bot_can_read_messages") is False:
+            lead = (
+                "Право читать сообщения пока не выдано — включите его в MAX:\n"
+                "группа → администраторы → Glosix → разрешение **читать сообщения**.\n\n"
+            )
+        else:
+            lead = (
+                "Для сводок боту нужно **право читать сообщения** в группе. "
+                "Включите его в настройках администратора бота.\n\n"
+            )
+        return f"{intro}\n\n{lead}Напишите «да», когда доступ включён."
 
     return (
         f"{intro}\n\n"

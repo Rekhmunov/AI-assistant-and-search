@@ -67,3 +67,17 @@ def test_explain_next_step_group_admin():
     }
     reply = explain_next_step(checklist)
     assert "администратор" in reply.lower()
+
+
+def test_explain_next_step_helps_when_not_admin():
+    checklist = {
+        "role": AgentRole.GROUP_REMINDER.value,
+        "max_chat_id": -75602062003657,
+        "schedule_text": "каждый день в 9:00",
+        "timezone": "Europe/Moscow",
+        "reminder_message": "Пора на встречу",
+        "bot_is_group_admin": False,
+    }
+    reply = explain_next_step(checklist)
+    assert "можно исправить" in reply.lower()
+    assert "не поддерживается" not in reply.lower()
