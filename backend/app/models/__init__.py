@@ -8,6 +8,7 @@ from app.models.subscription import Subscription
 from app.models.agent import AgentInstance, AgentReminder
 from app.models.thread import Thread
 from app.models.uploaded_file import UploadedFile
+from app.models.blog import BlogCategory, BlogMedia, BlogPost, BlogSlugRedirect
 from app.models.legal_document import LegalDocument, LegalDocumentVersion, UserLegalConsent
 from app.models.support_ticket import SupportTicket, SupportTicketStatus
 from app.models.support_ticket_reply import SupportTicketReply
@@ -28,6 +29,10 @@ __all__ = [
     "AdminAuditLog",
     "AppSetting",
     "UploadedFile",
+    "BlogCategory",
+    "BlogMedia",
+    "BlogPost",
+    "BlogSlugRedirect",
     "LegalDocument",
     "LegalDocumentVersion",
     "UserLegalConsent",

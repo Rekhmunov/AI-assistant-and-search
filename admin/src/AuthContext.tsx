@@ -39,6 +39,8 @@ const PERMS: Record<AdminRole, Set<string>> = {
     "admins:write",
     "support:read",
     "support:write",
+    "blog:read",
+    "blog:write",
   ]),
   support: new Set([
     "dashboard:read",
@@ -50,7 +52,14 @@ const PERMS: Record<AdminRole, Set<string>> = {
     "support:write",
     "audit:read",
   ]),
-  marketing: new Set(["dashboard:read", "broadcasts:read", "broadcasts:write", "audit:read"]),
+  marketing: new Set([
+    "dashboard:read",
+    "broadcasts:read",
+    "broadcasts:write",
+    "blog:read",
+    "blog:write",
+    "audit:read",
+  ]),
 };
 
 const AuthContext = createContext<AuthState | null>(null);

@@ -7,6 +7,9 @@ import { BroadcastsPage } from "./pages/Broadcasts";
 import { DashboardPage } from "./pages/Dashboard";
 import { LoginPage } from "./pages/Login";
 import { PaymentsPage } from "./pages/Payments";
+import { BlogPage } from "./pages/Blog";
+import { BlogCategoriesPage } from "./pages/BlogCategories";
+import { BlogEditPage } from "./pages/BlogEdit";
 import { DocumentsPage } from "./pages/Documents";
 import { SettingsPage } from "./pages/Settings";
 import { SupportPage } from "./pages/Support";
@@ -27,6 +30,10 @@ function ProtectedApp() {
         <Route path="payments" element={<PaymentsPage />} />
         <Route path="settings" element={<SettingsPage />} />
         <Route path="documents" element={<DocumentsPage />} />
+        <Route path="blog" element={<BlogPage />} />
+        <Route path="blog/categories" element={<BlogCategoriesPage />} />
+        <Route path="blog/new" element={<BlogEditPage />} />
+        <Route path="blog/:id" element={<BlogEditPage />} />
         <Route path="support" element={<SupportPage />} />
         <Route path="audit" element={<AuditPage />} />
         <Route path="admins" element={<AdminsPage />} />

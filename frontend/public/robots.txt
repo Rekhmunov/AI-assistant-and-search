@@ -3,9 +3,11 @@
 
 User-agent: *
 Allow: /
+Allow: /blog
 Allow: /privacy
 Allow: /offer
 Allow: /pd_consent
+Sitemap: https://glosix.ru/api/blog/sitemap.xml
 Disallow: /thread
 Disallow: /history
 Disallow: /profile

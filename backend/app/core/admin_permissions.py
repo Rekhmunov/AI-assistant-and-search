@@ -24,6 +24,8 @@ ROLE_PERMISSIONS: dict[str, set[str]] = {
         "audit:read",
         "admins:read",
         "admins:write",
+        "blog:read",
+        "blog:write",
     },
     AdminRole.SUPPORT.value: {
         "dashboard:read",
@@ -39,6 +41,8 @@ ROLE_PERMISSIONS: dict[str, set[str]] = {
         "dashboard:read",
         "broadcasts:read",
         "broadcasts:write",
+        "blog:read",
+        "blog:write",
         "audit:read",
     },
 }

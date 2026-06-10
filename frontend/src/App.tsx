@@ -13,6 +13,9 @@ import { SourceViewPage } from "./pages/SourceViewPage";
 import { LegalCompliance } from "./components/LegalCompliance";
 import { ProPaymentReturnHandler } from "./components/ProPaymentReturnHandler";
 import { LegalPathCatch } from "./components/LegalPathCatch";
+import { BlogPage } from "./pages/Blog";
+import { BlogCategoryPage } from "./pages/BlogCategory";
+import { BlogPostPage } from "./pages/BlogPost";
 import { Thread } from "./pages/Thread";
 
 const queryClient = new QueryClient();
@@ -35,6 +38,9 @@ function AppRoutes() {
             <Route path="/history" element={<History />} />
             <Route path="/profile" element={<Profile />} />
             <Route path="/source-view" element={<SourceViewPage />} />
+            <Route path="/blog" element={<BlogPage />} />
+            <Route path="/blog/category/:slug" element={<BlogCategoryPage />} />
+            <Route path="/blog/:slug" element={<BlogPostPage />} />
             <Route path="*" element={<LegalPathCatch />} />
           </Routes>
         ) : (

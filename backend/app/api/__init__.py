@@ -1,11 +1,12 @@
 from fastapi import APIRouter
 
-from app.api import admin, agent, auth, bot_webhook, config, feedback, files, health, legal, payments, search, support, threads, users, voice
+from app.api import admin, agent, auth, blog, bot_webhook, config, feedback, files, health, legal, payments, search, support, threads, users, voice
 
 api_router = APIRouter(prefix="/api")
 api_router.include_router(health.router)
 api_router.include_router(config.router)
 api_router.include_router(legal.router)
+api_router.include_router(blog.router)
 api_router.include_router(auth.router)
 api_router.include_router(search.router)
 api_router.include_router(agent.router)

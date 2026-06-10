@@ -5,6 +5,7 @@ import { hasMaxWebAppHashInUrl, isMaxWebApp } from "../lib/maxApp";
 const PRIVATE_ROUTE_PREFIXES = ["/thread", "/history", "/profile", "/login", "/source-view"] as const;
 
 const DEFAULT_TITLE = "Glosix - умный поиск с источниками, ИИ чат";
+const PUBLIC_CONTENT_PREFIXES = ["/blog"] as const;
 const PRIVATE_ROBOTS = "noindex, nofollow, noarchive";
 
 function isPrivateAppRoute(pathname: string): boolean {
@@ -45,10 +46,15 @@ export function usePageRobots() {
       return;
     }
 
-    removeMeta("robots");
-    removeMeta("googlebot");
-    if (document.title === "Glosix") {
-      document.title = DEFAULT_TITLE;
+    const isPublicContent = PUBLIC_CONTENT_PREFIXES.some(
+      (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
+    );
+    if (!isPublicContent) {
+      removeMeta("robots");
+      removeMeta("googlebot");
+      if (document.title === "Glosix") {
+        document.title = DEFAULT_TITLE;
+      }
     }
   }, [pathname]);
 }
