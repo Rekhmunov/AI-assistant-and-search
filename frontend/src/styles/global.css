@@ -1792,15 +1792,6 @@ body:has(.page-thread) {
   cursor: not-allowed;
 }
 
-.composer-icon--agent {
-  color: var(--accent, #5b6cff);
-}
-
-.composer-icon--agent:hover:not(:disabled) {
-  color: var(--accent, #5b6cff);
-  background: rgba(91, 108, 255, 0.12);
-}
-
 .composer-send {
   display: inline-flex;
   align-items: center;

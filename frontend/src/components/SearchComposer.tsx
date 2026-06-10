@@ -503,7 +503,7 @@ export function SearchComposer({
     !agentMode && onAgentClick ? (
       <button
         type="button"
-        className="composer-icon composer-icon--agent"
+        className="composer-icon"
         aria-label={t("agentModeButton")}
         title={t("agentModeButton")}
         disabled={disabled || isBusy}
@@ -765,12 +765,12 @@ export function SearchComposer({
 function AgentBotIcon() {
   return (
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden>
-      <rect x="4" y="8" width="16" height="11" rx="3" stroke="currentColor" strokeWidth="1.8" />
-      <circle cx="9" cy="13" r="1.2" fill="currentColor" />
-      <circle cx="15" cy="13" r="1.2" fill="currentColor" />
-      <path d="M12 8V5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-      <circle cx="12" cy="4" r="1.2" fill="currentColor" />
-      <path d="M7 11H5M19 11h-2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      <rect x="7" y="8" width="10" height="10" rx="1.5" stroke="currentColor" strokeWidth="1.8" />
+      <circle cx="10" cy="12" r="1" fill="currentColor" />
+      <circle cx="14" cy="12" r="1" fill="currentColor" />
+      <path d="M10.5 15.5h3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      <path d="M12 8V5.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      <circle cx="12" cy="4.5" r="1" fill="currentColor" />
     </svg>
   );
 }
