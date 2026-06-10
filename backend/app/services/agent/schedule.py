@@ -140,6 +140,45 @@ def parse_reminder_schedule(
     raise ValueError("schedule_unparseable")
 
 
+def normalize_schedule_phrase(text: str) -> str | None:
+    """Приводит фразу расписания к виду, который понимает parse_reminder_schedule."""
+    raw = (text or "").strip()
+    if not raw:
+        return None
+    low = raw.lower()
+    hm = _parse_time_hm(raw)
+    time_part = f"{hm[0]}:{hm[1]:02d}" if hm else None
+
+    if re.search(r"кажд\w+\s+день", low) or "ежедневно" in low:
+        return f"каждый день в {time_part}" if time_part else "каждый день"
+
+    for name in _WEEKDAY_MAP:
+        if name in low:
+            return f"каждый {name} в {time_part}" if time_part else f"каждый {name}"
+
+    if "сегодня" in low:
+        return f"сегодня в {time_part}" if time_part else None
+
+    if "завтра" in low:
+        return f"завтра в {time_part}" if time_part else "завтра"
+
+    if re.search(r"через\s+\d+", low):
+        return raw
+
+    if time_part:
+        return f"каждый день в {time_part}"
+
+    return raw
+
+
+def is_schedule_parseable(schedule_text: str, tz_name: str | None = None) -> bool:
+    try:
+        parse_reminder_schedule(schedule_text, tz_name=tz_name)
+        return True
+    except ValueError:
+        return False
+
+
 def format_run_at_local(run_at_utc: datetime, tz_name: str | None) -> str:
     tz = resolve_user_timezone(tz_name)
     local = run_at_utc.astimezone(tz)

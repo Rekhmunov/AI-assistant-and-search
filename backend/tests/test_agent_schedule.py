@@ -1,6 +1,13 @@
 from datetime import datetime, timedelta, timezone
 
-from app.services.agent.schedule import MSK, next_weekly_run, parse_reminder_schedule, resolve_user_timezone
+from app.services.agent.schedule import (
+    MSK,
+    is_schedule_parseable,
+    next_weekly_run,
+    normalize_schedule_phrase,
+    parse_reminder_schedule,
+    resolve_user_timezone,
+)
 
 
 def test_parse_tomorrow():
@@ -37,6 +44,21 @@ def test_timezone_utc_plus5():
     run_at, _ = parse_reminder_schedule("завтра в 10:00", now=now, tz_name="UTC+5")
     local = run_at.astimezone(tz)
     assert local.hour == 10
+
+
+def test_normalize_daily_with_time():
+    assert normalize_schedule_phrase("каждый день в 16:35") == "каждый день в 16:35"
+    assert normalize_schedule_phrase("каждый день") == "каждый день"
+
+
+def test_normalize_rejects_bare_today():
+    assert normalize_schedule_phrase("сегодня") is None
+    assert normalize_schedule_phrase("сегодня в 16:35") == "сегодня в 16:35"
+
+
+def test_is_schedule_parseable():
+    assert is_schedule_parseable("каждый день в 16:35")
+    assert not is_schedule_parseable("сегодня")
 
 
 def test_parse_bare_time_daily():

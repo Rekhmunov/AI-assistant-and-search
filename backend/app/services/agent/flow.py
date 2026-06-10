@@ -220,12 +220,27 @@ async def handle_agent_message(
             return user_msg, assistant, agent
         except ValueError as exc:
             logger.warning("Agent activation validation failed: %s", exc)
-            llm_result.reply = (
-                f"{llm_result.reply}\n\nНе удалось запустить: проверьте обязательные поля "
-                "в настройках агента и попробуйте снова."
-            )
-            cfg["awaiting_confirmation"] = False
+            code = str(exc)
+            if code in {"schedule_unparseable", "schedule_missing"}:
+                error_reply = (
+                    "Не удалось разобрать расписание. Напишите, когда срабатывать — "
+                    "например «каждый день в 16:35»."
+                )
+            elif code == "max_required":
+                error_reply = (
+                    "Сначала привяжите MAX: откройте **Профиль** в Glosix и войдите через MAX."
+                )
+            elif code == "message_missing":
+                error_reply = "Укажите текст сообщения, которое бот будет отправлять."
+            else:
+                error_reply = (
+                    "Не удалось запустить агента. Проверьте настройки и попробуйте снова."
+                )
+            cfg["awaiting_confirmation"] = True
             agent.config = cfg
+            assistant = await _assistant_reply(db, thread, error_reply)
+            await db.commit()
+            return user_msg, assistant, agent
 
     if llm_result.ready_for_confirmation and not missing:
         cfg["awaiting_confirmation"] = True

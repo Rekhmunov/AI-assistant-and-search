@@ -157,10 +157,35 @@ def _extract_quoted_reminder_text(clean: str) -> str | None:
 
 
 def _normalize_schedule_text(clean: str) -> str | None:
+    from app.services.agent.schedule import normalize_schedule_phrase
+
+    low = clean.lower()
+    if re.search(r"кажд\w+\s+день", low) or "ежедневно" in low:
+        hm = _TIME_ONLY_RE.search(clean)
+        if hm:
+            return f"каждый день в {int(hm.group(1))}:{hm.group(2)}"
+        return "каждый день"
+
     sched = _SCHEDULE_RE.search(clean)
-    if sched:
-        return sched.group(0).strip()
-    return None
+    if not sched:
+        hm = _TIME_ONLY_RE.search(clean)
+        if hm and not _has_any(low, "сегодня", "завтра", "через"):
+            return f"каждый день в {int(hm.group(1))}:{hm.group(2)}"
+        return None
+
+    fragment = sched.group(0).strip()
+    normalized = normalize_schedule_phrase(fragment)
+    if normalized:
+        return normalized
+
+    if _has_any(fragment.lower(), "сегодня", "завтра"):
+        hm = _TIME_ONLY_RE.search(clean)
+        if hm:
+            day = "сегодня" if "сегодня" in fragment.lower() else "завтра"
+            return f"{day} в {int(hm.group(1))}:{hm.group(2)}"
+        return None
+
+    return fragment
 
 
 def infer_checklist_fields(text: str, data: dict[str, Any]) -> dict[str, Any]:

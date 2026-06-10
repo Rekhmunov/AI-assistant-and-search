@@ -14,7 +14,12 @@ from app.services.agent.capabilities import (
     user_asks_feasibility,
     user_needs_clarification,
 )
-from app.services.agent.llm_onboarding import checklist_missing_fields, ChecklistState
+from app.services.agent.llm_onboarding import (
+    ChecklistState,
+    checklist_missing_fields,
+    finalize_checklist,
+    merge_checklist,
+)
 
 
 def test_user_needs_clarification():
@@ -125,6 +130,37 @@ def test_explain_next_step_no_timezone_prompt():
     }
     reply = explain_next_step(checklist)
     assert "часовой пояс" not in reply.lower()
+
+
+def test_merge_protects_schedule_on_confirm():
+    current = ChecklistState(
+        role=AgentRole.PERSONAL_REMINDER.value,
+        schedule_text="каждый день в 16:35",
+        timezone="Europe/Moscow",
+        reminder_message="Привет",
+    )
+    patch = ChecklistState(schedule_text="сегодня")
+    merged = merge_checklist(current, patch, user_text="да")
+    assert merged.schedule_text == "каждый день в 16:35"
+
+
+def test_finalize_restores_schedule_from_history():
+    checklist = ChecklistState(
+        role=AgentRole.PERSONAL_REMINDER.value,
+        schedule_text="сегодня",
+        timezone="Europe/Moscow",
+        reminder_message="Привет",
+    )
+    history = [
+        {
+            "role": "user",
+            "text": "Напоминай каждый день в 16:35 в личку, текст Привет",
+        },
+        {"role": "assistant", "text": "Подтверждаете?"},
+    ]
+    fixed = finalize_checklist(checklist, history=history)
+    assert fixed.schedule_text == "каждый день в 16:35"
+    assert "schedule" not in checklist_missing_fields(fixed)
 
 
 def test_detect_capabilities_template():

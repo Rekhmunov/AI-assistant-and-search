@@ -24,6 +24,7 @@ from app.services.agent.capabilities import (
 from app.services.agent.intent_hints import DEFAULT_AGENT_TIMEZONE
 from app.services.agent.constants import CANCEL_PHRASES, SUPPORTED_ROLE_LABELS
 from app.services.agent.onboarding import validate_activation
+from app.services.agent.schedule import is_schedule_parseable, normalize_schedule_phrase
 from app.services.agent.profile import (
     EVENT_DRIVEN_ROLES,
     GROUP_ROLES,
@@ -309,12 +310,124 @@ def load_checklist(agent: AgentInstance) -> ChecklistState:
     )
 
 
-def merge_checklist(current: ChecklistState, patch: ChecklistState) -> ChecklistState:
+_CHECKLIST_CORE_FIELDS = frozenset(
+    {
+        "role",
+        "schedule_text",
+        "timezone",
+        "reminder_message",
+        "search_topic",
+        "image_prompt",
+        "dm_command",
+        "scope",
+        "interaction_mode",
+        "support_instructions",
+        "delivery_mode",
+        "max_chat_id",
+    }
+)
+
+
+def _schedule_has_recurrence(text: str) -> bool:
+    low = (text or "").lower()
+    return any(
+        token in low
+        for token in (
+            "кажд",
+            "ежеднев",
+            "еженедел",
+            "понедельник",
+            "вторник",
+            "сред",
+            "четверг",
+            "пятниц",
+            "суббот",
+            "воскресен",
+        )
+    )
+
+
+def _is_weaker_schedule(new: str | None, old: str | None) -> bool:
+    if not new or not old:
+        return False
+    new_low = new.lower().strip()
+    old_low = old.lower().strip()
+    if new_low == old_low:
+        return False
+    if _schedule_has_recurrence(old_low) and not _schedule_has_recurrence(new_low):
+        if any(token in new_low for token in ("сегодня", "завтра")):
+            return True
+    if re.search(r"\d{1,2}[:.]\d{2}", old_low) and new_low in {"сегодня", "завтра"}:
+        return True
+    if is_schedule_parseable(old_low) and not is_schedule_parseable(new_low):
+        return True
+    return False
+
+
+def merge_checklist(
+    current: ChecklistState,
+    patch: ChecklistState,
+    *,
+    user_text: str = "",
+) -> ChecklistState:
     data = current.to_dict()
+    lock_core = user_wants_confirm(user_text) and bool(data.get("role"))
     for key, value in patch.to_dict().items():
-        if value is not None:
-            data[key] = value
+        if value is None:
+            continue
+        if lock_core and key in _CHECKLIST_CORE_FIELDS:
+            continue
+        if key == "schedule_text" and _is_weaker_schedule(str(value), data.get("schedule_text")):
+            continue
+        data[key] = value
     return ChecklistState.from_dict(data)
+
+
+def enrich_schedule_from_history(
+    checklist: ChecklistState,
+    history: list[dict[str, str]],
+) -> ChecklistState:
+    data = checklist.to_dict()
+    sched = str(data.get("schedule_text") or "")
+    tz = data.get("timezone")
+    needs_better = (
+        not sched
+        or not is_schedule_parseable(sched, tz)
+        or ("сегодня" in sched.lower() and not _schedule_has_recurrence(sched))
+    )
+    if not needs_better:
+        return checklist
+
+    for msg in reversed(history):
+        if msg.get("role") != "user":
+            continue
+        trial = apply_message_hints({}, msg.get("text") or "")
+        candidate = trial.get("schedule_text")
+        if not candidate:
+            continue
+        normalized = normalize_schedule_phrase(str(candidate)) or str(candidate)
+        if is_schedule_parseable(normalized, tz):
+            if _schedule_has_recurrence(normalized) or not sched:
+                data["schedule_text"] = normalized
+                return ChecklistState.from_dict(data)
+    return checklist
+
+
+def finalize_checklist(
+    checklist: ChecklistState,
+    *,
+    history: list[dict[str, str]] | None = None,
+) -> ChecklistState:
+    data = checklist.to_dict()
+    sched = data.get("schedule_text")
+    if sched:
+        normalized = normalize_schedule_phrase(str(sched))
+        if normalized:
+            data["schedule_text"] = normalized
+    checklist = ChecklistState.from_dict(data)
+    if history:
+        checklist = enrich_schedule_from_history(checklist, history)
+    return checklist
 
 
 def apply_checklist_to_agent(agent: AgentInstance, checklist: ChecklistState) -> None:
@@ -374,8 +487,14 @@ def checklist_missing_fields(checklist: ChecklistState) -> list[str]:
         missing.append("role")
         return missing
 
-    if role in SCHEDULED_ROLES and not checklist.schedule_text:
-        missing.append("schedule")
+    if role in SCHEDULED_ROLES:
+        if not checklist.schedule_text:
+            missing.append("schedule")
+        elif not is_schedule_parseable(
+            checklist.schedule_text,
+            checklist.timezone,
+        ):
+            missing.append("schedule")
 
     if role == AgentRole.NEWS_DIGEST.value:
         if not (checklist.search_topic or checklist.reminder_message):
@@ -536,8 +655,9 @@ async def run_llm_turn(
             raise AttributeError("complete_text unavailable")
     except Exception as exc:
         logger.exception("Agent LLM complete_text failed: %s", exc)
-        fallback_checklist = ChecklistState.from_dict(
-            apply_message_hints(checklist.to_dict(), last_user),
+        fallback_checklist = finalize_checklist(
+            ChecklistState.from_dict(apply_message_hints(checklist.to_dict(), last_user)),
+            history=history,
         )
         return LlmTurnResult(
             reply=build_parse_fallback_reply(fallback_checklist.to_dict(), last_user),
@@ -564,8 +684,9 @@ async def run_llm_turn(
 
     if not data:
         logger.warning("Agent LLM JSON parse failed after retry: %s", raw[:300])
-        fallback_checklist = ChecklistState.from_dict(
-            apply_message_hints(checklist.to_dict(), last_user),
+        fallback_checklist = finalize_checklist(
+            ChecklistState.from_dict(apply_message_hints(checklist.to_dict(), last_user)),
+            history=history,
         )
         return LlmTurnResult(
             reply=build_parse_fallback_reply(fallback_checklist.to_dict(), last_user),
@@ -573,8 +694,9 @@ async def run_llm_turn(
         )
 
     patch = ChecklistState.from_dict(data.get("checklist") if isinstance(data.get("checklist"), dict) else {})
-    merged = merge_checklist(checklist, patch)
+    merged = merge_checklist(checklist, patch, user_text=last_user)
     merged = ChecklistState.from_dict(apply_message_hints(merged.to_dict(), last_user))
+    merged = finalize_checklist(merged, history=history)
     reply = _sanitize_agent_reply(
         _str_or_none(data.get("reply")) or build_parse_fallback_reply(merged.to_dict(), last_user),
         last_user,

@@ -60,6 +60,19 @@ def test_correction_personal_reminder_with_time_and_text():
     assert data["timezone"] == "Europe/Moscow"
 
 
+def test_daily_schedule_includes_time():
+    data = infer_checklist_fields(
+        "каждый день в 16:35 в личный чат, текст Привет",
+        {},
+    )
+    assert data["schedule_text"] == "каждый день в 16:35"
+
+
+def test_bare_today_not_extracted_without_time():
+    data = infer_checklist_fields("сегодня", {"role": AgentRole.PERSONAL_REMINDER.value})
+    assert "schedule_text" not in data or data.get("schedule_text") is None
+
+
 def test_bare_time_gets_default_timezone():
     data = infer_checklist_fields("каждый день в 16:10", {"role": AgentRole.PERSONAL_REMINDER.value})
     assert data["timezone"] == "Europe/Moscow"
