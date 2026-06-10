@@ -43,7 +43,7 @@ USER_TASK_LABELS: dict[str, str] = {
     AgentRole.NEWS_DIGEST.value: "новостная сводка из интернета",
     AgentRole.IMAGE_POST.value: "генерация и отправка изображений",
     AgentRole.GROUP_MODERATION.value: "модерация сообщений в группе",
-    AgentRole.DM_ASSISTANT.value: "команды боту в личном чате MAX",
+    AgentRole.DM_ASSISTANT.value: "интерактивный помощник в MAX (личка и/или группа)",
 }
 
 
@@ -123,7 +123,14 @@ def agent_profile(agent: AgentInstance) -> AgentProfile:
         listens_group_messages=role in {
             AgentRole.GROUP_MESSAGE_LOG.value,
             AgentRole.GROUP_MODERATION.value,
-        },
+        }
+        or (
+            role == AgentRole.DM_ASSISTANT.value
+            and (
+                str(cfg.get("scope") or "").lower() in {"group", "both"}
+                or _delivery_mode(role, cfg) == "group"
+            )
+        ),
         listens_dm_commands=role == AgentRole.DM_ASSISTANT.value,
     )
 
@@ -134,6 +141,7 @@ def group_setup_roles() -> list[str]:
         AgentRole.GROUP_REMINDER.value,
         AgentRole.GROUP_MESSAGE_LOG.value,
         AgentRole.GROUP_MODERATION.value,
+        AgentRole.DM_ASSISTANT.value,
     ]
 
 

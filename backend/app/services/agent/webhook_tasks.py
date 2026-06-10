@@ -14,7 +14,13 @@ from app.services.agent.webhook import append_group_message
 logger = logging.getLogger(__name__)
 
 
-async def process_dm_message_background(*, max_user_id: int, text: str) -> None:
+async def process_dm_message_background(
+    *,
+    max_user_id: int,
+    text: str,
+    payload: dict | None = None,
+    message_id_value: str | None = None,
+) -> None:
     settings = get_settings()
     redis_client = aioredis.from_url(settings.redis_url, decode_responses=True)
     try:
@@ -24,6 +30,8 @@ async def process_dm_message_background(*, max_user_id: int, text: str) -> None:
                 redis_client,
                 max_user_id=max_user_id,
                 text=text,
+                payload=payload,
+                message_id_value=message_id_value,
             )
             if handled:
                 await db.commit()
@@ -39,9 +47,23 @@ async def process_group_message_background(
     text: str,
     author: str,
     message_id_value: str | None,
+    payload: dict | None = None,
 ) -> None:
+    settings = get_settings()
+    redis_client = aioredis.from_url(settings.redis_url, decode_responses=True)
     try:
         async with async_session_factory() as db:
+            from app.services.agent.group_interactive import handle_group_interactive
+
+            interactive = await handle_group_interactive(
+                db,
+                redis_client,
+                chat_id=chat_id,
+                text=text,
+                author=author,
+                payload=payload or {},
+                message_id_value=message_id_value,
+            )
             count = await append_group_message(
                 db,
                 chat_id=chat_id,
@@ -49,7 +71,9 @@ async def process_group_message_background(
                 author=author,
                 message_id_value=message_id_value,
             )
-            if count:
+            if interactive or count:
                 await db.commit()
     except Exception:
         logger.exception("MAX webhook group background failed chat=%s", chat_id)
+    finally:
+        await redis_client.aclose()

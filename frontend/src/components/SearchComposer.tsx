@@ -275,8 +275,11 @@ export function SearchComposer({
 
     for (const raw of batch) {
       const file = await prepareFileForUpload(raw);
-      const kind = (await resolveFileKind(file, expected)) ?? "document";
-      const err = validateFile(file, maxBytes, plan, expected, kind);
+      let kind = (await resolveFileKind(file, expected)) ?? "document";
+      if (agentMode) {
+        kind = "document";
+      }
+      const err = validateFile(file, maxBytes, plan, agentMode ? "document" : expected, kind);
       if (err) {
         setUploadFailure(err.message, err.suggestPro);
         continue;
@@ -503,7 +506,7 @@ export function SearchComposer({
       </button>
     ) : null;
 
-  const attachMenu = agentMode ? null : (
+  const attachMenu = (
     <ComposerAttachMenu
       disabled={disabled || isBusy || atLimit}
       directPick

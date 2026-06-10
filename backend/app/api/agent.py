@@ -55,6 +55,7 @@ async def post_agent_message(
             thread_id,
             body.text,
             redis_client,
+            file_ids=body.file_ids,
         )
     except ValueError as exc:
         code = str(exc)

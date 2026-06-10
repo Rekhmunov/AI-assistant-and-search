@@ -29,6 +29,7 @@ from app.services.agent.llm_onboarding import (
 )
 from app.services.agent.onboarding import activation_summary
 from app.services.agent.profile import EVENT_DRIVEN_ROLES, SCHEDULED_ROLES
+from app.services.agent.knowledge import ingest_agent_files
 from app.services.agent.reminders import activate_agent_reminders, effective_max_user_id
 
 logger = logging.getLogger(__name__)
@@ -89,6 +90,8 @@ async def handle_agent_message(
     thread_id: UUID,
     text: str,
     redis_client,
+    *,
+    file_ids: list[UUID] | None = None,
 ) -> tuple[Message, Message, AgentInstance]:
     result = await db.execute(
         select(Thread)
@@ -118,7 +121,17 @@ async def handle_agent_message(
     if not allowed:
         raise ValueError("rate_limit")
 
-    user_msg = await _user_message(db, thread, text.strip())
+    display_text = text.strip()
+    if file_ids and not display_text:
+        display_text = f"[Загружено документов: {len(file_ids)}]"
+    user_msg = await _user_message(db, thread, display_text)
+
+    if file_ids:
+        chunk_count = await ingest_agent_files(db, agent, user_id=user.id, file_ids=file_ids)
+        if chunk_count:
+            cfg = dict(agent.config or {})
+            cfg["knowledge_chunk_count"] = chunk_count
+            agent.config = cfg
 
     if user_wants_cancel(text):
         await cancel_agent(db, agent, reason="user_cancel")

@@ -217,3 +217,58 @@ class MaxBotService:
             pass
 
         return str(token) if token else None
+
+    async def get_messages_by_ids(self, message_ids: list[str]) -> list[dict]:
+        if not self.settings.bot_token.strip() or not message_ids:
+            return []
+        ids_param = ",".join(str(mid).strip() for mid in message_ids if str(mid).strip())
+        if not ids_param:
+            return []
+
+        async def _get():
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                return await client.get(
+                    f"{BOT_API_BASE}/messages",
+                    params={"message_ids": ids_param},
+                    headers=self._auth_headers(json_body=False),
+                )
+
+        try:
+            response = await self._request_with_rate_limit(_get)
+        except httpx.HTTPError as exc:
+            logger.warning("MAX get_messages network error: %s", exc)
+            return []
+        if not response.is_success:
+            logger.warning("MAX get_messages failed HTTP %s: %s", response.status_code, response.text[:300])
+            return []
+        try:
+            data = response.json()
+        except ValueError:
+            return []
+        messages = data.get("messages")
+        return messages if isinstance(messages, list) else []
+
+    async def download_url(self, url: str) -> bytes | None:
+        if not url or not url.startswith("http"):
+            return None
+        token = self.settings.bot_token.strip()
+        headers = {"Authorization": token} if token else {}
+
+        try:
+            async with httpx.AsyncClient(timeout=60.0, follow_redirects=True) as client:
+                response = await client.get(url, headers=headers)
+        except httpx.HTTPError as exc:
+            logger.warning("MAX download_url failed %s: %s", url[:80], exc)
+            return None
+        if response.is_success:
+            return response.content
+        if token:
+            try:
+                async with httpx.AsyncClient(timeout=60.0, follow_redirects=True) as client:
+                    response = await client.get(url)
+                if response.is_success:
+                    return response.content
+            except httpx.HTTPError:
+                pass
+        logger.warning("MAX download_url HTTP %s for %s", response.status_code, url[:80])
+        return None

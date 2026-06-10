@@ -536,12 +536,13 @@ export async function postAgentMessage(
   token: string,
   threadId: string,
   text: string,
+  fileIds: string[] = [],
 ): Promise<AgentMessageResponse> {
   const res = await fetch(`${API_BASE}/api/agent/threads/${threadId}/messages`, {
     method: "POST",
     headers: apiHeaders(token),
     credentials: "include",
-    body: JSON.stringify({ text }),
+    body: JSON.stringify({ text, file_ids: fileIds }),
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));

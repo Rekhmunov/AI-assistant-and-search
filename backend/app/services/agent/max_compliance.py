@@ -46,6 +46,14 @@ async def dm_command_allowed(max_user_id: int) -> bool:
     return False
 
 
+async def group_reply_allowed(chat_id: int) -> bool:
+    key = f"max:grp:cd:{chat_id}"
+    r = await _redis()
+    if await r.set(key, "1", nx=True, ex=int(DM_COMMAND_COOLDOWN_SEC)):
+        return True
+    return False
+
+
 async def dispatch_stagger(index: int) -> None:
     """Пауза между отправками в одном цикле dispatch (снижает риск 429)."""
     if index > 0:

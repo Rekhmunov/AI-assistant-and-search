@@ -436,8 +436,8 @@ export function Thread() {
   }, [turns.length, activeTab, turns]);
 
   const runAgentMessage = useCallback(
-    async (text: string, existingThreadId: string | null) => {
-      if (!text.trim() || !token || streamingRef.current) return;
+    async (text: string, existingThreadId: string | null, fileIds: string[] = []) => {
+      if ((!text.trim() && fileIds.length === 0) || !token || streamingRef.current) return;
       const tid = existingThreadId ?? threadId;
       if (!tid) return;
 
@@ -461,7 +461,7 @@ export function Thread() {
       ]);
 
       try {
-        const result = await postAgentMessage(token, tid, text);
+        const result = await postAgentMessage(token, tid, text, fileIds);
         queryClient.invalidateQueries({ queryKey: ["thread", tid] });
         queryClient.invalidateQueries({ queryKey: ["threads"] });
         setAgentStatusText(t("agentStatusConfiguring"));
@@ -956,7 +956,7 @@ export function Thread() {
     attachments: ComposerAttachment[];
   }) => {
     if (isAgentThread) {
-      void runAgentMessage(payload.query, threadId);
+      void runAgentMessage(payload.query, threadId, payload.attachmentIds);
       return;
     }
     runSearch(

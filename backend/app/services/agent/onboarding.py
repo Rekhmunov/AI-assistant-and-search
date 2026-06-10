@@ -52,14 +52,25 @@ def validate_activation(agent: AgentInstance) -> None:
             raise ValueError("image_prompt_missing")
 
     if role == AgentRole.DM_ASSISTANT.value:
-        if not normalize_dm_command(cfg.get("dm_command")):
+        mode = str(cfg.get("interaction_mode") or "command").strip().lower()
+        scope = str(cfg.get("scope") or cfg.get("delivery_mode") or "dm").strip().lower()
+        if mode in {"command", "both"} and not normalize_dm_command(cfg.get("dm_command")):
             raise ValueError("dm_command_missing")
-        if role == AgentRole.DM_ASSISTANT.value and not (
+        if mode in {"support", "both"} and not (
+            cfg.get("support_instructions")
+            or cfg.get("reminder_message")
+            or agent.instruction_text
+        ):
+            raise ValueError("support_instructions_missing")
+        if mode == "command" and not (
             cfg.get("reminder_message")
             or cfg.get("search_topic")
             or cfg.get("image_prompt")
+            or cfg.get("support_instructions")
         ):
             raise ValueError("dm_action_missing")
+        if scope in {"group", "both"} and not agent.max_chat_id:
+            raise ValueError("group_chat_missing")
 
     if role == AgentRole.GROUP_MODERATION.value:
         sw = cfg.get("moderation_stop_words") or (cfg.get("moderation_rules") or {}).get("stop_words")
@@ -121,7 +132,20 @@ def activation_summary(agent: AgentInstance) -> str:
     if agent.role == AgentRole.GROUP_MODERATION.value:
         lines.append("Модерация активна: бот следит за новыми сообщениями в группе.")
     if agent.role == AgentRole.DM_ASSISTANT.value:
-        lines.append("Напишите команду боту в личке MAX, чтобы получить ответ.")
+        scope = str(cfg.get("scope") or "dm")
+        mode = str(cfg.get("interaction_mode") or "command")
+        if scope in {"group", "both"}:
+            lines.append("Бот отвечает в группе MAX (нужны права админа).")
+        if scope in {"dm", "both"}:
+            if mode == "support":
+                lines.append("Пишите боту в личке — он ответит на любое сообщение.")
+            elif mode == "both":
+                lines.append("В личке: команда или обычный вопрос; можно прислать фото для OCR/перевода.")
+            else:
+                lines.append("Напишите команду боту в личке MAX, чтобы получить ответ.")
+        kb = cfg.get("knowledge_chunk_count")
+        if kb:
+            lines.append(f"База знаний: {kb} фрагментов из загруженных документов.")
 
     lines.append("Напишите «отключи агента», чтобы остановить.")
     return "\n".join(lines)

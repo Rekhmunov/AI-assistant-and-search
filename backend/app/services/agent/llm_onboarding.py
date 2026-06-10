@@ -59,7 +59,7 @@ AGENT_SYSTEM_PROMPT = """Ты — ассистент настройки аген
 - news_digest — поиск новостей по теме + сводка (личка или группа: delivery_mode)
 - image_post — генерация картинки по промпту (личка или группа)
 - group_moderation — удаление сообщений в группе по правилам (стоп-слова, ссылки)
-- dm_assistant — ответ в личке на команду (dm_command), без расписания
+- dm_assistant — интерактивный помощник: личка и/или группа, vision (фото/OCR/перевод), база знаний из документов
 
 Чеклист (сохраняй заполненное из current_checklist):
 - role — см. выше
@@ -68,7 +68,10 @@ AGENT_SYSTEM_PROMPT = """Ты — ассистент настройки аген
 - reminder_message — текст/заголовок сообщения
 - search_topic — тема для news_digest или dm_assistant с веб-сводкой
 - image_prompt — описание картинки для image_post / dm_assistant
-- dm_command — команда без слэша, напр. news (только dm_assistant). Если несколько агентов в личке — у каждого своя команда
+- dm_command — команда без слэша, напр. news (dm_assistant, если interaction_mode command/both)
+- scope: dm | group | both — где слушать (dm_assistant): личка, группа или оба
+- interaction_mode: command | support | both — command: только по команде; support: на все сообщения; both: и поддержка, и команда
+- support_instructions — как отвечать в режиме поддержки (тон, правила, FAQ-логика). Можно взять из reminder_message
 - delivery_mode: dm | group — куда отправлять (news_digest, image_post)
 - max_chat_id — ID группы
 - bot_is_group_admin / bot_can_read_messages
@@ -89,6 +92,8 @@ AGENT_SYSTEM_PROMPT = """Ты — ассистент настройки аген
   НЕ сбрасывай диалог; переформулируй последний шаг проще, опираясь на current_checklist.
   Объясняй один следующий шаг, не сваливай все вопросы разом.
 - Задавай по одному недостающему параметру за раз (кроме случая, когда пользователь сам дал всё сразу).
+- Для dm_assistant с группой: бот должен быть админом (bot_is_group_admin). Vision: пользователь может прислать фото с текстом «переведи с картинки».
+- База знаний: пользователь может прикрепить txt/pdf/docx в этот тред — сообщи, что документ можно загрузить кнопкой «+».
 - Если max_linked=false — объясни привязку MAX (Профиль → войти через MAX). Не активируй агента.
 - Когда обязательные поля заполнены: ready_for_confirmation=true и confirmation_summary с итогом.
 - activate=true только при явном подтверждении (да/подтверждаю) И max_linked=true.
@@ -105,6 +110,9 @@ AGENT_SYSTEM_PROMPT = """Ты — ассистент настройки аген
     "search_topic": null,
     "image_prompt": null,
     "dm_command": null,
+    "scope": null,
+    "interaction_mode": null,
+    "support_instructions": null,
     "delivery_mode": null,
     "max_chat_id": null,
     "bot_is_group_admin": null,
@@ -128,6 +136,9 @@ class ChecklistState:
     search_topic: str | None = None
     image_prompt: str | None = None
     dm_command: str | None = None
+    scope: str | None = None
+    interaction_mode: str | None = None
+    support_instructions: str | None = None
     delivery_mode: str | None = None
     max_chat_id: int | None = None
     bot_is_group_admin: bool | None = None
@@ -144,6 +155,9 @@ class ChecklistState:
             "search_topic": self.search_topic,
             "image_prompt": self.image_prompt,
             "dm_command": self.dm_command,
+            "scope": self.scope,
+            "interaction_mode": self.interaction_mode,
+            "support_instructions": self.support_instructions,
             "delivery_mode": self.delivery_mode,
             "max_chat_id": self.max_chat_id,
             "bot_is_group_admin": self.bot_is_group_admin,
@@ -172,6 +186,16 @@ class ChecklistState:
             delivery = delivery.lower()
             if delivery not in {"dm", "group"}:
                 delivery = None
+        scope = _str_or_none(raw.get("scope"))
+        if scope:
+            scope = scope.lower()
+            if scope not in {"dm", "group", "both"}:
+                scope = None
+        mode = _str_or_none(raw.get("interaction_mode"))
+        if mode:
+            mode = mode.lower()
+            if mode not in {"command", "support", "both"}:
+                mode = None
         return cls(
             role=role,
             schedule_text=_str_or_none(raw.get("schedule_text")),
@@ -180,6 +204,9 @@ class ChecklistState:
             search_topic=_str_or_none(raw.get("search_topic")),
             image_prompt=_str_or_none(raw.get("image_prompt")),
             dm_command=dm,
+            scope=scope,
+            interaction_mode=mode,
+            support_instructions=_str_or_none(raw.get("support_instructions")),
             delivery_mode=delivery,
             max_chat_id=chat_id,
             bot_is_group_admin=_bool_or_none(raw.get("bot_is_group_admin")),
@@ -245,6 +272,9 @@ def load_checklist(agent: AgentInstance) -> ChecklistState:
             "search_topic": cfg.get("search_topic"),
             "image_prompt": cfg.get("image_prompt"),
             "dm_command": cfg.get("dm_command"),
+            "scope": cfg.get("scope"),
+            "interaction_mode": cfg.get("interaction_mode"),
+            "support_instructions": cfg.get("support_instructions"),
             "delivery_mode": cfg.get("delivery_mode"),
             "max_chat_id": agent.max_chat_id or cfg.get("max_chat_id"),
             "bot_is_group_admin": cfg.get("bot_is_group_admin"),
@@ -272,6 +302,12 @@ def apply_checklist_to_agent(agent: AgentInstance, checklist: ChecklistState) ->
     cfg["search_topic"] = checklist.search_topic
     cfg["image_prompt"] = checklist.image_prompt
     cfg["dm_command"] = checklist.dm_command
+    if checklist.scope:
+        cfg["scope"] = checklist.scope
+    if checklist.interaction_mode:
+        cfg["interaction_mode"] = checklist.interaction_mode
+    if checklist.support_instructions:
+        cfg["support_instructions"] = checklist.support_instructions
     if checklist.delivery_mode:
         cfg["delivery_mode"] = checklist.delivery_mode
     cfg["bot_is_group_admin"] = checklist.bot_is_group_admin
@@ -327,10 +363,26 @@ def checklist_missing_fields(checklist: ChecklistState) -> list[str]:
         if not (checklist.image_prompt or checklist.reminder_message):
             missing.append("image_prompt")
     elif role == AgentRole.DM_ASSISTANT.value:
-        if not normalize_dm_command(checklist.dm_command):
+        mode = (checklist.interaction_mode or "command").lower()
+        scope = (checklist.scope or "dm").lower()
+        if mode in {"command", "both"} and not normalize_dm_command(checklist.dm_command):
             missing.append("dm_command")
-        if not (checklist.reminder_message or checklist.search_topic or checklist.image_prompt):
+        if mode in {"support", "both"} and not (
+            checklist.support_instructions or checklist.reminder_message
+        ):
+            missing.append("support_instructions")
+        if mode == "command" and not (
+            checklist.reminder_message
+            or checklist.search_topic
+            or checklist.image_prompt
+            or checklist.support_instructions
+        ):
             missing.append("dm_action")
+        if scope in {"group", "both"}:
+            if not checklist.max_chat_id:
+                missing.append("group_chat")
+            if checklist.bot_is_group_admin is not True:
+                missing.append("bot_admin")
     elif role == AgentRole.GROUP_MODERATION.value:
         if not checklist.moderation_stop_words and checklist.moderation_block_links is not True:
             missing.append("moderation_rules")
@@ -392,6 +444,8 @@ def _context_block(
         f"max_user_id: {user.max_user_id or 'нет'}",
         f"agent_status: {agent.status}",
         f"registered_group_chat_id: {registered or 'нет'}",
+        f"knowledge_chunks: {cfg.get('knowledge_chunk_count') or 0}",
+        f"knowledge_sources: {', '.join(cfg.get('knowledge_sources') or []) or 'нет'}",
         f"current_checklist: {json.dumps(checklist.to_dict(), ensure_ascii=False)}",
         f"missing_fields: {', '.join(missing) if missing else 'нет'}",
         "default_timezone: Europe/Moscow",
@@ -504,6 +558,12 @@ def build_confirmation_prompt(summary: str | None, checklist: ChecklistState) ->
         lines.append(f"• Промпт картинки: {checklist.image_prompt}")
     if checklist.dm_command:
         lines.append(f"• Команда в MAX: /{checklist.dm_command}")
+    if checklist.scope:
+        lines.append(f"• Где работает: {checklist.scope}")
+    if checklist.interaction_mode:
+        lines.append(f"• Режим: {checklist.interaction_mode}")
+    if checklist.support_instructions:
+        lines.append(f"• Поддержка: {checklist.support_instructions[:120]}")
     if checklist.reminder_message:
         lines.append(f"• Текст: {checklist.reminder_message}")
     if checklist.max_chat_id:

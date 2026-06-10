@@ -149,6 +149,22 @@ async def register_group_chat_for_user(
             agent.max_chat_id = chat_id
 
     # Групповая доставка news/image при настройке
+    result_dm = await db.execute(
+        select(AgentInstance).where(
+            AgentInstance.max_user_id == max_user_id,
+            AgentInstance.status.in_([AgentStatus.DRAFT.value, AgentStatus.COLLECTING.value]),
+            AgentInstance.role == AgentRole.DM_ASSISTANT.value,
+        )
+    )
+    for agent in result_dm.scalars().all():
+        cfg = dict(agent.config or {})
+        scope = str(cfg.get("scope") or "").lower()
+        if scope in {"group", "both"}:
+            cfg["registered_group_chat_id"] = chat_id
+            agent.config = cfg
+            if not agent.max_chat_id:
+                agent.max_chat_id = chat_id
+
     result2 = await db.execute(
         select(AgentInstance).where(
             AgentInstance.max_user_id == max_user_id,

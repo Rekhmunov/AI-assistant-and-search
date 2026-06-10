@@ -15,7 +15,7 @@ SUPPORTED_ROLE_LABELS = {
     "news_digest": "новостная сводка из интернета в MAX",
     "image_post": "генерация и отправка изображений в MAX",
     "group_moderation": "модерация сообщений в группе MAX",
-    "dm_assistant": "команда боту в личном чате MAX",
+    "dm_assistant": "интерактивный помощник в MAX",
 }
 
 CANCEL_PHRASES = (

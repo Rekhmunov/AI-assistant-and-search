@@ -146,6 +146,8 @@ async def max_webhook(
                 process_dm_message_background,
                 max_user_id=max_user_id,
                 text=text,
+                payload=payload,
+                message_id_value=message_id(payload),
             )
             return {"ok": True}
 
@@ -157,6 +159,7 @@ async def max_webhook(
                 text=text,
                 author=message_author(payload),
                 message_id_value=message_id(payload),
+                payload=payload,
             )
         return {"ok": True}
 
