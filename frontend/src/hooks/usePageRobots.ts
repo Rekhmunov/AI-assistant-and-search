@@ -25,6 +25,13 @@ function removeCanonical() {
   document.querySelector('link[rel="canonical"]')?.remove();
 }
 
+function removePublicSeoMeta() {
+  document.querySelector('meta[name="description"]')?.remove();
+  document.querySelectorAll('meta[property^="og:"], meta[name^="twitter:"]').forEach((el) => {
+    el.remove();
+  });
+}
+
 /** Prevent search engines from indexing private SPA routes (threads, history, profile). */
 export function usePageRobots() {
   const { pathname, search, hash } = useLocation();
@@ -35,8 +42,9 @@ export function usePageRobots() {
     if (isPrivate) {
       ensureMeta("robots", PRIVATE_ROBOTS);
       ensureMeta("googlebot", PRIVATE_ROBOTS);
-      ensureMeta("yandex", "noindex, nofollow");
+      ensureMeta("yandex", PRIVATE_ROBOTS);
       removeCanonical();
+      removePublicSeoMeta();
       document.title = "Glosix";
       return;
     }

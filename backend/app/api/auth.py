@@ -626,6 +626,7 @@ async def logout(
     refresh_token: Annotated[str | None, Cookie(alias="refresh_token")] = None,
 ):
     """Clear server session cookies so the client can continue as a guest."""
+    verify_allowed_origin(request)
     settings = get_settings()
     if refresh_token:
         payload = decode_token(refresh_token, "refresh", settings)
@@ -644,6 +645,8 @@ async def refresh_session(
     redis_client: Annotated[redis.Redis, Depends(get_redis)],
     refresh_token: Annotated[str | None, Cookie()] = None,
 ):
+    verify_allowed_origin(request)
+    await check_auth_rate_limit(redis_client, "refresh", client_ip(request))
     if not refresh_token:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="No refresh token")
 

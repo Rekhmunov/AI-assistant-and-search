@@ -9,6 +9,7 @@ MSK = timezone(timedelta(hours=3))
 
 GUEST_CREATIONS_PER_IP_PER_DAY = 20
 VOICE_REPORTS_PER_IP_PER_HOUR = 60
+BLOG_COMMENTS_PER_IP_PER_HOUR = 8
 
 
 def _day_key(prefix: str, user_id: str) -> str:
@@ -49,6 +50,20 @@ class RateLimiter:
 
     def _guest_search_key(self, user_id: str) -> str:
         return f"search_guest:{user_id}"
+
+    async def check_blog_comment_limit(self, client_ip: str) -> None:
+        from fastapi import HTTPException, status
+
+        key = f"blog_comment:{client_ip}"
+        count = await self.redis.incr(key)
+        if count == 1:
+            await self.redis.expire(key, 3600)
+        if count > BLOG_COMMENTS_PER_IP_PER_HOUR:
+            await self.redis.decr(key)
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail="Слишком много комментариев. Попробуйте позже.",
+            )
 
     async def check_voice_report_limit(self, client_ip: str) -> None:
         from fastapi import HTTPException, status

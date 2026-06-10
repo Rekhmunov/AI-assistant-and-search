@@ -14,7 +14,11 @@ def test_is_private_api_path():
     assert is_private_api_path("/api/search")
     assert is_private_api_path("/api/threads/abc")
     assert is_private_api_path("/api/files/uuid/shared")
+    assert is_private_api_path("/api/admin/users")
+    assert is_private_api_path("/api/agent/thread")
+    assert is_private_api_path("/api/bot/webhook")
     assert not is_private_api_path("/api/health")
+    assert not is_private_api_path("/api/blog/posts")
     assert not is_private_api_path("/health")
 
 

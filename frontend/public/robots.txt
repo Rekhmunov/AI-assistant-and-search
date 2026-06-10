@@ -18,4 +18,4 @@ Allow: /offer
 Allow: /cookies
 Allow: /terms
 Allow: /consent-personal-data
-Sitemap: https://glosix.ru/api/blog/sitemap.xml
+Sitemap: https://glosix.ru/blog/sitemap.xml

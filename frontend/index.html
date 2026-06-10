@@ -47,6 +47,11 @@
           document.head.appendChild(el);
         });
         document.querySelector('link[rel="canonical"]')?.remove();
+        document.querySelector('meta[name="description"]')?.remove();
+        document.querySelectorAll('meta[property^="og:"], meta[name^="twitter:"]').forEach(function (el) {
+          el.remove();
+        });
+        document.title = "Glosix";
       })();
     </script>
     <script src="https://st.max.ru/js/max-web-app.js"></script>

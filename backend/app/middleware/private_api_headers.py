@@ -20,6 +20,9 @@ _PRIVATE_PREFIXES = (
     "/api/support",
     "/api/payments",
     "/api/feedback",
+    "/api/admin",
+    "/api/agent",
+    "/api/bot",
 )
 
 

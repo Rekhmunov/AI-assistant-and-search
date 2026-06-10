@@ -3,11 +3,17 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_db
-from app.services.blog_posts import DEFAULT_LOCALE, get_category_by_slug, get_post_by_slug, resolve_slug_redirect
+from app.services.blog_posts import (
+    DEFAULT_LOCALE,
+    get_category_by_slug,
+    get_post_by_slug,
+    list_posts_public,
+    resolve_slug_redirect,
+)
 from app.services.blog_prerender import (
     read_prerender,
     render_category_html,
@@ -21,6 +27,29 @@ router = APIRouter(tags=["blog-pages"])
 
 def _cache_headers() -> dict[str, str]:
     return {"Cache-Control": "public, max-age=300", "X-Prerender": "blog"}
+
+
+@router.get("/blog/sitemap.xml")
+async def blog_sitemap_page(db: Annotated[AsyncSession, Depends(get_db)]):
+    posts, _ = await list_posts_public(db, limit=500)
+    lines = [
+        '<?xml version="1.0" encoding="UTF-8"?>',
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
+        "  <url><loc>https://glosix.ru/blog</loc><changefreq>daily</changefreq><priority>0.8</priority></url>",
+    ]
+    for post in posts:
+        loc = f"https://glosix.ru/blog/{post.slug}"
+        updated = post.updated_at.strftime("%Y-%m-%d") if post.updated_at else ""
+        lines.append(
+            f"  <url><loc>{loc}</loc><lastmod>{updated}</lastmod><changefreq>weekly</changefreq><priority>0.7</priority></url>"
+        )
+    lines.append("</urlset>")
+    body = "\n".join(lines)
+    return Response(
+        content=body,
+        media_type="application/xml",
+        headers={"Cache-Control": "public, max-age=3600"},
+    )
 
 
 @router.get("/blog", response_class=HTMLResponse)

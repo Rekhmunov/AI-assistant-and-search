@@ -23,8 +23,36 @@ class TestProductionGuards(unittest.TestCase):
                 jwt_secret="a" * 48,
                 skip_init_data_validation=False,
                 max_bot_webhook_secret="webhook-secret",
+                debug=False,
+                admin_api_key="admin-key",
             )
         )
+
+    def test_blocks_production_debug_mode(self):
+        with self.assertRaises(RuntimeError):
+            assert_production_security(
+                Settings(
+                    environment="production",
+                    jwt_secret="a" * 48,
+                    skip_init_data_validation=False,
+                    max_bot_webhook_secret="x",
+                    debug=True,
+                    admin_api_key="admin-key",
+                )
+            )
+
+    def test_blocks_production_without_admin_api_key(self):
+        with self.assertRaises(RuntimeError):
+            assert_production_security(
+                Settings(
+                    environment="production",
+                    jwt_secret="a" * 48,
+                    skip_init_data_validation=False,
+                    max_bot_webhook_secret="x",
+                    debug=False,
+                    admin_api_key="",
+                )
+            )
 
     def test_blocks_production_skip_init_validation(self):
         with self.assertRaises(RuntimeError):

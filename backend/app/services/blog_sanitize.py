@@ -4,19 +4,11 @@ from __future__ import annotations
 
 import re
 
-_SCRIPT_RE = re.compile(r"<script\b[^<]*(?:(?!</script>)<[^<]*)*</script>", re.I)
-_STYLE_RE = re.compile(r"<style\b[^<]*(?:(?!</style>)<[^<]*)*</style>", re.I)
-_ON_ATTR_RE = re.compile(r'\s+on\w+\s*=\s*("[^"]*"|\'[^\']*\'|[^\s>]+)', re.I)
-_JS_HREF_RE = re.compile(r'\shref\s*=\s*"\s*javascript:[^"]*"', re.I)
+from app.services.html_sanitize import sanitize_rich_html
 
 
 def sanitize_blog_html(html: str) -> str:
-    text = (html or "").strip() or "<p></p>"
-    text = _SCRIPT_RE.sub("", text)
-    text = _STYLE_RE.sub("", text)
-    text = _ON_ATTR_RE.sub("", text)
-    text = _JS_HREF_RE.sub("", text)
-    return text
+    return sanitize_rich_html(html, empty_default="<p></p>")
 
 
 def estimate_reading_time_min(html: str) -> int:

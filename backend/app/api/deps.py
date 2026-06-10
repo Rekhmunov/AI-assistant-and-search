@@ -141,7 +141,9 @@ async def require_admin_or_api_key(
 ) -> None:
     """Admin session cookie or X-Admin-Key for operational endpoints (e.g. LLM health probes)."""
     settings = get_settings()
-    if settings.admin_api_key and x_admin_key and x_admin_key == settings.admin_api_key:
+    from app.core.secrets import secrets_match
+
+    if settings.admin_api_key and x_admin_key and secrets_match(x_admin_key, settings.admin_api_key):
         return
     try:
         await get_current_admin(db, creds, admin_token)
@@ -312,5 +314,7 @@ async def verify_admin_api_key(
 ) -> None:
     """Legacy header auth; prefer admin session cookie."""
     settings = get_settings()
-    if not settings.admin_api_key or x_admin_key != settings.admin_api_key:
+    from app.core.secrets import secrets_match
+
+    if not settings.admin_api_key or not secrets_match(x_admin_key, settings.admin_api_key):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")

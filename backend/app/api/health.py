@@ -107,9 +107,7 @@ async def api_health_storage(
     }
 
 
-@router.get("/health")
-async def api_health(db: Annotated[AsyncSession, Depends(get_db)]):
-    """Проверка API и БД (для curl https://glosix.ru/api/health)."""
+async def _collect_health_diagnostics(db: AsyncSession) -> dict:
     await db.execute(text("SELECT 1"))
 
     result = await db.execute(
@@ -232,10 +230,26 @@ async def api_health(db: Annotated[AsyncSession, Depends(get_db)]):
     }
 
 
+@router.get("/health")
+async def api_health(db: Annotated[AsyncSession, Depends(get_db)]):
+    """Публичная проверка живости API (без внутренних деталей)."""
+    diagnostics = await _collect_health_diagnostics(db)
+    return {"status": diagnostics["status"]}
+
+
+@router.get("/health/diagnostics")
+async def api_health_diagnostics(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    _auth: Annotated[None, Depends(require_admin_or_api_key)],
+):
+    """Полная диагностика для админов и мониторинга."""
+    return await _collect_health_diagnostics(db)
+
+
 @router.get("/health/version")
-async def api_health_version():
+async def api_health_version(_auth: Annotated[None, Depends(require_admin_or_api_key)]):
     """
-    Версия backend для проверки деплоя (curl /api/health/version).
+    Версия backend для проверки деплоя.
     GIT_COMMIT задаётся при сборке образа или в .env.
     """
     import os

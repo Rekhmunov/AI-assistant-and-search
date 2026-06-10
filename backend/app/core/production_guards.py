@@ -26,3 +26,9 @@ def assert_production_security(settings: Settings) -> None:
         raise RuntimeError(
             "MAX_BOT_WEBHOOK_SECRET must be set in production (protects /api/bot/webhook)."
         )
+
+    if settings.debug:
+        raise RuntimeError("DEBUG must be false in production.")
+
+    if not settings.admin_api_key.strip():
+        raise RuntimeError("ADMIN_API_KEY must be set in production.")

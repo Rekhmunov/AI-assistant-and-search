@@ -1,10 +1,12 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_db
+from app.api.deps import get_db, get_rate_limiter
+from app.core.auth_limits import client_ip
+from app.core.limiter import RateLimiter
 from app.models.blog import BlogMedia
 from app.schemas.blog import BlogCategoryOut, BlogCommentCreate, BlogCommentOut, BlogPostListItem
 from app.services.blog_comments import add_comment, list_approved_comments
@@ -65,8 +67,11 @@ async def public_post_comments(slug: str, db: Annotated[AsyncSession, Depends(ge
 async def public_post_add_comment(
     slug: str,
     body: BlogCommentCreate,
+    request: Request,
     db: Annotated[AsyncSession, Depends(get_db)],
+    limiter: Annotated[RateLimiter, Depends(get_rate_limiter)],
 ):
+    await limiter.check_blog_comment_limit(client_ip(request))
     post = await get_post_by_slug(db, slug, locale=DEFAULT_LOCALE)
     if not post or post.status != "published" or not post.comments_enabled:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Комментарии отключены")

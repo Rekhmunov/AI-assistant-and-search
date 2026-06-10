@@ -92,10 +92,14 @@ def _verify_webhook_secret(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail="Webhook not configured",
             )
-        if provided != expected:
+        from app.core.secrets import secrets_match
+
+        if not secrets_match(provided, expected):
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
         return
-    if expected and provided != expected:
+    from app.core.secrets import secrets_match
+
+    if expected and not secrets_match(provided, expected):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
 
 
