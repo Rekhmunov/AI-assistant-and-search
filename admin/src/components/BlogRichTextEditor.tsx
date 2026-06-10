@@ -24,7 +24,7 @@ export function BlogRichTextEditor({ value, onChange, disabled }: Props) {
       const src = media.url.startsWith("http") ? media.url : `${API}${media.url}`;
       const imgHtml = `<p><img src="${src}" alt="${media.alt_text || ""}" loading="lazy" style="max-width:100%;height:auto;border-radius:8px;" /></p>`;
       const next = (value || "<p></p>").replace(/<\/p>\s*$/, "") + imgHtml;
-      onChange(next.endsWith("</p>") ? next : next + "<p></p>");
+      onChange(next.endsWith("</p>") ? next : `${next}<p></p>`);
     },
     [value, onChange],
   );
@@ -44,11 +44,17 @@ export function BlogRichTextEditor({ value, onChange, disabled }: Props) {
 
   return (
     <div className="blog-rte-wrap">
-      <div className="blog-rte-extra-toolbar">
-        <button type="button" className="rte-btn" disabled={disabled} onClick={onPickImage} title="Вставить картинку">
-          🖼
+      <div className="blog-rte-toolbar">
+        <button
+          type="button"
+          className="rte-btn blog-rte-image-btn"
+          disabled={disabled}
+          onClick={onPickImage}
+          title="Вставить изображение"
+        >
+          Изображение
         </button>
-        <span className="blog-rte-hint">JPEG/PNG/WebP → сжатие в WebP при загрузке</span>
+        <span className="hint blog-rte-hint">JPEG/PNG/WebP сжимаются в WebP при загрузке</span>
       </div>
       <input
         ref={fileRef}
@@ -57,7 +63,9 @@ export function BlogRichTextEditor({ value, onChange, disabled }: Props) {
         hidden
         onChange={onFileChange}
       />
-      <RichTextEditor value={value} onChange={onChange} disabled={disabled} allowHtmlSource />
+      <div className="blog-rte-editor-wrap">
+        <RichTextEditor value={value} onChange={onChange} disabled={disabled} allowHtmlSource />
+      </div>
     </div>
   );
 }

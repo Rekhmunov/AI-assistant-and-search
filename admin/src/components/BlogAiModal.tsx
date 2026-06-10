@@ -88,10 +88,9 @@ export function BlogAiModal({ open, onClose, onApplyArticle, onApplyCover, defau
   return createPortal(
     <AdminModal title="AI: статья и обложка" onClose={onClose}>
       <form className="blog-ai-form" onSubmit={generateArticle}>
-        <label className="field-label">
-          Тема / заголовок
+        <label className="blog-field blog-field--wide">
+          <span className="blog-field-label">Тема / заголовок</span>
           <input
-            className="field-input"
             value={topic}
             onChange={(e) => setTopic(e.target.value)}
             required
@@ -99,26 +98,24 @@ export function BlogAiModal({ open, onClose, onApplyArticle, onApplyCover, defau
             placeholder="Как ИИ-поиск экономит время"
           />
         </label>
-        <label className="field-label">
-          Требования к тексту
+        <label className="blog-field blog-field--wide">
+          <span className="blog-field-label">Требования к тексту</span>
           <textarea
-            className="field-input field-textarea"
             rows={4}
             value={requirements}
             onChange={(e) => setRequirements(e.target.value)}
             placeholder="Объём, тон, ключевые слова, структура разделов…"
           />
         </label>
-        <label className="field-label">
-          Промпт обложки (опционально)
+        <label className="blog-field blog-field--wide">
+          <span className="blog-field-label">Промпт обложки (опционально)</span>
           <input
-            className="field-input"
             value={coverPrompt}
             onChange={(e) => setCoverPrompt(e.target.value)}
             placeholder="Минималистичная иллюстрация, бирюзовые тона…"
           />
         </label>
-        {error && <p className="form-error">{error}</p>}
+        {error && <p className="error">{error}</p>}
         <div className="blog-ai-actions">
           <button type="submit" className="btn-primary" disabled={busy !== null}>
             {busy === "article" ? "Генерация…" : "Сгенерировать статью"}

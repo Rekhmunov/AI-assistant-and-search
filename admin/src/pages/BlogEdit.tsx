@@ -6,6 +6,7 @@ import { BlogAiModal } from "../components/BlogAiModal";
 import { BlogRichTextEditor } from "../components/BlogRichTextEditor";
 
 const API = import.meta.env.VITE_API_URL || "";
+const PUBLIC_SITE = import.meta.env.VITE_PUBLIC_URL || "https://glosix.ru";
 
 type Category = { id: string; name: string; slug: string };
 
@@ -59,6 +60,29 @@ function mediaSrc(url: string | undefined): string {
   return url.startsWith("http") ? url : `${API}${url}`;
 }
 
+function formatCommentDate(iso: string): string {
+  try {
+    return new Date(iso).toLocaleString("ru-RU");
+  } catch {
+    return iso;
+  }
+}
+
+function PanelChevron({ expanded }: { expanded: boolean }) {
+  return (
+    <svg
+      className={`blog-panel-chevron${expanded ? " blog-panel-chevron--expanded" : ""}`}
+      width="18"
+      height="18"
+      viewBox="0 0 24 24"
+      fill="none"
+      aria-hidden
+    >
+      <path d="M9 6l6 6-6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 export function BlogEditPage() {
   const { id } = useParams();
   const isNew = id === "new";
@@ -69,9 +93,12 @@ export function BlogEditPage() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [coverUrl, setCoverUrl] = useState("");
   const [busy, setBusy] = useState(false);
+  const [coverBusy, setCoverBusy] = useState(false);
   const [msg, setMsg] = useState("");
+  const [error, setError] = useState("");
   const [aiOpen, setAiOpen] = useState(false);
   const [comments, setComments] = useState<AdminComment[]>([]);
+  const [seoOpen, setSeoOpen] = useState(false);
 
   useEffect(() => {
     apiFetch<Category[]>("/api/admin/blog/categories").then(setCategories);
@@ -110,6 +137,7 @@ export function BlogEditPage() {
     if (!canWrite) return;
     setBusy(true);
     setMsg("");
+    setError("");
     const body = {
       ...form,
       category_id: form.category_id || null,
@@ -123,7 +151,7 @@ export function BlogEditPage() {
           body: JSON.stringify(body),
         });
         navigate(`/blog/${created.id}`, { replace: true });
-        setMsg("Создано");
+        setMsg("Статья создана");
       } else {
         await apiFetch(`/api/admin/blog/posts/${id}`, {
           method: "PATCH",
@@ -132,93 +160,134 @@ export function BlogEditPage() {
         setMsg("Сохранено");
       }
     } catch (err) {
-      setMsg(err instanceof Error ? err.message : "Ошибка сохранения");
+      setError(err instanceof Error ? err.message : "Ошибка сохранения");
     } finally {
       setBusy(false);
     }
   };
 
   const uploadCover = async (file: File) => {
-    const formData = new FormData();
-    formData.append("file", file);
-    const media = await apiUpload<{ id: string; url: string }>(
-      "/api/admin/blog/media?purpose=cover",
-      formData,
-    );
-    patch({ cover_image_id: media.id, og_image_id: form.og_image_id || media.id });
-    setCoverUrl(media.url);
+    setCoverBusy(true);
+    setError("");
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const media = await apiUpload<{ id: string; url: string }>(
+        "/api/admin/blog/media?purpose=cover",
+        formData,
+      );
+      patch({ cover_image_id: media.id, og_image_id: form.og_image_id || media.id });
+      setCoverUrl(media.url);
+      setMsg("Обложка загружена");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Не удалось загрузить обложку");
+    } finally {
+      setCoverBusy(false);
+    }
   };
 
+  const clearCover = () => {
+    patch({ cover_image_id: "", og_image_id: "" });
+    setCoverUrl("");
+  };
+
+  const publicUrl = form.slug ? `${PUBLIC_SITE}/blog/${form.slug}` : "";
+
   return (
-    <div className="page blog-edit-page">
-      <div className="page-header-row">
-        <h1>{isNew ? "Новая статья" : "Редактирование статьи"}</h1>
+    <div className="admin-page admin-page--blog-edit">
+      <header className="admin-page-header">
+        <div>
+          <h1>{isNew ? "Новая статья" : "Редактирование статьи"}</h1>
+          <p className="admin-page-subtitle">
+            {isNew
+              ? "Заполните заголовок и текст, затем опубликуйте в боковой панели."
+              : form.slug
+                ? `URL: /blog/${form.slug}`
+                : "Черновик без slug"}
+          </p>
+        </div>
         <div className="blog-edit-header-actions">
           {canWrite && (
             <button type="button" className="btn-secondary" onClick={() => setAiOpen(true)}>
-              ✨ AI-черновик
+              AI-черновик
             </button>
           )}
+          {form.status === "published" && publicUrl && (
+            <a className="btn-secondary" href={publicUrl} target="_blank" rel="noreferrer">
+              На сайте ↗
+            </a>
+          )}
           <Link to="/blog" className="btn-secondary">
-            ← К списку
+            К списку
           </Link>
         </div>
-      </div>
-      <form className="blog-edit-form" onSubmit={save}>
-        <div className="blog-edit-grid">
-          <section className="blog-edit-main">
-            <label className="field-label">
-              Заголовок
-              <input
-                className="field-input"
-                value={form.title}
-                onChange={(e) => patch({ title: e.target.value })}
-                required
-                disabled={!canWrite}
-              />
-            </label>
-            <label className="field-label">
-              Slug (латиница, URL: /blog/…)
-              <input
-                className="field-input"
-                value={form.slug}
-                onChange={(e) => patch({ slug: e.target.value })}
-                placeholder="auto-from-title"
-                disabled={!canWrite}
-              />
-            </label>
-            <label className="field-label">
-              Автор (ФИО)
-              <input
-                className="field-input"
-                value={form.author_name}
-                onChange={(e) => patch({ author_name: e.target.value })}
-                placeholder="Иван Иванов"
-                disabled={!canWrite}
-              />
-            </label>
-            <label className="field-label">
-              Краткое описание
-              <textarea
-                className="field-input field-textarea"
-                rows={2}
-                value={form.excerpt}
-                onChange={(e) => patch({ excerpt: e.target.value })}
-                disabled={!canWrite}
-              />
-            </label>
-            <label className="field-label">Текст статьи</label>
+      </header>
+
+      {msg && <p className="ok card">{msg}</p>}
+      {error && <p className="error card">{error}</p>}
+
+      <form className="blog-edit-layout" onSubmit={save}>
+        <div className="blog-edit-main">
+          <section className="card blog-edit-section">
+            <h2 className="blog-section-title">Основное</h2>
+            <div className="blog-fields-grid">
+              <label className="blog-field blog-field--wide">
+                <span className="blog-field-label">Заголовок</span>
+                <input
+                  value={form.title}
+                  onChange={(e) => patch({ title: e.target.value })}
+                  required
+                  disabled={!canWrite}
+                  placeholder="Заголовок статьи"
+                />
+              </label>
+              <label className="blog-field">
+                <span className="blog-field-label">Slug (латиница)</span>
+                <input
+                  value={form.slug}
+                  onChange={(e) => patch({ slug: e.target.value })}
+                  placeholder="auto-from-title"
+                  disabled={!canWrite}
+                />
+              </label>
+              <label className="blog-field">
+                <span className="blog-field-label">Автор (ФИО)</span>
+                <input
+                  value={form.author_name}
+                  onChange={(e) => patch({ author_name: e.target.value })}
+                  placeholder="Иван Иванов"
+                  disabled={!canWrite}
+                />
+              </label>
+              <label className="blog-field blog-field--wide">
+                <span className="blog-field-label">Краткое описание</span>
+                <textarea
+                  rows={3}
+                  value={form.excerpt}
+                  onChange={(e) => patch({ excerpt: e.target.value })}
+                  disabled={!canWrite}
+                  placeholder="Анонс для списка статей и соцсетей"
+                />
+              </label>
+            </div>
+          </section>
+
+          <section className="card blog-edit-section">
+            <h2 className="blog-section-title">Текст статьи</h2>
             <BlogRichTextEditor
               value={form.content_html}
               onChange={(html) => patch({ content_html: html })}
               disabled={!canWrite}
             />
           </section>
-          <aside className="blog-edit-side">
-            <label className="field-label">
-              Статус
+        </div>
+
+        <aside className="blog-edit-sidebar">
+          <section className="card blog-panel">
+            <h3 className="blog-panel-title">Публикация</h3>
+            <label className="blog-field">
+              <span className="blog-field-label">Статус</span>
               <select
-                className="field-input"
                 value={form.status}
                 onChange={(e) => patch({ status: e.target.value })}
                 disabled={!canWrite}
@@ -228,15 +297,14 @@ export function BlogEditPage() {
                 <option value="archived">Архив</option>
               </select>
             </label>
-            <label className="field-label">
-              Категория
+            <label className="blog-field">
+              <span className="blog-field-label">Категория</span>
               <select
-                className="field-input"
                 value={form.category_id}
                 onChange={(e) => patch({ category_id: e.target.value })}
                 disabled={!canWrite}
               >
-                <option value="">—</option>
+                <option value="">Без категории</option>
                 {categories.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.name}
@@ -244,96 +312,159 @@ export function BlogEditPage() {
                 ))}
               </select>
             </label>
-            <div className="field-label">
-              Обложка
-              {coverUrl && (
-                <img src={mediaSrc(coverUrl)} alt="" className="blog-cover-preview" />
-              )}
-              {canWrite && (
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={(e) => {
-                    const f = e.target.files?.[0];
-                    if (f) void uploadCover(f).catch((err) => setMsg(String(err)));
-                  }}
-                />
-              )}
-            </div>
-            <h3 className="blog-seo-title">SEO</h3>
-            <label className="field-label">
-              Meta title
-              <input className="field-input" value={form.meta_title} onChange={(e) => patch({ meta_title: e.target.value })} disabled={!canWrite} />
-            </label>
-            <label className="field-label">
-              Meta description
-              <textarea className="field-input field-textarea" rows={2} value={form.meta_description} onChange={(e) => patch({ meta_description: e.target.value })} disabled={!canWrite} />
-            </label>
-            <label className="field-label">
-              Keywords
-              <input className="field-input" value={form.meta_keywords} onChange={(e) => patch({ meta_keywords: e.target.value })} disabled={!canWrite} />
-            </label>
-            <label className="field-label">
-              OG title
-              <input className="field-input" value={form.og_title} onChange={(e) => patch({ og_title: e.target.value })} disabled={!canWrite} />
-            </label>
-            <label className="field-label">
-              OG description
-              <textarea className="field-input field-textarea" rows={2} value={form.og_description} onChange={(e) => patch({ og_description: e.target.value })} disabled={!canWrite} />
-            </label>
-            <label className="field-label checkbox-label">
-              <input
-                type="checkbox"
-                checked={form.robots_index}
-                onChange={(e) => patch({ robots_index: e.target.checked })}
-                disabled={!canWrite}
-              />
-              Индексировать (robots index)
-            </label>
-            <label className="field-label checkbox-label">
+            <label className="blog-toggle">
               <input
                 type="checkbox"
                 checked={form.comments_enabled}
                 onChange={(e) => patch({ comments_enabled: e.target.checked })}
                 disabled={!canWrite}
               />
-              Комментарии к статье
+              <span>Комментарии к статье</span>
             </label>
-            {!isNew && comments.length > 0 && (
-              <div className="blog-admin-comments">
-                <h3 className="blog-seo-title">Комментарии ({comments.length})</h3>
-                <ul className="blog-admin-comments-list">
-                  {comments.map((c) => (
-                    <li key={c.id}>
-                      <strong>{c.author_name}</strong>
-                      <p>{c.body}</p>
-                      {canWrite && (
-                        <button
-                          type="button"
-                          className="btn-link btn-link--danger"
-                          onClick={async () => {
-                            if (!window.confirm("Удалить комментарий?")) return;
-                            await apiFetch(`/api/admin/blog/posts/${id}/comments/${c.id}`, { method: "DELETE" });
-                            setComments((prev) => prev.filter((x) => x.id !== c.id));
-                          }}
-                        >
-                          Удалить
-                        </button>
-                      )}
-                    </li>
-                  ))}
-                </ul>
+          </section>
+
+          <section className="card blog-panel">
+            <h3 className="blog-panel-title">Обложка</h3>
+            <div className="blog-cover-block">
+              {coverUrl ? (
+                <img src={mediaSrc(coverUrl)} alt="" className="blog-cover-preview" />
+              ) : (
+                <div className="blog-cover-placeholder">16:9</div>
+              )}
+              {canWrite && (
+                <div className="blog-cover-actions">
+                  <label className="btn-secondary blog-file-btn">
+                    {coverBusy ? "Загрузка…" : coverUrl ? "Заменить" : "Загрузить"}
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp,image/gif"
+                      hidden
+                      disabled={coverBusy}
+                      onChange={(e) => {
+                        const f = e.target.files?.[0];
+                        e.target.value = "";
+                        if (f) void uploadCover(f);
+                      }}
+                    />
+                  </label>
+                  {coverUrl && (
+                    <button type="button" className="btn-secondary btn-danger-outline" onClick={clearCover}>
+                      Убрать
+                    </button>
+                  )}
+                </div>
+              )}
+              <p className="hint blog-cover-hint">JPEG, PNG, WebP — сжимается в WebP при загрузке</p>
+            </div>
+          </section>
+
+          <section className="card blog-panel blog-panel--collapsible">
+            <button
+              type="button"
+              className="blog-panel-toggle"
+              onClick={() => setSeoOpen((v) => !v)}
+              aria-expanded={seoOpen}
+            >
+              <span>SEO и Open Graph</span>
+              <PanelChevron expanded={seoOpen} />
+            </button>
+            {seoOpen && (
+              <div className="blog-panel-body">
+                <label className="blog-field">
+                  <span className="blog-field-label">Meta title</span>
+                  <input
+                    value={form.meta_title}
+                    onChange={(e) => patch({ meta_title: e.target.value })}
+                    disabled={!canWrite}
+                  />
+                </label>
+                <label className="blog-field">
+                  <span className="blog-field-label">Meta description</span>
+                  <textarea
+                    rows={3}
+                    value={form.meta_description}
+                    onChange={(e) => patch({ meta_description: e.target.value })}
+                    disabled={!canWrite}
+                  />
+                </label>
+                <label className="blog-field">
+                  <span className="blog-field-label">Keywords</span>
+                  <input
+                    value={form.meta_keywords}
+                    onChange={(e) => patch({ meta_keywords: e.target.value })}
+                    disabled={!canWrite}
+                  />
+                </label>
+                <label className="blog-field">
+                  <span className="blog-field-label">OG title</span>
+                  <input
+                    value={form.og_title}
+                    onChange={(e) => patch({ og_title: e.target.value })}
+                    disabled={!canWrite}
+                  />
+                </label>
+                <label className="blog-field">
+                  <span className="blog-field-label">OG description</span>
+                  <textarea
+                    rows={3}
+                    value={form.og_description}
+                    onChange={(e) => patch({ og_description: e.target.value })}
+                    disabled={!canWrite}
+                  />
+                </label>
+                <label className="blog-toggle">
+                  <input
+                    type="checkbox"
+                    checked={form.robots_index}
+                    onChange={(e) => patch({ robots_index: e.target.checked })}
+                    disabled={!canWrite}
+                  />
+                  <span>Индексировать в поиске</span>
+                </label>
               </div>
             )}
-          </aside>
-        </div>
-        {msg && <p className="form-msg">{msg}</p>}
-        {canWrite && (
-          <button type="submit" className="btn-primary" disabled={busy}>
-            {busy ? "Сохранение…" : "Сохранить"}
-          </button>
-        )}
+          </section>
+
+          {!isNew && comments.length > 0 && (
+            <section className="card blog-panel">
+              <h3 className="blog-panel-title">Комментарии ({comments.length})</h3>
+              <ul className="blog-admin-comments-list">
+                {comments.map((c) => (
+                  <li key={c.id} className="blog-admin-comment">
+                    <div className="blog-admin-comment-head">
+                      <strong>{c.author_name}</strong>
+                      <span className="hint">{formatCommentDate(c.created_at)}</span>
+                    </div>
+                    <p>{c.body}</p>
+                    {canWrite && (
+                      <button
+                        type="button"
+                        className="blog-comment-delete"
+                        onClick={async () => {
+                          if (!window.confirm("Удалить комментарий?")) return;
+                          await apiFetch(`/api/admin/blog/posts/${id}/comments/${c.id}`, { method: "DELETE" });
+                          setComments((prev) => prev.filter((x) => x.id !== c.id));
+                        }}
+                      >
+                        Удалить
+                      </button>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+
+          {canWrite && (
+            <div className="blog-edit-save-bar card">
+              <button type="submit" className="btn-primary blog-save-btn" disabled={busy}>
+                {busy ? "Сохранение…" : isNew ? "Создать статью" : "Сохранить"}
+              </button>
+            </div>
+          )}
+        </aside>
       </form>
+
       <BlogAiModal
         open={aiOpen}
         onClose={() => setAiOpen(false)}
@@ -350,10 +481,13 @@ export function BlogEditPage() {
             og_title: data.og_title,
             og_description: data.og_description,
           });
+          setSeoOpen(true);
+          setMsg("AI-черновик подставлен — проверьте и сохраните");
         }}
         onApplyCover={(mediaId, url) => {
           patch({ cover_image_id: mediaId, og_image_id: mediaId });
           setCoverUrl(url);
+          setMsg("Обложка от AI загружена");
         }}
       />
     </div>
