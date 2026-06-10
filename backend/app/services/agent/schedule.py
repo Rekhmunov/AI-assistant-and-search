@@ -130,6 +130,13 @@ def parse_reminder_schedule(
             dt = dt.replace(tzinfo=user_tz)
         return dt.astimezone(timezone.utc), None
 
+    hm = _parse_time_hm(raw)
+    if hm:
+        run = now_local.replace(hour=hm[0], minute=hm[1], second=0, microsecond=0)
+        if run <= now_local:
+            run += timedelta(days=1)
+        return run.astimezone(timezone.utc), "daily"
+
     raise ValueError("schedule_unparseable")
 
 

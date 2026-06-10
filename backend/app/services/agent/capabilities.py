@@ -6,23 +6,16 @@ import re
 from typing import Any
 
 from app.models.agent import AgentRole
+from app.services.agent.intent_hints import DEFAULT_AGENT_TIMEZONE
 from app.services.agent.profile import GROUP_ROLES as PROFILE_GROUP_ROLES
 from app.services.agent.profile import USER_TASK_LABELS
 
 GROUP_ROLES = PROFILE_GROUP_ROLES
 
-CAPABILITIES_REPLY = (
-    "Сейчас агент Glosix в MAX умеет:\n"
-    "• присылать уведомления и напоминания в личный чат — по расписанию;\n"
-    "• публиковать сообщения и картинки в группе (бот — администратор);\n"
-    "• собирать сводки из группы и новости по теме из интернета;\n"
-    "• модерировать группу (удалять сообщения по правилам);\n"
-    "• отвечать в личке и в группе как поддержка — в том числе распознавать текст с фото;\n"
-    "• выполнять команды в личке (например /новости — если настроите команду).\n\n"
-    "Напишите **одним сообщением**, что нужно вам — например:\n"
-    "• «напоминай мне каждый день в 9:00 про встречу»\n"
-    "• «отвечай в группе на вопросы по FAQ, распознавай текст с фото»\n"
-    "• «присылай новости про ИИ каждое утро»"
+_CAPABILITIES_TEMPLATE_MARKERS = (
+    "сейчас агент glosix в max умеет",
+    "присылать уведомления и напоминания в личный чат",
+    "напишите одним сообщением, что нужно вам",
 )
 
 _CONTINUE_MARKERS = (
@@ -182,6 +175,47 @@ def _mentions_read_access(text: str) -> bool:
     return any(word in low for word in ("читать", "чтение", "read", "доступ к сообщ"))
 
 
+def _ensure_timezone(checklist: dict[str, Any]) -> dict[str, Any]:
+    data = dict(checklist)
+    if data.get("schedule_text") and not data.get("timezone"):
+        data["timezone"] = DEFAULT_AGENT_TIMEZONE
+    return data
+
+
+def reply_looks_like_capabilities_template(reply: str) -> bool:
+    low = (reply or "").lower()
+    return any(marker in low for marker in _CAPABILITIES_TEMPLATE_MARKERS)
+
+
+def compose_feasibility_reply(checklist: dict[str, Any], user_text: str) -> str | None:
+    """Живой ответ на «ты можешь…?» когда LLM недоступен."""
+    if not user_asks_feasibility(user_text):
+        return None
+    hinted = _ensure_timezone(apply_message_hints(checklist, user_text))
+    role = hinted.get("role")
+    if role == AgentRole.PERSONAL_REMINDER.value:
+        if hinted.get("schedule_text") and hinted.get("reminder_message"):
+            tz = hinted.get("timezone") or DEFAULT_AGENT_TIMEZONE
+            return (
+                f"Да, напоминания в личный чат MAX — это как раз моя задача. "
+                f"Записал: «{hinted['reminder_message']}», {hinted['schedule_text']} ({tz}). "
+                "Если всё верно — напишите «запустить»."
+            )
+        return (
+            "Да, могу присылать напоминания в ваш личный чат MAX по расписанию. "
+            "Напишите, когда и с каким текстом — например «каждый день в 9:00, текст: встреча»."
+        )
+    if role == AgentRole.GROUP_REMINDER.value:
+        return (
+            "Да, могу публиковать сообщения в группу MAX по расписанию — бот должен быть админом. "
+            "Напишите расписание и текст сообщения."
+        )
+    return (
+        "Да, в MAX это можно настроить — напоминания, посты в группу, новости, модерация, "
+        "ответы с распознаванием текста с фото. Опишите задачу одним сообщением."
+    )
+
+
 def apply_message_hints(checklist: dict[str, Any], text: str) -> dict[str, Any]:
     """Извлекает из реплики пользователя поля чеклиста без участия LLM."""
     from app.services.agent.intent_hints import infer_checklist_fields
@@ -213,7 +247,7 @@ def apply_message_hints(checklist: dict[str, Any], text: str) -> dict[str, Any]:
         elif _is_positive(clean):
             data["bot_can_read_messages"] = True
 
-    return data
+    return _ensure_timezone(data)
 
 
 def _checklist_intro(checklist: dict[str, Any]) -> str:
@@ -232,8 +266,6 @@ def _checklist_intro(checklist: dict[str, Any]) -> str:
         parts.append(f"Расписание: {checklist['schedule_text']}.")
     if checklist.get("reminder_message"):
         parts.append(f"Текст: {str(checklist['reminder_message'])[:80]}.")
-    if checklist.get("timezone"):
-        parts.append(f"Часовой пояс: {checklist['timezone']}.")
     return " ".join(parts)
 
 
@@ -321,13 +353,6 @@ def explain_next_step(checklist: dict[str, Any], *, user_text: str = "") -> str:
             "«завтра в 10:15» или «через 30 минут»."
         )
 
-    if checklist.get("schedule_text") and not checklist.get("timezone"):
-        return (
-            f"{intro}\n\n"
-            "Нужен ваш **часовой пояс** (например Europe/Moscow или UTC+3), "
-            "чтобы время срабатывания было верным."
-        )
-
     if role in SCHEDULED_ROLES and not checklist.get("reminder_message"):
         if role == AgentRole.GROUP_MESSAGE_LOG.value:
             label = "заголовка сводки"
@@ -400,6 +425,9 @@ def try_local_onboarding_reply(checklist: dict[str, Any], user_text: str) -> str
 
 
 def build_parse_fallback_reply(checklist: dict[str, Any], user_text: str) -> str:
+    feas = compose_feasibility_reply(checklist, user_text)
+    if feas:
+        return feas
     local = try_local_onboarding_reply(checklist, user_text)
     if local:
         return local

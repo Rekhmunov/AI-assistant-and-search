@@ -39,6 +39,15 @@ def test_timezone_utc_plus5():
     assert local.hour == 10
 
 
+def test_parse_bare_time_daily():
+    now = datetime(2026, 6, 3, 12, 0, tzinfo=MSK)
+    run_at, recurrence = parse_reminder_schedule("16:10", now=now)
+    assert recurrence == "daily"
+    local = run_at.astimezone(MSK)
+    assert local.hour == 16
+    assert local.minute == 10
+
+
 def test_next_weekly_run_skips_past_today():
     now = datetime(2026, 6, 2, 11, 0, tzinfo=MSK)  # Monday 11:00
     run = next_weekly_run(0, 10, 0, now=now)

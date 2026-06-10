@@ -14,11 +14,14 @@ from app.models.user import User
 from app.services.agent.capabilities import (
     apply_message_hints,
     build_parse_fallback_reply,
+    compose_feasibility_reply,
+    reply_looks_like_capabilities_template,
     user_asks_capabilities,
     user_asks_feasibility,
     user_needs_clarification,
     user_wants_continue,
 )
+from app.services.agent.intent_hints import DEFAULT_AGENT_TIMEZONE
 from app.services.agent.constants import CANCEL_PHRASES, SUPPORTED_ROLE_LABELS
 from app.services.agent.onboarding import validate_activation
 from app.services.agent.profile import (
@@ -66,7 +69,7 @@ AGENT_SYSTEM_PROMPT = """Ты — ассистент настройки аген
 Чеклист (сохраняй заполненное из current_checklist):
 - role — см. выше
 - schedule_text — для scheduled-ролей (не для dm_assistant / group_moderation)
-- timezone — если в расписании есть время
+- timezone — только если пользователь сам назвал пояс; иначе Europe/Moscow (не спрашивай)
 - reminder_message — текст/заголовок сообщения
 - search_topic — тема для news_digest или dm_assistant с веб-сводкой
 - image_prompt — описание картинки для image_post / dm_assistant
@@ -86,7 +89,9 @@ AGENT_SYSTEM_PROMPT = """Ты — ассистент настройки аген
 - НЕ повторяй один и тот же вопрос дважды подряд. Смотри history и current_checklist.
 - Живой диалог: reply всегда своими словами, как человек. ЗАПРЕЩЕНО вставлять фиксированный список возможностей или шаблонный блок.
 - «Что умеешь» (без конкретной задачи) — кратко своими словами 3–4 примера, попроси описать задачу.
-- «Ты можешь сделать X?» / «можно ли Y?» — ответь по существу: **да или нет**, почему; если да — заполни role в checklist и задай ОДИН уточняющий вопрос (расписание, текст, группа). Не подменяй ответ списком всех возможностей.
+- «Ты можешь сделать X?» / «можно ли Y?» — ответь по существу: **да или нет**, почему; если да — заполни role в checklist и задай ОДИН уточняющий вопрос (расписание, текст, группа). Не подменяй ответ списком всех возможностей. ЗАПРЕЩЕНО отвечать шаблоном «Сейчас агент Glosix в MAX умеет: • …».
+- «Твоей группе» / «твоём чате» в обращении к боту = личный диалог с Glosix в MAX (personal_reminder), НЕ группа пользователей.
+- Часовой пояс: по умолчанию Europe/Moscow. НЕ спрашивай timezone, если пользователь не указал другой.
 - Короткие «ок», «продолжим», «дальше» — объясни ОДИН следующий шаг по missing_fields, не начинай диалог заново.
 
 Примеры (пользователь → role + поля):
@@ -211,10 +216,14 @@ class ChecklistState:
             mode = mode.lower()
             if mode not in {"command", "support", "both"}:
                 mode = None
+        schedule_text = _str_or_none(raw.get("schedule_text"))
+        timezone = _str_or_none(raw.get("timezone"))
+        if schedule_text and not timezone:
+            timezone = DEFAULT_AGENT_TIMEZONE
         return cls(
             role=role,
-            schedule_text=_str_or_none(raw.get("schedule_text")),
-            timezone=_str_or_none(raw.get("timezone")),
+            schedule_text=schedule_text,
+            timezone=timezone,
             reminder_message=_str_or_none(raw.get("reminder_message")),
             search_topic=_str_or_none(raw.get("search_topic")),
             image_prompt=_str_or_none(raw.get("image_prompt")),
@@ -365,11 +374,8 @@ def checklist_missing_fields(checklist: ChecklistState) -> list[str]:
         missing.append("role")
         return missing
 
-    if role in SCHEDULED_ROLES:
-        if not checklist.schedule_text:
-            missing.append("schedule")
-        if checklist.schedule_text and not checklist.timezone:
-            missing.append("timezone")
+    if role in SCHEDULED_ROLES and not checklist.schedule_text:
+        missing.append("schedule")
 
     if role == AgentRole.NEWS_DIGEST.value:
         if not (checklist.search_topic or checklist.reminder_message):
@@ -416,6 +422,15 @@ def checklist_missing_fields(checklist: ChecklistState) -> list[str]:
         if role == AgentRole.GROUP_MESSAGE_LOG.value and checklist.bot_can_read_messages is not True:
             missing.append("bot_read")
     return missing
+
+
+def _sanitize_agent_reply(reply: str, user_text: str, checklist: ChecklistState) -> str:
+    if reply_looks_like_capabilities_template(reply):
+        fallback = compose_feasibility_reply(checklist.to_dict(), user_text)
+        if fallback:
+            return fallback
+        return build_parse_fallback_reply(checklist.to_dict(), user_text)
+    return reply
 
 
 def _parse_llm_json(raw: str) -> dict[str, Any] | None:
@@ -531,7 +546,24 @@ async def run_llm_turn(
 
     data = _parse_llm_json(raw)
     if not data:
-        logger.warning("Agent LLM JSON parse failed: %s", raw[:300])
+        logger.warning("Agent LLM JSON parse failed, retrying: %s", raw[:300])
+        try:
+            retry_messages = [
+                *payload_messages,
+                {
+                    "role": "system",
+                    "text": "Предыдущий ответ не был валидным JSON. Ответь снова — только JSON-объект по схеме.",
+                },
+            ]
+            raw = await llm.complete_text(  # type: ignore[attr-defined]
+                retry_messages, model="pro", max_tokens=900, temperature=0.2
+            )
+            data = _parse_llm_json(raw)
+        except Exception:
+            data = None
+
+    if not data:
+        logger.warning("Agent LLM JSON parse failed after retry: %s", raw[:300])
         fallback_checklist = ChecklistState.from_dict(
             apply_message_hints(checklist.to_dict(), last_user),
         )
@@ -542,7 +574,12 @@ async def run_llm_turn(
 
     patch = ChecklistState.from_dict(data.get("checklist") if isinstance(data.get("checklist"), dict) else {})
     merged = merge_checklist(checklist, patch)
-    reply = _str_or_none(data.get("reply")) or "Уточните, пожалуйста, детали задачи."
+    merged = ChecklistState.from_dict(apply_message_hints(merged.to_dict(), last_user))
+    reply = _sanitize_agent_reply(
+        _str_or_none(data.get("reply")) or build_parse_fallback_reply(merged.to_dict(), last_user),
+        last_user,
+        merged,
+    )
     ready = bool(data.get("ready_for_confirmation"))
     summary = _str_or_none(data.get("confirmation_summary"))
     activate = bool(data.get("activate"))

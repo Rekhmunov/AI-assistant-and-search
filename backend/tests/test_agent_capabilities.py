@@ -6,12 +6,15 @@ from app.models.agent import AgentRole
 from app.services.agent.capabilities import (
     apply_message_hints,
     build_parse_fallback_reply,
+    compose_feasibility_reply,
     explain_next_step,
+    reply_looks_like_capabilities_template,
     try_local_onboarding_reply,
     user_asks_capabilities,
     user_asks_feasibility,
     user_needs_clarification,
 )
+from app.services.agent.llm_onboarding import checklist_missing_fields, ChecklistState
 
 
 def test_user_needs_clarification():
@@ -81,6 +84,52 @@ def test_explain_next_step_group_admin():
     }
     reply = explain_next_step(checklist)
     assert "администратор" in reply.lower()
+
+
+def test_feasibility_fallback_not_template():
+    q = "Ты можешь сделать напоминание в своем чате?"
+    reply = build_parse_fallback_reply({}, q)
+    assert "Сейчас агент Glosix в MAX умеет" not in reply
+    assert "личный чат" in reply.lower() or "да" in reply.lower()
+
+
+def test_compose_feasibility_with_full_checklist():
+    checklist = {
+        "role": AgentRole.PERSONAL_REMINDER.value,
+        "schedule_text": "16:10",
+        "timezone": "Europe/Moscow",
+        "reminder_message": "Привет",
+    }
+    reply = compose_feasibility_reply(checklist, "ты можешь сделать напоминание?")
+    assert "Привет" in reply
+    assert "16:10" in reply
+    assert "часовой пояс" not in reply.lower()
+
+
+def test_no_timezone_in_missing_fields():
+    state = ChecklistState(
+        role=AgentRole.PERSONAL_REMINDER.value,
+        schedule_text="16:10",
+        timezone="Europe/Moscow",
+        reminder_message="Привет",
+    )
+    assert "timezone" not in checklist_missing_fields(state)
+
+
+def test_explain_next_step_no_timezone_prompt():
+    checklist = {
+        "role": AgentRole.PERSONAL_REMINDER.value,
+        "schedule_text": "16:10",
+        "timezone": "Europe/Moscow",
+        "reminder_message": None,
+    }
+    reply = explain_next_step(checklist)
+    assert "часовой пояс" not in reply.lower()
+
+
+def test_detect_capabilities_template():
+    tpl = "Сейчас агент Glosix в MAX умеет:\n• присылать уведомления"
+    assert reply_looks_like_capabilities_template(tpl)
 
 
 def test_explain_next_step_helps_when_not_admin():

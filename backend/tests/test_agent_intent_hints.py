@@ -39,3 +39,27 @@ def test_local_skips_feasibility_for_llm():
 def test_user_wants_continue():
     assert user_wants_continue("ок")
     assert user_wants_continue("продолжим настройку")
+
+
+def test_tvoey_gruppe_means_personal_chat():
+    role = infer_role_from_text("Ок, давай сделаем напоминание в твоей группе")
+    assert role == AgentRole.PERSONAL_REMINDER.value
+
+
+def test_correction_personal_reminder_with_time_and_text():
+    polluted = {
+        "role": AgentRole.GROUP_REMINDER.value,
+        "reminder_message": "Ты можешь сделать напоминание в своем чате?",
+        "schedule_text": None,
+    }
+    text = 'Нет, напоминание в твоем чате Glosix. В 16:10. Текст напоминания "Привет"'
+    data = infer_checklist_fields(text, polluted)
+    assert data["role"] == AgentRole.PERSONAL_REMINDER.value
+    assert "16:10" in (data.get("schedule_text") or "")
+    assert data["reminder_message"] == "Привет"
+    assert data["timezone"] == "Europe/Moscow"
+
+
+def test_bare_time_gets_default_timezone():
+    data = infer_checklist_fields("каждый день в 16:10", {"role": AgentRole.PERSONAL_REMINDER.value})
+    assert data["timezone"] == "Europe/Moscow"
