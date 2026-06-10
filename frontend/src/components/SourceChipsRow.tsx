@@ -16,7 +16,7 @@ export function SourceChipsRow({ indices, sources, className, showFavicon = fals
   if (!groups.length) return null;
 
   return (
-    <div className={className ?? "source-chips-row"}>
+    <span className={className ?? "source-chips-row"}>
       {groups.map((group) => (
         <SourceLink
           key={`${group.label}-${group.url}`}
@@ -43,6 +43,6 @@ export function SourceChipsRow({ indices, sources, className, showFavicon = fals
           </span>
         </SourceLink>
       ))}
-    </div>
+    </span>
   );
 }
