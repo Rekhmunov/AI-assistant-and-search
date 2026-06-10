@@ -518,17 +518,51 @@ export async function deleteThread(token: string, id: string): Promise<void> {
   }
 }
 
-export async function createAgentThread(token: string): Promise<AgentThreadCreateResponse> {
-  const res = await fetch(`${API_BASE}/api/agent/threads`, {
-    method: "POST",
-    headers: apiHeaders(token),
-    credentials: "include",
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    const detail = (err as { detail?: unknown }).detail;
-    throw new HttpResponseError(formatApiErrorDetail(detail) || "Failed to create agent", res.status);
+async function parseApiErrorResponse(res: Response, fallback: string): Promise<string> {
+  const serverMsg = serverUnavailableMessage(res.status);
+  try {
+    const body = await res.json();
+    return formatApiErrorDetail(body, serverMsg ?? fallback);
+  } catch {
+    return serverMsg ?? `${fallback} (код ${res.status})`;
   }
+}
+
+async function fetchAgentWithRetry(
+  url: string,
+  init: RequestInit,
+  fallback: string,
+): Promise<Response> {
+  const maxAttempts = 3;
+  let lastRes: Response | null = null;
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    const res = await fetch(url, init);
+    if (res.ok) return res;
+    lastRes = res;
+    if (attempt < maxAttempts - 1 && isTransientFailureStatus(res.status)) {
+      await new Promise((resolve) => window.setTimeout(resolve, 700 * (attempt + 1)));
+      continue;
+    }
+    const message = await parseApiErrorResponse(res, fallback);
+    throw new HttpResponseError(message, res.status);
+  }
+  if (!lastRes) {
+    throw new HttpResponseError(fallback, 0);
+  }
+  const message = await parseApiErrorResponse(lastRes, fallback);
+  throw new HttpResponseError(message, lastRes.status);
+}
+
+export async function createAgentThread(token: string): Promise<AgentThreadCreateResponse> {
+  const res = await fetchAgentWithRetry(
+    `${API_BASE}/api/agent/threads`,
+    {
+      method: "POST",
+      headers: apiHeaders(token),
+      credentials: "include",
+    },
+    "Не удалось создать агента. Попробуйте ещё раз.",
+  );
   return res.json();
 }
 
@@ -538,17 +572,16 @@ export async function postAgentMessage(
   text: string,
   fileIds: string[] = [],
 ): Promise<AgentMessageResponse> {
-  const res = await fetch(`${API_BASE}/api/agent/threads/${threadId}/messages`, {
-    method: "POST",
-    headers: apiHeaders(token),
-    credentials: "include",
-    body: JSON.stringify({ text, file_ids: fileIds }),
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    const detail = (err as { detail?: unknown }).detail;
-    throw new HttpResponseError(formatApiErrorDetail(detail) || "Failed to send agent message", res.status);
-  }
+  const res = await fetchAgentWithRetry(
+    `${API_BASE}/api/agent/threads/${threadId}/messages`,
+    {
+      method: "POST",
+      headers: apiHeaders(token),
+      credentials: "include",
+      body: JSON.stringify({ text, file_ids: fileIds }),
+    },
+    "Не удалось отправить сообщение. Попробуйте ещё раз.",
+  );
   return res.json();
 }
 

@@ -130,6 +130,47 @@ async def handle_agent_message(
         display_text = f"[Загружено документов: {len(file_ids)}]"
     user_msg = await _user_message(db, thread, display_text)
 
+    try:
+        return await _handle_agent_message_body(
+            db,
+            user,
+            thread,
+            agent,
+            thread_id,
+            text,
+            redis_client,
+            user_msg,
+            file_ids=file_ids,
+        )
+    except ValueError:
+        raise
+    except Exception as exc:
+        logger.exception("Agent message unhandled error thread=%s: %s", thread_id, exc)
+        await db.rollback()
+        assistant = await _assistant_reply(
+            db,
+            thread,
+            (
+                "Сейчас не удалось обработать запрос. Попробуйте ещё раз через несколько секунд "
+                "или переформулируйте задачу."
+            ),
+        )
+        await db.commit()
+        return user_msg, assistant, agent
+
+
+async def _handle_agent_message_body(
+    db: AsyncSession,
+    user: User,
+    thread: Thread,
+    agent: AgentInstance,
+    thread_id: UUID,
+    text: str,
+    redis_client,
+    user_msg: Message,
+    *,
+    file_ids: list[UUID] | None = None,
+) -> tuple[Message, Message, AgentInstance]:
     if file_ids:
         chunk_count = await ingest_agent_files(db, agent, user_id=user.id, file_ids=file_ids)
         if chunk_count:
@@ -213,7 +254,13 @@ async def handle_agent_message(
             await db.commit()
             sent = 0
             if agent.role in SCHEDULED_ROLES:
-                sent = await dispatch_due_reminders(db, agent_id=agent.id, redis_client=redis_client)
+                try:
+                    sent = await dispatch_due_reminders(
+                        db, agent_id=agent.id, redis_client=redis_client
+                    )
+                except Exception as exc:
+                    logger.exception("Agent immediate dispatch failed agent=%s: %s", agent.id, exc)
+                    sent = 0
                 await db.commit()
             summary = activation_summary(agent)
             if agent.role in SCHEDULED_ROLES:
@@ -252,6 +299,20 @@ async def handle_agent_message(
             cfg["awaiting_confirmation"] = True
             agent.config = cfg
             assistant = await _assistant_reply(db, thread, error_reply)
+            await db.commit()
+            return user_msg, assistant, agent
+        except Exception as exc:
+            logger.exception("Agent activation failed thread=%s: %s", thread_id, exc)
+            cfg["awaiting_confirmation"] = True
+            agent.config = cfg
+            assistant = await _assistant_reply(
+                db,
+                thread,
+                (
+                    "Настройки сохранены, но запустить агента сейчас не удалось. "
+                    "Попробуйте написать «да» ещё раз через минуту."
+                ),
+            )
             await db.commit()
             return user_msg, assistant, agent
 

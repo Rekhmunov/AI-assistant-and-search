@@ -1,5 +1,6 @@
 /** Текст ошибки из ответа FastAPI (detail: string | object[]). */
 export function formatApiErrorDetail(body: unknown, fallback: string): string {
+  if (typeof body === "string" && body.trim()) return body.trim();
   if (!body || typeof body !== "object") return fallback;
   const detail = (body as { detail?: unknown }).detail;
   if (typeof detail === "string" && detail.trim()) return detail;

@@ -58,6 +58,7 @@ async def post_agent_message(
             file_ids=body.file_ids,
         )
     except ValueError as exc:
+        await db.rollback()
         code = str(exc)
         if code == "thread_not_found":
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Тред не найден")
@@ -79,6 +80,7 @@ async def post_agent_message(
         logger.warning("Agent message error: %s", exc)
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Не удалось обработать сообщение")
     except Exception as exc:
+        await db.rollback()
         logger.exception("Agent message unhandled error thread=%s", thread_id)
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,

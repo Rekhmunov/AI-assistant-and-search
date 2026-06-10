@@ -483,7 +483,10 @@ export function Thread() {
         setAgentStatusText(null);
         setSearchPhase("idle");
       } catch (err) {
-        const msg = err instanceof Error ? err.message : "Не удалось отправить сообщение";
+        const msg =
+          err instanceof Error && err.message.trim()
+            ? err.message
+            : "Не удалось отправить сообщение. Попробуйте ещё раз.";
         setAgentLoading(false);
         setAgentStatusText(null);
         setSearchPhase("idle");
