@@ -28,7 +28,7 @@ from app.services.agent.llm_onboarding import (
     user_wants_cancel,
 )
 from app.services.agent.onboarding import activation_summary
-from app.services.agent.reminders import activate_agent_reminders
+from app.services.agent.reminders import activate_agent_reminders, effective_max_user_id
 
 logger = logging.getLogger(__name__)
 

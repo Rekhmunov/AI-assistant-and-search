@@ -35,7 +35,18 @@ async def cancel_agent_for_thread(db: AsyncSession, thread_id: UUID) -> bool:
     return True
 
 
+async def purge_agent_for_thread(db: AsyncSession, thread_id: UUID) -> bool:
+    """Удаляет агента и все напоминания (CASCADE) после soft-delete треда."""
+    agent = await get_agent_for_thread(db, thread_id)
+    if not agent:
+        return False
+    await cancel_reminders_for_agent(db, agent.id)
+    await db.delete(agent)
+    await db.flush()
+    return True
+
+
 async def on_thread_soft_deleted(db: AsyncSession, thread: Thread) -> None:
     if thread.thread_type != "agent":
         return
-    await cancel_agent_for_thread(db, thread.id)
+    await purge_agent_for_thread(db, thread.id)
