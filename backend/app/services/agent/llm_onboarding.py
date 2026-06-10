@@ -14,8 +14,8 @@ from app.models.user import User
 from app.services.agent.capabilities import (
     apply_message_hints,
     build_parse_fallback_reply,
-    try_local_onboarding_reply,
     user_asks_capabilities,
+    user_asks_feasibility,
     user_needs_clarification,
     user_wants_continue,
 )
@@ -84,7 +84,9 @@ AGENT_SYSTEM_PROMPT = """Ты — ассистент настройки аген
 - Принимай задачу своими словами. НЕ заставляй выбирать из списка и НЕ называй «whitelist».
 - Как только пользователь описал задачу — СРАЗУ заполни role и все уже понятные поля в checklist. Не переспрашивай то, что уже сказано.
 - НЕ повторяй один и тот же вопрос дважды подряд. Смотри history и current_checklist.
-- Если пользователь спрашивает «что умеешь» / «что можешь» — кратко 3–4 примера и попроси описать задачу одной фразой.
+- Живой диалог: reply всегда своими словами, как человек. ЗАПРЕЩЕНО вставлять фиксированный список возможностей или шаблонный блок.
+- «Что умеешь» (без конкретной задачи) — кратко своими словами 3–4 примера, попроси описать задачу.
+- «Ты можешь сделать X?» / «можно ли Y?» — ответь по существу: **да или нет**, почему; если да — заполни role в checklist и задай ОДИН уточняющий вопрос (расписание, текст, группа). Не подменяй ответ списком всех возможностей.
 - Короткие «ок», «продолжим», «дальше» — объясни ОДИН следующий шаг по missing_fields, не начинай диалог заново.
 
 Примеры (пользователь → role + поля):
@@ -93,6 +95,7 @@ AGENT_SYSTEM_PROMPT = """Ты — ассистент настройки аген
 - «новости про ИИ каждое утро» → news_digest, search_topic, schedule_text
 - «отвечай в группе на вопросы, переводи текст с фото» → dm_assistant, scope=group, interaction_mode=support
 - «удаляй спам и ссылки в группе» → group_moderation, moderation_stop_words/block_links
+- «ты можешь сделать напоминание в личке?» → reply: да; role=personal_reminder; спроси когда и о чём
 - Различай «нужно настроить» и «не поддерживается»:
   • Нужно настроить — помоги пошагово, не отказывай: бот не админ в группе (как добавить в админы),
     нет права читать сообщения (как включить), не привязан MAX, не хватает ID группы, расписания,
@@ -470,9 +473,13 @@ def _context_block(
             "user_signal: needs_clarification — переформулируй последний шаг проще, "
             "сохрани current_checklist, не начинай диалог заново"
         )
-    if user_asks_capabilities(last_user_text):
+    if user_asks_feasibility(last_user_text):
         lines.append(
-            "user_signal: asks_capabilities — кратко 3–4 примера и попроси описать задачу одной фразой"
+            "user_signal: asks_feasibility — ответь да/нет по существу; если да, заполни role и задай один уточняющий вопрос; без списка всех возможностей"
+        )
+    elif user_asks_capabilities(last_user_text):
+        lines.append(
+            "user_signal: asks_capabilities — кратко своими словами 3–4 примера, попроси описать задачу"
         )
     if user_wants_continue(last_user_text):
         lines.append(
@@ -494,19 +501,7 @@ async def run_llm_turn(
     if not history or history[-1]["role"] != "user":
         logger.warning("Agent LLM turn without trailing user message")
 
-    enriched = ChecklistState.from_dict(apply_message_hints(checklist.to_dict(), last_user))
-    local_reply = try_local_onboarding_reply(checklist.to_dict(), last_user)
-    use_local = local_reply is not None and (
-        user_asks_capabilities(last_user)
-        or user_needs_clarification(last_user)
-        or user_wants_continue(last_user)
-        or (enriched.role and enriched.role != checklist.role)
-        or (enriched.role and len(last_user.strip()) >= 15)
-    )
-    if use_local:
-        return LlmTurnResult(reply=local_reply, checklist=enriched)
-
-    checklist = enriched
+    checklist = ChecklistState.from_dict(apply_message_hints(checklist.to_dict(), last_user))
 
     llm, _, _, _, _ = await resolve_runtime_providers(db, redis_client, user=user)
 

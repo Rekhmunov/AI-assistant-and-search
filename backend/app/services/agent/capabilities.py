@@ -55,12 +55,11 @@ _CLARIFICATION_MARKERS = (
     "зачем это",
 )
 
-_CAPABILITIES_QUESTION_MARKERS = (
+_CAPABILITY_LIST_MARKERS = (
     "что умеешь",
+    "что ты умеешь",
     "ты умеешь",
     "что умеет",
-    "что можешь",
-    "ты можешь",
     "что может",
     "какие возможност",
     "что доступно",
@@ -72,6 +71,19 @@ _CAPABILITIES_QUESTION_MARKERS = (
     "какие сценарии",
     "whitelist",
     "вайтлист",
+)
+
+# Конкретная задача в вопросе — не список возможностей, а «можешь ли X?»
+_TASK_HINT_RE = re.compile(
+    r"(напомин|уведом|новост|модерац|сводк|картин|изображ|групп|поддержк|faq|команд|"
+    r"перевед|распозна|спам|удал|сообщен|чат|бот)",
+    re.I,
+)
+
+_FEASIBILITY_RE = re.compile(
+    r"(?:^|\s)(?:ты\s+)?(?:можешь|умеешь|сможешь|получится|"
+    r"можно\s+ли|возможно\s+ли|есть\s+ли|поддерживаешь\s+ли|умеешь\s+ли|можешь\s+ли)\b",
+    re.I,
 )
 
 
@@ -91,11 +103,30 @@ def user_wants_continue(text: str) -> bool:
     return any(marker in low for marker in _CONTINUE_MARKERS)
 
 
-def user_asks_capabilities(text: str) -> bool:
+def _has_task_hint(text: str) -> bool:
+    return bool(_TASK_HINT_RE.search(text or ""))
+
+
+def user_asks_feasibility(text: str) -> bool:
+    """
+    «Ты можешь сделать напоминание?» — вопрос про конкретную задачу, не про список возможностей.
+    """
     low = (text or "").strip().lower()
-    if not low:
+    if not low or not _FEASIBILITY_RE.search(low):
         return False
-    return any(marker in low for marker in _CAPABILITIES_QUESTION_MARKERS)
+    return _has_task_hint(low) or len(low) > 20
+
+
+def user_asks_capabilities(text: str) -> bool:
+    """Только запрос списка возможностей («что умеешь»), без конкретной задачи."""
+    low = (text or "").strip().lower()
+    if not low or user_asks_feasibility(text):
+        return False
+    if any(marker in low for marker in _CAPABILITY_LIST_MARKERS):
+        return True
+    if ("что можешь" in low or "ты можешь" in low) and not _has_task_hint(low):
+        return True
+    return False
 
 
 def extract_chat_id(text: str) -> int | None:
@@ -349,27 +380,20 @@ def explain_next_step(checklist: dict[str, Any], *, user_text: str = "") -> str:
 
 def try_local_onboarding_reply(checklist: dict[str, Any], user_text: str) -> str | None:
     """
-    Ответ без LLM, если из текста уже понятен следующий шаг.
-    Возвращает None, если лучше вызвать LLM.
+    Резервный ответ без LLM — только при сбое модели.
+    Обычный диалог всегда идёт через LLM (живые формулировки).
     """
+    if user_asks_capabilities(user_text) or user_asks_feasibility(user_text):
+        return None
+
     hinted = apply_message_hints(checklist, user_text)
-    if user_asks_capabilities(user_text):
-        return CAPABILITIES_REPLY
-
     step = explain_next_step(hinted, user_text=user_text)
-    intro = _checklist_intro(hinted)
-
-    if hinted.get("role") and hinted.get("role") != checklist.get("role"):
-        return f"Записал.\n\n{step}"
 
     if user_needs_clarification(user_text) or user_wants_continue(user_text):
         prefix = "Поясню проще.\n\n" if user_needs_clarification(user_text) else ""
         return prefix + step
 
-    if hinted.get("role") and intro:
-        return step
-
-    if len((user_text or "").strip()) >= 12 and not hinted.get("role"):
+    if hinted.get("role"):
         return step
 
     return None

@@ -7,7 +7,9 @@ from app.services.agent.capabilities import (
     apply_message_hints,
     build_parse_fallback_reply,
     explain_next_step,
+    try_local_onboarding_reply,
     user_asks_capabilities,
+    user_asks_feasibility,
     user_needs_clarification,
 )
 
@@ -23,6 +25,18 @@ def test_user_asks_capabilities():
     assert user_asks_capabilities("Что ты умеешь?")
     assert user_asks_capabilities("Какие возможности есть?")
     assert not user_asks_capabilities("напомни мне завтра в 9")
+
+
+def test_feasibility_not_capabilities_list():
+    q = "Ты можешь сделать напоминание в своем чате?"
+    assert user_asks_feasibility(q)
+    assert not user_asks_capabilities(q)
+    assert try_local_onboarding_reply({}, q) is None
+
+
+def test_feasibility_infers_reminder_role():
+    data = apply_message_hints({}, "Ты можешь сделать напоминание в своем чате?")
+    assert data.get("role") == AgentRole.PERSONAL_REMINDER.value
 
 
 def test_apply_message_hints_extracts_chat_id():

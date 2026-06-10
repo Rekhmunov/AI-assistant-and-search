@@ -31,11 +31,9 @@ def test_local_reply_after_capabilities_not_loop():
     assert "одним сообщением" in reply.lower() or "примеры" in reply.lower()
 
 
-def test_local_reply_infers_role():
-    text = "Напоминай мне каждый день в 9:00 пить воду"
-    reply = try_local_onboarding_reply({}, text)
-    assert reply is not None
-    assert "9" in reply or "расписан" in reply.lower() or "Понял задачу" in reply
+def test_local_skips_feasibility_for_llm():
+    text = "Ты можешь сделать напоминание в личке?"
+    assert try_local_onboarding_reply({}, text) is None
 
 
 def test_user_wants_continue():

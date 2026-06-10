@@ -27,9 +27,16 @@ def _has_any(text: str, *needles: str) -> bool:
 def infer_role_from_text(text: str) -> str | None:
     """Эвристика: определить role по свободной формулировке задачи."""
     clean = (text or "").strip()
-    if len(clean) < 8:
-        return None
     low = clean.lower()
+    has_reminder = _has_any(low, "напомин", "уведом")
+    min_len = 5 if has_reminder else 8
+    if len(clean) < min_len:
+        return None
+
+    if has_reminder:
+        if _has_any(low, "групп") and not _has_any(low, "своем чат", "своём чат", "личн", "мне"):
+            return AgentRole.GROUP_REMINDER.value
+        return AgentRole.PERSONAL_REMINDER.value
 
     if _has_any(low, "модерац", "удаляй сообщ", "удалять сообщ", "стоп-слов", "антиспам", "фильтр спам"):
         return AgentRole.GROUP_MODERATION.value
@@ -64,10 +71,10 @@ def infer_role_from_text(text: str) -> str | None:
     if _has_any(low, "сводк", "итог дня", "резюме") and _has_any(low, "групп", "чат"):
         return AgentRole.GROUP_MESSAGE_LOG.value
 
-    if _has_any(low, "групп", "чат") and _has_any(low, "напомин", "уведом", "сообщ", "пиши", "отправ"):
+    if _has_any(low, "групп", "чат") and _has_any(low, "сообщ", "пиши", "отправ"):
         return AgentRole.GROUP_REMINDER.value
 
-    if _has_any(low, "напомин", "уведом", "пинг", "напиши мне", "присылай мне"):
+    if _has_any(low, "пинг", "напиши мне", "присылай мне"):
         return AgentRole.PERSONAL_REMINDER.value
 
     if _has_any(low, "команд", "/") and _has_any(low, "бот", "личк", "max"):
