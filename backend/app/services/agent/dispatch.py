@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.agent import AgentInstance, AgentReminder, AgentStatus
 from app.models.user import User
 from app.services.agent.content import build_delivery_content
+from app.services.agent.max_compliance import dispatch_stagger
 from app.services.agent.profile import agent_profile
 from app.services.agent.reminders import delivery_target, schedule_next_recurrence
 from app.services.bot import MaxBotService
@@ -61,7 +62,8 @@ async def dispatch_due_reminders(
     reminders = list(result.scalars().all())
     sent_count = 0
 
-    for reminder in reminders:
+    for index, reminder in enumerate(reminders):
+        await dispatch_stagger(index)
         agent_result = await db.execute(
             select(AgentInstance).where(AgentInstance.id == reminder.agent_id)
         )

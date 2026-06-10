@@ -1,7 +1,9 @@
 from app.services.bot_message_format import (
+    MAX_MESSAGE_TEXT_LIMIT,
     _MD_SOFT_BREAK,
     detect_max_text_format,
     prepare_max_message,
+    truncate_max_message_text,
 )
 
 
@@ -60,6 +62,16 @@ def test_editor_link_converts_to_markdown():
     text, fmt = prepare_max_message('<p>Читайте <a href="https://glosix.ru">сайт</a></p>')
     assert fmt == "markdown"
     assert "[сайт](https://glosix.ru)" in text
+
+
+def test_prepare_max_message_truncates_to_4000():
+    long_text = "x" * 5000
+    text, _fmt = prepare_max_message(long_text)
+    assert len(text) <= MAX_MESSAGE_TEXT_LIMIT
+
+
+def test_truncate_max_message_text():
+    assert len(truncate_max_message_text("a" * 5000)) <= MAX_MESSAGE_TEXT_LIMIT
 
 
 def test_explicit_html_format_uses_br_tags():

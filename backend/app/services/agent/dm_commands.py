@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.agent import AgentInstance, AgentRole, AgentStatus
 from app.services.agent.content import build_dm_command_content
+from app.services.agent.max_compliance import dm_command_allowed
 from app.services.agent.profile import agent_config, normalize_dm_command
 from app.services.agent.reminders import effective_max_user_id
 from app.services.bot import MaxBotService
@@ -107,6 +108,9 @@ async def handle_dm_message(
         return True
 
     command, _args = parse_dm_command(text)
+    if not await dm_command_allowed(max_user_id):
+        return True
+
     agent = await find_dm_agent_for_command(db, max_user_id=max_user_id, command=command)
     if not agent:
         return False

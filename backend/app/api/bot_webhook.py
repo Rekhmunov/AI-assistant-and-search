@@ -1,14 +1,12 @@
 import logging
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_db, get_redis
+from app.api.deps import get_db
 from app.core.config import get_settings
-from app.services.agent.dm_commands import handle_dm_message
 from app.services.agent.webhook import (
-    append_group_message,
     is_bot_added,
     is_bot_sender,
     is_direct_message,
@@ -18,6 +16,10 @@ from app.services.agent.webhook import (
     message_text,
     parse_chat_id,
     register_group_chat_for_user,
+)
+from app.services.agent.webhook_tasks import (
+    process_dm_message_background,
+    process_group_message_background,
 )
 from app.services.bot_welcome import send_bot_welcome
 
@@ -100,6 +102,7 @@ def _verify_webhook_secret(
 @router.post("/webhook")
 async def max_webhook(
     request: Request,
+    background_tasks: BackgroundTasks,
     db: Annotated[AsyncSession, Depends(get_db)],
     x_max_bot_api_secret: Annotated[str | None, Header(alias="X-Max-Bot-Api-Secret")] = None,
     x_webhook_secret: Annotated[str | None, Header(alias="X-Webhook-Secret")] = None,
@@ -139,28 +142,22 @@ async def max_webhook(
 
         text = message_text(payload)
         if is_direct_message(payload) and max_user_id is not None:
-            redis_client = await get_redis()
-            handled = await handle_dm_message(
-                db,
-                redis_client,
+            background_tasks.add_task(
+                process_dm_message_background,
                 max_user_id=max_user_id,
                 text=text,
             )
-            if handled:
-                await db.commit()
             return {"ok": True}
 
         chat_id = parse_chat_id(payload)
         if chat_id is not None:
-            count = await append_group_message(
-                db,
+            background_tasks.add_task(
+                process_group_message_background,
                 chat_id=chat_id,
                 text=text,
                 author=message_author(payload),
                 message_id_value=message_id(payload),
             )
-            if count:
-                await db.commit()
         return {"ok": True}
 
     return {"ok": True}

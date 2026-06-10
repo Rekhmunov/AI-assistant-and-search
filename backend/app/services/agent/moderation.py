@@ -10,6 +10,7 @@ from urllib.parse import urlparse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.agent import AgentInstance
+from app.services.agent.max_compliance import moderation_delete_allowed
 from app.services.agent.profile import agent_config
 from app.services.bot import MaxBotService
 
@@ -67,6 +68,9 @@ async def handle_group_moderation(
     bot = bot or MaxBotService()
     deleted = False
     if message_id:
+        if not await moderation_delete_allowed(chat_id):
+            logger.debug("moderation cooldown chat=%s", chat_id)
+            return False
         result = await bot.delete_message(message_id)
         deleted = result.ok
         if not result.ok:
@@ -86,6 +90,6 @@ async def handle_group_moderation(
             f"Автор: {author}\n"
             f"Текст: {preview}"
         )
-        await bot.send_message(int(agent.max_user_id), note)
+        await bot.send_message(int(agent.max_user_id), note, notify=False)
 
     return True

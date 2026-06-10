@@ -6,6 +6,9 @@ import re
 from html import escape, unescape
 from html.parser import HTMLParser
 
+# dev.max.ru/docs-api/methods/POST/messages — text до 4000 символов
+MAX_MESSAGE_TEXT_LIMIT = 4000
+
 _HTML_TAG_RE = re.compile(r"<[a-z][\s\S]*?>", re.IGNORECASE)
 _MARKDOWN_RE = re.compile(
     r"(\*\*.+\*\*|__.+__|~~.+~~|\+\+.+?\+\+|\[.+\]\([^)]+\)|`[^`]+`|\^\^.+?\^\^)",
@@ -40,6 +43,14 @@ def detect_max_text_format(text: str) -> str | None:
     return None
 
 
+def truncate_max_message_text(text: str, *, limit: int = MAX_MESSAGE_TEXT_LIMIT) -> str:
+    """Обрезает текст до лимита MAX API, не ломая UTF-8."""
+    if len(text) <= limit:
+        return text
+    trimmed = text[: limit - 1].rstrip()
+    return f"{trimmed}…"
+
+
 def prepare_max_message(text: str, text_format: str | None = None) -> tuple[str, str | None]:
     """
     Нормализовать текст перед отправкой в MAX.
@@ -49,7 +60,7 @@ def prepare_max_message(text: str, text_format: str | None = None) -> tuple[str,
     - строка внутри абзаца: два пробела + \\n (hard break в Markdown).
     Явный text_format=html оставляем для обратной совместимости (<br/>).
     """
-    text = text.strip()
+    text = truncate_max_message_text(text.strip())
     if not text:
         return text, text_format
 
