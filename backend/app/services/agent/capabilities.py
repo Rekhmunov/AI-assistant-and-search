@@ -6,27 +6,18 @@ import re
 from typing import Any
 
 from app.models.agent import AgentRole
+from app.services.agent.profile import GROUP_ROLES as PROFILE_GROUP_ROLES
+from app.services.agent.profile import USER_TASK_LABELS
 
-# Внутренние роли → понятные пользователю названия задач
-USER_TASK_LABELS = {
-    AgentRole.PERSONAL_REMINDER.value: "уведомления в ваш личный чат MAX",
-    AgentRole.GROUP_REMINDER.value: "сообщения в группу MAX",
-    AgentRole.GROUP_MESSAGE_LOG.value: "сводки из группы в ваш личный чат MAX",
-}
-
-GROUP_ROLES = frozenset(
-    {
-        AgentRole.GROUP_REMINDER.value,
-        AgentRole.GROUP_MESSAGE_LOG.value,
-    }
-)
+GROUP_ROLES = PROFILE_GROUP_ROLES
 
 CAPABILITIES_REPLY = (
     "Сейчас агент Glosix в MAX умеет:\n"
-    "• присылать вам уведомления в личный чат — по расписанию или разово;\n"
-    "• публиковать сообщения в группе, где бот Glosix — администратор;\n"
-    "• читать сообщения такой группы и присылать вам краткие сводки в личку;\n"
-    "• работать по расписанию с учётом вашего часового пояса.\n\n"
+    "• присылать уведомления и напоминания в личный чат — по расписанию;\n"
+    "• публиковать сообщения и картинки в группе (бот — администратор);\n"
+    "• собирать сводки из группы и новости по теме из интернета;\n"
+    "• модерировать группу (удалять сообщения по правилам);\n"
+    "• выполнять команды в личке (например /новости — если настроите команду).\n\n"
     "Опишите задачу своими словами — помогу настроить."
 )
 

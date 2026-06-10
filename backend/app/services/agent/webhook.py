@@ -1,4 +1,4 @@
-"""Обработка MAX webhook для групповых агентов."""
+"""Обработка MAX webhook для агентов."""
 
 from __future__ import annotations
 
@@ -10,6 +10,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.agent import AgentInstance, AgentRole, AgentStatus
+from app.services.agent.moderation import handle_group_moderation
+from app.services.agent.profile import group_setup_roles
 
 logger = logging.getLogger(__name__)
 
@@ -38,25 +40,80 @@ def parse_chat_id(payload: dict[str, Any]) -> int | None:
     return None
 
 
-def message_text(payload: dict[str, Any]) -> str:
+def _message_obj(payload: dict[str, Any]) -> dict[str, Any] | None:
     message = payload.get("message")
-    if isinstance(message, dict):
-        body = message.get("body")
-        if isinstance(body, dict) and body.get("text"):
-            return str(body["text"])
-        if message.get("text"):
-            return str(message["text"])
+    return message if isinstance(message, dict) else None
+
+
+def message_text(payload: dict[str, Any]) -> str:
+    message = _message_obj(payload)
+    if not message:
+        return ""
+    body = message.get("body")
+    if isinstance(body, dict) and body.get("text"):
+        return str(body["text"])
+    if message.get("text"):
+        return str(message["text"])
     return ""
 
 
+def message_id(payload: dict[str, Any]) -> str | None:
+    message = _message_obj(payload)
+    if not message:
+        return None
+    body = message.get("body")
+    if isinstance(body, dict):
+        for key in ("mid", "message_id", "id"):
+            raw = body.get(key)
+            if raw is not None:
+                return str(raw)
+    for key in ("mid", "message_id", "id"):
+        raw = message.get(key)
+        if raw is not None:
+            return str(raw)
+    return None
+
+
 def message_author(payload: dict[str, Any]) -> str:
-    message = payload.get("message")
-    if not isinstance(message, dict):
+    message = _message_obj(payload)
+    if not message:
         return "?"
     sender = message.get("sender") or message.get("from")
     if isinstance(sender, dict):
+        if sender.get("is_bot") or sender.get("isBot"):
+            return "bot"
         return str(sender.get("name") or sender.get("username") or sender.get("user_id") or "?")
     return "?"
+
+
+def is_bot_sender(payload: dict[str, Any]) -> bool:
+    message = _message_obj(payload)
+    if not message:
+        return False
+    sender = message.get("sender") or message.get("from")
+    if isinstance(sender, dict):
+        return bool(sender.get("is_bot") or sender.get("isBot"))
+    return False
+
+
+def is_direct_message(payload: dict[str, Any]) -> bool:
+    """Личное сообщение боту (нет group chat_id или chat_type dialog)."""
+    chat_id = parse_chat_id(payload)
+    if chat_id is None:
+        return True
+    chat = payload.get("chat")
+    if isinstance(chat, dict):
+        ctype = str(chat.get("type") or chat.get("chat_type") or "").lower()
+        if ctype in {"dialog", "private", "user"}:
+            return True
+    message = _message_obj(payload)
+    if isinstance(message, dict):
+        recipient = message.get("recipient")
+        if isinstance(recipient, dict):
+            ctype = str(recipient.get("type") or recipient.get("chat_type") or "").lower()
+            if ctype in {"dialog", "private", "user"}:
+                return True
+    return False
 
 
 def is_bot_added(payload: dict[str, Any]) -> bool:
@@ -75,13 +132,12 @@ async def register_group_chat_for_user(
     max_user_id: int,
     chat_id: int,
 ) -> None:
+    roles = group_setup_roles()
     result = await db.execute(
         select(AgentInstance).where(
             AgentInstance.max_user_id == max_user_id,
             AgentInstance.status.in_([AgentStatus.DRAFT.value, AgentStatus.COLLECTING.value]),
-            AgentInstance.role.in_(
-                [AgentRole.GROUP_REMINDER.value, AgentRole.GROUP_MESSAGE_LOG.value]
-            ),
+            AgentInstance.role.in_(roles),
         )
     )
     agents = result.scalars().all()
@@ -92,6 +148,22 @@ async def register_group_chat_for_user(
         if not agent.max_chat_id:
             agent.max_chat_id = chat_id
 
+    # Групповая доставка news/image при настройке
+    result2 = await db.execute(
+        select(AgentInstance).where(
+            AgentInstance.max_user_id == max_user_id,
+            AgentInstance.status.in_([AgentStatus.DRAFT.value, AgentStatus.COLLECTING.value]),
+            AgentInstance.role.in_([AgentRole.NEWS_DIGEST.value, AgentRole.IMAGE_POST.value]),
+        )
+    )
+    for agent in result2.scalars().all():
+        cfg = dict(agent.config or {})
+        if str(cfg.get("delivery_mode") or "").lower() == "group":
+            cfg["registered_group_chat_id"] = chat_id
+            agent.config = cfg
+            if not agent.max_chat_id:
+                agent.max_chat_id = chat_id
+
 
 async def append_group_message(
     db: AsyncSession,
@@ -99,9 +171,12 @@ async def append_group_message(
     chat_id: int,
     text: str,
     author: str,
+    message_id_value: str | None = None,
 ) -> int:
-    if not text.strip():
+    if not text.strip() or author == "bot":
         return 0
+    updated = 0
+
     result = await db.execute(
         select(AgentInstance).where(
             AgentInstance.status == AgentStatus.ACTIVE.value,
@@ -109,9 +184,7 @@ async def append_group_message(
             AgentInstance.max_chat_id == chat_id,
         )
     )
-    agents = result.scalars().all()
-    updated = 0
-    for agent in agents:
+    for agent in result.scalars().all():
         cfg = dict(agent.config or {})
         buffer = list(cfg.get("message_buffer") or [])
         buffer.append(
@@ -119,9 +192,29 @@ async def append_group_message(
                 "author": author,
                 "text": text[:1000],
                 "at": datetime.now(timezone.utc).isoformat(),
+                "message_id": message_id_value,
             }
         )
-        cfg["message_buffer"] = buffer[-100:]
+        cfg["message_buffer"] = buffer[-80:]
         agent.config = cfg
         updated += 1
+
+    mod_result = await db.execute(
+        select(AgentInstance).where(
+            AgentInstance.status == AgentStatus.ACTIVE.value,
+            AgentInstance.role == AgentRole.GROUP_MODERATION.value,
+            AgentInstance.max_chat_id == chat_id,
+        )
+    )
+    for agent in mod_result.scalars().all():
+        await handle_group_moderation(
+            db,
+            agent,
+            message_id=message_id_value,
+            text=text,
+            author=author,
+            chat_id=chat_id,
+        )
+        updated += 1
+
     return updated

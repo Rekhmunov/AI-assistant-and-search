@@ -12,6 +12,10 @@ SUPPORTED_ROLE_LABELS = {
     "personal_reminder": "уведомления в личный чат MAX",
     "group_reminder": "сообщения в группу MAX",
     "group_message_log": "сводки из группы в личный чат MAX",
+    "news_digest": "новостная сводка из интернета в MAX",
+    "image_post": "генерация и отправка изображений в MAX",
+    "group_moderation": "модерация сообщений в группе MAX",
+    "dm_assistant": "команда боту в личном чате MAX",
 }
 
 CANCEL_PHRASES = (

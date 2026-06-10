@@ -4,13 +4,17 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_db
+from app.api.deps import get_db, get_redis
 from app.core.config import get_settings
+from app.services.agent.dm_commands import handle_dm_message
 from app.services.agent.webhook import (
     append_group_message,
     is_bot_added,
+    is_bot_sender,
+    is_direct_message,
     is_message_created,
     message_author,
+    message_id,
     message_text,
     parse_chat_id,
     register_group_chat_for_user,
@@ -130,13 +134,30 @@ async def max_webhook(
         return {"ok": True}
 
     if is_message_created(payload):
+        if is_bot_sender(payload):
+            return {"ok": True}
+
+        text = message_text(payload)
+        if is_direct_message(payload) and max_user_id is not None:
+            redis_client = await get_redis()
+            handled = await handle_dm_message(
+                db,
+                redis_client,
+                max_user_id=max_user_id,
+                text=text,
+            )
+            if handled:
+                await db.commit()
+            return {"ok": True}
+
         chat_id = parse_chat_id(payload)
         if chat_id is not None:
             count = await append_group_message(
                 db,
                 chat_id=chat_id,
-                text=message_text(payload),
+                text=text,
                 author=message_author(payload),
+                message_id_value=message_id(payload),
             )
             if count:
                 await db.commit()

@@ -9,11 +9,19 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.agent import AgentInstance, AgentReminder, AgentRole, AgentStatus
+from app.models.agent import AgentInstance, AgentReminder, AgentStatus
+from app.models.user import User
+from app.services.agent.content import build_delivery_content
+from app.services.agent.profile import agent_profile
 from app.services.agent.reminders import delivery_target, schedule_next_recurrence
 from app.services.bot import MaxBotService
 
 logger = logging.getLogger(__name__)
+
+
+async def _resolve_user(db: AsyncSession, agent: AgentInstance) -> User | None:
+    result = await db.execute(select(User).where(User.id == agent.user_id))
+    return result.scalar_one_or_none()
 
 
 async def dispatch_due_reminders(
@@ -21,10 +29,19 @@ async def dispatch_due_reminders(
     *,
     agent_id: UUID | None = None,
     bot: MaxBotService | None = None,
+    redis_client=None,
     limit: int = 20,
 ) -> int:
     """Отправляет просроченные pending-напоминания. Возвращает число обработанных."""
     bot = bot or MaxBotService()
+    redis_owned = False
+    if redis_client is None:
+        import redis.asyncio as aioredis
+
+        from app.core.config import get_settings
+
+        redis_client = aioredis.from_url(get_settings().redis_url, decode_responses=True)
+        redis_owned = True
     now = datetime.now(timezone.utc)
     q = (
         select(AgentReminder)
@@ -60,26 +77,32 @@ async def dispatch_due_reminders(
             logger.warning("Agent reminder skipped: no max_user_id agent=%s", agent.id)
             continue
 
-        user_id, chat_id = delivery_target(agent)
-        text = reminder.message_text
+        user = await _resolve_user(db, agent)
+        if not user:
+            reminder.last_error = "user missing"
+            reminder.status = "failed"
+            continue
 
-        if agent.role == AgentRole.GROUP_MESSAGE_LOG.value:
-            cfg = dict(agent.config or {})
-            buffer = cfg.get("message_buffer") or []
-            if not buffer:
-                text = "Новых сообщений в группе с прошлой сводки нет."
-            else:
-                lines = [
-                    f"• {item.get('author', '?')}: {item.get('text', '')[:200]}"
-                    for item in buffer[-20:]
-                ]
-                text = f"{reminder.message_text}\n\n" + "\n".join(lines)
-                cfg["message_buffer"] = []
-                agent.config = cfg
+        user_id, chat_id = delivery_target(agent)
+        try:
+            content = await build_delivery_content(
+                db,
+                redis_client,
+                user,
+                agent,
+                reminder,
+                bot=bot,
+            )
+        except Exception as exc:
+            logger.exception("Agent content build failed agent=%s: %s", agent.id, exc)
+            reminder.last_error = str(exc)[:500]
+            reminder.status = "failed"
+            continue
 
         send_result = await bot.send_message(
             int(user_id) if user_id else None,
-            text,
+            content.text,
+            attachments=content.attachments or None,
             chat_id=int(chat_id) if chat_id else None,
         )
         if send_result.ok:
@@ -103,4 +126,6 @@ async def dispatch_due_reminders(
 
     if reminders:
         await db.flush()
+    if redis_owned:
+        await redis_client.aclose()
     return sent_count

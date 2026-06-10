@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.agent import AgentInstance, AgentReminder, AgentRole, AgentStatus
 from app.services.agent.onboarding import validate_activation
+from app.services.agent.profile import EVENT_DRIVEN_ROLES, SCHEDULED_ROLES, agent_profile
 from app.services.agent.schedule import parse_reminder_schedule
 
 
@@ -23,11 +24,24 @@ async def cancel_reminders_for_agent(db: AsyncSession, agent_id: UUID) -> int:
     return len(result.scalars().all())
 
 
-async def activate_agent_reminders(db: AsyncSession, agent: AgentInstance) -> AgentReminder:
+async def activate_agent(db: AsyncSession, agent: AgentInstance) -> AgentReminder | None:
+    """Активирует агента: напоминание для scheduled-ролей или просто ACTIVE для event-driven."""
     validate_activation(agent)
     await cancel_reminders_for_agent(db, agent.id)
-
     cfg = dict(agent.config or {})
+    profile = agent_profile(agent)
+
+    if agent.role in EVENT_DRIVEN_ROLES:
+        agent.status = AgentStatus.ACTIVE.value
+        cfg.pop("next_run_at", None)
+        agent.config = cfg
+        await db.flush()
+        return None
+
+    if agent.role not in SCHEDULED_ROLES:
+        raise ValueError("role_unsupported")
+
+    message_text = str(cfg.get("reminder_message") or cfg.get("image_prompt") or cfg.get("search_topic") or "—")
     run_at, recurrence = parse_reminder_schedule(
         str(cfg["schedule_text"]),
         tz_name=str(cfg.get("timezone") or "Europe/Moscow"),
@@ -35,7 +49,7 @@ async def activate_agent_reminders(db: AsyncSession, agent: AgentInstance) -> Ag
     reminder = AgentReminder(
         agent_id=agent.id,
         run_at=run_at,
-        message_text=str(cfg["reminder_message"]),
+        message_text=message_text,
         recurrence=recurrence,
         status="pending",
     )
@@ -45,6 +59,10 @@ async def activate_agent_reminders(db: AsyncSession, agent: AgentInstance) -> Ag
     agent.config = cfg
     await db.flush()
     return reminder
+
+
+async def activate_agent_reminders(db: AsyncSession, agent: AgentInstance) -> AgentReminder | None:
+    return await activate_agent(db, agent)
 
 
 async def schedule_next_recurrence(db: AsyncSession, reminder: AgentReminder) -> AgentReminder | None:
@@ -117,10 +135,9 @@ def effective_max_user_id(agent: AgentInstance) -> int | None:
 def delivery_target(agent: AgentInstance) -> tuple[int | None, int | None]:
     """(user_id, chat_id) — куда слать в MAX."""
     max_uid = effective_max_user_id(agent)
-    if agent.role == AgentRole.PERSONAL_REMINDER.value:
-        return max_uid, None
+    profile = agent_profile(agent)
+    if profile.delivery_mode == "group":
+        return None, agent.max_chat_id
     if agent.role == AgentRole.GROUP_REMINDER.value:
         return None, agent.max_chat_id
-    if agent.role == AgentRole.GROUP_MESSAGE_LOG.value:
-        return max_uid, None
     return max_uid, None

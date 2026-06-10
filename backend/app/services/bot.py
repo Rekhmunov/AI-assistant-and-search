@@ -99,6 +99,29 @@ class MaxBotService:
 
         return BotSendResult(ok=False, error="send failed")
 
+    async def delete_message(self, message_id: str) -> BotSendResult:
+        """Удаляет сообщение в MAX (бот должен иметь право; обычно < 24 ч)."""
+        if not self.settings.bot_token.strip():
+            return BotSendResult(ok=False, error="bot_token not configured")
+        mid = (message_id or "").strip()
+        if not mid:
+            return BotSendResult(ok=False, error="message_id required")
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.delete(
+                    f"{BOT_API_BASE}/messages",
+                    params={"message_id": mid},
+                    headers=self._auth_headers(json_body=False),
+                )
+        except httpx.HTTPError as exc:
+            logger.warning("MAX delete_message network error mid=%s: %s", mid, exc)
+            return BotSendResult(ok=False, error=str(exc))
+        if response.is_success:
+            return BotSendResult(ok=True)
+        detail = response.text[:500]
+        logger.warning("MAX delete_message failed mid=%s HTTP %s: %s", mid, response.status_code, detail)
+        return BotSendResult(ok=False, error=detail or f"HTTP {response.status_code}")
+
     async def upload_media(self, data: bytes, filename: str, media_type: str) -> str | None:
         """Upload image or video to MAX and return attachment token."""
         if not self.settings.bot_token.strip():

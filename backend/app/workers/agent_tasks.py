@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 
+import redis.asyncio as aioredis
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.core.config import get_settings
@@ -24,10 +25,14 @@ async def _dispatch_agent_reminders_async() -> None:
     engine = create_async_engine(settings.database_url)
     session_factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
-    async with session_factory() as db:
-        count = await dispatch_due_reminders(db)
-        await db.commit()
-        if count:
-            logger.info("Celery dispatched %s agent reminders", count)
-
+    redis_client = aioredis.from_url(settings.redis_url, decode_responses=True)
+    count = 0
+    try:
+        async with session_factory() as db:
+            count = await dispatch_due_reminders(db, redis_client=redis_client)
+            await db.commit()
+    finally:
+        await redis_client.aclose()
+    if count:
+        logger.info("Celery dispatched %s agent reminders", count)
     await engine.dispose()

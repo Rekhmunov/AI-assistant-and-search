@@ -19,6 +19,13 @@ from app.services.agent.capabilities import (
 )
 from app.services.agent.constants import CANCEL_PHRASES, SUPPORTED_ROLE_LABELS
 from app.services.agent.onboarding import validate_activation
+from app.services.agent.profile import (
+    EVENT_DRIVEN_ROLES,
+    GROUP_ROLES,
+    SCHEDULED_ROLES,
+    VALID_ROLES,
+    normalize_dm_command,
+)
 from app.services.providers.factory import resolve_runtime_providers
 
 logger = logging.getLogger(__name__)
@@ -37,36 +44,36 @@ CONFIRM_PHRASES = (
     "верно",
 )
 
-VALID_ROLES = frozenset(
-    {
-        AgentRole.PERSONAL_REMINDER.value,
-        AgentRole.GROUP_REMINDER.value,
-        AgentRole.GROUP_MESSAGE_LOG.value,
-    }
-)
-
 AGENT_SYSTEM_PROMPT = """Ты — ассистент настройки агента Glosix для мессенджера MAX.
 Веди живой диалог на русском. Отвечай только валидным JSON (без markdown-обёртки).
 
-Что технически доступно (внутренняя модель — НЕ озвучивай списком без запроса):
-• Писать пользователю в личный чат MAX (dm_out).
-• Писать в группу MAX, где бот Glosix — администратор (group_out).
-• Читать сообщения группы и присылать сводку/отчёт в личный чат (group_in + dm_out).
-• Срабатывание по расписанию или разово («завтра в 9:00», «через 15 минут», «каждый понедельник»).
+Что доступно в MAX (внутренняя модель — НЕ озвучивай списком без запроса):
+• Личный чат: уведомления, новости по теме, картинки, команды боту.
+• Группа (бот — админ): сообщения, картинки, сводки, модерация (удаление по правилам).
+• Расписание или команда в личке (для dm_assistant).
 
-Внутренние role (определи сам по смыслу запроса пользователя):
-- personal_reminder — уведомления/напоминания в личный чат пользователя.
-- group_reminder — сообщения/напоминания в группу MAX.
-- group_message_log — чтение группы + сводка в личный чат.
+Внутренние role (определи сам по запросу):
+- personal_reminder — текст в личку по расписанию
+- group_reminder — текст в группу по расписанию
+- group_message_log — сводка сообщений группы в личку (LLM) по расписанию
+- news_digest — поиск новостей по теме + сводка (личка или группа: delivery_mode)
+- image_post — генерация картинки по промпту (личка или группа)
+- group_moderation — удаление сообщений в группе по правилам (стоп-слова, ссылки)
+- dm_assistant — ответ в личке на команду (dm_command), без расписания
 
-Чеклист (заполняй по мере диалога, null если неизвестно; уже заполненное из current_checklist сохраняй):
-- role: personal_reminder | group_reminder | group_message_log | null
-- schedule_text: когда срабатывать (естественный язык)
-- timezone: IANA (Europe/Moscow) или UTC+N — уточни, если в расписании есть время суток
-- reminder_message: текст сообщения или сводки
-- max_chat_id: числовой ID группы (для group_*)
-- bot_is_group_admin: true/false/null
-- bot_can_read_messages: true/false/null (обязательно true для group_message_log)
+Чеклист (сохраняй заполненное из current_checklist):
+- role — см. выше
+- schedule_text — для scheduled-ролей (не для dm_assistant / group_moderation)
+- timezone — если в расписании есть время
+- reminder_message — текст/заголовок сообщения
+- search_topic — тема для news_digest или dm_assistant с веб-сводкой
+- image_prompt — описание картинки для image_post / dm_assistant
+- dm_command — команда без слэша, напр. news (только dm_assistant). Если несколько агентов в личке — у каждого своя команда
+- delivery_mode: dm | group — куда отправлять (news_digest, image_post)
+- max_chat_id — ID группы
+- bot_is_group_admin / bot_can_read_messages
+- moderation_stop_words — через запятую (group_moderation)
+- moderation_block_links: true/false
 
 Правила диалога:
 - Принимай задачу своими словами. НЕ заставляй выбирать из списка и НЕ называй «whitelist».
@@ -90,14 +97,20 @@ AGENT_SYSTEM_PROMPT = """Ты — ассистент настройки аген
 Формат ответа:
 {
   "reply": "текст",
-  "checklist": {
+    "checklist": {
     "role": null,
     "schedule_text": null,
     "timezone": null,
     "reminder_message": null,
+    "search_topic": null,
+    "image_prompt": null,
+    "dm_command": null,
+    "delivery_mode": null,
     "max_chat_id": null,
     "bot_is_group_admin": null,
-    "bot_can_read_messages": null
+    "bot_can_read_messages": null,
+    "moderation_stop_words": null,
+    "moderation_block_links": null
   },
   "ready_for_confirmation": false,
   "confirmation_summary": null,
@@ -112,9 +125,15 @@ class ChecklistState:
     schedule_text: str | None = None
     timezone: str | None = None
     reminder_message: str | None = None
+    search_topic: str | None = None
+    image_prompt: str | None = None
+    dm_command: str | None = None
+    delivery_mode: str | None = None
     max_chat_id: int | None = None
     bot_is_group_admin: bool | None = None
     bot_can_read_messages: bool | None = None
+    moderation_stop_words: str | None = None
+    moderation_block_links: bool | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -122,9 +141,15 @@ class ChecklistState:
             "schedule_text": self.schedule_text,
             "timezone": self.timezone,
             "reminder_message": self.reminder_message,
+            "search_topic": self.search_topic,
+            "image_prompt": self.image_prompt,
+            "dm_command": self.dm_command,
+            "delivery_mode": self.delivery_mode,
             "max_chat_id": self.max_chat_id,
             "bot_is_group_admin": self.bot_is_group_admin,
             "bot_can_read_messages": self.bot_can_read_messages,
+            "moderation_stop_words": self.moderation_stop_words,
+            "moderation_block_links": self.moderation_block_links,
         }
 
     @classmethod
@@ -139,14 +164,28 @@ class ChecklistState:
         role = raw.get("role")
         if role not in VALID_ROLES:
             role = None
+        dm = _str_or_none(raw.get("dm_command"))
+        if dm:
+            dm = normalize_dm_command(dm)
+        delivery = _str_or_none(raw.get("delivery_mode"))
+        if delivery:
+            delivery = delivery.lower()
+            if delivery not in {"dm", "group"}:
+                delivery = None
         return cls(
             role=role,
             schedule_text=_str_or_none(raw.get("schedule_text")),
             timezone=_str_or_none(raw.get("timezone")),
             reminder_message=_str_or_none(raw.get("reminder_message")),
+            search_topic=_str_or_none(raw.get("search_topic")),
+            image_prompt=_str_or_none(raw.get("image_prompt")),
+            dm_command=dm,
+            delivery_mode=delivery,
             max_chat_id=chat_id,
             bot_is_group_admin=_bool_or_none(raw.get("bot_is_group_admin")),
             bot_can_read_messages=_bool_or_none(raw.get("bot_can_read_messages")),
+            moderation_stop_words=_str_or_none(raw.get("moderation_stop_words")),
+            moderation_block_links=_bool_or_none(raw.get("moderation_block_links")),
         )
 
 
@@ -201,10 +240,17 @@ def load_checklist(agent: AgentInstance) -> ChecklistState:
         {
             "role": agent.role,
             "schedule_text": cfg.get("schedule_text"),
+            "timezone": cfg.get("timezone"),
             "reminder_message": cfg.get("reminder_message"),
+            "search_topic": cfg.get("search_topic"),
+            "image_prompt": cfg.get("image_prompt"),
+            "dm_command": cfg.get("dm_command"),
+            "delivery_mode": cfg.get("delivery_mode"),
             "max_chat_id": agent.max_chat_id or cfg.get("max_chat_id"),
             "bot_is_group_admin": cfg.get("bot_is_group_admin"),
             "bot_can_read_messages": cfg.get("bot_can_read_messages"),
+            "moderation_stop_words": cfg.get("moderation_stop_words"),
+            "moderation_block_links": cfg.get("moderation_block_links"),
         }
     )
 
@@ -223,8 +269,27 @@ def apply_checklist_to_agent(agent: AgentInstance, checklist: ChecklistState) ->
     cfg["schedule_text"] = checklist.schedule_text
     cfg["timezone"] = checklist.timezone or cfg.get("timezone") or "Europe/Moscow"
     cfg["reminder_message"] = checklist.reminder_message
+    cfg["search_topic"] = checklist.search_topic
+    cfg["image_prompt"] = checklist.image_prompt
+    cfg["dm_command"] = checklist.dm_command
+    if checklist.delivery_mode:
+        cfg["delivery_mode"] = checklist.delivery_mode
     cfg["bot_is_group_admin"] = checklist.bot_is_group_admin
     cfg["bot_can_read_messages"] = checklist.bot_can_read_messages
+    if checklist.moderation_stop_words:
+        cfg["moderation_stop_words"] = checklist.moderation_stop_words
+        rules = dict(cfg.get("moderation_rules") or {})
+        rules["stop_words"] = [
+            w.strip().lower()
+            for w in checklist.moderation_stop_words.split(",")
+            if w.strip()
+        ]
+        cfg["moderation_rules"] = rules
+    if checklist.moderation_block_links is not None:
+        cfg["moderation_block_links"] = checklist.moderation_block_links
+        rules = dict(cfg.get("moderation_rules") or {})
+        rules["block_links"] = checklist.moderation_block_links
+        cfg["moderation_rules"] = rules
     if checklist.max_chat_id is not None:
         cfg["max_chat_id"] = checklist.max_chat_id
         agent.max_chat_id = checklist.max_chat_id
@@ -244,20 +309,44 @@ def apply_checklist_to_agent(agent: AgentInstance, checklist: ChecklistState) ->
 
 def checklist_missing_fields(checklist: ChecklistState) -> list[str]:
     missing: list[str] = []
-    if not checklist.role:
+    role = checklist.role
+    if not role:
         missing.append("role")
-    if not checklist.schedule_text:
-        missing.append("schedule")
-    if checklist.schedule_text and not checklist.timezone:
-        missing.append("timezone")
-    if not checklist.reminder_message:
+        return missing
+
+    if role in SCHEDULED_ROLES:
+        if not checklist.schedule_text:
+            missing.append("schedule")
+        if checklist.schedule_text and not checklist.timezone:
+            missing.append("timezone")
+
+    if role == AgentRole.NEWS_DIGEST.value:
+        if not (checklist.search_topic or checklist.reminder_message):
+            missing.append("search_topic")
+    elif role == AgentRole.IMAGE_POST.value:
+        if not (checklist.image_prompt or checklist.reminder_message):
+            missing.append("image_prompt")
+    elif role == AgentRole.DM_ASSISTANT.value:
+        if not normalize_dm_command(checklist.dm_command):
+            missing.append("dm_command")
+        if not (checklist.reminder_message or checklist.search_topic or checklist.image_prompt):
+            missing.append("dm_action")
+    elif role == AgentRole.GROUP_MODERATION.value:
+        if not checklist.moderation_stop_words and checklist.moderation_block_links is not True:
+            missing.append("moderation_rules")
+    elif not checklist.reminder_message:
         missing.append("message")
-    if checklist.role in {AgentRole.GROUP_REMINDER.value, AgentRole.GROUP_MESSAGE_LOG.value}:
+
+    needs_group = role in GROUP_ROLES or (
+        role in {AgentRole.NEWS_DIGEST.value, AgentRole.IMAGE_POST.value}
+        and (checklist.delivery_mode or "dm") == "group"
+    )
+    if needs_group:
         if not checklist.max_chat_id:
             missing.append("group_chat")
         if checklist.bot_is_group_admin is not True:
             missing.append("bot_admin")
-        if checklist.role == AgentRole.GROUP_MESSAGE_LOG.value and checklist.bot_can_read_messages is not True:
+        if role == AgentRole.GROUP_MESSAGE_LOG.value and checklist.bot_can_read_messages is not True:
             missing.append("bot_read")
     return missing
 
@@ -402,24 +491,33 @@ def build_confirmation_prompt(summary: str | None, checklist: ChecklistState) ->
     if summary:
         return f"{summary}\n\nЗапустить агента? Ответьте «да» или «подтверждаю»."
     role_label = SUPPORTED_ROLE_LABELS.get(checklist.role or "", checklist.role or "—")
-    return (
-        "Проверьте настройки перед запуском:\n"
-        f"• Задача: {role_label}\n"
-        f"• Расписание: {checklist.schedule_text or '—'}\n"
-        f"• Часовой пояс: {checklist.timezone or 'Europe/Moscow'}\n"
-        f"• Текст: {checklist.reminder_message or '—'}\n"
-        + (f"• Группа MAX: {checklist.max_chat_id}\n" if checklist.max_chat_id else "")
-        + "\nЗапустить агента? Ответьте «да» или «подтверждаю»."
-    )
+    lines = [
+        "Проверьте настройки перед запуском:",
+        f"• Задача: {role_label}",
+    ]
+    if checklist.schedule_text:
+        lines.append(f"• Расписание: {checklist.schedule_text}")
+        lines.append(f"• Часовой пояс: {checklist.timezone or 'Europe/Moscow'}")
+    if checklist.search_topic:
+        lines.append(f"• Тема: {checklist.search_topic}")
+    if checklist.image_prompt:
+        lines.append(f"• Промпт картинки: {checklist.image_prompt}")
+    if checklist.dm_command:
+        lines.append(f"• Команда в MAX: /{checklist.dm_command}")
+    if checklist.reminder_message:
+        lines.append(f"• Текст: {checklist.reminder_message}")
+    if checklist.max_chat_id:
+        lines.append(f"• Группа MAX: {checklist.max_chat_id}")
+    if checklist.moderation_stop_words or checklist.moderation_block_links:
+        lines.append("• Модерация: настроена")
+    lines.append("\nЗапустить агента? Ответьте «да» или «подтверждаю».")
+    return "\n".join(lines)
 
 
 def try_validate_checklist(checklist: ChecklistState) -> None:
     class _AgentShim:
         role = checklist.role
         max_chat_id = checklist.max_chat_id
-        config = {
-            "schedule_text": checklist.schedule_text,
-            "reminder_message": checklist.reminder_message,
-        }
+        config = checklist.to_dict()
 
     validate_activation(_AgentShim())  # type: ignore[arg-type]

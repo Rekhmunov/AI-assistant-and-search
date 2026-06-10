@@ -21,6 +21,10 @@ class AgentRole(str, enum.Enum):
     PERSONAL_REMINDER = "personal_reminder"
     GROUP_REMINDER = "group_reminder"
     GROUP_MESSAGE_LOG = "group_message_log"
+    NEWS_DIGEST = "news_digest"
+    IMAGE_POST = "image_post"
+    GROUP_MODERATION = "group_moderation"
+    DM_ASSISTANT = "dm_assistant"
 
 
 class AgentInstance(Base):

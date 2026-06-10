@@ -28,6 +28,7 @@ from app.services.agent.llm_onboarding import (
     user_wants_cancel,
 )
 from app.services.agent.onboarding import activation_summary
+from app.services.agent.profile import EVENT_DRIVEN_ROLES, SCHEDULED_ROLES
 from app.services.agent.reminders import activate_agent_reminders, effective_max_user_id
 
 logger = logging.getLogger(__name__)
@@ -184,23 +185,31 @@ async def handle_agent_message(
                 raise ValueError("max_required")
             await activate_agent_reminders(db, agent)
             await db.commit()
-            sent = await dispatch_due_reminders(db, agent_id=agent.id)
-            await db.commit()
+            sent = 0
+            if agent.role in SCHEDULED_ROLES:
+                sent = await dispatch_due_reminders(db, agent_id=agent.id, redis_client=redis_client)
+                await db.commit()
             summary = activation_summary(agent)
-            if sent:
-                summary += "\n\nПервое напоминание уже отправлено в MAX."
-            else:
-                summary += "\n\nНапоминание запланировано — бот напишет в MAX в указанное время."
-                if not effective_max_user_id(agent):
-                    summary += "\n\n⚠️ Аккаунт MAX не привязан — привяжите в Профиле, иначе напоминания не дойдут."
+            if agent.role in SCHEDULED_ROLES:
+                if sent:
+                    summary += "\n\nПервый запуск уже выполнен — проверьте MAX."
+                else:
+                    summary += "\n\nЗапуск запланирован — бот напишет в MAX в указанное время."
+                    if not effective_max_user_id(agent):
+                        summary += (
+                            "\n\n⚠️ Аккаунт MAX не привязан — привяжите в Профиле, "
+                            "иначе сообщения не дойдут."
+                        )
+            elif agent.role in EVENT_DRIVEN_ROLES:
+                summary += "\n\nАгент слушает события в MAX — дополнительных действий не требуется."
             assistant = await _assistant_reply(db, thread, summary)
             await db.commit()
             return user_msg, assistant, agent
         except ValueError as exc:
             logger.warning("Agent activation validation failed: %s", exc)
             llm_result.reply = (
-                f"{llm_result.reply}\n\nНе удалось запустить: уточните расписание "
-                "(например «завтра в 9:00» или «через 10 минут») и текст напоминания."
+                f"{llm_result.reply}\n\nНе удалось запустить: проверьте обязательные поля "
+                "в настройках агента и попробуйте снова."
             )
             cfg["awaiting_confirmation"] = False
             agent.config = cfg
