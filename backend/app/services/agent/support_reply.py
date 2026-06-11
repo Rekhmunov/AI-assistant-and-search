@@ -104,6 +104,8 @@ async def build_interactive_reply(
     vision_images: list[VisionImage] | None = None,
     bot: MaxBotService | None = None,
     force_command: bool = False,
+    chat_id: int | None = None,
+    author: str = "",
 ) -> tuple[str, list[dict]]:
     """Возвращает (text, attachments) для send_message."""
     cfg = agent_config(agent)
@@ -158,6 +160,20 @@ async def build_interactive_reply(
         question = "Обработай изображение согласно запросу пользователя."
 
     from app.services.agent.document_delivery import try_build_file_reply
+    from app.services.agent.expense_tracker import handle_expense_tracker_reply
+
+    expense_reply = await handle_expense_tracker_reply(
+        db,
+        redis_client,
+        user,
+        agent,
+        question,
+        bot=bot,
+        chat_id=chat_id,
+        author=author,
+    )
+    if expense_reply is not None:
+        return expense_reply.text, expense_reply.attachments
 
     file_reply = await try_build_file_reply(
         db,

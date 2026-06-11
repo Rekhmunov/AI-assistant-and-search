@@ -294,6 +294,13 @@ def apply_message_hints(checklist: dict[str, Any], text: str) -> dict[str, Any]:
 
 
 def _checklist_intro(checklist: dict[str, Any]) -> str:
+    if str(checklist.get("task_mode") or "").lower() == "expense_tracker":
+        cats = checklist.get("expense_categories") or []
+        cat_hint = f" Категорий: {len(cats)}." if cats else ""
+        return (
+            "Понял задачу: **учёт затрат в группе MAX** — формат «Сумма + описание», "
+            f"категоризация, Excel-отчёт по запросу.{cat_hint}"
+        )
     role = checklist.get("role")
     task = USER_TASK_LABELS.get(role or "", "")
     parts: list[str] = []

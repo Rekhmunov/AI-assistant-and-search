@@ -65,7 +65,7 @@ AGENT_SYSTEM_PROMPT = """Ты — ассистент настройки аген
 - news_digest — поиск новостей по теме + пост в MAX (личка или группа: delivery_mode). Может быть текст + 1–3 фото (content_pipeline=web_digest_images)
 - image_post — только генерация картинки по промпту (личка или группа), без новостного текста
 - group_moderation — удаление сообщений в группе по правилам (стоп-слова, ссылки)
-- dm_assistant — интерактивный помощник: личка и/или группа, vision (фото/OCR/перевод), база знаний из документов
+- dm_assistant — интерактивный помощник: личка и/или группа, vision (фото/OCR/перевод), база знаний, учёт данных в группе (затраты в таблицу, отчёт Excel по запросу)
 
 Чеклист (сохраняй заполненное из current_checklist):
 - role — см. выше
@@ -111,6 +111,7 @@ AGENT_SYSTEM_PROMPT = """Ты — ассистент настройки аген
 - «каждый понедельник присылай отчёт в Excel» → personal_reminder, schedule_text, reminder_message=инструкция, content_pipeline=document_gen, output_format=xlsx
 - «отправляй PDF-договор по шаблону каждый месяц» → personal_reminder/group_reminder, content_pipeline=document_gen, output_format=pdf, reminder_message=что включить в документ
 - «пришли картинку заката по команде» → image_post или dm_assistant, content_pipeline=image_gen, image_prompt
+- «в группу пишу затраты Сумма+описание, раскидывай по категориям, по запросу excel-отчёт» → dm_assistant, scope=group, interaction_mode=support, task_mode=expense_tracker, expense_categories=[список], support_instructions=полная логика; расписание НЕ нужно
 - «раз в час» / «каждый час» / «every hour» → schedule_text=каждый час (НЕ переспрашивай расписание)
 - «отвечай в группе на вопросы, переводи текст с фото» → dm_assistant, scope=group, interaction_mode=support
 - «удаляй спам и ссылки в группе» → group_moderation, moderation_stop_words/block_links
@@ -186,6 +187,8 @@ class ChecklistState:
     post_image_count_min: int | None = None
     post_image_count_max: int | None = None
     output_format: str | None = None
+    task_mode: str | None = None
+    expense_categories: list[str] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -211,6 +214,8 @@ class ChecklistState:
             "post_image_count_min": self.post_image_count_min,
             "post_image_count_max": self.post_image_count_max,
             "output_format": self.output_format,
+            "task_mode": self.task_mode,
+            "expense_categories": self.expense_categories,
         }
 
     @classmethod
@@ -270,6 +275,8 @@ class ChecklistState:
             post_image_count_min=_int_or_none(raw.get("post_image_count_min")),
             post_image_count_max=_int_or_none(raw.get("post_image_count_max")),
             output_format=_normalize_output_format(raw.get("output_format")),
+            task_mode=_str_or_none(raw.get("task_mode")),
+            expense_categories=_list_of_str(raw.get("expense_categories")),
         )
 
 
@@ -287,6 +294,13 @@ def _str_or_none(value: Any) -> str | None:
         return None
     text = str(value).strip()
     return text or None
+
+
+def _list_of_str(value: Any) -> list[str] | None:
+    if not isinstance(value, list):
+        return None
+    items = [str(item).strip() for item in value if str(item).strip()]
+    return items or None
 
 
 def _normalize_output_format(value: Any) -> str | None:
@@ -560,6 +574,10 @@ def apply_checklist_to_agent(agent: AgentInstance, checklist: ChecklistState) ->
         cfg["post_image_count_max"] = checklist.post_image_count_max
     if checklist.output_format:
         cfg["output_format"] = checklist.output_format
+    if checklist.task_mode:
+        cfg["task_mode"] = checklist.task_mode
+    if checklist.expense_categories:
+        cfg["expense_categories"] = checklist.expense_categories
     if checklist.max_chat_id is not None:
         cfg["max_chat_id"] = checklist.max_chat_id
         agent.max_chat_id = checklist.max_chat_id
@@ -726,6 +744,11 @@ def _context_block(
         lines.append(
             "user_signal: context_reset — контекст сброшен; не используй старый диалог; "
             "веди себя как умный ассистент-агент, помоги с новой задачей с чистого листа"
+        )
+    if str(checklist.task_mode or cfg.get("task_mode") or "").lower() == "expense_tracker":
+        lines.append(
+            "user_signal: expense_tracker — слушай группу, парси «Сумма + описание», "
+            "категории из expense_categories; расписание не спрашивай"
         )
     return "\n".join(lines)
 

@@ -83,6 +83,8 @@ async def handle_group_interactive(
                 message_id_value=message_id_value,
                 bot=bot,
                 force_command=interaction_mode(cfg) == "command" and bool(command),
+                chat_id=chat_id,
+                author=author,
             )
             send_result = await bot.send_message(
                 None,

@@ -105,12 +105,16 @@ def _is_user_group(low: str) -> bool:
 
 def infer_role_from_text(text: str) -> str | None:
     """Эвристика: определить role по свободной формулировке задачи."""
+    from app.services.agent.expense_tracker import is_structured_group_tracker_task
     from app.services.agent.operational import is_operational_max_query
 
     clean = (text or "").strip()
     low = clean.lower()
     if is_operational_max_query(clean):
         return None
+
+    if is_structured_group_tracker_task(clean):
+        return AgentRole.DM_ASSISTANT.value
     has_reminder = _has_any(low, "напомин", "уведом")
     min_len = 5 if has_reminder else 8
     if len(clean) < min_len:
@@ -164,6 +168,9 @@ def infer_role_from_text(text: str) -> str | None:
 
     if _has_any(low, "сводк", "итог дня", "резюме") and _has_any(low, "групп", "чат"):
         return AgentRole.GROUP_MESSAGE_LOG.value
+
+    if is_structured_group_tracker_task(clean):
+        return AgentRole.DM_ASSISTANT.value
 
     if _is_user_group(low) and _has_any(low, "сообщ", "пиши", "напис", "отправ", "пост"):
         return AgentRole.GROUP_REMINDER.value
@@ -426,6 +433,10 @@ def infer_checklist_fields(text: str, data: dict[str, Any]) -> dict[str, Any]:
 
     if data.get("schedule_text") and not data.get("timezone"):
         data["timezone"] = DEFAULT_AGENT_TIMEZONE
+
+    from app.services.agent.expense_tracker import apply_expense_tracker_checklist
+
+    data = apply_expense_tracker_checklist(data, clean)
 
     from app.services.agent.document_delivery import infer_output_format, wants_document_delivery
 
