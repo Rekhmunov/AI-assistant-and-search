@@ -19,6 +19,9 @@ class ReflectionResult:
 
 _REFLECTION_SYSTEM = """Ты проверяешь ответ агента Glosix перед отправкой пользователю.
 Верни JSON: {"ok": true/false, "revised_reply": "исправленный ответ или null", "notes": "кратко"}
+revised_reply — ТОЛЬКО готовый текст для пользователя на русском. Без инструкций ассистенту,
+без «пользователь спрашивает», без названий tools, без «пример ответа», без «ожидайте».
+Если нужна только оценка — revised_reply=null, детали в notes.
 ok=true если ответ логичен, закрывает задачу, не путает расписание с интерактивным режимом.
 ok=false если ответ шаблонный, не по теме, просит расписание там где нужно слушать группу, или противоречит agent_spec.
 ok=false если пользователь только спрашивал/проверял (админ, доступ, список чатов), а ответ начал настройку агента
@@ -68,7 +71,12 @@ async def critique_agent_reply(
     revised = data.get("revised_reply")
     notes = str(data.get("notes") or "")
     if isinstance(revised, str) and revised.strip():
-        return ReflectionResult(ok=ok, revised_reply=revised.strip(), notes=notes)
+        from app.services.agent.agent_reply_sanitize import sanitize_user_facing_reply
+
+        clean = sanitize_user_facing_reply(revised)
+        if clean:
+            return ReflectionResult(ok=ok, revised_reply=clean, notes=notes)
+        return ReflectionResult(ok=ok, revised_reply=None, notes=notes or "meta_reply_discarded")
     return ReflectionResult(ok=ok, revised_reply=None, notes=notes)
 
 

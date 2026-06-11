@@ -135,11 +135,16 @@ async def run_onboarding_loop(
                 spec_context=spec_context_block(spec) + "\n" + _context_block(user, agent, result.checklist, last_user),
                 answer_model=answer_model,
             )
-            if reflection.revised_reply and (not reflection.ok or reflection.revised_reply != draft):
+            if (
+                reflection.revised_reply
+                and (not reflection.ok or reflection.revised_reply != draft)
+            ):
                 revised, revised_sources = prepare_agent_reply_for_ui(
                     reflection.revised_reply,
                     tool_trace,
                 )
+                if not revised.strip():
+                    revised = draft
                 result = LlmTurnResult(
                     reply=revised,
                     checklist=result.checklist,
@@ -217,8 +222,9 @@ async def run_runtime_loop(
                 answer_model=answer_model,
             )
             if reflection.revised_reply and (not reflection.ok or reflection.notes):
+                revised_text = reflection.revised_reply.strip() or result.text
                 result = RuntimeLoopResult(
-                    text=reflection.revised_reply,
+                    text=revised_text,
                     attachments=result.attachments,
                     tool_trace=result.tool_trace,
                 )

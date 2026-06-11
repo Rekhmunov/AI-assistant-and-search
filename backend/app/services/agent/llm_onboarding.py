@@ -146,8 +146,7 @@ AGENT_SYSTEM_PROMPT = """Ты — ассистент Glosix в диалоге п
 - Если max_linked=false — объясни привязку MAX (Профиль → войти через MAX). Не активируй агента.
 - Когда обязательные поля заполнены: ready_for_confirmation=true и confirmation_summary с итогом.
 - activate=true только при явном подтверждении (да/подтверждаю) И max_linked=true.
-- reply — текст пользователю (можно markdown), без дублирования JSON.
-- Запрещены ответы-обещания без результата («проверю», «отправлю сейчас»). Сначала tools, потом reply с итогом.
+- reply — текст пользователю (можно markdown), без дублирования JSON. Только готовый ответ, без служебных инструкций.
 
 Формат ответа:
 {
@@ -681,6 +680,12 @@ def checklist_missing_fields(checklist: ChecklistState) -> list[str]:
 
 
 def _sanitize_agent_reply(reply: str, user_text: str, checklist: ChecklistState) -> str:
+    from app.services.agent.agent_reply_sanitize import sanitize_user_facing_reply
+
+    clean = sanitize_user_facing_reply(reply)
+    if not clean:
+        return build_parse_fallback_reply(checklist.to_dict(), user_text)
+    reply = clean
     if reply_looks_like_capabilities_template(reply):
         fallback = compose_feasibility_reply(checklist.to_dict(), user_text)
         if fallback:

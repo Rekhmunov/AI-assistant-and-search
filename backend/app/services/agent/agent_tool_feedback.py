@@ -123,11 +123,12 @@ def summarize_tool_trace_for_user(tool_trace: list[dict]) -> str | None:
 
 
 def ensure_action_feedback(reply: str, tool_trace: list[dict], user_text: str) -> str:
+    from app.services.agent.agent_reply_sanitize import sanitize_user_facing_reply
     """
     Пользователь всегда получает итог: либо ответ модели с результатом,
     либо сводку по tool_trace, либо явное сообщение об ошибке.
     """
-    body = (reply or "").strip()
+    body = sanitize_user_facing_reply(reply)
     summary = summarize_tool_trace_for_user(tool_trace)
 
     if tool_trace:
@@ -148,7 +149,5 @@ def ensure_action_feedback(reply: str, tool_trace: list[dict], user_text: str) -
 
 
 PROMISE_WITHOUT_TOOLS_NUDGE = (
-    "Нельзя отвечать только обещанием («проверю», «отправлю»). "
-    "Сразу вызови нужные tools (max_probe_chat, max_send_message и т.д.) "
-    "с done=false, дождись tool_results, затем reply с фактическим итогом и done=true."
+    "Вызови tools для действия в MAX, затем reply с фактическим итогом для пользователя."
 )
