@@ -600,22 +600,129 @@ export async function createAgentThread(token: string | null): Promise<AgentThre
   return res.json();
 }
 
-export async function postAgentMessage(
+export type AgentStreamHandlers = {
+  onStatus?: (status: string) => void;
+  onUserMessage?: (message: Message) => void;
+  onAssistantMessage?: (message: Message) => void;
+  onDone?: (payload: { agent_status: string; agent_role: string | null }) => void;
+  onError?: (message: string, code?: string) => void;
+};
+
+export async function streamAgentMessage(
   token: string | null,
   threadId: string,
   text: string,
   fileIds: string[] = [],
-): Promise<AgentMessageResponse> {
-  const res = await fetchAgentWithRetry(
-    `${API_BASE}/api/agent/threads/${threadId}/messages`,
-    token,
-    {
+  handlers: AgentStreamHandlers = {},
+  options?: { signal?: AbortSignal },
+): Promise<AgentMessageResponse | null> {
+  const signal = options?.signal;
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}/api/agent/threads/${threadId}/messages`, {
       method: "POST",
+      headers: apiHeaders(token),
+      credentials: "include",
       body: JSON.stringify({ text, file_ids: fileIds }),
-    },
-    "Не удалось отправить сообщение. Попробуйте ещё раз.",
-  );
-  return res.json();
+      signal,
+    });
+  } catch (err) {
+    handlers.onError?.(networkErrorMessage(err), "network_error");
+    return null;
+  }
+
+  if (!res.ok || !res.body) {
+    let msg = "Не удалось отправить сообщение. Попробуйте ещё раз.";
+    try {
+      const err = await res.json();
+      msg = formatApiErrorDetail(err, msg);
+    } catch {
+      /* ignore */
+    }
+    handlers.onError?.(msg);
+    return null;
+  }
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let userMessage: Message | null = null;
+  let assistantMessage: Message | null = null;
+  let agentStatus = "";
+  let agentRole: string | null = null;
+  let finished = false;
+  let gotError = false;
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const parts = buffer.split("\n\n");
+      buffer = parts.pop() ?? "";
+
+      for (const part of parts) {
+        const lines = part.split("\n");
+        let event = "message";
+        let data = "";
+        for (const line of lines) {
+          if (line.startsWith("event:")) event = line.slice(6).trim();
+          if (line.startsWith("data:")) data = line.slice(5).trim();
+        }
+        if (!data) continue;
+        const parsed = JSON.parse(data) as Record<string, unknown>;
+        switch (event) {
+          case "status":
+            if (typeof parsed.status === "string") handlers.onStatus?.(parsed.status);
+            break;
+          case "user_message":
+            userMessage = parsed as Message;
+            handlers.onUserMessage?.(userMessage);
+            break;
+          case "assistant_message":
+            assistantMessage = parsed as Message;
+            handlers.onAssistantMessage?.(assistantMessage);
+            break;
+          case "done": {
+            finished = true;
+            agentStatus = typeof parsed.agent_status === "string" ? parsed.agent_status : "";
+            agentRole = typeof parsed.agent_role === "string" ? parsed.agent_role : null;
+            handlers.onDone?.({ agent_status: agentStatus, agent_role: agentRole });
+            break;
+          }
+          case "error":
+            gotError = true;
+            handlers.onError?.(
+              typeof parsed.message === "string"
+                ? parsed.message
+                : formatApiErrorDetail({ detail: parsed.message }, "Ошибка агента"),
+              typeof parsed.code === "string" ? parsed.code : undefined,
+            );
+            return null;
+        }
+      }
+    }
+  } catch (err) {
+    if (!signal?.aborted) {
+      gotError = true;
+      handlers.onError?.(networkErrorMessage(err), "network_error");
+    }
+    return null;
+  } finally {
+    if (!finished && !gotError) {
+      handlers.onError?.("Соединение прервано. Попробуйте ещё раз.", "network_error");
+    }
+  }
+
+  if (userMessage && assistantMessage) {
+    return {
+      user_message: userMessage,
+      assistant_message: assistantMessage,
+      agent_status: agentStatus,
+      agent_role: agentRole,
+    };
+  }
+  return null;
 }
 
 export async function fetchAgentActivityLogs(

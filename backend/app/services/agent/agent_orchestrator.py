@@ -39,6 +39,14 @@ from app.services.agent.llm_onboarding import (
 from app.services.agent.intent_hints import _extract_max_chat_id, user_wants_immediate_run, user_wants_today_run
 from app.services.agent.operational import bind_chat_to_current_agent, is_operational_max_query
 from app.services.agent.llm_onboarding import user_wants_confirm  # noqa: F401 — re-export path
+from app.services.agent.agent_status import (
+    STATUS_ANALYZING_RESULTS,
+    STATUS_THINKING,
+    StatusCallback,
+    emit_status,
+    noop_status,
+    tool_status_label,
+)
 from app.services.providers.factory import resolve_runtime_providers
 
 logger = logging.getLogger(__name__)
@@ -86,6 +94,7 @@ async def run_agent_turn(
     *,
     thread_id: UUID,
     diagnostic_mode: bool = False,
+    on_status: StatusCallback | None = None,
 ) -> LlmTurnResult:
     checklist = load_checklist(agent)
     history = _history_messages(messages)
@@ -102,6 +111,7 @@ async def run_agent_turn(
     allow_test = user_consented_test_send(last_user)
 
     tool_trace: list[dict] = []
+    status_cb = on_status or noop_status
     extra_system = TOOLS_APPENDIX
     if diagnostic_mode:
         diag = await agent_runtime_diagnostics(db, agent)
@@ -135,6 +145,10 @@ async def run_agent_turn(
             )
         payload_messages.extend(history)
 
+        await emit_status(
+            status_cb,
+            STATUS_THINKING if iteration == 0 else STATUS_ANALYZING_RESULTS,
+        )
         raw = await _llm_complete(llm, payload_messages)
         data = _parse_llm_json(raw)
         if not data and iteration < MAX_ORCHESTRATOR_ITERATIONS - 1:
@@ -171,6 +185,7 @@ async def run_agent_turn(
                     continue
                 tool_name = str(call.get("tool") or "")
                 arguments = call.get("arguments") if isinstance(call.get("arguments"), dict) else {}
+                await emit_status(status_cb, tool_status_label(tool_name))
                 result = await execute_agent_tool(
                     db,
                     redis_client,

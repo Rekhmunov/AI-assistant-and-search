@@ -7,7 +7,7 @@ import {
   fetchFileMeta,
   fetchThread,
   fetchSession,
-  postAgentMessage,
+  streamAgentMessage,
   streamSearch,
   type AnswerStatus,
   type GeneratedDocumentInfo,
@@ -265,14 +265,12 @@ export function Thread() {
   });
 
   const isAgentThread = thread?.thread_type === "agent";
-  const threadHasPending = Boolean(
-    !isAgentThread && thread && threadHasPendingAnswer(thread.messages),
-  );
+  const threadHasPending = Boolean(thread && threadHasPendingAnswer(thread.messages));
 
   const { data: answerStatus } = useQuery({
     queryKey: ["thread-answer-status", activeThreadKey],
     queryFn: () => fetchAnswerStatus(token, activeThreadKey!),
-    enabled: !!activeThreadKey && threadHasPending && !streaming,
+    enabled: !!activeThreadKey && (threadHasPending || agentLoading) && !streaming,
     refetchInterval: (query) => {
       if (streamingRef.current) return false;
       const data = query.state.data;
@@ -469,11 +467,21 @@ export function Thread() {
       ]);
 
       try {
-        const result = await postAgentMessage(token, tid, text, fileIds);
+        const result = await streamAgentMessage(token, tid, text, fileIds, {
+          onStatus: (status) => {
+            setAgentStatusText(status);
+          },
+        });
+        if (!result) {
+          setAgentLoading(false);
+          setAgentStatusText(null);
+          setSearchPhase("idle");
+          setTurns((prev) => prev.filter((turn) => turn.key !== pendingKey));
+          return;
+        }
         queryClient.invalidateQueries({ queryKey: ["thread", tid] });
         queryClient.invalidateQueries({ queryKey: ["threads"] });
-        setAgentStatusText(t("agentStatusConfiguring"));
-        setSearchPhase("answering");
+        queryClient.invalidateQueries({ queryKey: ["thread-answer-status", tid] });
         setTurns((prev) =>
           prev.map((turn) =>
             turn.key === pendingKey
@@ -1075,7 +1083,9 @@ export function Thread() {
             const isDocumentGenTurn = Boolean(turn.isDocumentGen || turn.generatedDocument);
             const isLastTurn = index === turns.length - 1;
             const turnAnswerStatus: AnswerStatus | undefined =
-              isLastTurn && turn.preparing ? answerStatus : undefined;
+              isLastTurn && (turn.preparing || (isAgentThread && agentLoading))
+                ? answerStatus
+                : undefined;
             const showPreparing = Boolean(
               turn.preparing && !streaming && !turn.errorCode && !answerHasText(turn.answer),
             );
@@ -1173,7 +1183,11 @@ export function Thread() {
                     <SearchStatusLine
                       phase="routing"
                       needsSearch={false}
-                      customStatus={agentStatusText ?? t("agentStatusThinking")}
+                      customStatus={
+                        agentStatusText ??
+                        turnAnswerStatus?.custom_status ??
+                        t("agentStatusThinking")
+                      }
                     />
                   ) : (
                     <SearchStatusLine phase={searchPhase} needsSearch={needsSearch} />

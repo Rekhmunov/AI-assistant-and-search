@@ -16,6 +16,13 @@ from app.models.user import User
 from app.services.agent.activity_log import append_agent_activity_log
 from app.services.agent.intent_hints import _extract_max_chat_id
 from app.services.agent.max_probe import probe_max_chat
+from app.services.agent.agent_status import (
+    STATUS_ADMIN_CHECK,
+    STATUS_MAX_CHAT,
+    StatusCallback,
+    emit_status,
+    noop_status,
+)
 from app.services.bot import MaxBotService
 
 
@@ -107,6 +114,7 @@ async def handle_operational_query(
     text: str,
     *,
     user_msg: Message,
+    on_status: StatusCallback | None = None,
 ) -> tuple[Message, Message, AgentInstance] | None:
     """
     Быстрый ответ на проверку админа/чата в контексте текущего треда.
@@ -126,6 +134,11 @@ async def handle_operational_query(
         return user_msg, assistant, agent
 
     bind_chat_to_current_agent(agent, int(chat_id))
+    status_cb = on_status or noop_status
+    if user_wants_admin_check(text):
+        await emit_status(status_cb, STATUS_ADMIN_CHECK)
+    else:
+        await emit_status(status_cb, STATUS_MAX_CHAT)
     bot = MaxBotService()
     probe = await probe_max_chat(bot, int(chat_id), send_test=False)
     admin = probe.get("bot_is_admin")

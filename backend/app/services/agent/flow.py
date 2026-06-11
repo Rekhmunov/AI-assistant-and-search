@@ -41,6 +41,16 @@ from app.services.agent.onboarding import activation_summary
 from app.services.agent.profile import EVENT_DRIVEN_ROLES, SCHEDULED_ROLES
 from app.services.agent.knowledge import ingest_agent_files
 from app.services.agent.reminders import activate_agent_reminders, effective_max_user_id
+from app.services.agent.agent_status import (
+    STATUS_ACTIVATING,
+    STATUS_FIRST_DISPATCH,
+    STATUS_INGEST_FILES,
+    STATUS_PREFLIGHT,
+    StatusCallback,
+    emit_status,
+    noop_status,
+)
+from app.services.agent.agent_pending import set_agent_pending
 
 logger = logging.getLogger(__name__)
 
@@ -102,6 +112,7 @@ async def handle_agent_message(
     redis_client,
     *,
     file_ids: list[UUID] | None = None,
+    on_status: StatusCallback | None = None,
 ) -> tuple[Message, Message, AgentInstance]:
     result = await db.execute(
         select(Thread)
@@ -135,6 +146,15 @@ async def handle_agent_message(
     if file_ids and not display_text:
         display_text = f"[Загружено документов: {len(file_ids)}]"
     user_msg = await _user_message(db, thread, display_text)
+    status_cb = on_status or noop_status
+    await set_agent_pending(
+        redis_client,
+        thread_id,
+        user_message_id=user_msg.id,
+        phase="thinking",
+        custom_status="Анализирую задачу…",
+    )
+    await emit_status(status_cb, "Анализирую задачу…")
 
     try:
         return await _handle_agent_message_body(
@@ -148,6 +168,7 @@ async def handle_agent_message(
             user_msg,
             limiter,
             file_ids=file_ids,
+            on_status=status_cb,
         )
     except ValueError:
         raise
@@ -178,8 +199,11 @@ async def _handle_agent_message_body(
     limiter: RateLimiter,
     *,
     file_ids: list[UUID] | None = None,
+    on_status: StatusCallback | None = None,
 ) -> tuple[Message, Message, AgentInstance]:
+    status_cb = on_status or noop_status
     if file_ids:
+        await emit_status(status_cb, STATUS_INGEST_FILES)
         chunk_count = await ingest_agent_files(db, agent, user_id=user.id, file_ids=file_ids)
         if chunk_count:
             cfg = dict(agent.config or {})
@@ -211,7 +235,7 @@ async def _handle_agent_message_body(
     )
 
     op_handled = await handle_operational_query(
-        db, user, agent, thread, text, user_msg=user_msg
+        db, user, agent, thread, text, user_msg=user_msg, on_status=status_cb
     )
     if op_handled is not None:
         return op_handled
@@ -244,6 +268,7 @@ async def _handle_agent_message_body(
             limiter,
             thread_id=thread.id,
             diagnostic_mode=diagnostic_mode,
+            on_status=status_cb,
         )
     except Exception as exc:
         logger.exception("Agent LLM turn failed thread=%s", thread_id)
@@ -285,6 +310,7 @@ async def _handle_agent_message_body(
             elif not agent.max_user_id:
                 raise ValueError("max_required")
             if agent.max_chat_id:
+                await emit_status(status_cb, STATUS_PREFLIGHT)
                 bot = MaxBotService()
                 probe = await probe_max_chat(bot, int(agent.max_chat_id), send_test=False)
                 await append_agent_activity_log(
@@ -306,6 +332,7 @@ async def _handle_agent_message_body(
                     )
                     await db.commit()
                     return user_msg, assistant, agent
+            await emit_status(status_cb, STATUS_ACTIVATING)
             await activate_agent_reminders(db, agent)
             active_cfg = dict(agent.config or {})
             await append_agent_activity_log(
@@ -323,6 +350,7 @@ async def _handle_agent_message_body(
             sent = 0
             if agent.role in SCHEDULED_ROLES:
                 try:
+                    await emit_status(status_cb, STATUS_FIRST_DISPATCH)
                     sent = await dispatch_due_reminders(
                         db, agent_id=agent.id, redis_client=redis_client
                     )

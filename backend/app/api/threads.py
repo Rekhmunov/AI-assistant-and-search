@@ -11,7 +11,7 @@ from sqlalchemy.orm import selectinload
 from app.api.deps import SearchUserResult, get_current_user, get_db, get_existing_search_user, get_redis
 from app.models.message import Message, MessageRole
 from app.models.message_feedback import MessageFeedback
-from app.models.thread import Thread
+from app.models.thread import Thread, ThreadType
 from app.schemas.feedback import MessageFeedbackOut, reason_label
 from app.models.user import Plan, User
 from app.core.config import get_settings
@@ -27,6 +27,7 @@ from app.schemas.thread import (
     ThreadListItem,
     ThreadUpdate,
 )
+from app.services.agent.agent_pending import clear_agent_pending, get_agent_pending
 from app.services.search_pending import (
     STALE_AFTER_SEC,
     clear_search_pending,
@@ -153,7 +154,12 @@ async def get_thread_answer_status(
     if last.role != MessageRole.USER:
         return AnswerStatusOut(pending=False, active=False, stale=False)
 
-    pending_raw = await get_search_pending(redis_client, thread_id)
+    is_agent_thread = thread.thread_type == ThreadType.AGENT
+    pending_raw = (
+        await get_agent_pending(redis_client, thread_id)
+        if is_agent_thread
+        else await get_search_pending(redis_client, thread_id)
+    )
     age_sec = (datetime.now(timezone.utc) - last.created_at).total_seconds()
 
     if pending_raw and is_pending_zombie(pending_raw):
@@ -164,7 +170,10 @@ async def get_thread_answer_status(
             kind="stale_pending",
             message=f"Зависший поиск сброшен (thread={thread_id}, query={preview!r})",
         )
-        await clear_search_pending(redis_client, thread_id)
+        if is_agent_thread:
+            await clear_agent_pending(redis_client, thread_id)
+        else:
+            await clear_search_pending(redis_client, thread_id)
         pending_raw = None
 
     active = pending_raw is not None
@@ -172,6 +181,8 @@ async def get_thread_answer_status(
     active_age_sec = pending_active_seconds(pending_raw) if pending_raw else None
 
     phase = pending_raw.get("phase") if pending_raw else None
+    if is_agent_thread and active and not phase:
+        phase = "routing"
     needs_search = pending_raw.get("needs_search") if pending_raw else None
     custom_status = pending_raw.get("custom_status") if pending_raw else None
     user_message_id_raw = pending_raw.get("user_message_id") if pending_raw else str(last.id)
