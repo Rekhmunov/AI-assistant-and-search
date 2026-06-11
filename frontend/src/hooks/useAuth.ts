@@ -4,10 +4,10 @@ import {
   completeBindMax,
   fetchMe,
   loginWithInitData,
-  logoutSession,
   refreshAccessToken,
 } from "../api/client";
 import {
+  captureMaxInitDataFromUrl,
   getMaxInitData,
   getMaxStartParam,
   parseMaxBindToken,
@@ -21,7 +21,13 @@ import { stripPrivateQueryParamsFromUrl } from "../lib/pageRobots";
 import { useAuthStore, waitForAuthHydration } from "../store/authStore";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-const BOOTSTRAP_TIMEOUT_MS = 12000;
+const HYDRATION_TIMEOUT_MS = 4000;
+const MAX_BRIDGE_TIMEOUT_MS = 5000;
+const AUTH_TASK_TIMEOUT_MS = 8000;
+
+async function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | null> {
+  return Promise.race([promise, sleep(ms).then(() => null)]);
+}
 
 async function refreshAccessTokenWithRetry(): Promise<string> {
   let last: unknown;
@@ -47,7 +53,8 @@ async function refreshAccessTokenWithRetry(): Promise<string> {
 
 async function trySilentRefresh(cancelled: () => boolean): Promise<string | null> {
   try {
-    const accessToken = await refreshAccessTokenWithRetry();
+    const accessToken = await withTimeout(refreshAccessTokenWithRetry(), AUTH_TASK_TIMEOUT_MS);
+    if (!accessToken) return null;
     if (!cancelled()) {
       useAuthStore.getState().setToken(accessToken);
     }
@@ -69,11 +76,11 @@ async function resolveAccessToken(cancelled: () => boolean): Promise<string | nu
 
   if (accessToken) {
     try {
-      const user = await fetchMe(accessToken);
-      if (!cancelled()) {
+      const user = await withTimeout(fetchMe(accessToken), AUTH_TASK_TIMEOUT_MS, null);
+      if (user && !cancelled()) {
         useAuthStore.getState().setUser(user);
       }
-      return accessToken;
+      if (user) return accessToken;
     } catch (err) {
       if (!(err instanceof HttpResponseError && isAuthFailureStatus(err.status))) {
         return accessToken;
@@ -84,7 +91,65 @@ async function resolveAccessToken(cancelled: () => boolean): Promise<string | nu
   return trySilentRefresh(cancelled);
 }
 
-/** JWT, then MAX deeplink bind, then MAX initData login, else guest-ready web session. */
+async function tryBindMax(token: string) {
+  const initData = getMaxInitData();
+  if (!initData) return;
+  try {
+    const user = await withTimeout(bindMax(token, initData), 4000, null);
+    if (user) useAuthStore.getState().setUser(user);
+  } catch {
+    /* already linked */
+  }
+}
+
+async function runBackgroundAuth(cancelled: () => boolean) {
+  const initData = getMaxInitData();
+  const bindToken = parseMaxBindToken(getMaxStartParam());
+
+  if (bindToken && initData) {
+    try {
+      const data = await withTimeout(
+        completeBindMax(bindToken, initData),
+        AUTH_TASK_TIMEOUT_MS,
+        null,
+      );
+      if (data && !cancelled()) {
+        useAuthStore.getState().setAuth(data.access_token, data.user);
+        return;
+      }
+    } catch (err) {
+      if (!cancelled()) {
+        setMaxBindError(err instanceof Error ? err.message : "Не удалось привязать MAX");
+      }
+      return;
+    }
+  }
+
+  const accessToken = await resolveAccessToken(cancelled);
+  if (cancelled()) return;
+
+  if (accessToken) {
+    void tryBindMax(accessToken);
+    return;
+  }
+
+  if (initData) {
+    try {
+      const data = await withTimeout(loginWithInitData(initData), AUTH_TASK_TIMEOUT_MS, null);
+      if (data && !cancelled()) {
+        useAuthStore.getState().setAuth(data.access_token, data.user);
+        return;
+      }
+    } catch (err) {
+      if (!cancelled()) {
+        const message = err instanceof Error ? err.message : "Не удалось войти через MAX";
+        setMaxLoginError(message);
+      }
+    }
+  }
+}
+
+/** JWT from storage first, then MAX initData login in background — UI is not blocked. */
 export function useAuthBootstrap() {
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -94,14 +159,11 @@ export function useAuthBootstrap() {
     const isCancelled = () => cancelled;
 
     async function bootstrap() {
-      const bootDeadline = Date.now() + BOOTSTRAP_TIMEOUT_MS;
-      const timedOut = () => Date.now() >= bootDeadline;
-
       try {
-        await Promise.race([waitForAuthHydration(), sleep(BOOTSTRAP_TIMEOUT_MS)]);
+        await Promise.race([waitForAuthHydration(), sleep(HYDRATION_TIMEOUT_MS)]);
         if (cancelled) return;
 
-        await Promise.race([waitForMaxWebApp(), sleep(BOOTSTRAP_TIMEOUT_MS)]);
+        await Promise.race([waitForMaxWebApp(MAX_BRIDGE_TIMEOUT_MS), sleep(MAX_BRIDGE_TIMEOUT_MS)]);
         if (cancelled) return;
 
         try {
@@ -110,63 +172,13 @@ export function useAuthBootstrap() {
           /* MAX bridge may be partial on desktop */
         }
 
-        const initData = getMaxInitData();
+        captureMaxInitDataFromUrl();
         stripMaxWebAppHashFromUrl();
-        const bindToken = parseMaxBindToken(getMaxStartParam());
         stripPrivateQueryParamsFromUrl();
-        if (bindToken && initData) {
-          try {
-            const data = await completeBindMax(bindToken, initData);
-            if (!cancelled) {
-              useAuthStore.getState().setAuth(data.access_token, data.user);
-              setReady(true);
-              return;
-            }
-          } catch (err) {
-            if (!cancelled) {
-              setMaxBindError(err instanceof Error ? err.message : "Не удалось привязать MAX");
-              setReady(true);
-              return;
-            }
-          }
-        }
-
-        const accessToken = timedOut()
-          ? useAuthStore.getState().token
-          : await Promise.race([
-              resolveAccessToken(isCancelled),
-              sleep(Math.max(0, bootDeadline - Date.now())).then(() => null),
-            ]);
-        if (cancelled) return;
-
-        if (accessToken) {
-          try {
-            await tryBindMax(accessToken);
-          } catch {
-            /* ignore */
-          }
-          if (!cancelled) setReady(true);
-          return;
-        }
-
-        if (initData) {
-          try {
-            const data = await loginWithInitData(initData);
-            if (!cancelled) {
-              useAuthStore.getState().setAuth(data.access_token, data.user);
-              setReady(true);
-              return;
-            }
-          } catch (err) {
-            if (!cancelled) {
-              const message =
-                err instanceof Error ? err.message : "Не удалось войти через MAX";
-              setMaxLoginError(message);
-            }
-          }
-        }
 
         if (!cancelled) setReady(true);
+
+        void runBackgroundAuth(isCancelled);
       } catch {
         if (!cancelled) {
           setError("Ошибка загрузки");
@@ -182,15 +194,4 @@ export function useAuthBootstrap() {
   }, []);
 
   return { ready, error };
-}
-
-async function tryBindMax(token: string) {
-  const initData = getMaxInitData();
-  if (!initData) return;
-  try {
-    const user = await bindMax(token, initData);
-    useAuthStore.getState().setUser(user);
-  } catch {
-    /* already linked */
-  }
 }

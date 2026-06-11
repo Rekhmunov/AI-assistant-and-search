@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { waitForMaxWebApp } from "./maxApp";
+import { captureMaxInitDataFromUrl, waitForMaxWebApp } from "./maxApp";
 
 describe("waitForMaxWebApp", () => {
   beforeEach(() => {
@@ -21,6 +21,7 @@ describe("waitForMaxWebApp", () => {
       platform: "android",
       ready: () => undefined,
     };
+    captureMaxInitDataFromUrl();
     vi.advanceTimersByTime(100);
     await promise;
   });

@@ -44,7 +44,7 @@ function AppRoutes() {
             <Route path="*" element={<LegalPathCatch />} />
           </Routes>
         ) : (
-          <div className="app-boot-placeholder" aria-busy="true" aria-label={t("pageLoading")}>
+          <div className="app-boot-placeholder app-boot-placeholder--fullscreen" aria-busy="true" aria-label={t("pageLoading")}>
             {t("pageLoading")}
           </div>
         )}

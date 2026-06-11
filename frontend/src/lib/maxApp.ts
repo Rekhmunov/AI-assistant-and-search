@@ -1,4 +1,8 @@
 const MAX_WEBAPP_HASH_RE = /(?:^|[&#])(?:WebAppData|WebAppPlatform|WebAppVersion)=/i;
+const MAX_INIT_DATA_KEY = "glosix-max-init-data";
+
+const MAX_WEBAPP_WAIT_MS = 5000;
+const MAX_WEBAPP_POLL_MS = 50;
 
 /** MAX passes init data in the location hash; fragment is not sent to the server. */
 export function hasMaxWebAppHashInUrl(urlLike?: string | URL): boolean {
@@ -12,24 +16,64 @@ export function hasMaxWebAppHashInUrl(urlLike?: string | URL): boolean {
   return MAX_WEBAPP_HASH_RE.test(`${window.location.search}${window.location.hash}`);
 }
 
-const MAX_WEBAPP_WAIT_MS = 3000;
-const MAX_WEBAPP_POLL_MS = 50;
+function readCachedMaxInitData(): string {
+  if (typeof sessionStorage === "undefined") return "";
+  try {
+    return sessionStorage.getItem(MAX_INIT_DATA_KEY)?.trim() ?? "";
+  } catch {
+    return "";
+  }
+}
+
+function rememberMaxInitData(value: string): void {
+  const data = value.trim();
+  if (!data || typeof sessionStorage === "undefined") return;
+  try {
+    sessionStorage.setItem(MAX_INIT_DATA_KEY, data);
+  } catch {
+    /* ignore */
+  }
+}
+
+function parseMaxInitDataFromHash(): string {
+  if (typeof window === "undefined") return "";
+  const hash = window.location.hash ?? "";
+  if (!hash || !hasMaxWebAppHashInUrl(hash)) return "";
+  const body = hash.startsWith("#") ? hash.slice(1) : hash;
+  try {
+    return new URLSearchParams(body).get("WebAppData")?.trim() ?? "";
+  } catch {
+    return "";
+  }
+}
+
+/** Persist initData from bridge or URL before the hash is stripped on reload. */
+export function captureMaxInitDataFromUrl(): void {
+  const fromBridge = window.WebApp?.initData?.trim() ?? "";
+  const fromHash = parseMaxInitDataFromHash();
+  const data = fromBridge || fromHash || readCachedMaxInitData();
+  if (data) rememberMaxInitData(data);
+}
 
 /** Wait until MAX WebApp bridge exposes initData (reload may populate it asynchronously). */
 export async function waitForMaxWebApp(timeoutMs = MAX_WEBAPP_WAIT_MS): Promise<void> {
   if (typeof window === "undefined") return;
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
+    captureMaxInitDataFromUrl();
     const bridge = window.WebApp;
     if (bridge?.initData?.trim() || bridge?.platform?.trim()) return;
+    if (readCachedMaxInitData()) return;
     if (hasMaxWebAppHashInUrl()) return;
     await new Promise((r) => setTimeout(r, MAX_WEBAPP_POLL_MS));
   }
+  captureMaxInitDataFromUrl();
 }
 
-/** Remove sensitive WebApp hash from the address bar after the MAX SDK has read it. */
+/** Remove sensitive WebApp hash from the address bar after initData has been captured. */
 export function stripMaxWebAppHashFromUrl(): void {
   if (typeof window === "undefined") return;
+  captureMaxInitDataFromUrl();
   const { pathname, search, hash } = window.location;
   if (!hash || !hasMaxWebAppHashInUrl(`${search}${hash}`)) return;
   window.history.replaceState(window.history.state, "", `${pathname}${search}`);
@@ -38,6 +82,8 @@ export function stripMaxWebAppHashFromUrl(): void {
 /** True when opened inside MAX miniapp (WebApp bridge present). */
 export function isMaxWebApp(): boolean {
   if (typeof window === "undefined") return false;
+  if (readCachedMaxInitData()) return true;
+  if (hasMaxWebAppHashInUrl()) return true;
   const bridge = window.WebApp;
   if (!bridge) return false;
   return Boolean(bridge.initData?.trim() || bridge.platform?.trim());
@@ -54,7 +100,17 @@ export function isIosLikeDevice(): boolean {
 }
 
 export function getMaxInitData(): string {
-  return window.WebApp?.initData?.trim() ?? "";
+  const fromBridge = window.WebApp?.initData?.trim() ?? "";
+  if (fromBridge) {
+    rememberMaxInitData(fromBridge);
+    return fromBridge;
+  }
+  const fromHash = parseMaxInitDataFromHash();
+  if (fromHash) {
+    rememberMaxInitData(fromHash);
+    return fromHash;
+  }
+  return readCachedMaxInitData();
 }
 
 const BIND_START_PREFIX = "bind_";

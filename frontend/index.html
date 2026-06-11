@@ -70,6 +70,18 @@
       })();
     </script>
     <script src="https://st.max.ru/js/max-web-app.js"></script>
+    <script>
+      (function () {
+        try {
+          var hash = location.hash || "";
+          if (!/(?:^|[&#])WebAppData=/i.test(hash)) return;
+          var body = hash.charAt(0) === "#" ? hash.slice(1) : hash;
+          var params = new URLSearchParams(body);
+          var data = params.get("WebAppData");
+          if (data) sessionStorage.setItem("glosix-max-init-data", data);
+        } catch (e) {}
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

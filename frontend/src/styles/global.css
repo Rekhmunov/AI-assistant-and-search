@@ -5690,6 +5690,10 @@ body:has(.page-thread) {
   font-size: 0.95rem;
 }
 
+.app-boot-placeholder--fullscreen {
+  min-height: calc(100dvh - var(--bottom-nav-height) - env(safe-area-inset-bottom));
+}
+
 .app-boot-error {
   padding: 24px 16px;
   text-align: center;
