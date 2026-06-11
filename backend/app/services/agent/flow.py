@@ -267,19 +267,8 @@ async def _handle_agent_message_body(
         user_wants_diagnostic(text) or assistant_turn
     )
 
-    if agent.status == AgentStatus.ACTIVE.value and not diagnostic_mode:
-        assistant = await _assistant_reply(
-            db,
-            thread,
-            (
-                "Агент уже работает.\n"
-                f"{activation_summary(agent)}\n\n"
-                "Чтобы изменить параметры, отключите агента фразой «отключи агента» и создайте нового.\n"
-                "Если что-то не так с отправкой — спросите «почему не отправляет» или «проверь группу»."
-            ),
-        )
-        await db.commit()
-        return user_msg, assistant, agent
+    # Активный агент продолжает диалог — не замораживаем.
+    # diagnostic_mode=True позволяет использовать полный LLM-цикл с runtime-диагностикой.
 
     msgs_result = await db.execute(
         select(Message).where(Message.thread_id == thread.id).order_by(Message.created_at.asc())
@@ -309,8 +298,9 @@ async def _handle_agent_message_body(
         )
         await db.commit()
         return user_msg, assistant, agent
+    was_active = agent.status == AgentStatus.ACTIVE.value
     apply_checklist_to_agent(agent, llm_result.checklist)
-    if not diagnostic_mode:
+    if not diagnostic_mode and not was_active:
         agent.status = AgentStatus.COLLECTING.value
 
     cfg = dict(agent.config or {})
@@ -362,10 +352,11 @@ async def _handle_agent_message_body(
             await emit_status(status_cb, STATUS_ACTIVATING)
             await activate_agent_reminders(db, agent)
             active_cfg = dict(agent.config or {})
+            event_type = "agent_updated" if was_active else "agent_activated"
             await append_agent_activity_log(
                 db,
                 agent,
-                "agent_activated",
+                event_type,
                 details={
                     "role": agent.role,
                     "schedule": active_cfg.get("schedule_text"),
@@ -386,6 +377,8 @@ async def _handle_agent_message_body(
                     sent = 0
                 await db.commit()
             summary = activation_summary(agent)
+            if was_active:
+                summary = f"Настройки обновлены.\n\n{summary}"
             if agent.role in SCHEDULED_ROLES:
                 if sent:
                     summary += "\n\nПервый запуск уже выполнен — проверьте MAX."

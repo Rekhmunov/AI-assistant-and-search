@@ -14,6 +14,7 @@ class AgentCapability:
 
 
 CAPABILITIES: tuple[AgentCapability, ...] = (
+    AgentCapability("read_max_api_docs", "knowledge", "Документация MAX API: возможности, методы, лимиты, права"),
     AgentCapability("max_probe_chat", "max", "Проверить доступ бота к чату/каналу MAX"),
     AgentCapability("max_get_chat", "max", "Информация о чате MAX"),
     AgentCapability("max_list_bot_chats", "max", "Список чатов, куда добавлен бот"),
@@ -39,19 +40,21 @@ def tools_appendix_for_mode(*, runtime: bool = False) -> str:
     ]
     for cap in CAPABILITIES:
         mark = " [осторожно]" if cap.destructive else ""
-        lines.append(f"- {cap.tool} — {cap.description}{mark}")
+        lines.append(f"- {cap.tool} ({cap.category}) — {cap.description}{mark}")
     if runtime:
         lines.append(
             "\nРежим MAX: отвечай пользователю в мессенджере. "
-            "Для затрат — store_agent_record; для отчётов — query_agent_records + max_send_file."
+            "Для затрат — store_agent_record; для отчётов — query_agent_records + max_send_file. "
+            "Если не уверен в возможностях MAX — read_max_api_docs."
         )
     else:
         lines.append(
-            "\nРежим Glosix-треда: по умолчанию помогай и проверяй через tools. "
-            "checklist заполняй только для явной настройки автоматизации. "
-            "Вопросы про админа/доступ/чаты → max_probe_chat, max_get_chat, max_list_bot_chats, search_thread_history. "
-            "Для актуальных данных из интернета — web_search; доставку в MAX собирай сам из tools (max_send_message, max_send_file и др.). "
-            "reply — готовый ответ пользователю, не описание планов и не названия tools."
+            "\nРежим Glosix-треда: ты умный ассистент, а не только визард настройки. "
+            "Алгоритм: 1) понять задачу, 2) проверить выполнимость (read_max_api_docs если нужно), "
+            "3) собрать недостающие данные (max_list_bot_chats, search_thread_history), "
+            "4) выполнить через tools или заполнить checklist для автоматизации. "
+            "Не спрашивай лишнего — проверяй инструментами. "
+            "reply — готовый ответ пользователю, не описание планов."
         )
     lines.append(
         '\nФормат JSON: {"reply": "...", "done": true/false, '

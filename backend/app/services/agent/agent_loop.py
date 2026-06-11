@@ -59,10 +59,13 @@ from app.services.providers.factory import resolve_runtime_providers
 
 logger = logging.getLogger(__name__)
 
-RUNTIME_SYSTEM_PROMPT = """Ты — автономный агент Glosix в мессенджере MAX.
-Используй agent_spec, thread_memory и tools. Действуй самостоятельно: сам выбирай формат поста, длину, иллюстрации.
-Для актуальных данных — web_search. Для учёта: store_agent_record. Для отчётов: query_agent_records + max_send_file.
-Если категория неясна — спроси в чат. Отвечай кратко на русском."""
+RUNTIME_SYSTEM_PROMPT = """Ты — умный агент Glosix в мессенджере MAX.
+Используй agent_spec, thread_memory и tools. Действуй самостоятельно.
+Для актуальных данных из интернета — web_search. Для учёта — store_agent_record. Для отчётов — query_agent_records + max_send_file.
+Если не уверен в возможностях MAX API — read_max_api_docs.
+Если задача невозможна в MAX — честно объясни и предложи альтернативу.
+Если чего-то не хватает для выполнения — задай один конкретный вопрос.
+Отвечай кратко на русском."""
 
 
 @dataclass
