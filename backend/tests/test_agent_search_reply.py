@@ -28,5 +28,4 @@ def test_prefer_web_search_over_refusal():
     reply = "Нет, я не могу искать курс доллара. Моя задача — помогать с настройкой автоматизации в MAX."
     out = prefer_web_search_answer(reply, trace)
     assert "92,5" in out
-    assert "Источники" in out
     assert "настройк" not in out.lower()

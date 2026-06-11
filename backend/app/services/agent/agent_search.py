@@ -180,7 +180,7 @@ async def run_agent_glosix_search(
 
     sources_block = format_sources_for_user(sources_json)
     return AgentSearchResult(
-        text=append_sources_to_answer(answer, sources_json),
+        text=answer,
         sources=sources_json,
         sources_block=sources_block,
     )

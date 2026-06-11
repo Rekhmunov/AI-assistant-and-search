@@ -44,6 +44,7 @@ import {
 } from "../lib/threadImageGroups";
 import { agentMessageUsesSearchFlow } from "../lib/agentDocRouting";
 import { answerHasText, normalizeAnswerText } from "../lib/answerText";
+import { displayAnswerText } from "../lib/stripSourcesFooter";
 import { renderAnswerTextSegment } from "../lib/renderAnswerText";
 import { resolveUnifiedDocument } from "../lib/resolveUnifiedDocument";
 import { SEARCH_QUERY_MAX_LENGTH } from "../lib/searchQueryLimits";
@@ -490,6 +491,7 @@ export function Thread() {
                   key: result.assistant_message.id,
                   messageId: result.assistant_message.id,
                   answer: result.assistant_message.content,
+                  sources: result.assistant_message.sources ?? [],
                   streaming: true,
                 }
               : turn,
@@ -1079,6 +1081,7 @@ export function Thread() {
           {turns.map((turn, index) => {
             const isActive = turn.streaming;
             const sources = turn.sources ?? [];
+            const answerText = displayAnswerText(normalizeAnswerText(turn.answer), sources);
             const isImageGenTurn = useChatGeneratedImageLayout(turn);
             const isDocumentGenTurn = Boolean(turn.isDocumentGen || turn.generatedDocument);
             const isLastTurn = index === turns.length - 1;
@@ -1232,7 +1235,7 @@ export function Thread() {
                         </div>
                       ) : (
                         <AnswerBody
-                          text={normalizeAnswerText(turn.answer)}
+                          text={answerText}
                           sources={sources}
                           isStreaming={
                             isActive &&
@@ -1279,7 +1282,7 @@ export function Thread() {
                     )}
                     {(answerHasText(turn.answer) || turn.generatedDocument || turn.markdownDocument) && (
                       <AnswerFooter
-                        answer={normalizeAnswerText(turn.answer)}
+                        answer={answerText}
                         title={turn.query}
                         sources={sources}
                         messageId={resolveAssistantMessageId(turn)}

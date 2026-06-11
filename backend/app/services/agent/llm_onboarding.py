@@ -300,6 +300,7 @@ class LlmTurnResult:
     ready_for_confirmation: bool = False
     confirmation_summary: str | None = None
     activate: bool = False
+    sources: list[dict[str, Any]] | None = None
 
 
 def _str_or_none(value: Any) -> str | None:

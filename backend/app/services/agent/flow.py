@@ -63,8 +63,19 @@ from app.services.agent.agent_pending import set_agent_pending
 logger = logging.getLogger(__name__)
 
 
-async def _assistant_reply(db: AsyncSession, thread: Thread, content: str) -> Message:
-    msg = Message(thread_id=thread.id, role=MessageRole.ASSISTANT, content=content)
+async def _assistant_reply(
+    db: AsyncSession,
+    thread: Thread,
+    content: str,
+    *,
+    sources: list | None = None,
+) -> Message:
+    msg = Message(
+        thread_id=thread.id,
+        role=MessageRole.ASSISTANT,
+        content=content,
+        sources=sources or None,
+    )
     db.add(msg)
     thread.message_count = (thread.message_count or 0) + 1
     thread.last_message_at = datetime.now(timezone.utc)
@@ -461,6 +472,11 @@ async def _handle_agent_message_body(
         cfg["awaiting_confirmation"] = False
         agent.config = cfg
 
-    assistant = await _assistant_reply(db, thread, llm_result.reply)
+    assistant = await _assistant_reply(
+        db,
+        thread,
+        llm_result.reply,
+        sources=llm_result.sources,
+    )
     await db.commit()
     return user_msg, assistant, agent

@@ -47,6 +47,7 @@ from app.services.agent.llm_onboarding import (
 )
 from app.services.agent.max_capabilities import tools_appendix_for_mode
 from app.services.agent.search_reply import prefer_web_search_answer
+from app.services.agent.source_display import prepare_agent_reply_for_ui
 from app.services.agent.thread_memory import update_thread_memory_after_turn
 from app.services.providers.factory import resolve_runtime_providers
 
@@ -107,13 +108,15 @@ async def run_onboarding_loop(
     )
     if isinstance(result, LlmTurnResult):
         draft = prefer_web_search_answer(result.reply, tool_trace)
-        if draft != result.reply:
+        draft, sources = prepare_agent_reply_for_ui(draft, tool_trace)
+        if draft != result.reply or sources:
             result = LlmTurnResult(
                 reply=draft,
                 checklist=result.checklist,
                 ready_for_confirmation=result.ready_for_confirmation,
                 confirmation_summary=result.confirmation_summary,
                 activate=result.activate,
+                sources=sources,
             )
         spec = load_agent_spec(agent)
         llm, _, answer_model, _, _ = await resolve_runtime_providers(db, redis_client, user=user)
@@ -127,12 +130,17 @@ async def run_onboarding_loop(
                 answer_model=answer_model,
             )
             if reflection.revised_reply and (not reflection.ok or reflection.revised_reply != draft):
+                revised, revised_sources = prepare_agent_reply_for_ui(
+                    reflection.revised_reply,
+                    tool_trace,
+                )
                 result = LlmTurnResult(
-                    reply=reflection.revised_reply,
+                    reply=revised,
                     checklist=result.checklist,
                     ready_for_confirmation=result.ready_for_confirmation,
                     confirmation_summary=result.confirmation_summary,
                     activate=result.activate,
+                    sources=revised_sources or result.sources,
                 )
         await emit_status(on_status, STATUS_MEMORY_UPDATE)
         await update_thread_memory_after_turn(
