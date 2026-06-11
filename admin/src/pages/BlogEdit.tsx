@@ -88,7 +88,7 @@ type PostAdminResponse = PostForm & { cover_image?: { url: string } | null };
 
 export function BlogEditPage() {
   const { id } = useParams();
-  const isNew = id === "new";
+  const isNew = !id || id === "new";
   const navigate = useNavigate();
   const location = useLocation();
   const { can } = useAuth();
