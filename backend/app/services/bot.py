@@ -16,6 +16,7 @@ BOT_API_BASE = "https://platform-api.max.ru"
 
 # Пауза после upload перед send (attachment.not.ready — dev.max.ru/docs-api/methods/POST/uploads)
 UPLOAD_TO_SEND_DELAY_SEC = 1.0
+FILE_UPLOAD_TO_SEND_DELAY_SEC = 2.5
 
 
 @dataclass
@@ -180,10 +181,10 @@ class MaxBotService:
         return BotSendResult(ok=False, error="delete failed")
 
     async def upload_media(self, data: bytes, filename: str, media_type: str) -> str | None:
-        """Upload image or video to MAX and return attachment token."""
+        """Upload image, video, file or audio to MAX and return attachment token."""
         if not self.settings.bot_token.strip():
             return None
-        if media_type not in {"image", "video"}:
+        if media_type not in {"image", "video", "file", "audio"}:
             return None
 
         headers = self._auth_headers(json_body=False)

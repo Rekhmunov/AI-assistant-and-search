@@ -23,11 +23,12 @@ ALLOWED_TOOLS = frozenset(
         "max_read_activity_logs",
         "web_search",
         "read_thread_summary",
+        "max_send_file",
     }
 )
 
 # Инструменты, меняющие состояние снаружи Glosix — только с явным флагом
-DESTRUCTIVE_TOOLS = frozenset({"max_send_test"})
+DESTRUCTIVE_TOOLS = frozenset({"max_send_test", "max_send_file"})
 
 
 class AgentSecurityError(ValueError):
@@ -98,7 +99,7 @@ def validate_tool_call(
 
     payload = dict(args or {}) if isinstance(args, dict) else {}
 
-    if name in {"max_probe_chat", "max_get_chat", "max_send_test"}:
+    if name in {"max_probe_chat", "max_get_chat", "max_send_test", "max_send_file"}:
         chat_id = payload.get("chat_id")
         if chat_id is None:
             chat_id = agent.max_chat_id
@@ -111,6 +112,20 @@ def validate_tool_call(
 
     if name == "max_send_test" and not allow_test_send:
         raise AgentSecurityError("test_send_not_allowed")
+
+    if name == "max_send_file":
+        if not allow_test_send:
+            raise AgentSecurityError("file_send_not_allowed")
+        instruction = str(payload.get("instruction") or "").strip()
+        if not instruction or len(instruction) > 2000:
+            raise AgentSecurityError("invalid_file_instruction")
+        payload["instruction"] = instruction
+        fmt = str(payload.get("format") or "docx").strip().lower()
+        if fmt in {"doc", "word"}:
+            fmt = "docx"
+        if fmt not in {"docx", "pdf", "xlsx", "image"}:
+            raise AgentSecurityError("invalid_file_format")
+        payload["format"] = fmt
 
     if name == "max_resolve_channel_link":
         payload["link"] = normalize_channel_link(str(payload.get("link") or ""))
@@ -137,5 +152,19 @@ def user_consented_test_send(user_text: str, checklist_allow: bool = False) -> b
         "проверь чат",
         "probe",
         "test send",
+        "отправь файл",
+        "пришли файл",
+        "пришли документ",
+        "отправь документ",
+        "пришли pdf",
+        "отправь pdf",
+        "пришли excel",
+        "отправь excel",
+        "пришли картин",
+        "отправь картин",
+        "пришли изображ",
+        "отправь изображ",
+        "сформируй и отправ",
+        "сделай и отправ",
     )
     return any(m in low for m in markers)

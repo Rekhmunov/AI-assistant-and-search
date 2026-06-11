@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.agent import AgentInstance, AgentReminder
 from app.models.user import User
 from app.services.agent.generate_content import generate_reminder_text
+from app.services.agent.document_delivery import build_document_delivery_content
 from app.services.agent.image_delivery import build_image_attachments
 from app.services.agent.profile import agent_config, agent_profile
 from app.services.agent.summarize import summarize_group_buffer
@@ -82,6 +83,19 @@ async def build_delivery_content(
         text, attachments = await build_image_attachments(prompt, bot=bot)
         return DeliveryContent(text=text, attachments=attachments)
 
+    if profile.content_pipeline == "document_gen":
+        instruction = str(cfg.get("generation_prompt") or base_text or "").strip()
+        output_format = str(cfg.get("output_format") or "docx").strip().lower()
+        result = await build_document_delivery_content(
+            db,
+            redis_client,
+            user,
+            instruction,
+            output_format=output_format,
+            bot=bot,
+        )
+        return DeliveryContent(text=result.text, attachments=result.attachments)
+
     if profile.content_pipeline == "llm_generate":
         instruction = str(cfg.get("generation_prompt") or base_text or "").strip()
         text = await generate_reminder_text(db, redis_client, user, instruction)
@@ -112,6 +126,19 @@ async def build_dm_command_content(
         prompt = str(cfg.get("image_prompt") or base_text or "").strip()
         text, attachments = await build_image_attachments(prompt, bot=bot)
         return DeliveryContent(text=text, attachments=attachments)
+
+    if profile.content_pipeline == "document_gen":
+        instruction = str(cfg.get("generation_prompt") or base_text or "").strip()
+        output_format = str(cfg.get("output_format") or "docx").strip().lower()
+        result = await build_document_delivery_content(
+            db,
+            redis_client,
+            user,
+            instruction,
+            output_format=output_format,
+            bot=bot,
+        )
+        return DeliveryContent(text=result.text, attachments=result.attachments)
 
     if profile.content_pipeline == "group_summary":
         return DeliveryContent(text=base_text or "Команда принята.", attachments=[])

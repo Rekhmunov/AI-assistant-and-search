@@ -72,7 +72,8 @@ AGENT_SYSTEM_PROMPT = """Ты — ассистент настройки аген
 - schedule_text — для scheduled-ролей (не для dm_assistant / group_moderation)
 - timezone — только если пользователь сам назвал пояс; иначе Europe/Moscow (не спрашивай)
 - reminder_message — текст сообщения ИЛИ инструкция для генерации (напр. «напиши стишок на 4 строки»)
-- content_pipeline: static | llm_generate | web_digest | web_digest_images — static/llm_generate для напоминаний; web_digest — новости текстом; web_digest_images — новостной пост 500–1000 символов + 1–3 иллюстрации
+- content_pipeline: static | llm_generate | web_digest | web_digest_images | document_gen | image_gen — static/llm_generate для напоминаний; web_digest — новости текстом; web_digest_images — новостной пост 500–1000 символов + 1–3 иллюстрации; document_gen — сформировать и отправить файл (docx/pdf/xlsx); image_gen — картинка
+- output_format: docx | pdf | xlsx — формат файла для document_gen (по умолчанию docx)
 - search_topic — тема для news_digest или dm_assistant с веб-сводкой
 - post_min_chars / post_max_chars — длина новостного поста (по умолчанию 500–1000)
 - post_image_count_min / post_image_count_max — число фото в посте (1–3)
@@ -107,6 +108,9 @@ AGENT_SYSTEM_PROMPT = """Ты — ассистент настройки аген
 - «пиши в группу каждый вечер итог дня» → group_reminder или group_message_log
 - «новости про ИИ каждое утро» → news_digest, search_topic, schedule_text
 - «публикуй в группу -ID новости про ИИ раз в час: текст 500–1000 символов, 1–3 фото» → news_digest, delivery_mode=group, max_chat_id, search_topic, schedule_text=каждый час, content_pipeline=web_digest_images, post_min_chars=500, post_max_chars=1000, post_image_count_min=1, post_image_count_max=3
+- «каждый понедельник присылай отчёт в Excel» → personal_reminder, schedule_text, reminder_message=инструкция, content_pipeline=document_gen, output_format=xlsx
+- «отправляй PDF-договор по шаблону каждый месяц» → personal_reminder/group_reminder, content_pipeline=document_gen, output_format=pdf, reminder_message=что включить в документ
+- «пришли картинку заката по команде» → image_post или dm_assistant, content_pipeline=image_gen, image_prompt
 - «раз в час» / «каждый час» / «every hour» → schedule_text=каждый час (НЕ переспрашивай расписание)
 - «отвечай в группе на вопросы, переводи текст с фото» → dm_assistant, scope=group, interaction_mode=support
 - «удаляй спам и ссылки в группе» → group_moderation, moderation_stop_words/block_links
@@ -181,6 +185,7 @@ class ChecklistState:
     post_max_chars: int | None = None
     post_image_count_min: int | None = None
     post_image_count_max: int | None = None
+    output_format: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -205,6 +210,7 @@ class ChecklistState:
             "post_max_chars": self.post_max_chars,
             "post_image_count_min": self.post_image_count_min,
             "post_image_count_max": self.post_image_count_max,
+            "output_format": self.output_format,
         }
 
     @classmethod
@@ -263,6 +269,7 @@ class ChecklistState:
             post_max_chars=_int_or_none(raw.get("post_max_chars")),
             post_image_count_min=_int_or_none(raw.get("post_image_count_min")),
             post_image_count_max=_int_or_none(raw.get("post_image_count_max")),
+            output_format=_normalize_output_format(raw.get("output_format")),
         )
 
 
@@ -280,6 +287,20 @@ def _str_or_none(value: Any) -> str | None:
         return None
     text = str(value).strip()
     return text or None
+
+
+def _normalize_output_format(value: Any) -> str | None:
+    fmt = _str_or_none(value)
+    if not fmt:
+        return None
+    low = fmt.lower()
+    if low in {"doc", "docx", "word"}:
+        return "docx"
+    if low == "pdf":
+        return "pdf"
+    if low in {"xlsx", "excel"}:
+        return "xlsx"
+    return None
 
 
 def _int_or_none(value: Any) -> int | None:
@@ -485,13 +506,21 @@ def apply_checklist_to_agent(agent: AgentInstance, checklist: ChecklistState) ->
             wants_llm_generated_content,
         )
 
+        from app.services.agent.document_delivery import infer_output_format, wants_document_delivery
+
         msg = checklist.reminder_message or ""
-        if wants_llm_generated_content(msg):
+        doc_fmt = infer_output_format(msg, checklist.output_format)
+        if checklist.content_pipeline == "document_gen" or (doc_fmt and wants_document_delivery(msg)):
+            cfg["content_pipeline"] = "document_gen"
+            cfg["output_format"] = doc_fmt or "docx"
+            cfg["generation_prompt"] = generation_instruction(msg) if msg else ""
+        elif wants_llm_generated_content(msg):
             cfg["content_pipeline"] = "llm_generate"
             cfg["generation_prompt"] = generation_instruction(msg)
         else:
             cfg["content_pipeline"] = "static"
             cfg.pop("generation_prompt", None)
+            cfg.pop("output_format", None)
     cfg["search_topic"] = checklist.search_topic
     cfg["image_prompt"] = checklist.image_prompt
     cfg["dm_command"] = checklist.dm_command
@@ -529,6 +558,8 @@ def apply_checklist_to_agent(agent: AgentInstance, checklist: ChecklistState) ->
         cfg["post_image_count_min"] = checklist.post_image_count_min
     if checklist.post_image_count_max is not None:
         cfg["post_image_count_max"] = checklist.post_image_count_max
+    if checklist.output_format:
+        cfg["output_format"] = checklist.output_format
     if checklist.max_chat_id is not None:
         cfg["max_chat_id"] = checklist.max_chat_id
         agent.max_chat_id = checklist.max_chat_id

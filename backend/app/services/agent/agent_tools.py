@@ -68,6 +68,14 @@ async def execute_agent_tool(
             return await _tool_web_search(db, redis_client, user, safe_args)
         if name == "read_thread_summary":
             return await _tool_thread_summary(db, thread_id=thread_id)
+        if name == "max_send_file":
+            return await _tool_max_send_file(
+                db,
+                redis_client,
+                user,
+                safe_args,
+                bot=bot,
+            )
     except Exception as exc:
         logger.exception("Agent tool %s failed: %s", name, exc)
         return {"ok": False, "error": str(exc)[:300], "tool": name}
@@ -155,6 +163,62 @@ async def _tool_web_search(
     topic = str(args["query"])
     text = await build_web_digest_text(db, redis_client, user, topic=topic, header="")
     return {"ok": True, "tool": "web_search", "result": {"text": text[:2500]}}
+
+
+async def _tool_max_send_file(
+    db: AsyncSession,
+    redis_client,
+    user: User,
+    args: dict,
+    *,
+    bot: MaxBotService,
+) -> dict:
+    from app.services.agent.document_delivery import (
+        build_document_delivery_content,
+        build_image_delivery_content,
+    )
+
+    chat_id = int(args["chat_id"])
+    instruction = str(args["instruction"])
+    fmt = str(args.get("format") or "docx")
+    try:
+        if fmt == "image":
+            result = await build_image_delivery_content(instruction, bot=bot)
+        else:
+            result = await build_document_delivery_content(
+                db,
+                redis_client,
+                user,
+                instruction,
+                output_format=fmt,
+                bot=bot,
+            )
+        if not result.attachments:
+            return {
+                "ok": False,
+                "tool": "max_send_file",
+                "error": result.text or "Не удалось подготовить файл",
+            }
+        send = await bot.send_message(
+            None,
+            result.text or "Файл",
+            attachments=result.attachments,
+            chat_id=chat_id,
+            notify=False,
+        )
+        return {
+            "ok": send.ok,
+            "tool": "max_send_file",
+            "result": {
+                "chat_id": chat_id,
+                "format": fmt,
+                "message_id": send.message_id,
+                "error": send.error,
+            },
+        }
+    except Exception as exc:
+        logger.exception("max_send_file failed chat_id=%s: %s", chat_id, exc)
+        return {"ok": False, "tool": "max_send_file", "error": str(exc)[:300]}
 
 
 async def _tool_thread_summary(db: AsyncSession, *, thread_id: UUID) -> dict:

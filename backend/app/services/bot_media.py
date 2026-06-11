@@ -26,10 +26,10 @@ def media_type_from_filename(filename: str) -> str | None:
 
 
 def max_bot_media_attachments(media_type: str | None, media_token: str | None) -> list[dict] | None:
-    """Вложение фото/видео над текстом (как в MAX Bot API)."""
+    """Вложение фото/видео/файла над текстом (как в MAX Bot API)."""
     mt = (media_type or "none").strip().lower()
     token = (media_token or "").strip()
-    if mt in {"image", "video"} and token:
+    if mt in {"image", "video", "file"} and token:
         return [{"type": mt, "payload": {"token": token}}]
     return None
 

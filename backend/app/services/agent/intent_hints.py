@@ -427,6 +427,15 @@ def infer_checklist_fields(text: str, data: dict[str, Any]) -> dict[str, Any]:
     if data.get("schedule_text") and not data.get("timezone"):
         data["timezone"] = DEFAULT_AGENT_TIMEZONE
 
+    from app.services.agent.document_delivery import infer_output_format, wants_document_delivery
+
+    doc_fmt = infer_output_format(clean, str(data.get("output_format") or ""))
+    if doc_fmt and wants_document_delivery(clean):
+        data["output_format"] = doc_fmt
+        data["content_pipeline"] = "document_gen"
+        if not data.get("reminder_message") and len(clean) > 12:
+            data["reminder_message"] = clean[:500]
+
     chat_id = _extract_max_chat_id(clean)
     if chat_id is not None:
         data["max_chat_id"] = chat_id

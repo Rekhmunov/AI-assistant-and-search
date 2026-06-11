@@ -157,6 +157,19 @@ async def build_interactive_reply(
     if not question and vision_note:
         question = "Обработай изображение согласно запросу пользователя."
 
+    from app.services.agent.document_delivery import try_build_file_reply
+
+    file_reply = await try_build_file_reply(
+        db,
+        redis_client,
+        user,
+        question,
+        output_format=str(cfg.get("output_format") or "") or None,
+        bot=bot,
+    )
+    if file_reply and file_reply.attachments:
+        return file_reply.text, file_reply.attachments
+
     answer = await _answer_with_llm(
         db,
         redis_client,

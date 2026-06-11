@@ -36,6 +36,7 @@ TOOL_STATUS_LABELS: dict[str, str] = {
     "max_read_activity_logs": "Читаю журнал активности агента…",
     "web_search": "Ищу в интернете…",
     "read_thread_summary": "Просматриваю историю диалога…",
+    "max_send_file": "Формирую и отправляю файл в MAX…",
 }
 
 
