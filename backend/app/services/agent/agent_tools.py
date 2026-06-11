@@ -70,8 +70,6 @@ async def execute_agent_tool(
             return await _tool_read_logs(db, thread_id=thread_id, user_id=user.id)
         if name == "web_search":
             return await _tool_web_search(db, redis_client, user, safe_args, on_status=on_status)
-        if name == "build_news_post":
-            return await _tool_build_news_post(db, redis_client, user, safe_args, on_status=on_status)
         if name == "read_thread_summary":
             return await _tool_thread_summary(db, thread_id=thread_id)
         if name == "max_send_file":
@@ -193,39 +191,6 @@ async def _tool_web_search(
             "text": search.text[:4000],
             "sources": search.sources[:12],
             "sources_block": search.sources_block,
-        },
-    }
-
-
-async def _tool_build_news_post(
-    db: AsyncSession,
-    redis_client,
-    user: User,
-    args: dict,
-    *,
-    on_status: StatusCallback | None = None,
-) -> dict:
-    from app.services.agent.news_post_delivery import build_news_post_content
-
-    topic = str(args["topic"])
-    text, attachments = await build_news_post_content(
-        db,
-        redis_client,
-        user,
-        topic=topic,
-        min_chars=int(args.get("min_chars") or 500),
-        max_chars=int(args.get("max_chars") or 1000),
-        image_min=int(args.get("image_min") or 1),
-        image_max=int(args.get("image_max") or 3),
-        on_status=on_status,
-    )
-    return {
-        "ok": True,
-        "tool": "build_news_post",
-        "result": {
-            "text": text[:3000],
-            "image_count": len(attachments),
-            "char_count": len(text),
         },
     }
 

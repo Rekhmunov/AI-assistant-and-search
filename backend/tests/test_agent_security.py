@@ -70,21 +70,6 @@ def test_forbidden_tool_rejected():
         assert "tool_not_allowed" in str(exc)
 
 
-def test_build_news_post_validation():
-    agent = _agent()
-    user = User(id=agent.user_id, max_user_id=1)
-    payload = validate_tool_call(
-        "build_news_post",
-        {"topic": "новости про ИИ"},
-        agent=agent,
-        user=user,
-        message_chat_id=None,
-        allow_test_send=False,
-    )
-    assert payload["topic"] == "новости про ИИ"
-    assert payload["min_chars"] == 500
-
-
 def test_store_agent_record_validation():
     agent = _agent()
     user = User(id=agent.user_id, max_user_id=1)

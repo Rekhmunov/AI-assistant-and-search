@@ -15,7 +15,6 @@ from app.models.agent import AgentInstance
 from app.models.message import Message
 from app.models.user import User
 from app.services.agent.agent_reflection import critique_agent_reply, should_reflect
-from app.services.agent.search_guard import must_run_search_before_reply
 from app.services.agent.agent_security import (
     MAX_ORCHESTRATOR_ITERATIONS,
     MAX_TOOL_CALLS_PER_TURN,
@@ -53,8 +52,8 @@ from app.services.providers.factory import resolve_runtime_providers
 logger = logging.getLogger(__name__)
 
 RUNTIME_SYSTEM_PROMPT = """Ты — автономный агент Glosix в мессенджере MAX.
-Используй agent_spec, thread_memory и tools. Действуй самостоятельно.
-Для учёта данных: store_agent_record. Для отчётов: query_agent_records + max_send_file.
+Используй agent_spec, thread_memory и tools. Действуй самостоятельно: сам выбирай формат поста, длину, иллюстрации.
+Для актуальных данных — web_search. Для учёта: store_agent_record. Для отчётов: query_agent_records + max_send_file.
 Если категория неясна — спроси в чат. Отвечай кратко на русском."""
 
 
@@ -339,31 +338,6 @@ async def _tool_loop(
             continue
 
         reply = str(data.get("reply") or "").strip()
-        if done and must_run_search_before_reply(
-            user_text=user_text,
-            reply=reply,
-            tool_trace=tool_trace,
-        ):
-            tool_trace.append(
-                {
-                    "ok": False,
-                    "tool": "search_guard",
-                    "error": "reply_without_search",
-                }
-            )
-            history = list(history)
-            history.append(
-                {
-                    "role": "system",
-                    "text": (
-                        "Запрос требует актуальных данных из интернета. "
-                        "Нельзя отвечать из памяти или примерами. "
-                        'Вызови web_search с query по теме пользователя, затем сформируй reply с фактами и источниками.'
-                    ),
-                }
-            )
-            continue
-
         if mode == "runtime":
             if outbound_sent and not reply:
                 reply = ""

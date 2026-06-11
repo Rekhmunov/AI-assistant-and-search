@@ -393,9 +393,6 @@ def infer_checklist_fields(text: str, data: dict[str, Any]) -> dict[str, Any]:
         if length_limits:
             data["post_min_chars"] = length_limits[0]
             data["post_max_chars"] = length_limits[1]
-        elif image_count:
-            data["post_min_chars"] = 500
-            data["post_max_chars"] = 1000
 
     if role == AgentRole.IMAGE_POST.value and not data.get("image_prompt"):
         if len(clean) > 12:

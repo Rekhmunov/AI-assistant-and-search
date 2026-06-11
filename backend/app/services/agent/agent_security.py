@@ -22,7 +22,6 @@ ALLOWED_TOOLS = frozenset(
         "max_resolve_channel_link",
         "max_read_activity_logs",
         "web_search",
-        "build_news_post",
         "read_thread_summary",
         "max_send_file",
         "max_send_message",
@@ -177,24 +176,6 @@ def validate_tool_call(
         if not query or len(query) > 500:
             raise AgentSecurityError("invalid_search_query")
         payload["query"] = query
-
-    if name == "build_news_post":
-        topic = str(payload.get("topic") or "").strip()
-        if not topic or len(topic) > 500:
-            raise AgentSecurityError("invalid_search_query")
-        payload["topic"] = topic
-        for key, default, lo, hi in (
-            ("min_chars", 500, 200, 2000),
-            ("max_chars", 1000, 300, 4000),
-            ("image_min", 1, 1, 3),
-            ("image_max", 3, 1, 3),
-        ):
-            raw = payload.get(key)
-            if raw is None:
-                payload[key] = default
-            else:
-                val = int(raw)
-                payload[key] = max(lo, min(hi, val))
 
     return payload
 

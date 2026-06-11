@@ -41,7 +41,6 @@ TOOL_STATUS_LABELS: dict[str, str] = {
     "max_resolve_channel_link": "Определяю группу по ссылке MAX…",
     "max_read_activity_logs": "Читаю журнал активности агента…",
     "web_search": "Ищу в интернете…",
-    "build_news_post": "Собираю пост: поиск, текст и фото…",
     "read_thread_summary": "Просматриваю историю диалога…",
     "max_send_file": "Формирую и отправляю файл в MAX…",
     "max_send_message": "Отправляю сообщение в MAX…",
