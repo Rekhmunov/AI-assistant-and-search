@@ -90,6 +90,8 @@ async def execute_agent_tool(
             return _tool_query_records(agent, safe_args)
         if name == "update_agent_memory":
             return _tool_update_memory(agent, safe_args)
+        if name == "read_max_api_docs":
+            return _tool_read_max_api_docs(safe_args)
     except Exception as exc:
         logger.exception("Agent tool %s failed: %s", name, exc)
         return {"ok": False, "error": str(exc)[:300], "tool": name}
@@ -315,6 +317,18 @@ async def _tool_thread_summary(db: AsyncSession, *, thread_id: UUID) -> dict:
     msgs = list(reversed(result.scalars().all()))
     lines = [f"{m.role.value}: {m.content[:400]}" for m in msgs]
     return {"ok": True, "tool": "read_thread_summary", "result": {"messages": lines}}
+
+
+def _tool_read_max_api_docs(args: dict) -> dict:
+    from app.services.agent.max_docs import get_max_docs
+
+    section = str(args.get("section") or "").strip()
+    content = get_max_docs(section or None)
+    return {
+        "ok": True,
+        "tool": "read_max_api_docs",
+        "result": {"content": content[:8000], "section": section or "full"},
+    }
 
 
 async def agent_runtime_diagnostics(db: AsyncSession, agent: AgentInstance) -> dict:

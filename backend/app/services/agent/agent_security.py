@@ -29,6 +29,7 @@ ALLOWED_TOOLS = frozenset(
         "store_agent_record",
         "query_agent_records",
         "update_agent_memory",
+        "read_max_api_docs",
     }
 )
 
@@ -176,6 +177,10 @@ def validate_tool_call(
         if not query or len(query) > 500:
             raise AgentSecurityError("invalid_search_query")
         payload["query"] = query
+
+    if name == "read_max_api_docs":
+        section = str(payload.get("section") or "").strip()[:200]
+        payload["section"] = section
 
     return payload
 
