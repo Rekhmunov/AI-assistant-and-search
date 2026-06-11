@@ -8,7 +8,8 @@ export const PRIVATE_ROUTE_PREFIXES = [
   "/source-view",
 ] as const;
 
-const PRIVATE_QUERY_RE = /(?:^|&)(?:WebAppStartParam|etext|startapp)=/i;
+const PRIVATE_QUERY_KEYS = ["WebAppStartParam", "etext", "startapp"] as const;
+const PRIVATE_QUERY_RE = /(?:^|&)(?:WebAppStartParam|etext|startapp)(?:=|&|$)/i;
 
 export function isPrivateAppPath(pathname: string): boolean {
   return PRIVATE_ROUTE_PREFIXES.some(
@@ -29,4 +30,20 @@ export function shouldNoindexPage(pathname: string, search = "", hash = ""): boo
     return true;
   }
   return false;
+}
+
+/** Убирает трекинг-параметры MAX/рекламы из адресной строки после чтения. */
+export function stripPrivateQueryParamsFromUrl(): void {
+  if (typeof window === "undefined") return;
+  const url = new URL(window.location.href);
+  let changed = false;
+  for (const key of PRIVATE_QUERY_KEYS) {
+    if (!url.searchParams.has(key)) continue;
+    url.searchParams.delete(key);
+    changed = true;
+  }
+  if (!changed) return;
+  const search = url.searchParams.toString();
+  const next = `${url.pathname}${search ? `?${search}` : ""}${url.hash}`;
+  window.history.replaceState(window.history.state, "", next);
 }

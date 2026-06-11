@@ -9,6 +9,9 @@ Disallow: /login
 Disallow: /source-view
 Disallow: /api/
 Disallow: /?
+Disallow: /?WebAppStartParam
+Disallow: /?etext
+Disallow: /?startapp
 Disallow: /*?*etext=
 Disallow: /*?*WebAppStartParam=
 Disallow: /*?*startapp=

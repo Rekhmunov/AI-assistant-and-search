@@ -6,6 +6,11 @@
 
 resolver 127.0.0.11 valid=10s ipv6=off;
 
+map $args $glosix_private_query {
+    default 0;
+    ~*(^|&)(WebAppStartParam|etext|startapp)  1;
+}
+
 server {
     listen 80;
     server_name ${APP_SERVER_NAMES};
@@ -17,7 +22,7 @@ server {
     add_header Permissions-Policy "camera=(), microphone=(self), geolocation=()" always;
 
     location = / {
-        if ($args ~* "(WebAppStartParam|etext|startapp)=") {
+        if ($glosix_private_query) {
             add_header X-Robots-Tag "noindex, nofollow, noarchive" always;
         }
         set $frontend_upstream frontend:80;

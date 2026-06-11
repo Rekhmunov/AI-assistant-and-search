@@ -10,8 +10,14 @@ describe("pageRobots", () => {
 
   it("marks tracking query params", () => {
     expect(hasPrivateQueryParams("?WebAppStartParam=foo")).toBe(true);
+    expect(hasPrivateQueryParams("?WebAppStartParam=")).toBe(true);
+    expect(hasPrivateQueryParams("?WebAppStartParam")).toBe(true);
     expect(hasPrivateQueryParams("?etext=2202.abc")).toBe(true);
     expect(hasPrivateQueryParams("")).toBe(false);
+  });
+
+  it("combines homepage with empty WebAppStartParam", () => {
+    expect(shouldNoindexPage("/", "?WebAppStartParam=")).toBe(true);
   });
 
   it("combines path and query checks", () => {

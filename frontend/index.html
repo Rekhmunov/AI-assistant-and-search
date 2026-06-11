@@ -4,6 +4,21 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <script>
+      (function () {
+        var search = location.search || "";
+        var q = search.charAt(0) === "?" ? search.slice(1) : search;
+        if (!/(?:^|&)(?:WebAppStartParam|etext|startapp)(?:=|&|$)/i.test(q)) return;
+        var robots = "noindex, nofollow, noarchive";
+        ["robots", "googlebot", "yandex"].forEach(function (name) {
+          var el = document.createElement("meta");
+          el.setAttribute("name", name);
+          el.setAttribute("content", robots);
+          document.head.appendChild(el);
+        });
+        document.title = "Glosix";
+      })();
+    </script>
     <meta
       name="description"
       content="Glosix - ИИ ассистент и умный поиск. Ищет в интернете онлайн по источникам и дает готовый ответ. Генерирует документы и картинки, обрабатывает PDF, Word, Excel и фото. Переводит тексты. ИИ чат с нейросетью. Доступен в браузере и мессенджере MAX."
@@ -34,7 +49,7 @@
         var isPrivatePath = privatePaths.some(function (p) {
           return path === p || path.indexOf(p + "/") === 0;
         });
-        var privateQuery = /(?:^|&)(?:WebAppStartParam|etext|startapp)=/i.test(
+        var privateQuery = /(?:^|&)(?:WebAppStartParam|etext|startapp)(?:=|&|$)/i.test(
           search.charAt(0) === "?" ? search.slice(1) : search
         );
         var privateHash = /(?:^|[&#])(?:WebAppData|WebAppPlatform|WebAppVersion)=/i.test(hash);

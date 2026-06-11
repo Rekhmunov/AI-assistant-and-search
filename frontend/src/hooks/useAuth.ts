@@ -15,6 +15,7 @@ import {
   setMaxLoginError,
 } from "../lib/maxApp";
 import { HttpResponseError, isAuthFailureStatus, isTransientFailureStatus } from "../lib/httpError";
+import { stripPrivateQueryParamsFromUrl } from "../lib/pageRobots";
 import { useAuthStore, waitForAuthHydration } from "../store/authStore";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -98,6 +99,7 @@ export function useAuthBootstrap() {
 
         const initData = getMaxInitData();
         const bindToken = parseMaxBindToken(getMaxStartParam());
+        stripPrivateQueryParamsFromUrl();
         if (bindToken && initData) {
           try {
             const data = await completeBindMax(bindToken, initData);
