@@ -46,6 +46,7 @@ from app.services.agent.llm_onboarding import (
     load_checklist,
 )
 from app.services.agent.max_capabilities import tools_appendix_for_mode
+from app.services.agent.search_reply import prefer_web_search_answer
 from app.services.agent.thread_memory import update_thread_memory_after_turn
 from app.services.providers.factory import resolve_runtime_providers
 
@@ -105,7 +106,15 @@ async def run_onboarding_loop(
         on_status=on_status,
     )
     if isinstance(result, LlmTurnResult):
-        draft = result.reply
+        draft = prefer_web_search_answer(result.reply, tool_trace)
+        if draft != result.reply:
+            result = LlmTurnResult(
+                reply=draft,
+                checklist=result.checklist,
+                ready_for_confirmation=result.ready_for_confirmation,
+                confirmation_summary=result.confirmation_summary,
+                activate=result.activate,
+            )
         spec = load_agent_spec(agent)
         llm, _, answer_model, _, _ = await resolve_runtime_providers(db, redis_client, user=user)
         if should_reflect(user_text=last_user, draft_reply=draft, runtime=False):
@@ -176,6 +185,13 @@ async def run_runtime_loop(
         author=author,
     )
     if isinstance(result, RuntimeLoopResult):
+        text = prefer_web_search_answer(result.text, result.tool_trace or tool_trace)
+        if text != result.text:
+            result = RuntimeLoopResult(
+                text=text,
+                attachments=result.attachments,
+                tool_trace=result.tool_trace,
+            )
         llm, _, answer_model, _, _ = await resolve_runtime_providers(db, redis_client, user=user)
         if should_reflect(user_text=user_text, draft_reply=result.text, runtime=True):
             await emit_status(on_status, STATUS_REFLECTING)

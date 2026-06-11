@@ -87,6 +87,15 @@ _FEASIBILITY_RE = re.compile(
     re.I,
 )
 
+_IMMEDIATE_LOOKUP_RE = re.compile(
+    r"(?:"
+    r"\b(?:найди|найти|поищи|поиск|узнай|узнать|проверь|посмотри|покажи)\b"
+    r"|\bв\s+интернет"
+    r"|\bскажи\s+(?:мне\s+)?(?:какой|сколько|что|когда|где)\b"
+    r")",
+    re.I,
+)
+
 
 def user_needs_clarification(text: str) -> bool:
     low = (text or "").strip().lower()
@@ -108,6 +117,14 @@ def _has_task_hint(text: str) -> bool:
     return bool(_TASK_HINT_RE.search(text or ""))
 
 
+def user_wants_immediate_lookup(text: str) -> bool:
+    """Сейчас нужен факт из интернета, а не вопрос «можешь ли настроить агента»."""
+    low = (text or "").strip().lower()
+    if not low:
+        return False
+    return bool(_IMMEDIATE_LOOKUP_RE.search(low))
+
+
 def user_asks_feasibility(text: str) -> bool:
     """
     «Ты можешь сделать напоминание?» — вопрос про конкретную задачу, не про список возможностей.
@@ -115,7 +132,9 @@ def user_asks_feasibility(text: str) -> bool:
     low = (text or "").strip().lower()
     if not low or not _FEASIBILITY_RE.search(low):
         return False
-    return _has_task_hint(low) or len(low) > 20
+    if user_wants_immediate_lookup(low):
+        return False
+    return _has_task_hint(low)
 
 
 def user_asks_capabilities(text: str) -> bool:

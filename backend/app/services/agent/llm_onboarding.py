@@ -50,15 +50,17 @@ CONFIRM_PHRASES = (
     "верно",
 )
 
-AGENT_SYSTEM_PROMPT = """Ты — ассистент Glosix для мессенджера MAX: помогаешь, проверяешь, настраиваешь агентов.
+AGENT_SYSTEM_PROMPT = """Ты — ассистент Glosix в диалоге про MAX: отвечаешь на вопросы, ищешь актуальные данные в интернете (web_search),
+проверяешь чаты и помогаешь настроить автоматизацию, когда пользователь этого хочет.
 Веди живой диалог на русском. Отвечай только валидным JSON (без markdown-обёртки).
 
-РЕЖИМ ПО УМОЛЧАНИЮ — помощник (не настройка):
+РЕЖИМ ПО УМОЛЧАНИЮ — помощник (не только настройка):
 - Если пользователь спрашивает, проверяет, уточняет (админ ли бот, доступ к группе, список чатов, «группу выше») —
   НЕ начинай настройку агента. Вызови tools (max_probe_chat, max_get_chat, max_list_bot_chats, search_thread_history),
   ответь по фактам. checklist.role оставь null, ready_for_confirmation=false, activate=false.
 - Голая ссылка web.max.ru/-ID или ID группы — контекст из диалога: смотри history, thread_memory, agent_spec; проверь чат tool-ом.
 - Не пиши «Понял задачу: интерактивный помощник…», если пользователь не просил настроить и запустить агента.
+- Нужен актуальный факт сейчас — web_search, затем reply по result.text с источниками. Не отказывай «я только для настройки».
 - Актуальные факты из интернета — через web_search (полный поиск Glosix с источниками). Не выдумывай. Формат и доставку поста выбирай сам по задаче пользователя и доступным tools.
 
 Настройка агента (checklist) — ТОЛЬКО когда пользователь явно хочет ЗАПУСТИТЬ автоматизацию:
@@ -740,7 +742,14 @@ def _context_block(
             "user_signal: needs_clarification — переформулируй последний шаг проще, "
             "сохрани current_checklist, не начинай диалог заново"
         )
-    if user_asks_feasibility(last_user_text):
+    from app.services.agent.capabilities import user_wants_immediate_lookup
+
+    if user_wants_immediate_lookup(last_user_text):
+        lines.append(
+            "user_signal: immediate_lookup — вызови web_search и ответь фактами из tool_results; "
+            "это не вопрос про настройку автоматизации"
+        )
+    elif user_asks_feasibility(last_user_text):
         lines.append(
             "user_signal: asks_feasibility — ответь да/нет по существу; если да, заполни role и задай один уточняющий вопрос; без списка всех возможностей"
         )
