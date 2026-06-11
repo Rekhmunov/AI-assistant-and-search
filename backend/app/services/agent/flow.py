@@ -25,7 +25,6 @@ from app.services.agent.capabilities import reply_claims_activation
 from app.services.agent.intent_hints import user_wants_immediate_run, user_wants_today_run
 from app.services.agent.agent_loop import run_onboarding_loop
 from app.services.agent.agent_orchestrator import user_wants_diagnostic
-from app.services.agent.operational import handle_operational_query, is_operational_max_query
 from app.services.agent.llm_onboarding import (
     apply_checklist_to_agent,
     build_confirmation_prompt,
@@ -253,16 +252,9 @@ async def _handle_agent_message_body(
             return user_msg, assistant, agent
         assistant_turn = True
 
-    operational = is_operational_max_query(text)
     diagnostic_mode = agent.status == AgentStatus.ACTIVE.value and (
-        user_wants_diagnostic(text) or operational or assistant_turn
+        user_wants_diagnostic(text) or assistant_turn
     )
-
-    op_handled = await handle_operational_query(
-        db, user, agent, thread, text, user_msg=user_msg, on_status=status_cb
-    )
-    if op_handled is not None:
-        return op_handled
 
     if agent.status == AgentStatus.ACTIVE.value and not diagnostic_mode:
         assistant = await _assistant_reply(

@@ -47,7 +47,9 @@ def tools_appendix_for_mode(*, runtime: bool = False) -> str:
         )
     else:
         lines.append(
-            "\nРежим настройки: заполняй checklist/agent_spec, используй tools для проверки MAX."
+            "\nРежим Glosix-треда: по умолчанию помогай и проверяй через tools. "
+            "checklist заполняй только для явной настройки автоматизации. "
+            "Вопросы про админа/доступ/чаты → max_probe_chat, max_get_chat, max_list_bot_chats, search_thread_history."
         )
     lines.append(
         '\nФормат JSON: {"reply": "...", "done": true/false, '

@@ -79,12 +79,11 @@ async def run_onboarding_loop(
     history = history_messages_for_agent(messages, agent)
     last_user = history[-1]["text"] if history and history[-1]["role"] == "user" else ""
     from app.services.agent.intent_hints import _extract_max_chat_id
-    from app.services.agent.operational import bind_chat_to_current_agent, is_operational_max_query
+    from app.services.agent.operational import bind_chat_to_current_agent
 
-    if is_operational_max_query(last_user):
-        cid = _extract_max_chat_id(last_user)
-        if cid is not None:
-            bind_chat_to_current_agent(agent, int(cid))
+    cid = _extract_max_chat_id(last_user)
+    if cid is not None:
+        bind_chat_to_current_agent(agent, int(cid))
 
     checklist = ChecklistState.from_dict(apply_message_hints(checklist.to_dict(), last_user))
     sync_spec_from_checklist(agent, checklist.to_dict(), last_user)

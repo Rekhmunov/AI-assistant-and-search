@@ -52,6 +52,17 @@ def user_corrects_understanding(text: str) -> bool:
             "исправь",
             "нет,",
             "нет ты",
+            "задачу не давал",
+            "задачу не давала",
+            "не давал задач",
+            "не давала задач",
+            "не просил настраивать",
+            "не просила настраивать",
+            "не просил запускать",
+            "никакую задачу",
+            "никакую не давал",
+            "не давал",
+            "не давала",
         )
     )
 
@@ -298,32 +309,38 @@ def _normalize_schedule_text(clean: str) -> str | None:
 
 def infer_checklist_fields(text: str, data: dict[str, Any]) -> dict[str, Any]:
     """Дополняет чеклист полями из текста пользователя."""
-    from app.services.agent.operational import is_operational_max_query
+    from app.services.agent.operational import is_assist_turn
 
     clean = (text or "").strip()
     if not clean:
         return data
 
-    if is_operational_max_query(clean):
-        chat_id = _extract_max_chat_id(clean)
-        if chat_id is not None:
-            data["max_chat_id"] = chat_id
-        return data
-
-    low = clean.lower()
-
-    if user_corrects_understanding(clean):
-        if _is_personal_max_chat(low):
-            data["role"] = AgentRole.PERSONAL_REMINDER.value
+    corrected = user_corrects_understanding(clean)
+    if corrected:
+        data["role"] = None
+        data.pop("interaction_mode", None)
+        data.pop("scope", None)
+        data.pop("support_instructions", None)
         prev_msg = data.get("reminder_message") or ""
         if prev_msg and ("?" in prev_msg or _has_any(prev_msg.lower(), "можешь", "можно ли", "напоминание в")):
             data["reminder_message"] = None
 
+    if is_assist_turn(clean):
+        chat_id = _extract_max_chat_id(clean)
+        if chat_id is not None:
+            data["max_chat_id"] = chat_id
+        data["role"] = None
+        for key in ("interaction_mode", "scope", "support_instructions", "dm_command"):
+            data.pop(key, None)
+        return data
+
+    low = clean.lower()
+
     inferred_role = infer_role_from_text(clean)
     if inferred_role:
         data["role"] = inferred_role
-    elif not data.get("role"):
-        pass
+    elif corrected:
+        data["role"] = None
 
     if user_wants_immediate_run(clean):
         data["schedule_text"] = "через 2 минуты"

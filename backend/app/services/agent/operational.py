@@ -37,15 +37,57 @@ def user_wants_admin_check(text: str) -> bool:
         for q in (
             "ты там админ",
             "ты админ",
-            "бот админ",
             "админ ли",
             "ли админ",
             "являешься админ",
             "является админ",
+            "где ты админ",
+            "в которых ты админ",
+            "чаты, в которых",
+            "чатах, в которых",
         )
     ):
         return True
+    if "бот админ" in low and ("?" in low or re.search(r"провер\w*|ли\b", low)):
+        return True
+    if re.search(r"чат", low) and re.search(r"админ", low) and re.search(r"провер\w*|какие|где|список", low):
+        return True
     if "?" in low and re.search(r"провер\w*", low):
+        return True
+    return False
+
+
+def is_bare_max_link_message(text: str) -> bool:
+    """Сообщение в основном ссылка или ID группы MAX — контекст, не задача на настройку."""
+    clean = (text or "").strip()
+    chat_id = _extract_max_chat_id(clean)
+    if chat_id is None:
+        return False
+    remainder = re.sub(r"https?://\S+", "", clean)
+    remainder = re.sub(r"-?\d{5,}", "", remainder)
+    remainder = re.sub(r"[^\wа-яё]+", " ", remainder, flags=re.I).strip().lower()
+    noise = {"max", "ru", "web", "группа", "чат", "ссылка", "вот", "id"}
+    tokens = [t for t in remainder.split() if t and t not in noise]
+    return len("".join(tokens)) < 12
+
+
+def is_assist_turn(text: str) -> bool:
+    """Помощь/диагностика — агент сам решает через tools, без автозаполнения checklist."""
+    clean = (text or "").strip()
+    if not clean:
+        return False
+    low = clean.lower()
+    if _has_write_to_group_intent(low):
+        return False
+    if is_operational_max_query(clean):
+        return True
+    if is_bare_max_link_message(clean):
+        return True
+    if user_wants_admin_check(clean):
+        return True
+    if re.search(r"провер\w*", low) and re.search(r"чат|групп|max|бот", low):
+        return True
+    if _extract_max_chat_id(clean) and re.search(r"выше|раньше|писал|скинул|прислал", low):
         return True
     return False
 
