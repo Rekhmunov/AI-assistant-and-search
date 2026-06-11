@@ -176,18 +176,25 @@ async def _tool_web_search(
     *,
     on_status: StatusCallback | None = None,
 ) -> dict:
-    from app.services.agent.web_digest import build_web_digest_text
+    from app.services.agent.agent_search import run_agent_glosix_search
 
     topic = str(args["query"])
-    text = await build_web_digest_text(
+    search = await run_agent_glosix_search(
         db,
         redis_client,
         user,
-        topic=topic,
-        header="",
+        topic,
         on_status=on_status,
     )
-    return {"ok": True, "tool": "web_search", "result": {"text": text[:2500]}}
+    return {
+        "ok": True,
+        "tool": "web_search",
+        "result": {
+            "text": search.text[:4000],
+            "sources": search.sources[:12],
+            "sources_block": search.sources_block,
+        },
+    }
 
 
 async def _tool_build_news_post(

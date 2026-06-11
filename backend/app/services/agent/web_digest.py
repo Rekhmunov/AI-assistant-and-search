@@ -1,4 +1,4 @@
-"""Поиск в интернете + сводка для агента (без search_flow / SSE)."""
+"""Поиск в интернете для агента — полный пайплайн Glosix с источниками."""
 
 from __future__ import annotations
 
@@ -7,9 +7,9 @@ from collections.abc import Awaitable, Callable
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.user import User
-from app.services.agent.agent_status import STATUS_SEARCH_FETCH, STATUS_SEARCH_WRITE
+from app.services.agent.agent_search import run_agent_glosix_search
 from app.services.agent.summarize import summarize_search_sources
-from app.services.providers.factory import create_search_provider, resolve_search_provider_id
+from app.services.llm_provider import SearchSource
 
 StatusCallback = Callable[[str], Awaitable[None]]
 
@@ -29,20 +29,41 @@ async def build_web_digest_text(
     if not topic:
         return "Тема для поиска не задана."
 
-    if on_status:
-        await on_status(STATUS_SEARCH_FETCH)
-    provider_id = await resolve_search_provider_id(db, redis_client)
-    search = create_search_provider(provider_id)
-    sources = await search.search(topic, limit=5)
-    if on_status:
-        await on_status(STATUS_SEARCH_WRITE)
-    return await summarize_search_sources(
+    result = await run_agent_glosix_search(
         db,
         redis_client,
         user,
         topic,
-        sources,
-        header=header,
-        min_chars=min_chars,
-        max_chars=max_chars,
+        on_status=on_status,
     )
+
+    if min_chars and max_chars and max_chars >= min_chars and result.sources:
+        sources = [
+            SearchSource(
+                index=int(s.get("index") or i + 1),
+                url=str(s.get("url") or ""),
+                title=str(s.get("title") or ""),
+                snippet=str(s.get("snippet") or ""),
+                domain=str(s.get("domain") or ""),
+            )
+            for i, s in enumerate(result.sources)
+        ]
+        body = await summarize_search_sources(
+            db,
+            redis_client,
+            user,
+            topic,
+            sources,
+            header="",
+            min_chars=min_chars,
+            max_chars=max_chars,
+        )
+        if result.sources_block and result.sources_block not in body:
+            body = f"{body.strip()}\n\n{result.sources_block}"
+    else:
+        body = result.text
+
+    body = (body or "").strip()
+    if header.strip():
+        return f"{header.strip()}\n\n{body}"
+    return body

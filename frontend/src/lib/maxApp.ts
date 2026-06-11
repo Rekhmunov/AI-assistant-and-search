@@ -12,6 +12,21 @@ export function hasMaxWebAppHashInUrl(urlLike?: string | URL): boolean {
   return MAX_WEBAPP_HASH_RE.test(`${window.location.search}${window.location.hash}`);
 }
 
+const MAX_WEBAPP_WAIT_MS = 3000;
+const MAX_WEBAPP_POLL_MS = 50;
+
+/** Wait until MAX WebApp bridge exposes initData (reload may populate it asynchronously). */
+export async function waitForMaxWebApp(timeoutMs = MAX_WEBAPP_WAIT_MS): Promise<void> {
+  if (typeof window === "undefined") return;
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const bridge = window.WebApp;
+    if (bridge?.initData?.trim() || bridge?.platform?.trim()) return;
+    if (hasMaxWebAppHashInUrl()) return;
+    await new Promise((r) => setTimeout(r, MAX_WEBAPP_POLL_MS));
+  }
+}
+
 /** Remove sensitive WebApp hash from the address bar after the MAX SDK has read it. */
 export function stripMaxWebAppHashFromUrl(): void {
   if (typeof window === "undefined") return;

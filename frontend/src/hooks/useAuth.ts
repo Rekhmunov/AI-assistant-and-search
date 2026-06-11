@@ -13,12 +13,15 @@ import {
   parseMaxBindToken,
   setMaxBindError,
   setMaxLoginError,
+  stripMaxWebAppHashFromUrl,
+  waitForMaxWebApp,
 } from "../lib/maxApp";
 import { HttpResponseError, isAuthFailureStatus, isTransientFailureStatus } from "../lib/httpError";
 import { stripPrivateQueryParamsFromUrl } from "../lib/pageRobots";
 import { useAuthStore, waitForAuthHydration } from "../store/authStore";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+const BOOTSTRAP_TIMEOUT_MS = 12000;
 
 async function refreshAccessTokenWithRetry(): Promise<string> {
   let last: unknown;
@@ -91,13 +94,24 @@ export function useAuthBootstrap() {
     const isCancelled = () => cancelled;
 
     async function bootstrap() {
+      const bootDeadline = Date.now() + BOOTSTRAP_TIMEOUT_MS;
+      const timedOut = () => Date.now() >= bootDeadline;
+
       try {
-        await waitForAuthHydration();
+        await Promise.race([waitForAuthHydration(), sleep(BOOTSTRAP_TIMEOUT_MS)]);
         if (cancelled) return;
 
-        if (window.WebApp?.ready) window.WebApp.ready();
+        await Promise.race([waitForMaxWebApp(), sleep(BOOTSTRAP_TIMEOUT_MS)]);
+        if (cancelled) return;
+
+        try {
+          window.WebApp?.ready?.();
+        } catch {
+          /* MAX bridge may be partial on desktop */
+        }
 
         const initData = getMaxInitData();
+        stripMaxWebAppHashFromUrl();
         const bindToken = parseMaxBindToken(getMaxStartParam());
         stripPrivateQueryParamsFromUrl();
         if (bindToken && initData) {
@@ -117,7 +131,12 @@ export function useAuthBootstrap() {
           }
         }
 
-        const accessToken = await resolveAccessToken(isCancelled);
+        const accessToken = timedOut()
+          ? useAuthStore.getState().token
+          : await Promise.race([
+              resolveAccessToken(isCancelled),
+              sleep(Math.max(0, bootDeadline - Date.now())).then(() => null),
+            ]);
         if (cancelled) return;
 
         if (accessToken) {

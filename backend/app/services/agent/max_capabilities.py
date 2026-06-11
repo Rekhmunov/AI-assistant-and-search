@@ -22,7 +22,7 @@ CAPABILITIES: tuple[AgentCapability, ...] = (
     AgentCapability("max_send_message", "max", "Отправить текст в MAX (личка или группа)", destructive=True),
     AgentCapability("max_send_file", "max", "Сгенерировать и отправить файл (docx/pdf/xlsx/image)", destructive=True),
     AgentCapability("max_read_activity_logs", "max", "Журнал dispatch агента за 24ч"),
-    AgentCapability("web_search", "glosix", "Поиск в интернете + текстовая сводка"),
+    AgentCapability("web_search", "glosix", "Полный поиск Glosix: ответ по источникам из интернета"),
     AgentCapability(
         "build_news_post",
         "glosix",
@@ -55,7 +55,7 @@ def tools_appendix_for_mode(*, runtime: bool = False) -> str:
             "\nРежим Glosix-треда: по умолчанию помогай и проверяй через tools. "
             "checklist заполняй только для явной настройки автоматизации. "
             "Вопросы про админа/доступ/чаты → max_probe_chat, max_get_chat, max_list_bot_chats, search_thread_history. "
-            "Пост с текстом и фото → build_news_post (не пиши «ищу» без tool). Только текст → web_search."
+            "Новости/актуальные факты → web_search (обязательно, с источниками). Пост с фото → build_news_post. Без tool не отвечай фактами из головы."
         )
     lines.append(
         '\nФормат JSON: {"reply": "...", "done": true/false, '
