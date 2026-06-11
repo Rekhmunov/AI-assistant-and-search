@@ -42,11 +42,14 @@ export function waitForAuthHydration(): Promise<void> {
   }
   return new Promise((resolve) => {
     const done = () => resolve();
+    const timeout = window.setTimeout(done, 2000);
     const unsub = useAuthStore.persist.onFinishHydration(() => {
+      window.clearTimeout(timeout);
       unsub();
       done();
     });
     if (useAuthStore.persist.hasHydrated()) {
+      window.clearTimeout(timeout);
       unsub();
       done();
     }

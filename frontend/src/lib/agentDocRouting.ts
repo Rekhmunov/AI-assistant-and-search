@@ -1,7 +1,10 @@
-/** Когда в треде агента запрос идёт в поисковый SSE (документы), а не в onboarding API. */
+/** Когда в треде агента запрос идёт в поисковый SSE (как обычный тред), а не в onboarding API. */
 
 const AGENT_SETUP_RE =
   /(?:напомин|уведом|агент|max\b|бот\b|групп|модерац|faq|база\s+знан|поддержк|расписан|часовой\s+пояс|запусти|подтверж)/i;
+
+const IMMEDIATE_LOOKUP_RE =
+  /(?:\b(?:найди|найти|поищи|поиск|узнай|узнать|проверь|посмотри|покажи)\b|\bв\s+интернет|\bскажи\s+(?:мне\s+)?(?:какой|сколько|что|когда|где)\b)/i;
 
 const IN_CHAT_RE =
   /\b(?:в\s+чат(?:е)?|в\s+ответ(?:е)?|текстом|без\s+(?:файл|документ)|не\s+(?:делай|создавай|генерируй)?\s*(?:файл|документ))\b/i;
@@ -23,6 +26,12 @@ const LEGAL_DOC_RE = /(?:оферт|договор|соглашен|заявле
 
 const DOC_CHAT_RE =
   /(?:(?:напиши|создай|составь|сформируй|подготовь|сделай|разработай)(?:\s+\S+){0,6}\s+(?:оферт|договор|соглашен|заявлен|политик|регламент|устав|приказ|документ)|(?:оферт|договор|заявлен|политик)\s+(?:для|на|по)\b)/i;
+
+export function wantsImmediateLookup(query: string): boolean {
+  const text = (query || "").trim();
+  if (!text) return false;
+  return IMMEDIATE_LOOKUP_RE.test(text);
+}
 
 export function wantsDocumentGeneration(query: string): boolean {
   const text = (query || "").trim();
@@ -50,6 +59,7 @@ export function agentMessageUsesSearchFlow(query: string, attachmentIds: string[
     if (!text || text.startsWith("[Загружено документов")) return false;
     return !isAgentSetupQuery(text);
   }
+  if (wantsImmediateLookup(text) && !isAgentSetupQuery(text)) return true;
   if (wantsDocumentGeneration(text)) return true;
   if (refersToPriorAnswer(text)) return true;
   if (LEGAL_DOC_RE.test(text) && DOC_CHAT_RE.test(text)) return true;

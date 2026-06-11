@@ -5694,6 +5694,25 @@ body:has(.page-thread) {
   min-height: calc(100dvh - var(--bottom-nav-height) - env(safe-area-inset-bottom));
 }
 
+.app-shell--booting .app-main {
+  position: relative;
+  min-height: calc(100dvh - var(--bottom-nav-height) - env(safe-area-inset-bottom));
+}
+
+.app-boot-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 0.95rem;
+  padding: 24px;
+  padding-bottom: calc(24px + env(safe-area-inset-bottom));
+}
+
 .app-boot-error {
   padding: 24px 16px;
   text-align: center;

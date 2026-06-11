@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 
+from app.services.agent.capabilities import user_wants_immediate_lookup
 from app.services.doc_gen_context import refers_to_prior_answer
 from app.services.doc_gen_routing import wants_document_generation
 from app.services.document_answer_enforce import is_legal_document_request
@@ -32,7 +33,7 @@ def is_agent_setup_query(query: str) -> bool:
 
 def agent_message_uses_search_flow(query: str, *, has_attachments: bool) -> bool:
     """
-    Документы и анализ файлов — как в обычном треде (SSE).
+    Поиск Glosix (SSE): документы, актуальные факты из интернета, анализ файлов.
     Настройка MAX-агента — через /api/agent/.../messages.
     """
     text = (query or "").strip()
@@ -40,6 +41,9 @@ def agent_message_uses_search_flow(query: str, *, has_attachments: bool) -> bool
         if not text or text.startswith("[Загружено документов"):
             return False
         return not is_agent_setup_query(text)
+
+    if user_wants_immediate_lookup(text) and not is_agent_setup_query(text):
+        return True
 
     if wants_document_generation(text):
         return True
@@ -66,4 +70,8 @@ def agent_thread_allows_search_flow(
         return True
     if has_attachments and flow_name in {"chat", "search_rag", "export_chat_document"}:
         return True
-    return wants_document_generation(query) or refers_to_prior_answer(query)
+    return (
+        user_wants_immediate_lookup(query)
+        or wants_document_generation(query)
+        or refers_to_prior_answer(query)
+    )

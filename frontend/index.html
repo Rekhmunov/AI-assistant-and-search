@@ -78,7 +78,10 @@
           var body = hash.charAt(0) === "#" ? hash.slice(1) : hash;
           var params = new URLSearchParams(body);
           var data = params.get("WebAppData");
-          if (data) sessionStorage.setItem("glosix-max-init-data", data);
+          if (data) {
+            sessionStorage.setItem("glosix-max-init-data", data);
+            try { localStorage.setItem("glosix-max-init-data", data); } catch (e2) {}
+          }
         } catch (e) {}
       })();
     </script>

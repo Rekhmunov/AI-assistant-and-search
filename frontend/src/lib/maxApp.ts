@@ -17,9 +17,15 @@ export function hasMaxWebAppHashInUrl(urlLike?: string | URL): boolean {
 }
 
 function readCachedMaxInitData(): string {
-  if (typeof sessionStorage === "undefined") return "";
   try {
-    return sessionStorage.getItem(MAX_INIT_DATA_KEY)?.trim() ?? "";
+    const fromSession =
+      typeof sessionStorage !== "undefined"
+        ? sessionStorage.getItem(MAX_INIT_DATA_KEY)?.trim() ?? ""
+        : "";
+    if (fromSession) return fromSession;
+    return typeof localStorage !== "undefined"
+      ? localStorage.getItem(MAX_INIT_DATA_KEY)?.trim() ?? ""
+      : "";
   } catch {
     return "";
   }
@@ -27,9 +33,14 @@ function readCachedMaxInitData(): string {
 
 function rememberMaxInitData(value: string): void {
   const data = value.trim();
-  if (!data || typeof sessionStorage === "undefined") return;
+  if (!data) return;
   try {
-    sessionStorage.setItem(MAX_INIT_DATA_KEY, data);
+    sessionStorage?.setItem(MAX_INIT_DATA_KEY, data);
+  } catch {
+    /* ignore */
+  }
+  try {
+    localStorage?.setItem(MAX_INIT_DATA_KEY, data);
   } catch {
     /* ignore */
   }

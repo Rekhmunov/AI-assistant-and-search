@@ -21,7 +21,7 @@ import { stripPrivateQueryParamsFromUrl } from "../lib/pageRobots";
 import { useAuthStore, waitForAuthHydration } from "../store/authStore";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-const HYDRATION_TIMEOUT_MS = 4000;
+const HYDRATION_TIMEOUT_MS = 1500;
 const MAX_BRIDGE_TIMEOUT_MS = 5000;
 const AUTH_TASK_TIMEOUT_MS = 8000;
 
@@ -76,7 +76,7 @@ async function resolveAccessToken(cancelled: () => boolean): Promise<string | nu
 
   if (accessToken) {
     try {
-      const user = await withTimeout(fetchMe(accessToken), AUTH_TASK_TIMEOUT_MS, null);
+      const user = await withTimeout(fetchMe(accessToken), AUTH_TASK_TIMEOUT_MS);
       if (user && !cancelled()) {
         useAuthStore.getState().setUser(user);
       }
@@ -103,6 +103,13 @@ async function tryBindMax(token: string) {
 }
 
 async function runBackgroundAuth(cancelled: () => boolean) {
+  await Promise.race([waitForMaxWebApp(MAX_BRIDGE_TIMEOUT_MS), sleep(MAX_BRIDGE_TIMEOUT_MS)]);
+  if (cancelled()) return;
+
+  captureMaxInitDataFromUrl();
+  stripMaxWebAppHashFromUrl();
+  stripPrivateQueryParamsFromUrl();
+
   const initData = getMaxInitData();
   const bindToken = parseMaxBindToken(getMaxStartParam());
 
@@ -138,7 +145,6 @@ async function runBackgroundAuth(cancelled: () => boolean) {
       const data = await withTimeout(loginWithInitData(initData), AUTH_TASK_TIMEOUT_MS, null);
       if (data && !cancelled()) {
         useAuthStore.getState().setAuth(data.access_token, data.user);
-        return;
       }
     } catch (err) {
       if (!cancelled()) {
@@ -149,7 +155,7 @@ async function runBackgroundAuth(cancelled: () => boolean) {
   }
 }
 
-/** JWT from storage first, then MAX initData login in background — UI is not blocked. */
+/** UI сразу после hydration; MAX login и refresh — в фоне. */
 export function useAuthBootstrap() {
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -160,21 +166,15 @@ export function useAuthBootstrap() {
 
     async function bootstrap() {
       try {
-        await Promise.race([waitForAuthHydration(), sleep(HYDRATION_TIMEOUT_MS)]);
-        if (cancelled) return;
-
-        await Promise.race([waitForMaxWebApp(MAX_BRIDGE_TIMEOUT_MS), sleep(MAX_BRIDGE_TIMEOUT_MS)]);
-        if (cancelled) return;
-
+        captureMaxInitDataFromUrl();
         try {
           window.WebApp?.ready?.();
         } catch {
           /* MAX bridge may be partial on desktop */
         }
 
-        captureMaxInitDataFromUrl();
-        stripMaxWebAppHashFromUrl();
-        stripPrivateQueryParamsFromUrl();
+        await Promise.race([waitForAuthHydration(), sleep(HYDRATION_TIMEOUT_MS)]);
+        if (cancelled) return;
 
         if (!cancelled) setReady(true);
 

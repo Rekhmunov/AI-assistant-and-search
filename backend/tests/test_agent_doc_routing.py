@@ -46,3 +46,13 @@ def test_faq_upload_stays_agent():
         "Добавь в базу знаний FAQ",
         has_attachments=True,
     )
+
+
+def test_live_lookup_uses_search_flow():
+    q = "можешь найти курс доллара в интернете"
+    assert agent_message_uses_search_flow(q, has_attachments=False)
+    assert agent_thread_allows_search_flow(q, has_attachments=False, flow_name="search_rag")
+
+
+def test_setup_reminder_stays_agent_api():
+    assert not agent_message_uses_search_flow("напоминай каждый день в 9:00", has_attachments=False)

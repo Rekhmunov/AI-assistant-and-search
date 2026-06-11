@@ -15,4 +15,13 @@ describe("agentDocRouting", () => {
   it("routes export prior to search", () => {
     expect(agentMessageUsesSearchFlow("Оформи текст выше в docx", [])).toBe(true);
   });
+
+  it("routes live internet lookup to search SSE", () => {
+    expect(agentMessageUsesSearchFlow("можешь найти курс доллара в интернете", [])).toBe(true);
+    expect(agentMessageUsesSearchFlow("найди кое-что в интернете", [])).toBe(true);
+  });
+
+  it("keeps agent setup out of search SSE", () => {
+    expect(agentMessageUsesSearchFlow("напоминай каждый день в 9:00", [])).toBe(false);
+  });
 });
