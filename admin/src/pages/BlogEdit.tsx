@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { apiFetch, apiUpload } from "../api";
 import { useAuth } from "../AuthContext";
 import { BlogAiModal } from "../components/BlogAiModal";
@@ -84,10 +84,13 @@ function PanelChevron({ expanded }: { expanded: boolean }) {
   );
 }
 
+type PostAdminResponse = PostForm & { cover_image?: { url: string } | null };
+
 export function BlogEditPage() {
   const { id } = useParams();
   const isNew = id === "new";
   const navigate = useNavigate();
+  const location = useLocation();
   const { can } = useAuth();
   const canWrite = can("blog:write");
   const [form, setForm] = useState<PostForm>(EMPTY);
@@ -102,6 +105,15 @@ export function BlogEditPage() {
   const [seoOpen, setSeoOpen] = useState(false);
   const editorRef = useRef<BlogRichTextEditorHandle>(null);
 
+  // Show success message passed via navigation state (e.g. "Статья создана" after redirect)
+  useEffect(() => {
+    const state = location.state as { msg?: string } | null;
+    if (state?.msg) {
+      setMsg(state.msg);
+      window.history.replaceState({}, "");
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => {
     apiFetch<Category[]>("/api/admin/blog/categories")
       .then(setCategories)
@@ -110,34 +122,40 @@ export function BlogEditPage() {
       });
   }, []);
 
+  const applyPostToForm = (post: PostAdminResponse) => {
+    setForm({
+      title: post.title,
+      slug: post.slug,
+      excerpt: post.excerpt,
+      content_html: post.content_html,
+      status: post.status,
+      category_id: post.category_id || "",
+      cover_image_id: post.cover_image_id || "",
+      og_image_id: post.og_image_id || "",
+      meta_title: post.meta_title,
+      meta_description: post.meta_description,
+      meta_keywords: post.meta_keywords,
+      og_title: post.og_title,
+      og_description: post.og_description,
+      robots_index: post.robots_index,
+      author_name: post.author_name || "",
+      comments_enabled: post.comments_enabled || false,
+    });
+    setCoverUrl(post.cover_image?.url || "");
+  };
+
   useEffect(() => {
     if (isNew || !id) return;
     setError("");
-    apiFetch<PostForm & { cover_image?: { url: string } }>(`/api/admin/blog/posts/${id}`).then((post) => {
-      setForm({
-        title: post.title,
-        slug: post.slug,
-        excerpt: post.excerpt,
-        content_html: post.content_html,
-        status: post.status,
-        category_id: post.category_id || "",
-        cover_image_id: post.cover_image_id || "",
-        og_image_id: post.og_image_id || "",
-        meta_title: post.meta_title,
-        meta_description: post.meta_description,
-        meta_keywords: post.meta_keywords,
-        og_title: post.og_title,
-        og_description: post.og_description,
-        robots_index: post.robots_index,
-        author_name: post.author_name || "",
-        comments_enabled: post.comments_enabled || false,
+    apiFetch<PostAdminResponse>(`/api/admin/blog/posts/${id}`)
+      .then((post) => {
+        applyPostToForm(post);
+        apiFetch<AdminComment[]>(`/api/admin/blog/posts/${id}/comments`).then(setComments).catch(() => setComments([]));
+      })
+      .catch((err) => {
+        setError(err instanceof Error ? err.message : "Не удалось загрузить статью");
       });
-      setCoverUrl(post.cover_image?.url || "");
-      apiFetch<AdminComment[]>(`/api/admin/blog/posts/${id}/comments`).then(setComments).catch(() => setComments([]));
-    }).catch((err) => {
-      setError(err instanceof Error ? err.message : "Не удалось загрузить статью");
-    });
-  }, [id, isNew]);
+  }, [id, isNew]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const patch = (partial: Partial<PostForm>) => setForm((f) => ({ ...f, ...partial }));
 
@@ -164,13 +182,14 @@ export function BlogEditPage() {
           method: "POST",
           body: JSON.stringify(body),
         });
-        navigate(`/blog/${created.id}`, { replace: true });
-        setMsg("Статья создана");
+        navigate(`/blog/${created.id}`, { replace: true, state: { msg: "Статья создана" } });
       } else {
-        await apiFetch(`/api/admin/blog/posts/${id}`, {
+        const saved = await apiFetch<PostAdminResponse>(`/api/admin/blog/posts/${id}`, {
           method: "PATCH",
           body: JSON.stringify(body),
         });
+        // Sync form with server response (reflects sanitized HTML, updated timestamps, etc.)
+        applyPostToForm(saved);
         setMsg("Сохранено");
       }
     } catch (err) {

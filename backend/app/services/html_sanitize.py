@@ -41,7 +41,7 @@ _BLOG_TAGS = frozenset(
 _BLOG_ATTRS = {
     "*": ["class"],
     "a": ["href", "title", "target", "rel"],
-    "img": ["src", "alt", "title", "width", "height", "loading"],
+    "img": ["src", "alt", "title", "width", "height", "loading", "style"],
     "th": ["colspan", "rowspan"],
     "td": ["colspan", "rowspan"],
 }

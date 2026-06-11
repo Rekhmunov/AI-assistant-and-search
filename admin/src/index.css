@@ -437,7 +437,19 @@ label {
   color: #b91c1c;
 }
 
+.error.card {
+  background: #fef2f2;
+  border-color: rgba(185, 28, 28, 0.25);
+  color: #b91c1c;
+}
+
 .ok {
+  color: #15803d;
+}
+
+.ok.card {
+  background: #f0fdf4;
+  border-color: rgba(21, 128, 61, 0.25);
   color: #15803d;
 }
 
@@ -3308,7 +3320,7 @@ pre.small {
 
 .blog-table-wrap {
   width: 100%;
-  overflow: hidden;
+  overflow-x: auto;
   border: 1px solid var(--border);
   border-radius: 12px;
   background: var(--surface);
@@ -3343,6 +3355,13 @@ pre.small {
 .blog-table tbody tr:hover {
   background: var(--surface-hover);
 }
+
+.blog-table th:nth-child(1) { width: 42%; }
+.blog-table th:nth-child(2) { width: 11%; }
+.blog-table th:nth-child(3) { width: 14%; }
+.blog-table th:nth-child(4) { width: 10%; }
+.blog-table th:nth-child(5) { width: 14%; }
+.blog-table th:nth-child(6) { width: 9%; }
 
 .blog-post-cell {
   display: flex;
@@ -3457,7 +3476,7 @@ pre.small {
 
 .blog-edit-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 320px;
+  grid-template-columns: minmax(0, 1fr) 340px;
   gap: 16px;
   align-items: start;
 }
@@ -3632,8 +3651,8 @@ pre.small {
 }
 
 .blog-rte-editor-wrap .rte-editor {
-  min-height: 280px;
-  max-height: 520px;
+  min-height: 360px;
+  max-height: 640px;
 }
 
 .blog-cat-create {

@@ -278,10 +278,12 @@ async def update_post(db: AsyncSession, post: BlogPost, data: dict) -> BlogPost:
         _apply_publish_fields(post, post.status, data.get("published_at"))
     elif "published_at" in data:
         _apply_publish_fields(post, post.status, data.get("published_at"))
+    # FK fields accept None to clear the association
+    for field in ("category_id", "cover_image_id", "og_image_id"):
+        if field in data:
+            setattr(post, field, data[field])
+    # Scalar fields: skip if None to preserve existing value
     for field in (
-        "category_id",
-        "cover_image_id",
-        "og_image_id",
         "meta_title",
         "meta_description",
         "meta_keywords",

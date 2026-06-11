@@ -1,6 +1,8 @@
+import logging
 from typing import Annotated
 from uuid import UUID, uuid4
 
+import redis.asyncio as redis
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -32,8 +34,7 @@ from app.services.blog_ai import (
     generate_blog_inline_image,
     media_upload_out,
 )
-from app.services.blog_seo_meta import VALID_META_FIELDS, generate_blog_meta_field
-from app.services.gigachat_image_gen import ImageGenerationError
+from app.services.blog_comments import delete_comment, list_post_comments_admin
 from app.services.blog_image import ALLOWED_UPLOAD_MIME, process_blog_image
 from app.services.blog_posts import (
     create_post,
@@ -42,11 +43,13 @@ from app.services.blog_posts import (
     post_to_admin,
     update_post,
 )
-from app.services.blog_slug import ensure_unique_category_slug, ensure_unique_post_slug, is_valid_slug, slugify_title
-from app.services.blog_comments import delete_comment, list_post_comments_admin
 from app.services.blog_prerender import rebuild_all_prerender, refresh_blog_prerender_for_post
+from app.services.blog_seo_meta import VALID_META_FIELDS, generate_blog_meta_field
+from app.services.blog_slug import ensure_unique_category_slug, ensure_unique_post_slug, is_valid_slug, slugify_title
 from app.services.blog_storage import save_blog_image
-import redis.asyncio as redis
+from app.services.gigachat_image_gen import ImageGenerationError
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/blog", tags=["admin-blog"])
 
@@ -223,8 +226,10 @@ async def admin_create_post(
     )
     await db.commit()
     post = await _load_post(db, post.id)
-    if post.status == "published":
+    try:
         await refresh_blog_prerender_for_post(db, post)
+    except Exception:
+        logger.warning("blog prerender failed after create post %s", post.id, exc_info=True)
     return post_to_admin(post, author_email=admin.email)
 
 
@@ -254,7 +259,10 @@ async def admin_update_post(
     )
     await db.commit()
     post = await _load_post(db, post_id)
-    await refresh_blog_prerender_for_post(db, post)
+    try:
+        await refresh_blog_prerender_for_post(db, post)
+    except Exception:
+        logger.warning("blog prerender failed after update post %s", post_id, exc_info=True)
     return post_to_admin(post, author_email=admin.email)
 
 
