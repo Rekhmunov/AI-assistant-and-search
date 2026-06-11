@@ -6,9 +6,6 @@ import re
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from app.models.agent import AgentInstance
 from app.models.user import User
 
@@ -37,37 +34,35 @@ class AgentSecurityError(ValueError):
     pass
 
 
-async def allowed_chat_ids_for_user(db: AsyncSession, user_id: UUID) -> set[int]:
-    result = await db.execute(select(AgentInstance).where(AgentInstance.user_id == user_id))
+def allowed_chat_ids_for_agent(
+    agent: AgentInstance,
+    *,
+    message_chat_id: int | None = None,
+) -> set[int]:
+    """Только чаты, привязанные к агенту этого треда (+ chat_id из текущего сообщения)."""
     ids: set[int] = set()
-    for agent in result.scalars().all():
-        if agent.max_chat_id:
-            ids.add(int(agent.max_chat_id))
-        cfg = agent.config if isinstance(agent.config, dict) else {}
-        for key in ("registered_group_chat_id", "max_chat_id"):
-            raw = cfg.get(key)
-            if raw is not None:
-                try:
-                    ids.add(int(raw))
-                except (TypeError, ValueError):
-                    pass
-    return ids
-
-
-def chat_id_allowed(chat_id: int, agent: AgentInstance, user: User, extra_allowed: set[int]) -> bool:
-    cid = int(chat_id)
-    allowed = set(extra_allowed)
     if agent.max_chat_id:
-        allowed.add(int(agent.max_chat_id))
+        ids.add(int(agent.max_chat_id))
     cfg = agent.config if isinstance(agent.config, dict) else {}
-    for key in ("registered_group_chat_id", "max_chat_id"):
+    for key in ("thread_chat_id", "registered_group_chat_id", "max_chat_id"):
         raw = cfg.get(key)
         if raw is not None:
             try:
-                allowed.add(int(raw))
+                ids.add(int(raw))
             except (TypeError, ValueError):
                 pass
-    return cid in allowed
+    if message_chat_id is not None:
+        ids.add(int(message_chat_id))
+    return ids
+
+
+def chat_id_allowed(
+    chat_id: int,
+    agent: AgentInstance,
+    *,
+    message_chat_id: int | None = None,
+) -> bool:
+    return int(chat_id) in allowed_chat_ids_for_agent(agent, message_chat_id=message_chat_id)
 
 
 def sanitize_message_text(text: str) -> str:
@@ -94,7 +89,7 @@ def validate_tool_call(
     *,
     agent: AgentInstance,
     user: User,
-    allowed_chats: set[int],
+    message_chat_id: int | None,
     allow_test_send: bool,
 ) -> dict[str, Any]:
     name = str(tool or "").strip().lower()
@@ -110,7 +105,7 @@ def validate_tool_call(
         if chat_id is None:
             raise AgentSecurityError("chat_id_required")
         cid = int(chat_id)
-        if not chat_id_allowed(cid, agent, user, allowed_chats):
+        if not chat_id_allowed(cid, agent, message_chat_id=message_chat_id):
             raise AgentSecurityError("chat_id_forbidden")
         payload["chat_id"] = cid
 

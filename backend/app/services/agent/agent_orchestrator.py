@@ -36,7 +36,8 @@ from app.services.agent.llm_onboarding import (
     load_checklist,
     merge_checklist,
 )
-from app.services.agent.intent_hints import user_wants_immediate_run, user_wants_today_run
+from app.services.agent.intent_hints import _extract_max_chat_id, user_wants_immediate_run, user_wants_today_run
+from app.services.agent.operational import bind_chat_to_current_agent, is_operational_max_query
 from app.services.agent.llm_onboarding import user_wants_confirm  # noqa: F401 — re-export path
 from app.services.providers.factory import resolve_runtime_providers
 
@@ -89,6 +90,12 @@ async def run_agent_turn(
     checklist = load_checklist(agent)
     history = _history_messages(messages)
     last_user = history[-1]["text"] if history and history[-1]["role"] == "user" else ""
+
+    if is_operational_max_query(last_user):
+        cid = _extract_max_chat_id(last_user)
+        if cid is not None:
+            bind_chat_to_current_agent(agent, int(cid))
+
     checklist = ChecklistState.from_dict(apply_message_hints(checklist.to_dict(), last_user))
 
     llm, _, _, _, _ = await resolve_runtime_providers(db, redis_client, user=user)
@@ -173,6 +180,7 @@ async def run_agent_turn(
                     arguments,
                     thread_id=thread_id,
                     allow_test_send=allow_test,
+                    user_message=last_user,
                 )
                 tool_trace.append(result)
             checklist = _merge_checklist_from_data(data, checklist, last_user, history)
@@ -257,6 +265,10 @@ def _str_or_none(value: Any) -> str | None:
 
 
 def user_wants_diagnostic(text: str) -> bool:
+    from app.services.agent.operational import is_operational_max_query
+
+    if is_operational_max_query(text):
+        return True
     low = (text or "").lower()
     markers = (
         "почему не",

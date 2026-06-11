@@ -14,11 +14,8 @@ from app.models.agent import AgentInstance, AgentReminder, AgentStatus
 from app.models.message import Message
 from app.models.user import User
 from app.services.agent.activity_log import list_agent_activity_logs
-from app.services.agent.agent_security import (
-    AgentSecurityError,
-    allowed_chat_ids_for_user,
-    validate_tool_call,
-)
+from app.services.agent.agent_security import AgentSecurityError, validate_tool_call
+from app.services.agent.intent_hints import _extract_max_chat_id
 from app.services.agent.max_probe import probe_max_chat, resolve_channel_link
 from app.services.agent.max_errors import explain_max_send_error
 from app.services.bot import MaxBotService
@@ -37,16 +34,17 @@ async def execute_agent_tool(
     thread_id: UUID,
     allow_test_send: bool,
     bot: MaxBotService | None = None,
+    user_message: str = "",
 ) -> dict[str, Any]:
     bot = bot or MaxBotService()
-    allowed_chats = await allowed_chat_ids_for_user(db, user.id)
+    message_chat_id = _extract_max_chat_id(user_message)
     try:
         safe_args = validate_tool_call(
             tool,
             args,
             agent=agent,
             user=user,
-            allowed_chats=allowed_chats,
+            message_chat_id=message_chat_id,
             allow_test_send=allow_test_send,
         )
     except AgentSecurityError as exc:

@@ -322,6 +322,7 @@ def load_checklist(agent: AgentInstance) -> ChecklistState:
     stored = cfg.get("checklist")
     if isinstance(stored, dict):
         return ChecklistState.from_dict(stored)
+    chat_id = agent.max_chat_id or cfg.get("thread_chat_id") or cfg.get("max_chat_id")
     return ChecklistState.from_dict(
         {
             "role": agent.role,
@@ -335,7 +336,7 @@ def load_checklist(agent: AgentInstance) -> ChecklistState:
             "interaction_mode": cfg.get("interaction_mode"),
             "support_instructions": cfg.get("support_instructions"),
             "delivery_mode": cfg.get("delivery_mode"),
-            "max_chat_id": agent.max_chat_id or cfg.get("max_chat_id"),
+            "max_chat_id": chat_id,
             "bot_is_group_admin": cfg.get("bot_is_group_admin"),
             "bot_can_read_messages": cfg.get("bot_can_read_messages"),
             "moderation_stop_words": cfg.get("moderation_stop_words"),
@@ -530,7 +531,11 @@ def apply_checklist_to_agent(agent: AgentInstance, checklist: ChecklistState) ->
     if checklist.max_chat_id is not None:
         cfg["max_chat_id"] = checklist.max_chat_id
         agent.max_chat_id = checklist.max_chat_id
-    elif cfg.get("registered_group_chat_id") and not agent.max_chat_id:
+    elif cfg.get("thread_chat_id") and not agent.max_chat_id:
+        agent.max_chat_id = int(cfg["thread_chat_id"])
+        checklist.max_chat_id = agent.max_chat_id
+        cfg["max_chat_id"] = agent.max_chat_id
+    elif cfg.get("registered_group_chat_id") and not agent.max_chat_id and not cfg.get("thread_chat_id"):
         agent.max_chat_id = int(cfg["registered_group_chat_id"])
         checklist.max_chat_id = agent.max_chat_id
         cfg["max_chat_id"] = agent.max_chat_id

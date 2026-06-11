@@ -4,6 +4,7 @@ from app.models.agent import AgentInstance, AgentStatus
 from app.models.user import User
 from app.services.agent.agent_security import (
     AgentSecurityError,
+    allowed_chat_ids_for_agent,
     chat_id_allowed,
     validate_tool_call,
     user_consented_test_send,
@@ -27,9 +28,10 @@ def _agent(**kwargs) -> AgentInstance:
 
 def test_chat_id_allowed_for_agent():
     agent = _agent(max_chat_id=-100)
-    user = User(id=agent.user_id, max_user_id=1)
-    assert chat_id_allowed(-100, agent, user, set())
-    assert not chat_id_allowed(-999, agent, user, set())
+    assert chat_id_allowed(-100, agent)
+    assert chat_id_allowed(-200, agent, message_chat_id=-200)
+    assert not chat_id_allowed(-999, agent)
+    assert -200 in allowed_chat_ids_for_agent(agent, message_chat_id=-200)
 
 
 def test_test_send_requires_consent():
@@ -46,7 +48,7 @@ def test_forbidden_tool_rejected():
             {"chat_id": -100, "text": "hack"},
             agent=agent,
             user=user,
-            allowed_chats=set(),
+            message_chat_id=None,
             allow_test_send=True,
         )
         assert False, "expected AgentSecurityError"

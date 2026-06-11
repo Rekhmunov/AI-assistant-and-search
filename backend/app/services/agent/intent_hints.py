@@ -105,8 +105,12 @@ def _is_user_group(low: str) -> bool:
 
 def infer_role_from_text(text: str) -> str | None:
     """Эвристика: определить role по свободной формулировке задачи."""
+    from app.services.agent.operational import is_operational_max_query
+
     clean = (text or "").strip()
     low = clean.lower()
+    if is_operational_max_query(clean):
+        return None
     has_reminder = _has_any(low, "напомин", "уведом")
     min_len = 5 if has_reminder else 8
     if len(clean) < min_len:
@@ -161,7 +165,7 @@ def infer_role_from_text(text: str) -> str | None:
     if _has_any(low, "сводк", "итог дня", "резюме") and _has_any(low, "групп", "чат"):
         return AgentRole.GROUP_MESSAGE_LOG.value
 
-    if _is_user_group(low) and _has_any(low, "сообщ", "пиши", "напис", "отправ", "пост", "провер"):
+    if _is_user_group(low) and _has_any(low, "сообщ", "пиши", "напис", "отправ", "пост"):
         return AgentRole.GROUP_REMINDER.value
 
     if _has_any(low, "групп") and _has_any(low, "напиши", "пиши", "напис", "отправ", "пост"):
@@ -287,8 +291,16 @@ def _normalize_schedule_text(clean: str) -> str | None:
 
 def infer_checklist_fields(text: str, data: dict[str, Any]) -> dict[str, Any]:
     """Дополняет чеклист полями из текста пользователя."""
+    from app.services.agent.operational import is_operational_max_query
+
     clean = (text or "").strip()
     if not clean:
+        return data
+
+    if is_operational_max_query(clean):
+        chat_id = _extract_max_chat_id(clean)
+        if chat_id is not None:
+            data["max_chat_id"] = chat_id
         return data
 
     low = clean.lower()

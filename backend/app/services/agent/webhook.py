@@ -132,11 +132,15 @@ def is_message_created(payload: dict[str, Any]) -> bool:
 
 
 def _bind_chat_to_agent(agent: AgentInstance, chat_id: int) -> None:
+    """Привязка chat_id только если у агента ещё нет другой группы."""
+    cid = int(chat_id)
+    if agent.max_chat_id and int(agent.max_chat_id) != cid:
+        return
     cfg = dict(agent.config or {})
-    cfg["registered_group_chat_id"] = chat_id
+    cfg["registered_group_chat_id"] = cid
     agent.config = cfg
     if not agent.max_chat_id:
-        agent.max_chat_id = chat_id
+        agent.max_chat_id = cid
 
 
 async def register_group_chat_for_user(
