@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from typing import Annotated, Any
 
@@ -26,6 +27,32 @@ from app.services.agent.webhook_tasks import (
 from app.services.bot_welcome import send_bot_welcome
 
 logger = logging.getLogger(__name__)
+
+_bot_username_initialized = False
+_bot_username_lock = asyncio.Lock()
+
+
+async def _ensure_bot_username_loaded() -> None:
+    """Лениво загружает username бота из GET /me при первом вызове."""
+    global _bot_username_initialized
+    if _bot_username_initialized:
+        return
+    async with _bot_username_lock:
+        if _bot_username_initialized:
+            return
+        try:
+            from app.services.bot import MaxBotService
+            from app.services.agent.interaction import configure_bot_username
+
+            info = await MaxBotService().get_me()
+            if info:
+                username = info.get("username") or info.get("name") or ""
+                if username:
+                    configure_bot_username(username)
+                    logger.info("Bot username set: %s", username)
+        except Exception as exc:
+            logger.warning("Failed to load bot username: %s", exc)
+        _bot_username_initialized = True
 
 router = APIRouter(prefix="/bot", tags=["bot"])
 
@@ -116,6 +143,7 @@ async def max_webhook(
 ):
     """MAX Bot API webhook: отправляет приветствие при bot_started (/start)."""
     _verify_webhook_secret(x_max_bot_api_secret, x_webhook_secret, secret)
+    await _ensure_bot_username_loaded()
     try:
         payload = await request.json()
     except Exception:

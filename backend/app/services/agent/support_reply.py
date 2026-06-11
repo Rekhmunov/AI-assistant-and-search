@@ -132,7 +132,7 @@ async def build_interactive_reply(
             user_text=enriched_question,
             chat_id=chat_id,
             author=author,
-            vision_context="",
+            vision_context=vision_note,
         )
         return "Обрабатываю запрос, ответ пришлю в чат…", []
 

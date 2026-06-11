@@ -13,6 +13,15 @@ _VALID_MODES = frozenset({"command", "support", "both"})
 
 _MENTION_RE = re.compile(r"(?:@|#)\s*\w+|бот\b|glosix\b", re.I)
 
+# Динамически заполняется из GET /me при первом webhook-запросе
+_bot_state: dict[str, str | None] = {"username": None}
+
+
+def configure_bot_username(username: str | None) -> None:
+    """Устанавливает username бота для корректной детекции @упоминаний."""
+    if username:
+        _bot_state["username"] = username.lower().lstrip("@")
+
 
 def agent_scope(cfg: dict[str, Any]) -> str:
     raw = str(cfg.get("scope") or cfg.get("delivery_mode") or "dm").strip().lower()
@@ -48,7 +57,13 @@ def message_addresses_agent(text: str, command: str | None) -> bool:
         return True
     if low.startswith("/") and command and low[1:].split()[0] == command:
         return True
-    return bool(_MENTION_RE.search(low))
+    if _MENTION_RE.search(low):
+        return True
+    # Проверяем реальный username бота (@glosix_bot и т.п.)
+    bot_username = _bot_state.get("username")
+    if bot_username and (f"@{bot_username}" in low or bot_username in low):
+        return True
+    return False
 
 
 def should_handle_dm(agent: AgentInstance, *, text: str, command: str | None, has_images: bool) -> bool:
