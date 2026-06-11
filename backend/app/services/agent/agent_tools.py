@@ -18,7 +18,7 @@ from app.services.agent.agent_security import AgentSecurityError, validate_tool_
 from app.services.agent.agent_status import StatusCallback
 from app.services.agent.intent_hints import _extract_max_chat_id
 from app.services.agent.max_probe import probe_max_chat, resolve_channel_link
-from app.services.agent.max_errors import explain_max_send_error
+from app.services.agent.max_errors import explain_max_send_error, explain_security_error
 from app.services.bot import MaxBotService
 
 logger = logging.getLogger(__name__)
@@ -52,7 +52,13 @@ async def execute_agent_tool(
             allow_test_send=allow_test_send,
         )
     except AgentSecurityError as exc:
-        return {"ok": False, "error": str(exc), "tool": tool}
+        code = str(exc)
+        return {
+            "ok": False,
+            "error": code,
+            "error_human": explain_security_error(code),
+            "tool": tool,
+        }
 
     name = str(tool).strip().lower()
     try:
@@ -94,9 +100,20 @@ async def execute_agent_tool(
             return _tool_read_max_api_docs(safe_args)
     except Exception as exc:
         logger.exception("Agent tool %s failed: %s", name, exc)
-        return {"ok": False, "error": str(exc)[:300], "tool": name}
+        raw = str(exc)[:300]
+        return {
+            "ok": False,
+            "error": raw,
+            "error_human": explain_max_send_error(raw),
+            "tool": name,
+        }
 
-    return {"ok": False, "error": "unknown_tool", "tool": name}
+    return {
+        "ok": False,
+        "error": "unknown_tool",
+        "error_human": explain_security_error("unknown_tool"),
+        "tool": name,
+    }
 
 
 async def _tool_max_probe_chat(bot: MaxBotService, args: dict) -> dict:
@@ -240,7 +257,8 @@ async def _tool_max_send_file(
                 attachments=result.attachments,
                 notify=True,
             )
-            dest = {"user_id": send_user_id}
+            dest: dict = {"user_id": send_user_id}
+            err_explain = explain_max_send_error(send.error, user_id=int(send_user_id))
         else:
             send = await bot.send_message(
                 None,
@@ -250,17 +268,15 @@ async def _tool_max_send_file(
                 notify=False,
             )
             dest = {"chat_id": send_chat_id}
-        return {
-            "ok": send.ok,
-            "tool": "max_send_file",
-            "result": {
-                **dest,
-                "format": fmt,
-                "message_id": send.message_id,
-                "error": send.error,
-                "attachments": result.attachments,
-            },
-        }
+            err_explain = explain_max_send_error(send.error, chat_id=int(send_chat_id))
+
+        file_result: dict = {**dest, "format": fmt, "message_id": send.message_id}
+        if not send.ok:
+            file_result["error"] = send.error
+            file_result["error_human"] = err_explain
+        else:
+            file_result["attachments"] = result.attachments
+        return {"ok": send.ok, "tool": "max_send_file", "result": file_result}
     except Exception as exc:
         logger.exception("max_send_file failed chat_id=%s: %s", chat_id, exc)
         return {"ok": False, "tool": "max_send_file", "error": str(exc)[:300]}
@@ -274,19 +290,19 @@ async def _tool_max_send_message(bot: MaxBotService, args: dict) -> dict:
     if user_id is not None:
         # Личное сообщение: MAX API требует user_id, не chat_id
         send = await bot.send_message(int(user_id), text, notify=True)
-        return {
-            "ok": send.ok,
-            "tool": "max_send_message",
-            "result": {"user_id": user_id, "message_id": send.message_id, "error": send.error},
-        }
+        result: dict = {"user_id": user_id, "message_id": send.message_id}
+        if not send.ok:
+            result["error"] = send.error
+            result["error_human"] = explain_max_send_error(send.error, user_id=int(user_id))
+        return {"ok": send.ok, "tool": "max_send_message", "result": result}
     else:
         # Групповое сообщение
         send = await bot.send_message(None, text, chat_id=int(chat_id), notify=False)
-        return {
-            "ok": send.ok,
-            "tool": "max_send_message",
-            "result": {"chat_id": chat_id, "message_id": send.message_id, "error": send.error},
-        }
+        result = {"chat_id": chat_id, "message_id": send.message_id}
+        if not send.ok:
+            result["error"] = send.error
+            result["error_human"] = explain_max_send_error(send.error, chat_id=int(chat_id))
+        return {"ok": send.ok, "tool": "max_send_message", "result": result}
 
 
 async def _tool_search_thread_history(db: AsyncSession, *, thread_id: UUID, args: dict) -> dict:
@@ -384,4 +400,22 @@ async def agent_runtime_diagnostics(db: AsyncSession, agent: AgentInstance) -> d
 
 
 def format_tool_results_for_llm(results: list[dict]) -> str:
-    return json.dumps(results, ensure_ascii=False, indent=0)[:12000]
+    """Форматирует результаты tool-вызовов для LLM.
+
+    Для неудачных вызовов ставит error_human первым полем, чтобы LLM
+    сразу видел человекочитаемое объяснение и использовал его в reply.
+    """
+    ordered: list[dict] = []
+    for r in results:
+        if not r.get("ok", True) and "error_human" in r:
+            # Переупорядочиваем: error_human идёт первым
+            entry = {"ok": False, "error_human": r["error_human"], "tool": r.get("tool", "?")}
+            if "error" in r:
+                entry["error"] = r["error"]
+            nested = r.get("result")
+            if nested:
+                entry["result"] = nested
+            ordered.append(entry)
+        else:
+            ordered.append(r)
+    return json.dumps(ordered, ensure_ascii=False, indent=0)[:12000]
