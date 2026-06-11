@@ -24,11 +24,16 @@ ALLOWED_TOOLS = frozenset(
         "web_search",
         "read_thread_summary",
         "max_send_file",
+        "max_send_message",
+        "search_thread_history",
+        "store_agent_record",
+        "query_agent_records",
+        "update_agent_memory",
     }
 )
 
 # Инструменты, меняющие состояние снаружи Glosix — только с явным флагом
-DESTRUCTIVE_TOOLS = frozenset({"max_send_test", "max_send_file"})
+DESTRUCTIVE_TOOLS = frozenset({"max_send_test", "max_send_file", "max_send_message"})
 
 
 class AgentSecurityError(ValueError):
@@ -44,6 +49,8 @@ def allowed_chat_ids_for_agent(
     ids: set[int] = set()
     if agent.max_chat_id:
         ids.add(int(agent.max_chat_id))
+    if agent.max_user_id:
+        ids.add(int(agent.max_user_id))
     cfg = agent.config if isinstance(agent.config, dict) else {}
     for key in ("thread_chat_id", "registered_group_chat_id", "max_chat_id"):
         raw = cfg.get(key)
@@ -99,7 +106,7 @@ def validate_tool_call(
 
     payload = dict(args or {}) if isinstance(args, dict) else {}
 
-    if name in {"max_probe_chat", "max_get_chat", "max_send_test", "max_send_file"}:
+    if name in {"max_probe_chat", "max_get_chat", "max_send_test", "max_send_file", "max_send_message"}:
         chat_id = payload.get("chat_id")
         if chat_id is None:
             chat_id = agent.max_chat_id
@@ -113,9 +120,11 @@ def validate_tool_call(
     if name == "max_send_test" and not allow_test_send:
         raise AgentSecurityError("test_send_not_allowed")
 
-    if name == "max_send_file":
+    if name in {"max_send_file", "max_send_message"}:
         if not allow_test_send:
             raise AgentSecurityError("file_send_not_allowed")
+
+    if name == "max_send_file":
         instruction = str(payload.get("instruction") or "").strip()
         if not instruction or len(instruction) > 2000:
             raise AgentSecurityError("invalid_file_instruction")
@@ -126,6 +135,38 @@ def validate_tool_call(
         if fmt not in {"docx", "pdf", "xlsx", "image"}:
             raise AgentSecurityError("invalid_file_format")
         payload["format"] = fmt
+
+    if name == "max_send_message":
+        text = str(payload.get("text") or "").strip()
+        if not text or len(text) > MAX_MESSAGE_TEXT_LEN:
+            raise AgentSecurityError("invalid_message_text")
+        payload["text"] = text
+
+    if name == "search_thread_history":
+        query = str(payload.get("query") or "").strip()
+        if not query or len(query) > 500:
+            raise AgentSecurityError("invalid_search_query")
+        payload["query"] = query
+
+    if name == "store_agent_record":
+        table = str(payload.get("table") or "default").strip().lower()[:64]
+        data = payload.get("data")
+        if not isinstance(data, dict):
+            raise AgentSecurityError("invalid_record_data")
+        payload["table"] = table
+        payload["data"] = data
+
+    if name == "query_agent_records":
+        table = str(payload.get("table") or "default").strip().lower()[:64]
+        payload["table"] = table
+        if payload.get("category") is not None:
+            payload["category"] = str(payload["category"]).strip()[:120]
+
+    if name == "update_agent_memory":
+        note = str(payload.get("note") or "").strip()
+        if not note or len(note) > 500:
+            raise AgentSecurityError("invalid_memory_note")
+        payload["note"] = note
 
     if name == "max_resolve_channel_link":
         payload["link"] = normalize_channel_link(str(payload.get("link") or ""))

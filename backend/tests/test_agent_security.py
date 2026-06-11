@@ -39,13 +39,27 @@ def test_test_send_requires_consent():
     assert not user_consented_test_send("привет")
 
 
+def test_max_send_message_allowed_with_consent():
+    agent = _agent()
+    user = User(id=agent.user_id, max_user_id=1)
+    payload = validate_tool_call(
+        "max_send_message",
+        {"chat_id": -100, "text": "тест"},
+        agent=agent,
+        user=user,
+        message_chat_id=None,
+        allow_test_send=True,
+    )
+    assert payload["text"] == "тест"
+
+
 def test_forbidden_tool_rejected():
     agent = _agent()
     user = User(id=agent.user_id, max_user_id=1)
     try:
         validate_tool_call(
-            "max_send_message",
-            {"chat_id": -100, "text": "hack"},
+            "shell_exec",
+            {"cmd": "rm -rf /"},
             agent=agent,
             user=user,
             message_chat_id=None,
@@ -54,3 +68,18 @@ def test_forbidden_tool_rejected():
         assert False, "expected AgentSecurityError"
     except AgentSecurityError as exc:
         assert "tool_not_allowed" in str(exc)
+
+
+def test_store_agent_record_validation():
+    agent = _agent()
+    user = User(id=agent.user_id, max_user_id=1)
+    payload = validate_tool_call(
+        "store_agent_record",
+        {"table": "expenses", "data": {"amount": 100, "category": "Аренда"}},
+        agent=agent,
+        user=user,
+        message_chat_id=None,
+        allow_test_send=False,
+    )
+    assert payload["table"] == "expenses"
+    assert payload["data"]["amount"] == 100

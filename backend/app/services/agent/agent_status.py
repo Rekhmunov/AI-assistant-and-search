@@ -37,6 +37,11 @@ TOOL_STATUS_LABELS: dict[str, str] = {
     "web_search": "Ищу в интернете…",
     "read_thread_summary": "Просматриваю историю диалога…",
     "max_send_file": "Формирую и отправляю файл в MAX…",
+    "max_send_message": "Отправляю сообщение в MAX…",
+    "search_thread_history": "Ищу в истории диалога…",
+    "store_agent_record": "Сохраняю запись…",
+    "query_agent_records": "Читаю сохранённые данные…",
+    "update_agent_memory": "Обновляю память агента…",
 }
 
 

@@ -86,6 +86,8 @@ async def handle_group_interactive(
                 chat_id=chat_id,
                 author=author,
             )
+            if not (reply_text or "").strip() and not attachments:
+                return True
             send_result = await bot.send_message(
                 None,
                 reply_text,

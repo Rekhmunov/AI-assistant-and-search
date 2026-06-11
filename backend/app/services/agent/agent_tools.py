@@ -35,6 +35,8 @@ async def execute_agent_tool(
     allow_test_send: bool,
     bot: MaxBotService | None = None,
     user_message: str = "",
+    runtime_chat_id: int | None = None,
+    author: str = "",
 ) -> dict[str, Any]:
     bot = bot or MaxBotService()
     message_chat_id = _extract_max_chat_id(user_message)
@@ -76,6 +78,16 @@ async def execute_agent_tool(
                 safe_args,
                 bot=bot,
             )
+        if name == "max_send_message":
+            return await _tool_max_send_message(bot, safe_args)
+        if name == "search_thread_history":
+            return await _tool_search_thread_history(db, thread_id=thread_id, args=safe_args)
+        if name == "store_agent_record":
+            return _tool_store_record(agent, safe_args, author=author, chat_id=runtime_chat_id)
+        if name == "query_agent_records":
+            return _tool_query_records(agent, safe_args)
+        if name == "update_agent_memory":
+            return _tool_update_memory(agent, safe_args)
     except Exception as exc:
         logger.exception("Agent tool %s failed: %s", name, exc)
         return {"ok": False, "error": str(exc)[:300], "tool": name}
@@ -214,11 +226,68 @@ async def _tool_max_send_file(
                 "format": fmt,
                 "message_id": send.message_id,
                 "error": send.error,
+                "attachments": result.attachments,
             },
         }
     except Exception as exc:
         logger.exception("max_send_file failed chat_id=%s: %s", chat_id, exc)
         return {"ok": False, "tool": "max_send_file", "error": str(exc)[:300]}
+
+
+async def _tool_max_send_message(bot: MaxBotService, args: dict) -> dict:
+    chat_id = int(args["chat_id"])
+    text = str(args["text"])
+    send = await bot.send_message(None, text, chat_id=chat_id, notify=False)
+    return {
+        "ok": send.ok,
+        "tool": "max_send_message",
+        "result": {"chat_id": chat_id, "message_id": send.message_id, "error": send.error},
+    }
+
+
+async def _tool_search_thread_history(db: AsyncSession, *, thread_id: UUID, args: dict) -> dict:
+    from app.services.agent.thread_memory import search_thread_history_tool
+
+    return await search_thread_history_tool(db, thread_id, str(args["query"]))
+
+
+def _tool_store_record(
+    agent: AgentInstance,
+    args: dict,
+    *,
+    author: str,
+    chat_id: int | None,
+) -> dict:
+    from app.services.agent.agent_records import store_record
+
+    entry = store_record(
+        agent,
+        str(args["table"]),
+        dict(args["data"]),
+        author=author,
+        chat_id=chat_id,
+    )
+    return {"ok": True, "tool": "store_agent_record", "result": {"entry": entry}}
+
+
+def _tool_query_records(agent: AgentInstance, args: dict) -> dict:
+    from app.services.agent.agent_records import query_records
+
+    rows = query_records(
+        agent,
+        str(args["table"]),
+        category=str(args["category"]) if args.get("category") else None,
+    )
+    return {"ok": True, "tool": "query_agent_records", "result": {"items": rows, "count": len(rows)}}
+
+
+def _tool_update_memory(agent: AgentInstance, args: dict) -> dict:
+    from app.services.agent.agent_spec import append_fact, load_agent_spec, save_agent_spec
+
+    spec = load_agent_spec(agent)
+    append_fact(spec, str(args["note"]))
+    save_agent_spec(agent, spec)
+    return {"ok": True, "tool": "update_agent_memory", "result": {"facts": spec.facts[-5:]}}
 
 
 async def _tool_thread_summary(db: AsyncSession, *, thread_id: UUID) -> dict:

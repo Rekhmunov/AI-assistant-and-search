@@ -506,6 +506,9 @@ def finalize_checklist(
 
 
 def apply_checklist_to_agent(agent: AgentInstance, checklist: ChecklistState) -> None:
+    from app.services.agent.agent_spec import sync_spec_from_checklist
+
+    sync_spec_from_checklist(agent, checklist.to_dict())
     cfg = dict(agent.config or {})
     cfg["checklist"] = checklist.to_dict()
     cfg["schedule_text"] = checklist.schedule_text

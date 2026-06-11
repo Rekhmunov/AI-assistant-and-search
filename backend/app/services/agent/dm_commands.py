@@ -187,7 +187,10 @@ async def handle_dm_message(
             message_id_value=message_id_value,
             bot=bot,
             force_command=mode == "command" and bool(command),
+            chat_id=max_user_id,
         )
+        if not (reply_text or "").strip() and not attachments:
+            return True
         result = await bot.send_message(
             max_user_id,
             reply_text,

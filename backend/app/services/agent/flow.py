@@ -23,7 +23,8 @@ from app.services.agent.profile import agent_profile
 from app.services.agent.lifecycle import cancel_agent, get_agent_for_thread
 from app.services.agent.capabilities import reply_claims_activation
 from app.services.agent.intent_hints import user_wants_immediate_run, user_wants_today_run
-from app.services.agent.agent_orchestrator import run_agent_turn, user_wants_diagnostic
+from app.services.agent.agent_loop import run_onboarding_loop
+from app.services.agent.agent_orchestrator import user_wants_diagnostic
 from app.services.agent.operational import handle_operational_query, is_operational_max_query
 from app.services.agent.llm_onboarding import (
     apply_checklist_to_agent,
@@ -282,7 +283,7 @@ async def _handle_agent_message_body(
     )
     all_messages = list(msgs_result.scalars().all())
     try:
-        llm_result = await run_agent_turn(
+        llm_result = await run_onboarding_loop(
             db,
             redis_client,
             user,

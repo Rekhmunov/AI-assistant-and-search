@@ -1,4 +1,4 @@
-"""Ответы поддержки: vision (OCR/перевод), база знаний, инструкции из треда."""
+"""Ответы поддержки: vision + единый agent loop в MAX."""
 
 from __future__ import annotations
 
@@ -46,52 +46,6 @@ def _default_vision_query(text: str) -> str:
     return (text or "").strip() or "Опиши содержимое изображения и извлеки весь текст."
 
 
-async def _answer_with_llm(
-    db: AsyncSession,
-    redis_client,
-    user: User,
-    *,
-    question: str,
-    instructions: str,
-    knowledge: str,
-    vision_note: str = "",
-) -> str:
-    from app.services.providers.factory import resolve_runtime_providers
-
-    llm, _, _, _, _ = await resolve_runtime_providers(db, redis_client, user=user)
-    system_parts = [
-        "Ты — помощник в мессенджере MAX. Отвечай кратко и по делу на русском.",
-    ]
-    if instructions:
-        system_parts.append(f"Инструкции владельца агента:\n{instructions[:3000]}")
-    if knowledge:
-        system_parts.append(f"База знаний (используй при ответе, не выдумывай):\n{knowledge[:6000]}")
-    if vision_note:
-        system_parts.append(f"Результат анализа изображения:\n{vision_note[:4000]}")
-
-    user_text = question.strip() or "Помоги пользователю."
-    try:
-        if hasattr(llm, "complete_text"):
-            return (
-                await llm.complete_text(  # type: ignore[attr-defined]
-                    [
-                        {"role": "system", "text": "\n\n".join(system_parts)},
-                        {"role": "user", "text": user_text[:2000]},
-                    ],
-                    model="pro",
-                    max_tokens=900,
-                    temperature=0.3,
-                )
-            ).strip()
-    except Exception as exc:
-        logger.warning("Support LLM failed: %s", exc)
-    if vision_note:
-        return vision_note[:3500]
-    if knowledge:
-        return "Нашёл информацию в базе знаний, но не удалось сформулировать ответ. Попробуйте переформулировать вопрос."
-    return "Сейчас не могу ответить. Попробуйте позже."
-
-
 async def build_interactive_reply(
     db: AsyncSession,
     redis_client,
@@ -125,9 +79,6 @@ async def build_interactive_reply(
         content: DeliveryContent = await build_dm_command_content(db, redis_client, user, agent, bot=bot)
         return content.text, content.attachments or []
 
-    instructions = support_instructions(agent, cfg)
-    knowledge = await retrieve_knowledge_context(db, agent, text)
-
     images = list(vision_images or [])
     if not images and payload:
         images = await load_message_vision_images(
@@ -159,40 +110,44 @@ async def build_interactive_reply(
     if not question and vision_note:
         question = "Обработай изображение согласно запросу пользователя."
 
-    from app.services.agent.document_delivery import try_build_file_reply
-    from app.services.agent.expense_tracker import handle_expense_tracker_reply
+    knowledge = await retrieve_knowledge_context(db, agent, question)
+    instructions = support_instructions(agent, cfg)
+    enriched_question = question
+    if instructions:
+        enriched_question = f"{question}\n\n[Инструкции владельца]\n{instructions[:2500]}"
+    if knowledge:
+        enriched_question = f"{enriched_question}\n\n[База знаний]\n{knowledge[:4000]}"
 
-    expense_reply = await handle_expense_tracker_reply(
+    from app.services.agent.agent_runtime import (
+        run_max_interactive_loop,
+        should_run_max_loop_background,
+    )
+
+    if should_run_max_loop_background(question) and chat_id is not None:
+        from app.workers.agent_tasks import enqueue_max_agent_loop_background
+
+        enqueue_max_agent_loop_background(
+            agent_id=str(agent.id),
+            user_id=str(user.id),
+            user_text=enriched_question,
+            chat_id=chat_id,
+            author=author,
+            vision_context="",
+        )
+        return "Обрабатываю запрос, ответ пришлю в чат…", []
+
+    loop_result = await run_max_interactive_loop(
         db,
         redis_client,
         user,
         agent,
-        question,
-        bot=bot,
+        user_text=enriched_question,
         chat_id=chat_id,
         author=author,
-    )
-    if expense_reply is not None:
-        return expense_reply.text, expense_reply.attachments
-
-    file_reply = await try_build_file_reply(
-        db,
-        redis_client,
-        user,
-        question,
-        output_format=str(cfg.get("output_format") or "") or None,
+        vision_context=vision_note,
         bot=bot,
     )
-    if file_reply and file_reply.attachments:
-        return file_reply.text, file_reply.attachments
-
-    answer = await _answer_with_llm(
-        db,
-        redis_client,
-        user,
-        question=question,
-        instructions=instructions,
-        knowledge=knowledge,
-        vision_note=vision_note,
-    )
-    return answer, []
+    reply_text = (loop_result.text or "").strip()
+    if not reply_text and not loop_result.attachments:
+        reply_text = "Готово."
+    return reply_text, loop_result.attachments
