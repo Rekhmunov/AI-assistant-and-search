@@ -94,6 +94,90 @@ async def _messages_have_debug_trace(db: AsyncSession) -> bool:
     return _debug_trace_column_ok
 
 
+async def _buffer_llm_stream(stream: AsyncIterator[str]) -> str:
+    parts: list[str] = []
+    async for chunk in stream:
+        parts.append(chunk)
+    return "".join(parts)
+
+
+async def _generate_refined_search_answer(
+    llm,
+    *,
+    llm_query: str,
+    sources: list[SearchSource],
+    llm_history: list[dict],
+    model: str,
+    prior_sources_block: str | None,
+    answer_hint: str | None,
+    fact_pack,
+    fact_slots: list[str],
+    howto: bool,
+    grounding_mode: str,
+) -> str:
+    """Собрать ответ LLM в буфер, verify/regen до отдачи токенов клиенту."""
+    full_answer = await _buffer_llm_stream(
+        llm.stream_answer(
+            llm_query,
+            sources,
+            llm_history,
+            model=model,
+            prior_sources_block=prior_sources_block,
+            hint_clarify=answer_hint,
+            strict_facts=False,
+            fact_pack=fact_pack,
+            intent_howto=howto,
+            grounding_mode=grounding_mode,
+        )
+    )
+
+    if fact_pack and fact_pack.facts and grounding_mode == "strict":
+        ok, unsupported = verify_answer_against_facts(
+            full_answer,
+            fact_pack,
+            fact_slots=fact_slots,
+            grounding=grounding_mode,
+        )
+        if not ok:
+            logger.info("Answer verify failed, unsupported numbers: %s", unsupported)
+            full_answer = await _buffer_llm_stream(
+                llm.stream_answer(
+                    llm_query,
+                    sources,
+                    llm_history,
+                    model=model,
+                    prior_sources_block=prior_sources_block,
+                    hint_clarify=answer_hint,
+                    strict_facts=True,
+                    fact_pack=fact_pack,
+                    intent_howto=howto,
+                    grounding_mode=grounding_mode,
+                )
+            )
+
+    if is_template_evasion(full_answer):
+        logger.info("Answer template/refusal detected, regenerating")
+        regen_grounding = grounding_mode
+        if not any(s in STRICT_NUMERIC_SLOTS for s in fact_slots):
+            regen_grounding = "hybrid"
+        full_answer = await _buffer_llm_stream(
+            llm.stream_answer(
+                llm_query,
+                sources,
+                llm_history,
+                model=model,
+                prior_sources_block=prior_sources_block,
+                hint_clarify=answer_hint,
+                strict_facts=False,
+                fact_pack=fact_pack,
+                intent_howto=howto,
+                grounding_mode=regen_grounding,
+            )
+        )
+
+    return full_answer
+
+
 _VALID_INTENTS: frozenset[str] = frozenset(
     {
         "factual_current",
@@ -773,74 +857,21 @@ class SearchFlowService:
                         weak_retrieval=weak_retrieval,
                         fact_slots=fact_slots,
                     )
-                    use_strict_facts = False
-
-                    full_answer = ""
-                    async for chunk in llm.stream_answer(
-                        llm_query,
-                        sources,
-                        llm_history,
+                    full_answer = await _generate_refined_search_answer(
+                        llm,
+                        llm_query=llm_query,
+                        sources=sources,
+                        llm_history=llm_history,
                         model=route.answer_model,
                         prior_sources_block=prior_sources_block,
-                        hint_clarify=answer_hint,
-                        strict_facts=use_strict_facts,
+                        answer_hint=answer_hint,
                         fact_pack=fact_pack,
-                        intent_howto=howto,
+                        fact_slots=fact_slots,
+                        howto=howto,
                         grounding_mode=grounding_mode,
-                    ):
-                        full_answer += chunk
-                        yield sse_event("token", {"text": chunk})
-
-                    if (
-                        fact_pack
-                        and fact_pack.facts
-                        and grounding_mode == "strict"
-                    ):
-                        ok, unsupported = verify_answer_against_facts(
-                            full_answer,
-                            fact_pack,
-                            fact_slots=fact_slots,
-                            grounding=grounding_mode,
-                        )
-                        if not ok:
-                            logger.info("Answer verify failed, unsupported numbers: %s", unsupported)
-                            yield sse_event("reset_answer", {})
-                            full_answer = ""
-                            async for chunk in llm.stream_answer(
-                                llm_query,
-                                sources,
-                                llm_history,
-                                model=route.answer_model,
-                                prior_sources_block=prior_sources_block,
-                                hint_clarify=answer_hint,
-                                strict_facts=True,
-                                fact_pack=fact_pack,
-                                intent_howto=howto,
-                                grounding_mode=grounding_mode,
-                            ):
-                                full_answer += chunk
-                                yield sse_event("token", {"text": chunk})
-                    if is_template_evasion(full_answer):
-                        logger.info("Answer template/refusal detected, regenerating")
-                        yield sse_event("reset_answer", {})
-                        full_answer = ""
-                        regen_grounding = grounding_mode
-                        if not any(s in STRICT_NUMERIC_SLOTS for s in fact_slots):
-                            regen_grounding = "hybrid"
-                        async for chunk in llm.stream_answer(
-                            llm_query,
-                            sources,
-                            llm_history,
-                            model=route.answer_model,
-                            prior_sources_block=prior_sources_block,
-                            hint_clarify=answer_hint,
-                            strict_facts=False,
-                            fact_pack=fact_pack,
-                            intent_howto=howto,
-                            grounding_mode=regen_grounding,
-                        ):
-                            full_answer += chunk
-                            yield sse_event("token", {"text": chunk})
+                    )
+                    if full_answer:
+                        yield sse_event("token", {"text": full_answer})
                 else:
                     async for chunk in llm.stream_answer_direct(
                         llm_query,

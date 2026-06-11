@@ -258,15 +258,16 @@ async def update_post(db: AsyncSession, post: BlogPost, data: dict) -> BlogPost:
         post.title = data["title"].strip()
     if "slug" in data and data["slug"] is not None:
         new_slug = data["slug"].strip()
-        if not is_valid_slug(new_slug):
-            raise ValueError("invalid_slug")
-        if new_slug != post.slug:
-            unique = await ensure_unique_post_slug(
-                db, new_slug, locale=post.locale or DEFAULT_LOCALE, exclude_id=post.id
-            )
-            old = post.slug
-            post.slug = unique
-            db.add(BlogSlugRedirect(old_slug=old, post_id=post.id))
+        if new_slug:
+            if not is_valid_slug(new_slug):
+                raise ValueError("invalid_slug")
+            if new_slug != post.slug:
+                unique = await ensure_unique_post_slug(
+                    db, new_slug, locale=post.locale or DEFAULT_LOCALE, exclude_id=post.id
+                )
+                old = post.slug
+                post.slug = unique
+                db.add(BlogSlugRedirect(old_slug=old, post_id=post.id))
     if "excerpt" in data and data["excerpt"] is not None:
         post.excerpt = data["excerpt"].strip()
     if "content_html" in data and data["content_html"] is not None:

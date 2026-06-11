@@ -1,3 +1,5 @@
+import { formatApiErrorDetail } from "./lib/apiErrorDetail";
+
 const API = import.meta.env.VITE_API_URL || "";
 
 export class ApiError extends Error {
@@ -23,11 +25,11 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
     let detail = res.statusText;
     try {
       const body = await res.json();
-      detail = body.detail || JSON.stringify(body);
+      detail = formatApiErrorDetail(body, res.statusText);
     } catch {
       /* ignore */
     }
-    throw new ApiError(String(detail), res.status);
+    throw new ApiError(detail, res.status);
   }
 
   if (res.status === 204) {
@@ -47,11 +49,11 @@ export async function apiUpload<T>(path: string, formData: FormData): Promise<T>
     let detail = res.statusText;
     try {
       const body = await res.json();
-      detail = body.detail || JSON.stringify(body);
+      detail = formatApiErrorDetail(body, res.statusText);
     } catch {
       /* ignore */
     }
-    throw new ApiError(String(detail), res.status);
+    throw new ApiError(detail, res.status);
   }
 
   return res.json() as Promise<T>;

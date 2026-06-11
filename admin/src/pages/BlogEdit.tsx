@@ -103,11 +103,16 @@ export function BlogEditPage() {
   const editorRef = useRef<BlogRichTextEditorHandle>(null);
 
   useEffect(() => {
-    apiFetch<Category[]>("/api/admin/blog/categories").then(setCategories);
+    apiFetch<Category[]>("/api/admin/blog/categories")
+      .then(setCategories)
+      .catch((err) => {
+        setError(err instanceof Error ? err.message : "Не удалось загрузить категории");
+      });
   }, []);
 
   useEffect(() => {
     if (isNew || !id) return;
+    setError("");
     apiFetch<PostForm & { cover_image?: { url: string } }>(`/api/admin/blog/posts/${id}`).then((post) => {
       setForm({
         title: post.title,
@@ -129,6 +134,8 @@ export function BlogEditPage() {
       });
       setCoverUrl(post.cover_image?.url || "");
       apiFetch<AdminComment[]>(`/api/admin/blog/posts/${id}/comments`).then(setComments).catch(() => setComments([]));
+    }).catch((err) => {
+      setError(err instanceof Error ? err.message : "Не удалось загрузить статью");
     });
   }, [id, isNew]);
 
@@ -140,12 +147,17 @@ export function BlogEditPage() {
     setBusy(true);
     setMsg("");
     setError("");
-    const body = {
+    const body: Record<string, unknown> = {
       ...form,
       category_id: form.category_id || null,
       cover_image_id: form.cover_image_id || null,
       og_image_id: form.og_image_id || null,
     };
+    if (!isNew && !form.slug.trim()) {
+      delete body.slug;
+    } else if (!form.slug.trim()) {
+      body.slug = null;
+    }
     try {
       if (isNew) {
         const created = await apiFetch<{ id: string }>("/api/admin/blog/posts", {
@@ -461,8 +473,12 @@ export function BlogEditPage() {
                         className="blog-comment-delete"
                         onClick={async () => {
                           if (!window.confirm("Удалить комментарий?")) return;
-                          await apiFetch(`/api/admin/blog/posts/${id}/comments/${c.id}`, { method: "DELETE" });
-                          setComments((prev) => prev.filter((x) => x.id !== c.id));
+                          try {
+                            await apiFetch(`/api/admin/blog/posts/${id}/comments/${c.id}`, { method: "DELETE" });
+                            setComments((prev) => prev.filter((x) => x.id !== c.id));
+                          } catch (err) {
+                            setError(err instanceof Error ? err.message : "Не удалось удалить комментарий");
+                          }
                         }}
                       >
                         Удалить
