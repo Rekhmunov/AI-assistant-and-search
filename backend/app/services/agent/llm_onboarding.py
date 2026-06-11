@@ -99,6 +99,7 @@ AGENT_SYSTEM_PROMPT = """Ты — ассистент настройки аген
 - «Твоей группе» / «твоём чате» в обращении к боту = личный диалог с Glosix в MAX (personal_reminder), НЕ группа пользователей.
 - Часовой пояс: по умолчанию Europe/Moscow. НЕ спрашивай timezone, если пользователь не указал другой.
 - Короткие «ок», «продолжим», «дальше» — объясни ОДИН следующий шаг по missing_fields, не начинай диалог заново.
+- «Сбрось контекст» / «начни заново» — подтверди сброс кратко; checklist пустой (если настройка), не опирайся на старую history; спроси новую задачу или помоги как умный ассистент.
 
 Примеры (пользователь → role + поля):
 - «напоминай каждый день в 9 про встречу» → personal_reminder, schedule_text, reminder_message, content_pipeline=static
@@ -688,6 +689,13 @@ def _context_block(
         lines.append(
             "user_signal: wants_continue — один конкретный следующий шаг по missing_fields, без сброса"
         )
+    from app.services.agent.context_reset import user_wants_context_reset
+
+    if user_wants_context_reset(last_user_text):
+        lines.append(
+            "user_signal: context_reset — контекст сброшен; не используй старый диалог; "
+            "веди себя как умный ассистент-агент, помоги с новой задачей с чистого листа"
+        )
     return "\n".join(lines)
 
 
@@ -699,7 +707,9 @@ async def run_llm_turn(
     messages: list[Message],
 ) -> LlmTurnResult:
     checklist = load_checklist(agent)
-    history = _history_messages(messages)
+    from app.services.agent.context_reset import history_messages_for_agent
+
+    history = history_messages_for_agent(messages, agent)
     last_user = history[-1]["text"] if history and history[-1]["role"] == "user" else ""
     if not history or history[-1]["role"] != "user":
         logger.warning("Agent LLM turn without trailing user message")

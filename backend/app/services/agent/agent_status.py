@@ -18,6 +18,7 @@ logger = logging.getLogger(__name__)
 StatusCallback = Callable[[str], Awaitable[None]]
 
 STATUS_THINKING = "Анализирую задачу…"
+STATUS_CONTEXT_RESET = "Сбрасываю контекст…"
 STATUS_ANALYZING_RESULTS = "Формирую ответ по результатам проверок…"
 STATUS_INGEST_FILES = "Обрабатываю загруженные документы…"
 STATUS_ADMIN_CHECK = "Проверяю права администратора в группе…"

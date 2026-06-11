@@ -21,12 +21,12 @@ from app.services.agent.agent_tools import (
     execute_agent_tool,
     format_tool_results_for_llm,
 )
+from app.services.agent.context_reset import history_messages_for_agent
 from app.services.agent.llm_onboarding import (
     AGENT_SYSTEM_PROMPT,
     ChecklistState,
     LlmTurnResult,
     _context_block,
-    _history_messages,
     _parse_llm_json,
     _sanitize_agent_reply,
     apply_message_hints,
@@ -97,7 +97,7 @@ async def run_agent_turn(
     on_status: StatusCallback | None = None,
 ) -> LlmTurnResult:
     checklist = load_checklist(agent)
-    history = _history_messages(messages)
+    history = history_messages_for_agent(messages, agent)
     last_user = history[-1]["text"] if history and history[-1]["role"] == "user" else ""
 
     if is_operational_max_query(last_user):

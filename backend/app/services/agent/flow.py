@@ -43,12 +43,20 @@ from app.services.agent.knowledge import ingest_agent_files
 from app.services.agent.reminders import activate_agent_reminders, effective_max_user_id
 from app.services.agent.agent_status import (
     STATUS_ACTIVATING,
+    STATUS_CONTEXT_RESET,
     STATUS_FIRST_DISPATCH,
     STATUS_INGEST_FILES,
     STATUS_PREFLIGHT,
     StatusCallback,
     emit_status,
     noop_status,
+)
+from app.services.agent.context_reset import (
+    apply_onboarding_reset,
+    context_reset_reply,
+    is_pure_context_reset_request,
+    mark_context_reset,
+    user_wants_context_reset,
 )
 from app.services.agent.agent_pending import set_agent_pending
 
@@ -229,9 +237,24 @@ async def _handle_agent_message_body(
         await db.commit()
         return user_msg, assistant, agent
 
+    context_reset = user_wants_context_reset(text)
+    assistant_turn = False
+    if context_reset:
+        await emit_status(status_cb, STATUS_CONTEXT_RESET)
+        mark_context_reset(agent, user_msg.id)
+        if agent.status != AgentStatus.ACTIVE.value:
+            apply_onboarding_reset(agent)
+        else:
+            assistant_turn = True
+        if is_pure_context_reset_request(text):
+            assistant = await _assistant_reply(db, thread, context_reset_reply(agent))
+            await db.commit()
+            return user_msg, assistant, agent
+        assistant_turn = True
+
     operational = is_operational_max_query(text)
     diagnostic_mode = agent.status == AgentStatus.ACTIVE.value and (
-        user_wants_diagnostic(text) or operational
+        user_wants_diagnostic(text) or operational or assistant_turn
     )
 
     op_handled = await handle_operational_query(
