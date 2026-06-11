@@ -48,6 +48,12 @@ from app.services.agent.llm_onboarding import (
 from app.services.agent.max_capabilities import tools_appendix_for_mode
 from app.services.agent.search_reply import prefer_web_search_answer
 from app.services.agent.source_display import prepare_agent_reply_for_ui
+from app.services.agent.agent_tool_feedback import (
+    PROMISE_WITHOUT_TOOLS_NUDGE,
+    ensure_action_feedback,
+    reply_is_deferred_promise,
+    user_expects_immediate_max_action,
+)
 from app.services.agent.thread_memory import update_thread_memory_after_turn
 from app.services.providers.factory import resolve_runtime_providers
 
@@ -265,6 +271,7 @@ async def _tool_loop(
 
     attachments: list[dict] = []
     outbound_sent = False
+    loop_nudges: list[str] = []
 
     for iteration in range(MAX_ORCHESTRATOR_ITERATIONS):
         if iteration > 0:
@@ -289,6 +296,8 @@ async def _tool_loop(
             payload.append({"role": "system", "text": _context_block(user, agent, checklist, user_text)})
         if runtime_chat_id is not None:
             payload.append({"role": "system", "text": f"current_max_chat_id: {runtime_chat_id}"})
+        for nudge in loop_nudges:
+            payload.append({"role": "system", "text": nudge})
         if tool_trace:
             payload.append(
                 {"role": "system", "text": f"tool_results:\n{format_tool_results_for_llm(tool_trace)}"}
@@ -319,8 +328,7 @@ async def _tool_loop(
             return LlmTurnResult(reply=build_parse_fallback_reply(fb.to_dict(), user_text), checklist=fb), tool_trace
 
         tool_calls = data.get("tool_calls")
-        done = bool(data.get("done", True))
-        if isinstance(tool_calls, list) and tool_calls and not done:
+        if isinstance(tool_calls, list) and tool_calls:
             if len(tool_trace) >= MAX_TOOL_CALLS_PER_TURN:
                 msg = "Слишком много шагов за один запрос. Уточните задачу."
                 if mode == "runtime":
@@ -362,19 +370,44 @@ async def _tool_loop(
             continue
 
         reply = str(data.get("reply") or "").strip()
+        if (
+            not tool_trace
+            and reply_is_deferred_promise(reply)
+            and user_expects_immediate_max_action(user_text)
+            and not loop_nudges
+            and iteration < MAX_ORCHESTRATOR_ITERATIONS - 1
+        ):
+            loop_nudges.append(PROMISE_WITHOUT_TOOLS_NUDGE)
+            continue
+
         if mode == "runtime":
-            if outbound_sent and not reply:
-                reply = ""
-            elif not reply and attachments:
-                reply = "Готово."
-            return RuntimeLoopResult(text=reply or ("Готово." if not outbound_sent else ""), attachments=attachments, tool_trace=tool_trace), tool_trace
+            return RuntimeLoopResult(
+                text=ensure_action_feedback(reply, tool_trace, user_text),
+                attachments=attachments,
+                tool_trace=tool_trace,
+            ), tool_trace
 
         assert checklist is not None
-        return _result_from_data(data, checklist, user_text, history, user), tool_trace
+        result = _result_from_data(data, checklist, user_text, history, user)
+        final_reply = ensure_action_feedback(result.reply, tool_trace, user_text)
+        if final_reply != result.reply:
+            result = LlmTurnResult(
+                reply=final_reply,
+                checklist=result.checklist,
+                ready_for_confirmation=result.ready_for_confirmation,
+                confirmation_summary=result.confirmation_summary,
+                activate=result.activate,
+                sources=result.sources,
+            )
+        return result, tool_trace
 
-    msg = "Задача сложная — достигнут лимит шагов. Напишите «продолжим» или уточните."
+    msg = ensure_action_feedback(
+        "Задача сложная — достигнут лимит шагов. Напишите «продолжим» или уточните.",
+        tool_trace,
+        user_text,
+    )
     if mode == "runtime":
-        return RuntimeLoopResult(text=msg, attachments=attachments), tool_trace
+        return RuntimeLoopResult(text=msg, attachments=attachments, tool_trace=tool_trace), tool_trace
     return LlmTurnResult(reply=msg, checklist=checklist or ChecklistState()), tool_trace
 
 

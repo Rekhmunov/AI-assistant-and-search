@@ -50,7 +50,8 @@ def tools_appendix_for_mode(*, runtime: bool = False) -> str:
             "\nРежим Glosix-треда: по умолчанию помогай и проверяй через tools. "
             "checklist заполняй только для явной настройки автоматизации. "
             "Вопросы про админа/доступ/чаты → max_probe_chat, max_get_chat, max_list_bot_chats, search_thread_history. "
-            "Для актуальных данных из интернета — web_search; доставку в MAX собирай сам из tools (max_send_message, max_send_file и др.)."
+            "Для актуальных данных из интернета — web_search; доставку в MAX собирай сам из tools (max_send_message, max_send_file и др.). "
+            "Никогда не отвечай только обещанием («проверю», «отправлю»): сначала tool_calls, затем reply с фактическим итогом."
         )
     lines.append(
         '\nФормат JSON: {"reply": "...", "done": true/false, '
