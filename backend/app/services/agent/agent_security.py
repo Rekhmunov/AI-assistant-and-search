@@ -107,7 +107,7 @@ def validate_tool_call(
 
     payload = dict(args or {}) if isinstance(args, dict) else {}
 
-    if name in {"max_probe_chat", "max_get_chat", "max_send_test", "max_send_file", "max_send_message"}:
+    if name in {"max_probe_chat", "max_get_chat", "max_send_test"}:
         chat_id = payload.get("chat_id")
         if chat_id is None:
             chat_id = agent.max_chat_id
@@ -117,6 +117,52 @@ def validate_tool_call(
         if not chat_id_allowed(cid, agent, message_chat_id=message_chat_id):
             raise AgentSecurityError("chat_id_forbidden")
         payload["chat_id"] = cid
+
+    if name == "max_send_file":
+        # Поддерживаем и личку (user_id) и группу (chat_id)
+        raw_user_id = payload.get("user_id")
+        raw_chat_id = payload.get("chat_id")
+        if raw_user_id is not None:
+            uid = int(raw_user_id)
+            allowed_uid = int(agent.max_user_id) if agent.max_user_id else None
+            if allowed_uid is None or uid != allowed_uid:
+                raise AgentSecurityError("user_id_forbidden")
+            payload["user_id"] = uid
+            payload.pop("chat_id", None)
+        else:
+            if raw_chat_id is None:
+                raw_chat_id = agent.max_chat_id
+            if raw_chat_id is None:
+                raise AgentSecurityError("chat_id_or_user_id_required")
+            cid = int(raw_chat_id)
+            if not chat_id_allowed(cid, agent, message_chat_id=message_chat_id):
+                raise AgentSecurityError("chat_id_forbidden")
+            payload["chat_id"] = cid
+            payload.pop("user_id", None)
+
+    if name == "max_send_message":
+        # Поддерживаем два режима: личка (user_id) и группа (chat_id)
+        raw_user_id = payload.get("user_id")
+        raw_chat_id = payload.get("chat_id")
+        if raw_user_id is not None:
+            # Режим личных сообщений: user_id должен совпадать с владельцем агента
+            uid = int(raw_user_id)
+            allowed_uid = int(agent.max_user_id) if agent.max_user_id else None
+            if allowed_uid is None or uid != allowed_uid:
+                raise AgentSecurityError("user_id_forbidden")
+            payload["user_id"] = uid
+            payload.pop("chat_id", None)
+        else:
+            # Режим группы: chat_id обязателен и должен быть разрешён
+            if raw_chat_id is None:
+                raw_chat_id = agent.max_chat_id
+            if raw_chat_id is None:
+                raise AgentSecurityError("chat_id_or_user_id_required")
+            cid = int(raw_chat_id)
+            if not chat_id_allowed(cid, agent, message_chat_id=message_chat_id):
+                raise AgentSecurityError("chat_id_forbidden")
+            payload["chat_id"] = cid
+            payload.pop("user_id", None)
 
     if name == "max_send_test" and not allow_test_send:
         raise AgentSecurityError("test_send_not_allowed")

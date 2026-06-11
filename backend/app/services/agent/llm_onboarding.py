@@ -754,9 +754,15 @@ def _context_block(
     cfg = dict(agent.config or {})
     registered = cfg.get("registered_group_chat_id")
     missing = checklist_missing_fields(checklist)
+    dm_hint = (
+        f"для отправки ЛИЧНОГО сообщения пользователю используй max_send_message с user_id={user.max_user_id}"
+        if user.max_user_id
+        else "личные сообщения недоступны (MAX не привязан)"
+    )
     lines = [
         f"max_linked: {bool(user.max_user_id)}",
         f"max_user_id: {user.max_user_id or 'нет'}",
+        f"dm_send_hint: {dm_hint}",
         f"agent_status: {agent.status}",
         f"registered_group_chat_id: {registered or 'нет'}",
         f"knowledge_chunks: {cfg.get('knowledge_chunk_count') or 0}",

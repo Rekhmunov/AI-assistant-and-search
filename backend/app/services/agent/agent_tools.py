@@ -210,7 +210,8 @@ async def _tool_max_send_file(
         build_image_delivery_content,
     )
 
-    chat_id = int(args["chat_id"])
+    send_user_id: int | None = args.get("user_id")
+    send_chat_id: int | None = args.get("chat_id")
     instruction = str(args["instruction"])
     fmt = str(args.get("format") or "docx")
     try:
@@ -231,18 +232,29 @@ async def _tool_max_send_file(
                 "tool": "max_send_file",
                 "error": result.text or "Не удалось подготовить файл",
             }
-        send = await bot.send_message(
-            None,
-            result.text or "Файл",
-            attachments=result.attachments,
-            chat_id=chat_id,
-            notify=False,
-        )
+        if send_user_id is not None:
+            # Личное сообщение
+            send = await bot.send_message(
+                int(send_user_id),
+                result.text or "Файл",
+                attachments=result.attachments,
+                notify=True,
+            )
+            dest = {"user_id": send_user_id}
+        else:
+            send = await bot.send_message(
+                None,
+                result.text or "Файл",
+                attachments=result.attachments,
+                chat_id=int(send_chat_id),
+                notify=False,
+            )
+            dest = {"chat_id": send_chat_id}
         return {
             "ok": send.ok,
             "tool": "max_send_file",
             "result": {
-                "chat_id": chat_id,
+                **dest,
                 "format": fmt,
                 "message_id": send.message_id,
                 "error": send.error,
@@ -255,14 +267,26 @@ async def _tool_max_send_file(
 
 
 async def _tool_max_send_message(bot: MaxBotService, args: dict) -> dict:
-    chat_id = int(args["chat_id"])
     text = str(args["text"])
-    send = await bot.send_message(None, text, chat_id=chat_id, notify=False)
-    return {
-        "ok": send.ok,
-        "tool": "max_send_message",
-        "result": {"chat_id": chat_id, "message_id": send.message_id, "error": send.error},
-    }
+    user_id: int | None = args.get("user_id")
+    chat_id: int | None = args.get("chat_id")
+
+    if user_id is not None:
+        # Личное сообщение: MAX API требует user_id, не chat_id
+        send = await bot.send_message(int(user_id), text, notify=True)
+        return {
+            "ok": send.ok,
+            "tool": "max_send_message",
+            "result": {"user_id": user_id, "message_id": send.message_id, "error": send.error},
+        }
+    else:
+        # Групповое сообщение
+        send = await bot.send_message(None, text, chat_id=int(chat_id), notify=False)
+        return {
+            "ok": send.ok,
+            "tool": "max_send_message",
+            "result": {"chat_id": chat_id, "message_id": send.message_id, "error": send.error},
+        }
 
 
 async def _tool_search_thread_history(db: AsyncSession, *, thread_id: UUID, args: dict) -> dict:

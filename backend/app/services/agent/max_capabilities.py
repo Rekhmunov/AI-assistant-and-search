@@ -20,7 +20,7 @@ CAPABILITIES: tuple[AgentCapability, ...] = (
     AgentCapability("max_list_bot_chats", "max", "Список чатов, куда добавлен бот"),
     AgentCapability("max_resolve_channel_link", "max", "Получить chat_id по ссылке max.ru"),
     AgentCapability("max_send_test", "max", "Отправить тестовое текстовое сообщение", destructive=True),
-    AgentCapability("max_send_message", "max", "Отправить текст в MAX (личка или группа)", destructive=True),
+    AgentCapability("max_send_message", "max", "Отправить текст в MAX: личка — {user_id, text}, группа — {chat_id, text}", destructive=True),
     AgentCapability("max_send_file", "max", "Сгенерировать и отправить файл (docx/pdf/xlsx/image)", destructive=True),
     AgentCapability("max_read_activity_logs", "max", "Журнал dispatch агента за 24ч"),
     AgentCapability("web_search", "glosix", "Полный поиск Glosix: ответ по источникам из интернета"),
