@@ -26,6 +26,12 @@ STATUS_MAX_CHAT = "Запрашиваю данные чата MAX…"
 STATUS_PREFLIGHT = "Проверяю группу MAX перед запуском…"
 STATUS_ACTIVATING = "Запускаю агента…"
 STATUS_FIRST_DISPATCH = "Выполняю первую отправку…"
+STATUS_REFLECTING = "Проверяю ответ перед отправкой…"
+STATUS_MEMORY_UPDATE = "Обновляю память диалога…"
+STATUS_SEARCH_FETCH = "Ищу источники в интернете…"
+STATUS_SEARCH_WRITE = "Формирую текст по найденным источникам…"
+STATUS_BUILDING_POST = "Собираю пост: текст и иллюстрации…"
+STATUS_GENERATING_IMAGES = "Генерирую изображения…"
 
 TOOL_STATUS_LABELS: dict[str, str] = {
     "max_probe_chat": "Проверяю доступ бота к чату MAX…",
@@ -35,6 +41,7 @@ TOOL_STATUS_LABELS: dict[str, str] = {
     "max_resolve_channel_link": "Определяю группу по ссылке MAX…",
     "max_read_activity_logs": "Читаю журнал активности агента…",
     "web_search": "Ищу в интернете…",
+    "build_news_post": "Собираю пост: поиск, текст и фото…",
     "read_thread_summary": "Просматриваю историю диалога…",
     "max_send_file": "Формирую и отправляю файл в MAX…",
     "max_send_message": "Отправляю сообщение в MAX…",

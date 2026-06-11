@@ -15,6 +15,7 @@ from app.models.message import Message
 from app.models.user import User
 from app.services.agent.activity_log import list_agent_activity_logs
 from app.services.agent.agent_security import AgentSecurityError, validate_tool_call
+from app.services.agent.agent_status import StatusCallback
 from app.services.agent.intent_hints import _extract_max_chat_id
 from app.services.agent.max_probe import probe_max_chat, resolve_channel_link
 from app.services.agent.max_errors import explain_max_send_error
@@ -37,6 +38,7 @@ async def execute_agent_tool(
     user_message: str = "",
     runtime_chat_id: int | None = None,
     author: str = "",
+    on_status: StatusCallback | None = None,
 ) -> dict[str, Any]:
     bot = bot or MaxBotService()
     message_chat_id = _extract_max_chat_id(user_message)
@@ -67,7 +69,9 @@ async def execute_agent_tool(
         if name == "max_read_activity_logs":
             return await _tool_read_logs(db, thread_id=thread_id, user_id=user.id)
         if name == "web_search":
-            return await _tool_web_search(db, redis_client, user, safe_args)
+            return await _tool_web_search(db, redis_client, user, safe_args, on_status=on_status)
+        if name == "build_news_post":
+            return await _tool_build_news_post(db, redis_client, user, safe_args, on_status=on_status)
         if name == "read_thread_summary":
             return await _tool_thread_summary(db, thread_id=thread_id)
         if name == "max_send_file":
@@ -169,12 +173,54 @@ async def _tool_web_search(
     redis_client,
     user: User,
     args: dict,
+    *,
+    on_status: StatusCallback | None = None,
 ) -> dict:
     from app.services.agent.web_digest import build_web_digest_text
 
     topic = str(args["query"])
-    text = await build_web_digest_text(db, redis_client, user, topic=topic, header="")
+    text = await build_web_digest_text(
+        db,
+        redis_client,
+        user,
+        topic=topic,
+        header="",
+        on_status=on_status,
+    )
     return {"ok": True, "tool": "web_search", "result": {"text": text[:2500]}}
+
+
+async def _tool_build_news_post(
+    db: AsyncSession,
+    redis_client,
+    user: User,
+    args: dict,
+    *,
+    on_status: StatusCallback | None = None,
+) -> dict:
+    from app.services.agent.news_post_delivery import build_news_post_content
+
+    topic = str(args["topic"])
+    text, attachments = await build_news_post_content(
+        db,
+        redis_client,
+        user,
+        topic=topic,
+        min_chars=int(args.get("min_chars") or 500),
+        max_chars=int(args.get("max_chars") or 1000),
+        image_min=int(args.get("image_min") or 1),
+        image_max=int(args.get("image_max") or 3),
+        on_status=on_status,
+    )
+    return {
+        "ok": True,
+        "tool": "build_news_post",
+        "result": {
+            "text": text[:3000],
+            "image_count": len(attachments),
+            "char_count": len(text),
+        },
+    }
 
 
 async def _tool_max_send_file(

@@ -12,6 +12,8 @@ from app.services.agent.agent_status import (
 def test_tool_status_label_known():
     assert tool_status_label("web_search") == TOOL_STATUS_LABELS["web_search"]
     assert "интернет" in tool_status_label("web_search").lower()
+    assert tool_status_label("build_news_post") == TOOL_STATUS_LABELS["build_news_post"]
+    assert "пост" in tool_status_label("build_news_post").lower()
 
 
 def test_tool_status_label_unknown():

@@ -138,7 +138,12 @@ async def build_news_post_content(
     image_min: int = 1,
     image_max: int = 3,
     bot: MaxBotService | None = None,
+    on_status=None,
 ) -> tuple[str, list[dict]]:
+    from app.services.agent.agent_status import STATUS_BUILDING_POST, STATUS_GENERATING_IMAGES
+
+    if on_status:
+        await on_status(STATUS_BUILDING_POST)
     text = await build_web_digest_text(
         db,
         redis_client,
@@ -147,8 +152,11 @@ async def build_news_post_content(
         header=header,
         min_chars=min_chars,
         max_chars=max_chars,
+        on_status=on_status,
     )
     text = _clamp_text_length(text, min_chars, max_chars)
+    if on_status:
+        await on_status(STATUS_GENERATING_IMAGES)
     attachments = await build_news_post_attachments(
         db,
         redis_client,

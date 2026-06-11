@@ -23,6 +23,8 @@ from app.services.agent.agent_security import (
 from app.services.agent.agent_spec import load_agent_spec, spec_context_block, sync_spec_from_checklist
 from app.services.agent.agent_status import (
     STATUS_ANALYZING_RESULTS,
+    STATUS_MEMORY_UPDATE,
+    STATUS_REFLECTING,
     STATUS_THINKING,
     StatusCallback,
     emit_status,
@@ -107,6 +109,7 @@ async def run_onboarding_loop(
         spec = load_agent_spec(agent)
         llm, _, answer_model, _, _ = await resolve_runtime_providers(db, redis_client, user=user)
         if should_reflect(user_text=last_user, draft_reply=draft, runtime=False):
+            await emit_status(on_status, STATUS_REFLECTING)
             reflection = await critique_agent_reply(
                 llm,
                 user_text=last_user,
@@ -122,6 +125,7 @@ async def run_onboarding_loop(
                     confirmation_summary=result.confirmation_summary,
                     activate=result.activate,
                 )
+        await emit_status(on_status, STATUS_MEMORY_UPDATE)
         await update_thread_memory_after_turn(
             db,
             redis_client,
@@ -174,6 +178,7 @@ async def run_runtime_loop(
     if isinstance(result, RuntimeLoopResult):
         llm, _, answer_model, _, _ = await resolve_runtime_providers(db, redis_client, user=user)
         if should_reflect(user_text=user_text, draft_reply=result.text, runtime=True):
+            await emit_status(on_status, STATUS_REFLECTING)
             reflection = await critique_agent_reply(
                 llm,
                 user_text=user_text,
@@ -188,6 +193,7 @@ async def run_runtime_loop(
                     tool_trace=result.tool_trace,
                 )
         if thread_id:
+            await emit_status(on_status, STATUS_MEMORY_UPDATE)
             await update_thread_memory_after_turn(
                 db,
                 redis_client,
@@ -317,6 +323,7 @@ async def _tool_loop(
                     user_message=user_text,
                     runtime_chat_id=runtime_chat_id,
                     author=author,
+                    on_status=status_cb,
                 )
                 tool_trace.append(result)
                 if tool_name in {"max_send_file", "max_send_message"} and result.get("ok"):
