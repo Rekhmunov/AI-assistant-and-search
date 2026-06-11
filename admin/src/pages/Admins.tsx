@@ -8,22 +8,34 @@ export function AdminsPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [role, setRole] = useState<AdminRole>("support");
+  const [error, setError] = useState("");
+  const [msg, setMsg] = useState("");
 
-  const load = () => apiFetch<AdminUser[]>("/api/admin/admins").then(setAdmins);
+  const load = () =>
+    apiFetch<AdminUser[]>("/api/admin/admins")
+      .then(setAdmins)
+      .catch((err) => setError(err instanceof Error ? err.message : "Не удалось загрузить список администраторов"));
 
   useEffect(() => {
     load();
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const create = async (e: FormEvent) => {
     e.preventDefault();
-    await apiFetch("/api/admin/admins", {
-      method: "POST",
-      body: JSON.stringify({ email, password, role }),
-    });
-    setEmail("");
-    setPassword("");
-    load();
+    setError("");
+    setMsg("");
+    try {
+      await apiFetch("/api/admin/admins", {
+        method: "POST",
+        body: JSON.stringify({ email, password, role }),
+      });
+      setEmail("");
+      setPassword("");
+      setMsg("Администратор создан");
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Не удалось создать администратора");
+    }
   };
 
   return (
@@ -34,6 +46,8 @@ export function AdminsPage() {
           <p className="admin-page-subtitle">Учётные записи с доступом к панели</p>
         </div>
       </header>
+      {msg && <p className="ok card">{msg}</p>}
+      {error && <p className="error card">{error}</p>}
       {can("admins:write") && (
         <form className="card admins-create-form" onSubmit={create}>
           <h2>Новый админ</h2>

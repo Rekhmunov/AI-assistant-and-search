@@ -58,7 +58,7 @@ def admin_has_permission(admin: AdminUser, permission: str) -> bool:
 def require_permission(permission: str) -> Callable:
     async def _checker(admin: Annotated[AdminUser, Depends(get_current_admin)]) -> AdminUser:
         if not admin_has_permission(admin, permission):
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions")
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Недостаточно прав доступа")
         return admin
 
     return _checker

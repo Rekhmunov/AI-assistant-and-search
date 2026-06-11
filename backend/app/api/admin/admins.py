@@ -33,7 +33,7 @@ async def create_admin(
 ):
     existing = await db.execute(select(AdminUser).where(AdminUser.email == body.email.lower()))
     if existing.scalar_one_or_none():
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already exists")
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Администратор с таким email уже существует")
 
     row = AdminUser(
         email=body.email.lower(),
@@ -66,7 +66,7 @@ async def update_admin(
     result = await db.execute(select(AdminUser).where(AdminUser.id == admin_id))
     row = result.scalar_one_or_none()
     if not row:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Admin not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Администратор не найден")
 
     changes: dict = {}
     if body.role is not None:

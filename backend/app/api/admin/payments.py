@@ -97,7 +97,7 @@ async def delete_subscription(
     result = await db.execute(select(Subscription).where(Subscription.id == subscription_id))
     sub = result.scalar_one_or_none()
     if sub is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Subscription not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Подписка не найдена")
 
     payment_id = sub.yookassa_payment_id
     user_id = sub.user_id
@@ -124,7 +124,7 @@ async def bulk_delete_subscriptions(
     result = await db.execute(select(Subscription).where(Subscription.id.in_(body.ids)))
     subs = list(result.scalars().all())
     if not subs:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Subscriptions not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Выбранные подписки не найдены")
 
     for sub in subs:
         await db.delete(sub)

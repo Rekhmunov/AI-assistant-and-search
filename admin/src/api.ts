@@ -11,6 +11,23 @@ export class ApiError extends Error {
   }
 }
 
+const HTTP_STATUS_RU: Record<number, string> = {
+  400: "Некорректный запрос",
+  401: "Необходима авторизация",
+  403: "Доступ запрещён",
+  404: "Не найдено",
+  405: "Метод не поддерживается",
+  408: "Превышено время ожидания",
+  409: "Конфликт данных",
+  413: "Файл слишком большой",
+  422: "Ошибка валидации данных",
+  429: "Слишком много запросов",
+  500: "Внутренняя ошибка сервера",
+  502: "Ошибка внешнего сервиса",
+  503: "Сервис временно недоступен",
+  504: "Превышено время ожидания шлюза",
+};
+
 export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
   const res = await fetch(`${API}${path}`, {
     ...init,
@@ -22,10 +39,11 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
   });
 
   if (!res.ok) {
-    let detail = res.statusText;
+    const fallback = HTTP_STATUS_RU[res.status] ?? res.statusText;
+    let detail = fallback;
     try {
       const body = await res.json();
-      detail = formatApiErrorDetail(body, res.statusText);
+      detail = formatApiErrorDetail(body, fallback);
     } catch {
       /* ignore */
     }
@@ -46,10 +64,11 @@ export async function apiUpload<T>(path: string, formData: FormData): Promise<T>
   });
 
   if (!res.ok) {
-    let detail = res.statusText;
+    const fallback = HTTP_STATUS_RU[res.status] ?? res.statusText;
+    let detail = fallback;
     try {
       const body = await res.json();
-      detail = formatApiErrorDetail(body, res.statusText);
+      detail = formatApiErrorDetail(body, fallback);
     } catch {
       /* ignore */
     }

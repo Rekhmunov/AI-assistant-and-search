@@ -296,14 +296,14 @@ async def send_broadcast(
     if sent_hourly == 1:
         await redis.expire(rate_key, 3600)
     if sent_hourly > 5:
-        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Broadcast rate limit")
+        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Рассылка запускалась недавно — подождите несколько минут")
 
     result = await db.execute(select(Broadcast).where(Broadcast.id == broadcast_id))
     broadcast = result.scalar_one_or_none()
     if not broadcast:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Broadcast not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Рассылка не найдена")
     if broadcast.status == BroadcastStatus.SENDING:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Already sending")
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Рассылка уже выполняется")
 
     broadcast.status = BroadcastStatus.SENDING
     send_broadcast_task.delay(str(broadcast_id))

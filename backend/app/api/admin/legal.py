@@ -70,7 +70,7 @@ async def get_legal_document(
 ):
     doc = await get_document_by_slug(db, slug)
     if not doc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Документ не найден")
     return await _document_admin_out(db, doc)
 
 

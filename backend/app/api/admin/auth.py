@@ -32,12 +32,12 @@ async def admin_login(
     if attempts == 1:
         await redis_client.expire(rate_key, 900)
     if attempts > 10:
-        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Too many attempts")
+        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Слишком много попыток входа — попробуйте через 15 минут")
 
     result = await db.execute(select(AdminUser).where(AdminUser.email == body.email.lower()))
     admin = result.scalar_one_or_none()
     if not admin or not admin.is_active or not verify_password(body.password, admin.password_hash):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Неверный email или пароль")
 
     admin.last_login_at = datetime.now(timezone.utc)
     token = create_admin_token(str(admin.id), settings)

@@ -191,7 +191,7 @@ async def get_user(
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
     if not user:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Пользователь не найден")
     return await _user_out(db, user, limiter, include_threads_count=True)
 
 
@@ -208,7 +208,7 @@ async def update_user(
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
     if not user:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Пользователь не найден")
 
     changes: dict = {}
     if body.banned is not None:
@@ -290,7 +290,7 @@ async def user_thread_debug(
     )
     thread = result.scalar_one_or_none()
     if not thread:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Thread not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Тред не найден")
 
     return AdminThreadDebugOut(
         id=thread.id,
@@ -318,7 +318,7 @@ async def sync_pro_payment(
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
     if not user:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Пользователь не найден")
 
     recovery = await recover_pro_for_user(db, user, settings=settings)
     await log_admin_action(
@@ -346,7 +346,7 @@ async def grant_pro(
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
     if not user:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Пользователь не найден")
 
     user.plan = Plan.PRO
     user.plan_expires_at = datetime.now(timezone.utc) + timedelta(days=body.days)
@@ -372,7 +372,7 @@ async def revoke_pro(
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
     if not user:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Пользователь не найден")
     if user.plan != Plan.PRO:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

@@ -299,13 +299,13 @@ async def get_current_admin(
 
     payload = decode_token(token, "admin", settings)
     if not payload or not payload.get("sub"):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Недействительный токен сессии")
 
     admin_id = uuid.UUID(payload["sub"])
     result = await db.execute(select(AdminUser).where(AdminUser.id == admin_id))
     admin = result.scalar_one_or_none()
     if not admin or not admin.is_active:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Admin not found")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Администратор не найден")
     return admin
 
 
@@ -317,4 +317,4 @@ async def verify_admin_api_key(
     from app.core.secrets import secrets_match
 
     if not settings.admin_api_key or not secrets_match(x_admin_key, settings.admin_api_key):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Доступ запрещён")

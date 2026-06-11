@@ -59,11 +59,11 @@ async def update_settings(
     updated: dict[str, Any] = {}
     for key, value in body.settings.items():
         if key not in SETTING_KEYS:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Unknown setting: {key}")
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Неизвестный параметр настроек: {key}")
         if key == "llm_provider" and str(value) not in VALID_LLM_IDS:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unknown LLM provider")
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Неизвестный LLM-провайдер")
         if key == "free_llm_provider" and str(value) not in VALID_FREE_LLM_IDS:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unknown Free LLM provider")
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Неизвестный провайдер Free-плана")
         if key == "free_llm_provider" and str(value) == "deepseek":
             if not env.deepseek_configured:
                 raise HTTPException(
@@ -97,9 +97,9 @@ async def update_settings(
                     ),
                 )
         if key == "search_provider" and str(value) not in VALID_SEARCH_IDS:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unknown search provider")
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Неизвестный провайдер поиска")
         if key == "vision_provider" and str(value) not in VALID_VISION_IDS:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unknown vision provider")
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Неизвестный провайдер vision")
         if key == "vision_provider" and str(value) == "anthropic_claude":
             if not env.anthropic_configured:
                 raise HTTPException(
@@ -128,7 +128,7 @@ async def update_settings(
         if key == "image_gen_provider" and str(value) not in VALID_IMAGE_GEN_IDS:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Unknown image generation provider",
+                detail="Неизвестный провайдер генерации изображений",
             )
         if key == "image_gen_provider" and str(value) == "gigachat":
             if not env.gigachat_configured:

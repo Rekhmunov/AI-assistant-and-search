@@ -74,7 +74,11 @@ export function DashboardPage() {
       .then(setData)
       .catch((e) => {
         const msg = e instanceof Error ? e.message : String(e);
-        setError(msg === "Internal server error" ? `${msg} — обновите сервер и миграции БД` : msg);
+        setError(
+          msg === "Internal server error" || msg === "Внутренняя ошибка сервера"
+            ? "Внутренняя ошибка сервера — обновите сервер и примените миграции БД"
+            : msg,
+        );
       });
   }, []);
 
