@@ -8,10 +8,11 @@ import {
   useState,
   type CSSProperties,
   type FormEvent,
+  type PointerEvent as ReactPointerEvent,
 } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate, useParams } from "react-router-dom";
-import { deleteThread, renameThread } from "../api/client";
+import { deleteThread, renameThread, type ThreadListItem } from "../api/client";
 import { t } from "../i18n";
 import { useAuthStore } from "../store/authStore";
 
@@ -85,26 +86,6 @@ export function ThreadHistoryMenu({ threadId, title }: Props) {
     };
   }, [menuOpen, confirmDelete, positionMenu]);
 
-  useEffect(() => {
-    if (!menuOpen && !renaming) return;
-    const onPointerDown = (e: MouseEvent | TouchEvent) => {
-      const target = e.target as Node;
-      if (rootRef.current?.contains(target)) return;
-      if (menuRef.current?.contains(target)) return;
-      setMenuOpen(false);
-      setConfirmDelete(false);
-    };
-    const timer = window.setTimeout(() => {
-      document.addEventListener("mousedown", onPointerDown);
-      document.addEventListener("touchstart", onPointerDown, { passive: true });
-    }, 0);
-    return () => {
-      clearTimeout(timer);
-      document.removeEventListener("mousedown", onPointerDown);
-      document.removeEventListener("touchstart", onPointerDown);
-    };
-  }, [menuOpen, renaming]);
-
   const renameMutation = useMutation({
     mutationFn: (newTitle: string) => renameThread(token!, threadId, newTitle),
     onSuccess: () => {
@@ -119,16 +100,37 @@ export function ThreadHistoryMenu({ threadId, title }: Props) {
 
   const deleteMutation = useMutation({
     mutationFn: () => deleteThread(token!, threadId),
+    onMutate: async () => {
+      await queryClient.cancelQueries({ queryKey: ["threads"] });
+      const snapshots = queryClient.getQueriesData<ThreadListItem[]>({ queryKey: ["threads"] });
+      queryClient.setQueriesData<ThreadListItem[]>({ queryKey: ["threads"] }, (old) =>
+        Array.isArray(old) ? old.filter((item) => item.id !== threadId) : old,
+      );
+      return { snapshots };
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["threads"] });
       setMenuOpen(false);
       setConfirmDelete(false);
+      setError("");
       if (activeThreadId === threadId) {
         navigate("/history", { replace: true });
       }
     },
-    onError: (e: Error) => setError(e.message),
+    onError: (e: Error, _vars, context) => {
+      context?.snapshots?.forEach(([key, data]) => {
+        queryClient.setQueryData(key, data);
+      });
+      setError(e.message);
+    },
   });
+
+  const closeMenu = useCallback(() => {
+    if (deleteMutation.isPending) return;
+    setMenuOpen(false);
+    setConfirmDelete(false);
+    setError("");
+  }, [deleteMutation.isPending]);
 
   useEffect(() => {
     if (!renaming) return;
@@ -171,6 +173,25 @@ export function ThreadHistoryMenu({ threadId, title }: Props) {
       }
     : undefined;
 
+  const stopMenuPointer = (e: ReactPointerEvent) => {
+    e.stopPropagation();
+  };
+
+  const menuBackdropPortal =
+    menuOpen && !renaming
+      ? createPortal(
+          <div
+            className="thread-menu-backdrop"
+            aria-hidden
+            onPointerDown={(e) => {
+              e.preventDefault();
+              closeMenu();
+            }}
+          />,
+          document.body,
+        )
+      : null;
+
   const dropdownPortal =
     menuOpen && menuPlacement
       ? createPortal(
@@ -181,8 +202,16 @@ export function ThreadHistoryMenu({ threadId, title }: Props) {
               className="thread-dropdown thread-dropdown--portal"
               role="menu"
               style={menuStyle}
+              onPointerDown={stopMenuPointer}
             >
-              <button type="button" role="menuitem" onClick={openRename}>
+              <button
+                type="button"
+                role="menuitem"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  openRename();
+                }}
+              >
                 <PencilIcon />
                 {t("renameThread")}
               </button>
@@ -190,7 +219,11 @@ export function ThreadHistoryMenu({ threadId, title }: Props) {
                 type="button"
                 role="menuitem"
                 className="danger"
-                onClick={() => setConfirmDelete(true)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setConfirmDelete(true);
+                  setError("");
+                }}
               >
                 <TrashIcon />
                 {t("deleteThread")}
@@ -203,19 +236,33 @@ export function ThreadHistoryMenu({ threadId, title }: Props) {
               role="dialog"
               aria-label={t("deleteThreadConfirm")}
               style={menuStyle}
+              onPointerDown={stopMenuPointer}
             >
               <p>{t("deleteThreadConfirm")}</p>
+              {error && <p className="thread-menu-error">{error}</p>}
               <div className="thread-dropdown-actions">
-                <button type="button" className="btn-secondary" onClick={() => setConfirmDelete(false)}>
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  disabled={deleteMutation.isPending}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setConfirmDelete(false);
+                    setError("");
+                  }}
+                >
                   {t("cancel")}
                 </button>
                 <button
                   type="button"
                   className="danger"
                   disabled={deleteMutation.isPending}
-                  onClick={() => deleteMutation.mutate()}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    deleteMutation.mutate();
+                  }}
                 >
-                  {t("delete")}
+                  {deleteMutation.isPending ? t("historyDeleting") : t("delete")}
                 </button>
               </div>
             </div>
@@ -290,10 +337,12 @@ export function ThreadHistoryMenu({ threadId, title }: Props) {
           e.stopPropagation();
           setMenuOpen((v) => !v);
           setConfirmDelete(false);
+          setError("");
         }}
       >
         <KebabIcon />
       </button>
+      {menuBackdropPortal}
       {dropdownPortal}
       {renamePortal}
     </div>

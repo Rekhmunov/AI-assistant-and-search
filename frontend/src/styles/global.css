@@ -5011,6 +5011,14 @@ body:has(.page-thread) {
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
 }
 
+.thread-menu-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 999;
+  background: transparent;
+  touch-action: none;
+}
+
 .thread-dropdown--portal {
   position: fixed;
   top: auto;

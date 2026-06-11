@@ -521,15 +521,33 @@ export async function renameThread(token: string, id: string, title: string): Pr
 }
 
 export async function deleteThread(token: string, id: string): Promise<void> {
-  const res = await fetch(`${API_BASE}/api/threads/${id}`, {
-    method: "DELETE",
-    headers: apiHeaders(token),
-    credentials: "include",
-  });
-  if (!res.ok && res.status !== 204) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error((err as { detail?: string }).detail || "Failed to delete thread");
+  let accessToken = token;
+  let lastRes: Response | null = null;
+
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const res = await fetch(`${API_BASE}/api/threads/${id}`, {
+      method: "DELETE",
+      headers: apiHeaders(accessToken),
+      credentials: "include",
+    });
+    if (res.ok || res.status === 204) return;
+    lastRes = res;
+
+    if (res.status === 401 && attempt === 0) {
+      try {
+        const refreshed = await refreshAccessToken();
+        accessToken = refreshed.access_token;
+        useAuthStore.getState().setToken(accessToken);
+        continue;
+      } catch {
+        /* fall through */
+      }
+    }
+    break;
   }
+
+  const err = await lastRes?.json().catch(() => ({}));
+  throw new Error((err as { detail?: string }).detail || "Failed to delete thread");
 }
 
 async function parseApiErrorResponse(res: Response, fallback: string): Promise<string> {
