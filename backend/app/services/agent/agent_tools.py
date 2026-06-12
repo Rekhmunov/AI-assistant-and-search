@@ -69,7 +69,7 @@ async def execute_agent_tool(
         if name == "max_get_chat":
             return await _tool_max_get_chat(bot, safe_args)
         if name == "max_list_bot_chats":
-            return await _tool_max_list_bot_chats(bot)
+            return await _tool_max_list_bot_chats(db, user, agent)
         if name == "max_resolve_channel_link":
             return await _tool_resolve_link(bot, safe_args, agent=agent)
         if name == "max_read_activity_logs":
@@ -147,16 +147,71 @@ async def _tool_max_get_chat(bot: MaxBotService, args: dict) -> dict:
     return {"ok": True, "tool": "max_get_chat", "result": safe}
 
 
-async def _tool_max_list_bot_chats(bot: MaxBotService) -> dict:
-    subs = await bot.list_subscriptions()
-    chats = []
-    for item in subs:
-        if not isinstance(item, dict):
-            continue
-        cid = item.get("chat_id")
-        if cid is not None:
-            chats.append({"chat_id": cid, "url": item.get("url"), "time": item.get("time")})
-    return {"ok": True, "tool": "max_list_bot_chats", "result": {"chats": chats}}
+async def _tool_max_list_bot_chats(
+    db: AsyncSession,
+    user: User,
+    agent: AgentInstance,
+) -> dict:
+    """
+    Возвращает список чатов, в которых бот был замечен.
+
+    GET /chats устарел с июня 2026. GET /subscriptions возвращает webhook-подписки
+    (URL + event types), а НЕ список чатов. Поэтому берём chat_id из:
+    1. AgentInstance записей текущего пользователя (из bot_added событий)
+    2. Конфига текущего агента
+    """
+    chats: list[dict] = []
+    seen: set[int] = set()
+
+    # Чаты из конфига текущего агента
+    cfg = dict(agent.config or {})
+    for key in ("max_chat_id", "registered_group_chat_id", "thread_chat_id"):
+        raw = cfg.get(key)
+        if raw is not None:
+            try:
+                cid = int(raw)
+                if cid > 0 and cid not in seen:
+                    seen.add(cid)
+                    chats.append({"chat_id": cid, "source": "agent_config"})
+            except (ValueError, TypeError):
+                pass
+
+    # Чаты из всех агентов пользователя
+    try:
+        from sqlalchemy import select as sa_select
+        from app.models.agent import AgentStatus
+
+        result = await db.execute(
+            sa_select(AgentInstance).where(
+                AgentInstance.user_id == user.id,
+                AgentInstance.status.in_([
+                    AgentStatus.ACTIVE.value,
+                    AgentStatus.COLLECTING.value,
+                ]),
+                AgentInstance.max_chat_id.isnot(None),
+            )
+        )
+        for inst in result.scalars().all():
+            cid = int(inst.max_chat_id)
+            if cid > 0 and cid not in seen:
+                seen.add(cid)
+                chats.append({
+                    "chat_id": cid,
+                    "source": "agent_instance",
+                    "role": inst.role,
+                })
+    except Exception as exc:
+        logger.warning("max_list_bot_chats DB query failed: %s", exc)
+
+    note = (
+        "Список содержит чаты, зарегистрированные через webhook bot_added. "
+        "Если группы нет в списке — добавьте бота в группу или пришлите её ссылку."
+    )
+    return {
+        "ok": True,
+        "tool": "max_list_bot_chats",
+        "result": {"chats": chats, "count": len(chats), "note": note},
+    }
 
 
 async def _tool_resolve_link(bot: MaxBotService, args: dict, *, agent: AgentInstance) -> dict:

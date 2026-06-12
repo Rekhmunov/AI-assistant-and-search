@@ -91,10 +91,18 @@ class MaxBotService:
                 message_id = None
                 try:
                     payload = response.json()
+                    logger.debug(
+                        "MAX send_message OK user_id=%s chat_id=%s response=%s",
+                        user_id, params.get("chat_id"), str(payload)[:300],
+                    )
                     if isinstance(payload, dict):
                         message = payload.get("message")
                         if isinstance(message, dict):
-                            mid = message.get("message_id") or message.get("id")
+                            mid = (
+                                message.get("mid")
+                                or message.get("message_id")
+                                or message.get("id")
+                            )
                             if mid is not None:
                                 message_id = str(mid)
                         elif payload.get("message_id") is not None:
@@ -116,8 +124,9 @@ class MaxBotService:
 
             detail = response.text[:500]
             logger.warning(
-                "MAX send_message failed user_id=%s HTTP %s: %s",
+                "MAX send_message failed user_id=%s chat_id=%s HTTP %s: %s",
                 user_id,
+                params.get("chat_id"),
                 response.status_code,
                 detail,
             )
@@ -212,10 +221,11 @@ class MaxBotService:
 
         async def _upload_file():
             async with httpx.AsyncClient(timeout=120.0) as client:
-                # Multipart upload на CDN URL — без Authorization (dev.max.ru/docs-api/methods/POST/uploads).
+                # Multipart upload на CDN URL.
+                # ВАЖНО: НЕ задаём Content-Type вручную — httpx сам добавит boundary.
+                # Ручная установка заголовка без boundary ломает парсинг на сервере.
                 return await client.post(
                     upload_url,
-                    headers={"Content-Type": "multipart/form-data"},
                     files={"data": (filename, data, content_type)},
                 )
 
