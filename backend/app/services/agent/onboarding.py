@@ -153,5 +153,5 @@ def activation_summary(agent: AgentInstance) -> str:
         if kb:
             lines.append(f"База знаний: {kb} фрагментов из загруженных документов.")
 
-    lines.append("Напишите «отключи агента», чтобы остановить.")
+    lines.append("Напишите **отключи агента**, чтобы остановить.")
     return "\n".join(lines)
