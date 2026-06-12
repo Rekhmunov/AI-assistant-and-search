@@ -114,27 +114,6 @@ def _is_user_group(low: str) -> bool:
     return bool(re.search(r"\bгрупп[уыаеой]", low))
 
 
-_ONE_TIME_VERBS = frozenset({
-    "найди", "найти", "поищи", "поиск", "узнай", "узнать",
-    "покажи", "посмотри", "проверь", "расскажи", "скажи",
-})
-
-_RECURRING_MARKERS = (
-    "каждый", "каждую", "ежедневно", "еженедельно",
-    "публикуй", "отправляй", "присылай", "рассылай",
-    "автоматически", "по расписанию", "регулярно",
-    "раз в", "every",
-)
-
-
-def _is_one_time_request(low: str) -> bool:
-    """Возвращает True если запрос разовый (не автоматизация)."""
-    if any(v in low for v in _RECURRING_MARKERS):
-        return False
-    words = low.split()
-    return bool(words and words[0] in _ONE_TIME_VERBS)
-
-
 def infer_role_from_text(text: str) -> str | None:
     """Эвристика: определить role по свободной формулировке задачи."""
     from app.services.agent.expense_tracker import is_structured_group_tracker_task
@@ -181,10 +160,7 @@ def infer_role_from_text(text: str) -> str | None:
     ):
         return AgentRole.DM_ASSISTANT.value
 
-    # news_digest только если явный ПОВТОРЯЮЩИЙСЯ сценарий — не разовый поиск
     if _has_any(low, "новост", "дайджест") and not _has_any(low, "сводк сообщ"):
-        if _is_one_time_request(low):
-            return None  # «найди новость» — разовое действие, не автоматизация
         return AgentRole.NEWS_DIGEST.value
 
     if _has_any(low, "сгенерир", "генерир", "нарисуй") and _has_any(

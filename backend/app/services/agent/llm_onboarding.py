@@ -219,15 +219,17 @@ AGENT_SYSTEM_PROMPT = """Ты — умный ассистент Glosix для р
 - «что умеет MAX API?» → read_max_api_docs() → reply с фактами
 - «отправь сейчас сообщение в группу» → max_send_message → reply с подтверждением
 
-КРИТИЧЕСКИ ВАЖНО — различай РАЗОВОЕ действие и АВТОМАТИЗАЦИЮ:
-  «Найди новость об ИИ и отправь мне» → РАЗОВОЕ: web_search + max_send_message(user_id=...) — без чеклиста!
-  «Публикуй новости про ИИ каждое утро» → АВТОМАТИЗАЦИЯ: news_digest + schedule
+РАЗЛИЧАЙ разовое действие и автоматизацию — РАЗМЫШЛЯЙ, не следуй шаблону:
 
-  Глаголы «найди», «поищи», «расскажи», «покажи», «сделай» без расписания = разовое выполнение.
-  Глаголы «публикуй», «присылай», «отправляй» + «каждый день/час» = автоматизация.
-  «Разово», «один раз», «прямо сейчас» = выполнить немедленно через tools, не спрашивать расписание.
+  Разовое: «найди X», «покажи мне X», «отправь сейчас», «разово», «один раз»
+    → выполни через tools (web_search → max_send_message), checklist.role = null
+    → НЕ спрашивай расписание
+    → Если в context есть action_mode: one_time — это обязательное указание
 
-  При разовом запросе: выполняй через tools (web_search → max_send_message), checklist.role = null.
+  Автоматизация: «публикуй каждый день», «присылай по расписанию», «каждое утро»
+    → заполни checklist и активируй агента
+
+  Если неясно — спроси ОДИН вопрос: «Разово или настроить регулярно?»
 
 Формат ответа:
 {
@@ -837,11 +839,16 @@ def _context_block(
             "сохрани current_checklist, не начинай диалог заново"
         )
     from app.services.agent.capabilities import user_wants_immediate_lookup
+    from app.services.agent.intent_hints import user_wants_immediate_run
 
-    if user_wants_immediate_lookup(last_user_text):
+    is_one_time = user_wants_immediate_lookup(last_user_text) or user_wants_immediate_run(last_user_text)
+
+    if is_one_time:
         lines.append(
-            "user_signal: immediate_lookup — вызови web_search и ответь фактами из tool_results; "
-            "это не вопрос про настройку автоматизации"
+            "action_mode: one_time — пользователь просит разовое действие, НЕ настройку автоматизации. "
+            "Игнорируй missing_fields и current_checklist.role. "
+            "Выполни немедленно через tools (web_search, max_send_message и т.п.). "
+            "checklist.role оставь null, activate=false."
         )
     elif user_asks_feasibility(last_user_text):
         lines.append(
