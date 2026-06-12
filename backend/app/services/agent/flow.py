@@ -160,7 +160,7 @@ async def handle_agent_message(
 
     display_text = text.strip()
     if file_ids and not display_text:
-        display_text = f"[Загружено документов: {len(file_ids)}]"
+        raise ValueError("text_required_with_files")
     user_msg = await _user_message(db, thread, display_text)
     status_cb = on_status or noop_status
     await set_agent_pending(

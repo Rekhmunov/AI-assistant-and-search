@@ -1350,7 +1350,7 @@ export function Thread() {
         placeholder={isAgentThread ? t("agentComposerPlaceholder") : t("askFollowUp")}
         attachments={attachments}
         onAttachmentsChange={setAttachments}
-        requireTextWithAttachments={!isAgentThread && turns.length === 0}
+        requireTextWithAttachments={isAgentThread || (!isAgentThread && turns.length === 0)}
         layoutMode={isDesktop ? "default" : "threadMobile"}
         onNewChat={isDesktop ? undefined : () => navigate("/")}
         onAgentClick={startNewAgentThread}

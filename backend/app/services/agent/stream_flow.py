@@ -112,6 +112,12 @@ async def stream_agent_message(
                     {"code": code, "message": "Достигнут дневной лимит сообщений."},
                 )
                 return
+            if code == "text_required_with_files":
+                yield sse_event(
+                    "error",
+                    {"code": code, "message": "Добавьте подпись к файлу — опишите что делать с этим документом."},
+                )
+                return
             yield sse_event("error", {"code": code, "message": "Не удалось обработать сообщение"})
             return
         yield sse_event(
