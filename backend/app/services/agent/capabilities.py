@@ -299,6 +299,12 @@ def apply_message_hints(checklist: dict[str, Any], text: str) -> dict[str, Any]:
             data.pop(key, None)
         return _ensure_timezone(data)
 
+    # Разовый запрос на поиск/выполнение — не настройка автоматизации
+    if user_wants_immediate_lookup(clean):
+        data["role"] = None
+        data.pop("schedule_text", None)
+        return data
+
     data = infer_checklist_fields(clean, data)
 
     chat_id = extract_chat_id(clean)
