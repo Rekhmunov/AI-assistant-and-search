@@ -2,23 +2,34 @@
 # Приватные разделы и URL с трекинг-параметрами — закрыты.
 
 User-agent: *
+
+# Приватные маршруты приложения
 Disallow: /thread
+Disallow: /thread/
 Disallow: /history
+Disallow: /history/
 Disallow: /profile
+Disallow: /profile/
 Disallow: /login
+Disallow: /login/
 Disallow: /source-view
+Disallow: /source-view/
+
+# API
 Disallow: /api/
-Disallow: /?
-Disallow: /?WebAppStartParam
-Disallow: /?etext
-Disallow: /?startapp
-Disallow: /*?*etext=
+
+# MAX WebApp трекинг-параметры
 Disallow: /*?*WebAppStartParam=
+Disallow: /*?*etext=
 Disallow: /*?*startapp=
+
 Allow: /blog
+Allow: /blog/
 Allow: /privacy
 Allow: /offer
 Allow: /cookies
 Allow: /terms
 Allow: /consent-personal-data
+Allow: /$
+
 Sitemap: https://glosix.ru/blog/sitemap.xml

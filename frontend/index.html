@@ -4,11 +4,30 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+
+    <!--
+      Первый скрипт в <head> — до любых SEO-тегов.
+      Для приватных маршрутов (/thread, /history, /profile, /login, /source-view)
+      и MAX WebApp параметров — сразу добавляем noindex и убираем canonical.
+      Это видит краулер при любом рендеринге, включая raw HTML без JS.
+    -->
     <script>
       (function () {
+        var path = location.pathname || "/";
         var search = location.search || "";
+        var hash = location.hash || "";
         var q = search.charAt(0) === "?" ? search.slice(1) : search;
-        if (!/(?:^|&)(?:WebAppStartParam|etext|startapp)(?:=|&|$)/i.test(q)) return;
+
+        var privatePaths = ["/thread", "/history", "/profile", "/login", "/source-view"];
+        var isPrivatePath = privatePaths.some(function (p) {
+          return path === p || path.indexOf(p + "/") === 0;
+        });
+        var privateQuery = /(?:^|&)(?:WebAppStartParam|etext|startapp)(?:=|&|$)/i.test(q);
+        var privateHash = /(?:^|[&#])(?:WebAppData|WebAppPlatform|WebAppVersion)=/i.test(hash);
+
+        if (!isPrivatePath && !privateQuery && !privateHash) return;
+
+        // Добавляем noindex сразу — до всех остальных мета-тегов на странице
         var robots = "noindex, nofollow, noarchive";
         ["robots", "googlebot", "yandex"].forEach(function (name) {
           var el = document.createElement("meta");
@@ -17,8 +36,22 @@
           document.head.appendChild(el);
         });
         document.title = "Glosix";
+
+        // Убираем публичные SEO-теги, которые могут добавиться ниже в HTML
+        document.addEventListener("DOMContentLoaded", function () {
+          document.querySelector('link[rel="canonical"]')?.remove();
+          document.querySelector('meta[name="description"]')?.remove();
+          document.querySelectorAll('meta[property^="og:"], meta[name^="twitter:"]').forEach(function (el) {
+            el.remove();
+          });
+        });
       })();
     </script>
+
+    <!--
+      SEO-теги публичных страниц. Для приватных маршрутов они будут удалены
+      скриптом выше (DOMContentLoaded) или хуком usePageRobots в React.
+    -->
     <meta
       name="description"
       content="Glosix - ИИ ассистент и умный поиск. Ищет в интернете онлайн по источникам и дает готовый ответ. Генерирует документы и картинки, обрабатывает PDF, Word, Excel и фото. Переводит тексты. ИИ чат с нейросетью. Доступен в браузере и мессенджере MAX."
@@ -38,37 +71,13 @@
       content="Glosix - ИИ ассистент и умный поиск. Ищет в интернете онлайн по источникам и дает готовый ответ. Генерирует документы и картинки, обрабатывает PDF, Word, Excel и фото. Переводит тексты. ИИ чат с нейросетью. Доступен в браузере и мессенджере MAX."
     />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <!--
+      Canonical только для публичных страниц. React (usePageRobots) управляет
+      canonical динамически. Здесь ставим корень как дефолт для главной.
+    -->
     <link rel="canonical" href="https://glosix.ru/" />
     <title>Glosix - умный поиск с источниками, ИИ чат</title>
-    <script>
-      (function () {
-        var path = location.pathname || "/";
-        var search = location.search || "";
-        var hash = location.hash || "";
-        var privatePaths = ["/thread", "/history", "/profile", "/login", "/source-view"];
-        var isPrivatePath = privatePaths.some(function (p) {
-          return path === p || path.indexOf(p + "/") === 0;
-        });
-        var privateQuery = /(?:^|&)(?:WebAppStartParam|etext|startapp)(?:=|&|$)/i.test(
-          search.charAt(0) === "?" ? search.slice(1) : search
-        );
-        var privateHash = /(?:^|[&#])(?:WebAppData|WebAppPlatform|WebAppVersion)=/i.test(hash);
-        if (!isPrivatePath && !privateQuery && !privateHash) return;
-        var robots = "noindex, nofollow, noarchive";
-        ["robots", "googlebot", "yandex"].forEach(function (name) {
-          var el = document.createElement("meta");
-          el.setAttribute("name", name);
-          el.setAttribute("content", robots);
-          document.head.appendChild(el);
-        });
-        document.querySelector('link[rel="canonical"]')?.remove();
-        document.querySelector('meta[name="description"]')?.remove();
-        document.querySelectorAll('meta[property^="og:"], meta[name^="twitter:"]').forEach(function (el) {
-          el.remove();
-        });
-        document.title = "Glosix";
-      })();
-    </script>
+
     <script src="https://st.max.ru/js/max-web-app.js"></script>
     <script>
       (function () {
