@@ -50,3 +50,26 @@ async def on_thread_soft_deleted(db: AsyncSession, thread: Thread) -> None:
     if thread.thread_type != "agent":
         return
     await purge_agent_for_thread(db, thread.id)
+
+
+async def reactivate_cancelled_agent(db: AsyncSession, agent: AgentInstance) -> None:
+    """
+    Сбрасывает отменённый агент в DRAFT — пользователь может начать новую задачу
+    в том же треде без создания нового агента.
+    """
+    from app.services.agent.llm_onboarding import ChecklistState
+
+    agent.status = AgentStatus.DRAFT.value
+    agent.role = None
+    agent.max_chat_id = None
+    agent.instruction_text = None
+    cfg = dict(agent.config or {})
+    cfg["checklist"] = ChecklistState().to_dict()
+    cfg.pop("schedule_text", None)
+    cfg.pop("reminder_message", None)
+    cfg.pop("next_run_at", None)
+    cfg.pop("last_dispatch_error", None)
+    cfg.pop("cancel_reason", None)
+    cfg.pop("awaiting_confirmation", None)
+    agent.config = cfg
+    await db.flush()

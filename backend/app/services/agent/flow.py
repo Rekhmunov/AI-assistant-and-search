@@ -232,19 +232,19 @@ async def _handle_agent_message_body(
         assistant = await _assistant_reply(
             db,
             thread,
-            "Агент остановлен. Напоминания отменены. Создайте нового агента, если понадобится снова.",
+            (
+                "Агент остановлен, напоминания отменены.\n\n"
+                "Напишите новую задачу прямо здесь — начнём с чистого листа."
+            ),
         )
         await db.commit()
         return user_msg, assistant, agent
 
     if agent.status == AgentStatus.CANCELLED.value:
-        assistant = await _assistant_reply(
-            db,
-            thread,
-            "Этот агент уже отключён. Нажмите иконку робота, чтобы создать нового.",
-        )
-        await db.commit()
-        return user_msg, assistant, agent
+        # Пользователь пишет в отменённый тред — перезапускаем агента здесь же
+        from app.services.agent.lifecycle import reactivate_cancelled_agent
+        await reactivate_cancelled_agent(db, agent)
+        # Продолжаем обработку как обычный DRAFT
 
     context_reset = user_wants_context_reset(text)
     assistant_turn = False
