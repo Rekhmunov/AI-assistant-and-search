@@ -48,12 +48,7 @@ from app.services.agent.llm_onboarding import (
 from app.services.agent.max_capabilities import tools_appendix_for_mode
 from app.services.agent.search_reply import prefer_web_search_answer
 from app.services.agent.source_display import prepare_agent_reply_for_ui
-from app.services.agent.agent_tool_feedback import (
-    PROMISE_WITHOUT_TOOLS_NUDGE,
-    ensure_action_feedback,
-    reply_is_deferred_promise,
-    user_expects_immediate_max_action,
-)
+from app.services.agent.agent_tool_feedback import ensure_action_feedback
 from app.services.agent.thread_memory import update_thread_memory_after_turn
 from app.services.providers.factory import resolve_runtime_providers
 
@@ -105,13 +100,15 @@ async def run_onboarding_loop(
     history = history_messages_for_agent(messages, agent)
     last_user = history[-1]["text"] if history and history[-1]["role"] == "user" else ""
     from app.services.agent.intent_hints import _extract_max_chat_id
+    # Перед LLM — только структурное извлечение (chat_id из ссылок/чисел).
+    # Роль, поля чеклиста и намерение пользователя определяет LLM самостоятельно —
+    # никакого предзаполнения по ключевым словам.
     from app.services.agent.operational import bind_chat_to_current_agent
 
     cid = _extract_max_chat_id(last_user)
     if cid is not None:
         bind_chat_to_current_agent(agent, int(cid))
 
-    checklist = ChecklistState.from_dict(apply_message_hints(checklist.to_dict(), last_user))
     sync_spec_from_checklist(agent, checklist.to_dict(), last_user)
 
     result, tool_trace = await _tool_loop(
@@ -293,7 +290,6 @@ async def _tool_loop(
 
     attachments: list[dict] = []
     outbound_sent = False
-    loop_nudges: list[str] = []
 
     for iteration in range(MAX_ORCHESTRATOR_ITERATIONS):
         if iteration > 0:
@@ -318,8 +314,6 @@ async def _tool_loop(
             payload.append({"role": "system", "text": _context_block(user, agent, checklist, user_text)})
         if runtime_chat_id is not None:
             payload.append({"role": "system", "text": f"current_max_chat_id: {runtime_chat_id}"})
-        for nudge in loop_nudges:
-            payload.append({"role": "system", "text": nudge})
         if tool_trace:
             payload.append(
                 {"role": "system", "text": f"tool_results:\n{format_tool_results_for_llm(tool_trace)}"}
@@ -392,15 +386,6 @@ async def _tool_loop(
             continue
 
         reply = str(data.get("reply") or "").strip()
-        if (
-            not tool_trace
-            and reply_is_deferred_promise(reply)
-            and user_expects_immediate_max_action(user_text)
-            and not loop_nudges
-            and iteration < MAX_ORCHESTRATOR_ITERATIONS - 1
-        ):
-            loop_nudges.append(PROMISE_WITHOUT_TOOLS_NUDGE)
-            continue
 
         if mode == "runtime":
             return RuntimeLoopResult(

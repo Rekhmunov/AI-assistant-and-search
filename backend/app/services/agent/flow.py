@@ -21,7 +21,6 @@ from app.services.agent.dispatch import dispatch_due_reminders
 from app.services.agent.max_group import enrich_group_admin_status
 from app.services.agent.profile import agent_profile
 from app.services.agent.lifecycle import cancel_agent, get_agent_for_thread
-from app.services.agent.intent_hints import user_wants_immediate_run, user_wants_today_run
 from app.services.agent.agent_loop import run_onboarding_loop
 from app.services.agent.agent_orchestrator import user_wants_diagnostic
 from app.services.agent.llm_onboarding import (
@@ -308,14 +307,8 @@ async def _handle_agent_message_body(
         agent.config = cfg
     missing = checklist_missing_fields(llm_result.checklist)
 
+    # LLM решает activate — не форсируем по ключевым словам.
     should_activate = llm_result.activate
-    if not should_activate and not missing:
-        if user_wants_confirm(text) and (
-            cfg.get("awaiting_confirmation") or llm_result.ready_for_confirmation
-        ):
-            should_activate = True
-        elif user_wants_today_run(text) or user_wants_immediate_run(text):
-            should_activate = True
 
     if should_activate and not missing:
         try:

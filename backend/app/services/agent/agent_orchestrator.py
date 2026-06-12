@@ -64,8 +64,8 @@ def _merge_checklist_from_data(
     patch = ChecklistState.from_dict(
         data.get("checklist") if isinstance(data.get("checklist"), dict) else {}
     )
+    # Доверяем LLM-патчу — не дополняем keyword-инференсом после LLM.
     merged = merge_checklist(checklist, patch, user_text=last_user)
-    merged = ChecklistState.from_dict(apply_message_hints(merged.to_dict(), last_user))
     return finalize_checklist(merged, history=history)
 
 
@@ -87,16 +87,11 @@ def _result_from_data(
         activate = False
 
     missing = checklist_missing_fields(merged)
-    if user_wants_confirm(last_user) and not missing:
-        activate = True
-        ready = True
-    elif (user_wants_today_run(last_user) or user_wants_immediate_run(last_user)) and not missing:
-        activate = True
-        ready = True
 
+    # Не форсируем activate по ключевым словам — LLM решает.
+    # Структурный барьер: нельзя активировать с незаполненными полями.
     if activate and missing:
         activate = False
-        # Не заменяем ответ LLM шаблоном — он сам объяснит что не хватает
 
     return LlmTurnResult(
         reply=reply,

@@ -768,18 +768,13 @@ def checklist_missing_fields(checklist: ChecklistState) -> list[str]:
 
 
 def _sanitize_agent_reply(reply: str, user_text: str, checklist: ChecklistState) -> str:
+    """Фильтрует только явный JSON-мусор — не заменяет ответ LLM шаблоном."""
     from app.services.agent.agent_reply_sanitize import sanitize_user_facing_reply
 
     clean = sanitize_user_facing_reply(reply)
     if not clean:
         return build_parse_fallback_reply(checklist.to_dict(), user_text)
-    reply = clean
-    if reply_looks_like_capabilities_template(reply):
-        fallback = compose_feasibility_reply(checklist.to_dict(), user_text)
-        if fallback:
-            return fallback
-        return build_parse_fallback_reply(checklist.to_dict(), user_text)
-    return reply
+    return clean
 
 
 def _parse_llm_json(raw: str) -> dict[str, Any] | None:
@@ -953,19 +948,11 @@ async def run_llm_turn(
             )
 
     missing = checklist_missing_fields(merged)
-    if user_wants_confirm(last_user) and not missing:
-        activate = True
-        ready = True
-    else:
-        from app.services.agent.intent_hints import user_wants_immediate_run, user_wants_today_run
 
-        if (user_wants_today_run(last_user) or user_wants_immediate_run(last_user)) and not missing:
-            activate = True
-            ready = True
-
+    # Не форсируем activate по ключевым словам — LLM решает сам.
+    # Структурный барьер: нельзя активировать с незаполненными обязательными полями.
     if activate and missing:
         activate = False
-        reply = build_parse_fallback_reply(merged.to_dict(), last_user)
 
     return LlmTurnResult(
         reply=reply,

@@ -1,4 +1,4 @@
-"""Подстановка результата web_search, если модель отказала после успешного поиска."""
+"""Fallback: если LLM вернул пустой ответ после web_search — используем текст поиска."""
 
 from __future__ import annotations
 
@@ -15,29 +15,13 @@ def latest_web_search_text(tool_trace: list[dict]) -> str | None:
     return None
 
 
-def reply_defers_after_search(reply: str) -> bool:
-    low = (reply or "").lower()
-    markers = (
-        "не могу искать",
-        "не могу найти",
-        "не умею искать",
-        "моя задача",
-        "настройк",
-        "автоматизац",
-        "только помогаю с настройкой",
-        "не поддержива",
-    )
-    return any(m in low for m in markers)
-
-
 def prefer_web_search_answer(reply: str, tool_trace: list[dict]) -> str:
-    """Если web_search уже вернул ответ с источниками — не отбрасывать его из-за отказа LLM."""
-    search_text = latest_web_search_text(tool_trace)
-    if not search_text:
-        return reply
+    """
+    Только если LLM вернул пустой ответ после успешного web_search —
+    подставляем текст поиска. Не заменяем ответ LLM по ключевым словам.
+    """
     body = (reply or "").strip()
-    if reply_defers_after_search(body):
-        return search_text
-    if len(body) < 40 and len(search_text) > len(body):
-        return search_text
-    return reply
+    if body:
+        return reply  # LLM что-то написал — доверяем ему
+    search_text = latest_web_search_text(tool_trace)
+    return search_text or reply
