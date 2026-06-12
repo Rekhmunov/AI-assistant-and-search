@@ -8,8 +8,10 @@ from collections.abc import AsyncIterator
 from uuid import UUID
 
 import redis.asyncio as redis
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.database import async_session_factory
 from app.core.limiter import RateLimiter
 from app.models.user import User
 from app.services.agent.agent_pending import clear_agent_pending, set_agent_pending
@@ -34,27 +36,44 @@ async def stream_agent_message(
     result_box: dict = {}
     error_box: dict = {}
 
+    # Захватываем user_id — задача создаёт собственную сессию,
+    # не зависящую от жизненного цикла SSE-генератора.
+    # Если клиент закрывает соединение во время обработки (MAX mini-app),
+    # генератор получает GeneratorExit и его сессия закрывается,
+    # но задача продолжает работу со своей сессией и коммит проходит.
+    user_id = user.id
+
     async def run() -> None:
-        try:
-            user_msg, assistant_msg, agent = await handle_agent_message(
-                db,
-                user,
-                limiter,
-                thread_id,
-                text,
-                redis_client,
-                file_ids=file_ids,
-                on_status=reporter.callback(),
-            )
-            result_box["value"] = (user_msg, assistant_msg, agent)
-        except ValueError as exc:
-            error_box["value"] = exc
-        except Exception as exc:
-            logger.exception("Agent stream failed thread=%s", thread_id)
-            error_box["value"] = exc
-        finally:
-            await reporter.close()
-            await clear_agent_pending(redis_client, thread_id)
+        async with async_session_factory() as task_db:
+            try:
+                # Перезагружаем пользователя в собственной сессии задачи
+                res = await task_db.execute(
+                    select(User).where(User.id == user_id, User.deleted_at.is_(None))
+                )
+                task_user = res.scalar_one_or_none()
+                if not task_user:
+                    error_box["value"] = ValueError("user_not_found")
+                    return
+
+                user_msg, assistant_msg, agent = await handle_agent_message(
+                    task_db,
+                    task_user,
+                    limiter,
+                    thread_id,
+                    text,
+                    redis_client,
+                    file_ids=file_ids,
+                    on_status=reporter.callback(),
+                )
+                result_box["value"] = (user_msg, assistant_msg, agent)
+            except ValueError as exc:
+                error_box["value"] = exc
+            except Exception as exc:
+                logger.exception("Agent stream failed thread=%s", thread_id)
+                error_box["value"] = exc
+            finally:
+                await reporter.close()
+                await clear_agent_pending(redis_client, thread_id)
 
     task = asyncio.create_task(run())
 

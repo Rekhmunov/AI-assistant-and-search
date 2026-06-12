@@ -69,12 +69,18 @@ async def build_delivery_content(
 
     if profile.content_pipeline == "web_digest":
         topic = str(cfg.get("search_topic") or base_text or "новости").strip()
+        raw_min = cfg.get("post_min_chars")
+        raw_max = cfg.get("post_max_chars")
+        min_chars = int(raw_min) if raw_min else None
+        max_chars = int(raw_max) if raw_max else None
         text = await build_web_digest_text(
             db,
             redis_client,
             user,
             topic=topic,
             header=base_text if base_text != topic else "",
+            min_chars=min_chars,
+            max_chars=max_chars,
         )
         return DeliveryContent(text=text, attachments=[])
 
@@ -119,7 +125,15 @@ async def build_dm_command_content(
 
     if profile.content_pipeline == "web_digest":
         topic = str(cfg.get("search_topic") or base_text or "новости").strip()
-        text = await build_web_digest_text(db, redis_client, user, topic=topic, header="")
+        raw_min = cfg.get("post_min_chars")
+        raw_max = cfg.get("post_max_chars")
+        text = await build_web_digest_text(
+            db, redis_client, user,
+            topic=topic,
+            header="",
+            min_chars=int(raw_min) if raw_min else None,
+            max_chars=int(raw_max) if raw_max else None,
+        )
         return DeliveryContent(text=text, attachments=[])
 
     if profile.content_pipeline == "web_digest_images":
