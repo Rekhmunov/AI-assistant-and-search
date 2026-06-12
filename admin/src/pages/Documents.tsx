@@ -21,6 +21,8 @@ type LegalDocument = {
   slug: string;
   title: string;
   public_path: string;
+  meta_title: string | null;
+  meta_description: string | null;
   current_version: LegalVersion | null;
   versions: LegalVersion[];
 };
@@ -68,6 +70,8 @@ function DocumentSection({
   const [open, setOpen] = useState(false);
   const [content, setContent] = useState(doc.current_version?.content_html ?? "<p></p>");
   const [publicPath, setPublicPath] = useState(doc.public_path);
+  const [metaTitle, setMetaTitle] = useState(doc.meta_title ?? "");
+  const [metaDescription, setMetaDescription] = useState(doc.meta_description ?? "");
   const [busy, setBusy] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [msg, setMsg] = useState("");
@@ -76,6 +80,8 @@ function DocumentSection({
   useEffect(() => {
     setContent(doc.current_version?.content_html ?? "<p></p>");
     setPublicPath(doc.public_path);
+    setMetaTitle(doc.meta_title ?? "");
+    setMetaDescription(doc.meta_description ?? "");
   }, [doc]);
 
   const save = async (e: FormEvent) => {
@@ -86,7 +92,12 @@ function DocumentSection({
     try {
       const updated = await apiFetch<LegalDocument>(`/api/admin/legal/${doc.slug}`, {
         method: "PUT",
-        body: JSON.stringify({ content_html: content, public_path: publicPath }),
+        body: JSON.stringify({
+          content_html: content,
+          public_path: publicPath,
+          meta_title: metaTitle.trim() || null,
+          meta_description: metaDescription.trim() || null,
+        }),
       });
       onSaved(updated);
       setMsg("Сохранено — создана новая версия");
@@ -175,6 +186,40 @@ function DocumentSection({
                 Адрес на сайте (можно изменить). По умолчанию: {doc.public_path}
               </span>
             </label>
+
+            <div className="documents-seo-block">
+              <p className="documents-seo-label">SEO (для поисковых систем)</p>
+              <label className="documents-field">
+                Мета-заголовок (title)
+                <input
+                  type="text"
+                  value={metaTitle}
+                  onChange={(e) => setMetaTitle(e.target.value)}
+                  disabled={!canWrite}
+                  placeholder={`${SLUG_LABELS[doc.slug] ?? doc.title} — Glosix`}
+                  maxLength={255}
+                />
+                <span className="documents-field-hint">
+                  Если не заполнено — используется «{SLUG_LABELS[doc.slug] ?? doc.title} — Glosix».
+                  Рекомендуется до 60 символов.
+                </span>
+              </label>
+              <label className="documents-field">
+                Мета-описание (description)
+                <textarea
+                  value={metaDescription}
+                  onChange={(e) => setMetaDescription(e.target.value)}
+                  disabled={!canWrite}
+                  placeholder="Краткое описание для поисковой выдачи (до 160 символов)"
+                  maxLength={500}
+                  rows={3}
+                  style={{ width: "100%", resize: "vertical", fontFamily: "inherit", fontSize: "0.9rem" }}
+                />
+                <span className="documents-field-hint">
+                  Отображается в результатах Яндекса и Google. Рекомендуется до 160 символов.
+                </span>
+              </label>
+            </div>
 
             <div className="documents-editor-wrap">
               <span className="documents-field-label">Текст документа</span>

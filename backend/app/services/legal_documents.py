@@ -301,11 +301,19 @@ async def save_document_version(
     slug: str,
     content_html: str,
     public_path: str | None,
+    meta_title: str | None = None,
+    meta_description: str | None = None,
     admin: AdminUser,
 ) -> LegalDocumentVersion:
     doc = await get_document_by_slug(db, slug)
     if not doc:
         raise ValueError(f"Unknown document slug: {slug}")
+
+    # Обновляем SEO-поля на уровне документа (не версии)
+    if meta_title is not None:
+        doc.meta_title = meta_title.strip() or None
+    if meta_description is not None:
+        doc.meta_description = meta_description.strip() or None
 
     if public_path is not None:
         new_path = normalize_public_path(public_path)

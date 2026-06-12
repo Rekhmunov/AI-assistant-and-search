@@ -31,18 +31,58 @@ def _cache_headers() -> dict[str, str]:
 
 @router.get("/blog/sitemap.xml")
 async def blog_sitemap_page(db: Annotated[AsyncSession, Depends(get_db)]):
+    from datetime import datetime, timezone
+    from app.services.blog_categories import list_categories
+    from app.services.legal_documents import list_documents_admin, ensure_default_documents
+
     posts, _ = await list_posts_public(db, limit=500)
+    categories = await list_categories(db)
+    await ensure_default_documents(db)
+    legal_docs = await list_documents_admin(db)
+
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     lines = [
         '<?xml version="1.0" encoding="UTF-8"?>',
         '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
-        "  <url><loc>https://glosix.ru/blog</loc><changefreq>daily</changefreq><priority>0.8</priority></url>",
+        # Главная
+        f'  <url><loc>https://glosix.ru/</loc><lastmod>{today}</lastmod><changefreq>daily</changefreq><priority>1.0</priority></url>',
+        # Блог
+        f'  <url><loc>https://glosix.ru/blog</loc><lastmod>{today}</lastmod><changefreq>daily</changefreq><priority>0.8</priority></url>',
     ]
+
+    # Категории блога
+    for cat in categories:
+        lines.append(
+            f'  <url><loc>https://glosix.ru/blog/category/{cat.slug}</loc><changefreq>weekly</changefreq><priority>0.6</priority></url>'
+        )
+
+    # Статьи блога
     for post in posts:
         loc = f"https://glosix.ru/blog/{post.slug}"
-        updated = post.updated_at.strftime("%Y-%m-%d") if post.updated_at else ""
+        updated = post.updated_at.strftime("%Y-%m-%d") if post.updated_at else today
         lines.append(
-            f"  <url><loc>{loc}</loc><lastmod>{updated}</lastmod><changefreq>weekly</changefreq><priority>0.7</priority></url>"
+            f'  <url><loc>{loc}</loc><lastmod>{updated}</lastmod><changefreq>weekly</changefreq><priority>0.7</priority></url>'
         )
+
+    # Юридические страницы
+    legal_paths = {
+        "/privacy": ("monthly", "0.4"),
+        "/offer": ("monthly", "0.4"),
+        "/cookies": ("monthly", "0.4"),
+        "/terms": ("monthly", "0.4"),
+        "/consent-personal-data": ("monthly", "0.3"),
+    }
+    for doc in legal_docs:
+        if not doc.current_version_id:
+            continue
+        path = doc.public_path.lstrip("/")
+        full_path = f"/{path}"
+        freq, priority = legal_paths.get(full_path, ("monthly", "0.3"))
+        updated = doc.updated_at.strftime("%Y-%m-%d") if doc.updated_at else today
+        lines.append(
+            f'  <url><loc>https://glosix.ru{full_path}</loc><lastmod>{updated}</lastmod><changefreq>{freq}</changefreq><priority>{priority}</priority></url>'
+        )
+
     lines.append("</urlset>")
     body = "\n".join(lines)
     return Response(

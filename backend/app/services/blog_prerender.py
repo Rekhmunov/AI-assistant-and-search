@@ -164,9 +164,13 @@ _INDEX_TEMPLATE = """<!DOCTYPE html>
   <title>Блог Glosix — статьи об ИИ-поиске и ассистентах</title>
   <meta name="description" content="Статьи Glosix: умный поиск, ИИ-ассистент, MAX-бот и полезные гайды." />
   <link rel="canonical" href="{{ blog_url }}" />
-  <meta property="og:title" content="Блог Glosix" />
+  <meta property="og:title" content="Блог Glosix — статьи об ИИ-поиске и ассистентах" />
+  <meta property="og:description" content="Статьи Glosix: умный поиск, ИИ-ассистент, MAX-бот и полезные гайды." />
   <meta property="og:url" content="{{ blog_url }}" />
   <meta property="og:type" content="website" />
+  <meta name="twitter:card" content="summary" />
+  <meta name="twitter:title" content="Блог Glosix — статьи об ИИ-поиске и ассистентах" />
+  <meta name="twitter:description" content="Статьи Glosix: умный поиск, ИИ-ассистент, MAX-бот и полезные гайды." />
   <style>{{ css }}</style>
 </head>
 <body>
@@ -201,7 +205,15 @@ _CATEGORY_TEMPLATE = """<!DOCTYPE html>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>{{ category_name }} — Блог Glosix</title>
+  {% if category_description %}<meta name="description" content="{{ category_description }}" />{% else %}<meta name="description" content="Статьи в категории «{{ category_name }}» — блог Glosix об умном поиске и ИИ-ассистенте." />{% endif %}
   <link rel="canonical" href="{{ canonical_url }}" />
+  <meta property="og:title" content="{{ category_name }} — Блог Glosix" />
+  {% if category_description %}<meta property="og:description" content="{{ category_description }}" />{% endif %}
+  <meta property="og:url" content="{{ canonical_url }}" />
+  <meta property="og:type" content="website" />
+  <meta name="twitter:card" content="summary" />
+  <meta name="twitter:title" content="{{ category_name }} — Блог Glosix" />
+  {% if category_description %}<meta name="twitter:description" content="{{ category_description }}" />{% endif %}
   <style>{{ css }}</style>
 </head>
 <body>

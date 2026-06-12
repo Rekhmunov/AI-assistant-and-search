@@ -14,12 +14,16 @@ function formatDate(iso: string | null): string {
 
 export function BlogCategoryPage() {
   const { slug = "" } = useParams();
-  useBlogListMeta();
   const { data: categories = [] } = useQuery({
     queryKey: ["blog-categories"],
     queryFn: fetchBlogCategories,
   });
   const category = categories.find((c) => c.slug === slug);
+  useBlogListMeta({
+    categorySlug: slug,
+    categoryName: category?.name,
+    categoryDescription: category?.description ?? undefined,
+  });
   const { data: posts = [], isLoading } = useQuery({
     queryKey: ["blog-posts", slug],
     queryFn: () => fetchBlogPosts({ category: slug, limit: 50 }),

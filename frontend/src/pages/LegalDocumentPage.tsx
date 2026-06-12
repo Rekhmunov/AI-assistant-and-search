@@ -1,7 +1,18 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link, useLocation, Navigate } from "react-router-dom";
 import { fetchLegalByPath } from "../api/client";
+import { useLegalMeta } from "../hooks/useLegalMeta";
 import { t } from "../i18n";
+
+function LegalMeta({ data }: { data: { title: string; public_path: string; meta_title?: string | null; meta_description?: string | null } }) {
+  useLegalMeta({
+    title: data.title,
+    publicPath: data.public_path,
+    metaTitle: data.meta_title,
+    metaDescription: data.meta_description,
+  });
+  return null;
+}
 
 export function LegalDocumentPage() {
   const { pathname } = useLocation();
@@ -17,15 +28,16 @@ export function LegalDocumentPage() {
 
   return (
     <div className="page page-legal">
+      {data && <LegalMeta data={data} />}
       <article className="legal-page-card">
         {isLoading ? (
           <p className="muted-text">{t("pageLoading")}</p>
         ) : (
           <>
-            <h1 className="legal-page-title">{data.title}</h1>
+            <h1 className="legal-page-title">{data?.title}</h1>
             <div
               className="legal-doc-html legal-page-body"
-              dangerouslySetInnerHTML={{ __html: data.content_html }}
+              dangerouslySetInnerHTML={{ __html: data?.content_html ?? "" }}
             />
           </>
         )}

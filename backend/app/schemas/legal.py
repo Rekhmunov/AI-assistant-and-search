@@ -17,6 +17,8 @@ class LegalDocumentAdminOut(BaseModel):
     slug: str
     title: str
     public_path: str
+    meta_title: str | None = None
+    meta_description: str | None = None
     current_version: LegalVersionOut | None = None
     versions: list[LegalVersionOut] = Field(default_factory=list)
 
@@ -24,12 +26,16 @@ class LegalDocumentAdminOut(BaseModel):
 class LegalDocumentUpdate(BaseModel):
     content_html: str = Field(..., min_length=1)
     public_path: str | None = Field(default=None, max_length=255)
+    meta_title: str | None = Field(default=None, max_length=255)
+    meta_description: str | None = Field(default=None, max_length=500)
 
 
 class LegalDocumentPublicOut(BaseModel):
     slug: str
     title: str
     public_path: str
+    meta_title: str | None = None
+    meta_description: str | None = None
     version_id: UUID
     version_number: int
     content_html: str

@@ -43,16 +43,30 @@ function removeBlogMeta() {
   ].forEach((sel) => document.querySelector(sel)?.remove());
 }
 
-export function useBlogListMeta() {
+export function useBlogListMeta(options?: { categorySlug?: string; categoryName?: string; categoryDescription?: string }) {
+  const { categorySlug, categoryName, categoryDescription } = options ?? {};
   useEffect(() => {
-    document.title = "Блог Glosix — статьи об ИИ-поиске и ассистентах";
-    upsertMeta("name", "description", "Статьи Glosix: умный поиск, ИИ-ассистент, MAX-бот и полезные гайды.");
-    upsertLink("canonical", `${SITE}/blog`);
-    upsertMeta("property", "og:title", "Блог Glosix");
-    upsertMeta("property", "og:url", `${SITE}/blog`);
-    upsertMeta("property", "og:type", "website");
+    if (categorySlug && categoryName) {
+      // Страница категории
+      const canonical = `${SITE}/blog/category/${categorySlug}`;
+      document.title = `${categoryName} — Блог Glosix`;
+      upsertMeta("name", "description", categoryDescription || `Статьи в категории «${categoryName}» — блог Glosix об умном поиске и ИИ-ассистенте.`);
+      upsertLink("canonical", canonical);
+      upsertMeta("property", "og:title", `${categoryName} — Блог Glosix`);
+      upsertMeta("property", "og:url", canonical);
+      upsertMeta("property", "og:type", "website");
+    } else {
+      // Страница списка всех статей
+      document.title = "Блог Glosix — статьи об ИИ-поиске и ассистентах";
+      upsertMeta("name", "description", "Статьи Glosix: умный поиск, ИИ-ассистент, MAX-бот и полезные гайды.");
+      upsertLink("canonical", `${SITE}/blog`);
+      upsertMeta("property", "og:title", "Блог Glosix — статьи об ИИ-поиске и ассистентах");
+      upsertMeta("property", "og:description", "Статьи Glosix: умный поиск, ИИ-ассистент, MAX-бот и полезные гайды.");
+      upsertMeta("property", "og:url", `${SITE}/blog`);
+      upsertMeta("property", "og:type", "website");
+    }
     return () => removeBlogMeta();
-  }, []);
+  }, [categorySlug, categoryName, categoryDescription]);
 }
 
 export function useBlogPostMeta(post: BlogPostPublic | null) {

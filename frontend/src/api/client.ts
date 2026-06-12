@@ -236,6 +236,8 @@ export type LegalDocumentPublic = {
   slug: string;
   title: string;
   public_path: string;
+  meta_title?: string | null;
+  meta_description?: string | null;
   version_id: string;
   version_number: number;
   content_html: string;

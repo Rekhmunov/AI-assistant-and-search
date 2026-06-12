@@ -44,6 +44,8 @@ async def _document_admin_out(db: AsyncSession, doc) -> LegalDocumentAdminOut:
         slug=doc.slug,
         title=doc.title,
         public_path=doc.public_path,
+        meta_title=doc.meta_title,
+        meta_description=doc.meta_description,
         current_version=_version_out(current, consent_count=counts.get(current.id, 0)) if current else None,
         versions=[_version_out(v, consent_count=counts.get(v.id, 0)) for v in versions],
     )
@@ -88,6 +90,8 @@ async def update_legal_document(
             slug=slug,
             content_html=body.content_html,
             public_path=body.public_path,
+            meta_title=body.meta_title,
+            meta_description=body.meta_description,
             admin=admin,
         )
     except ValueError as e:

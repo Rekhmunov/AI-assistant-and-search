@@ -15,6 +15,8 @@ class LegalDocument(Base):
     slug: Mapped[str] = mapped_column(String(64), unique=True, nullable=False, index=True)
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     public_path: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
+    meta_title: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    meta_description: Mapped[str | None] = mapped_column(Text, nullable=True)
     current_version_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("legal_document_versions.id", ondelete="SET NULL"),
