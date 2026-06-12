@@ -57,23 +57,29 @@ logger = logging.getLogger(__name__)
 RUNTIME_SYSTEM_PROMPT = """Ты — умный агент Glosix в мессенджере MAX.
 Используй agent_spec, thread_memory и tools. Действуй самостоятельно.
 
-Генерация контента:
-• Изображение → max_send_file(chat_id=..., instruction="...", format="image")
-• Документ (Word/PDF/Excel) → max_send_file(chat_id=..., instruction="...", format="docx"/"pdf"/"xlsx")
-• Текст в чат → max_send_message(chat_id=..., text="...")
+АЛГОРИТМ перед каждым ответом:
+1. ПЛАН — прочитай историю диалога, пойми что нужно пользователю,
+   определи что уже знаешь и что нужно выяснить или сделать.
+2. ДЕЙСТВИЕ — вызови нужные tools, не описывай планы словами.
+3. ПРОВЕРКА — все части задачи выполнены? Ответ использует данные из tools?
 
-Данные и поиск:
-• Актуальные данные из интернета → web_search
-• Учёт затрат → store_agent_record; отчёты → query_agent_records + max_send_file(format="xlsx")
-• Если не уверен в возможностях MAX API → read_max_api_docs
+Инструменты:
+• Текст в чат: max_send_message(chat_id=..., text="...")
+• Картинка: max_send_file(chat_id=..., instruction="...", format="image")
+• Документ/Excel: max_send_file(chat_id=..., instruction="...", format="docx"/"pdf"/"xlsx")
+• Интернет: web_search
+• Учёт: store_agent_record / query_agent_records
+• Возможности MAX: read_max_api_docs
+• База знаний: read_knowledge_base
 
-Правила:
-• Фото пользователя анализируй через vision_context (передаётся автоматически).
-• Если задача невозможна в MAX — честно объясни и предложи альтернативу.
-• Если чего-то не хватает — задай один конкретный вопрос.
-• При ошибке tool (ok=false): используй поле error_human для объяснения.
-  Никогда не показывай коды ошибок (HTTP 403, chat_id_forbidden). Объясни причину и что делать.
-• Отвечай кратко на русском."""
+Память:
+• После важных открытий — update_agent_memory (chat_id, предпочтения, права бота).
+
+Ошибки:
+• tool ok=false → error_human → объясни причину и что делать, без технических кодов.
+
+Фото пользователя → vision_context передаётся автоматически.
+Краткие ответы на русском. Один вопрос за раз если чего-то не хватает."""
 
 
 @dataclass
@@ -139,7 +145,7 @@ async def run_onboarding_loop(
             )
         spec = load_agent_spec(agent)
         llm, _, answer_model, _, _ = await resolve_runtime_providers(db, redis_client, user=user)
-        if should_reflect(user_text=last_user, draft_reply=draft, runtime=False):
+        if should_reflect(user_text=last_user, draft_reply=draft, runtime=False, tool_trace=tool_trace):
             await emit_status(on_status, STATUS_REFLECTING)
             reflection = await critique_agent_reply(
                 llm,
@@ -225,7 +231,7 @@ async def run_runtime_loop(
                 tool_trace=result.tool_trace,
             )
         llm, _, answer_model, _, _ = await resolve_runtime_providers(db, redis_client, user=user)
-        if should_reflect(user_text=user_text, draft_reply=result.text, runtime=True):
+        if should_reflect(user_text=user_text, draft_reply=result.text, runtime=True, tool_trace=result.tool_trace):
             await emit_status(on_status, STATUS_REFLECTING)
             reflection = await critique_agent_reply(
                 llm,
