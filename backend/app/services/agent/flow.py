@@ -21,14 +21,12 @@ from app.services.agent.dispatch import dispatch_due_reminders
 from app.services.agent.max_group import enrich_group_admin_status
 from app.services.agent.profile import agent_profile
 from app.services.agent.lifecycle import cancel_agent, get_agent_for_thread
-from app.services.agent.capabilities import reply_claims_activation
 from app.services.agent.intent_hints import user_wants_immediate_run, user_wants_today_run
 from app.services.agent.agent_loop import run_onboarding_loop
 from app.services.agent.agent_orchestrator import user_wants_diagnostic
 from app.services.agent.llm_onboarding import (
     apply_checklist_to_agent,
     build_confirmation_prompt,
-    build_parse_fallback_reply,
     checklist_missing_fields,
     load_checklist,
     try_validate_checklist,
@@ -438,32 +436,12 @@ async def _handle_agent_message_body(
             await db.commit()
             return user_msg, assistant, agent
 
-    if should_activate and missing:
-        llm_result.reply = build_parse_fallback_reply(
-            llm_result.checklist.to_dict(),
-            text,
-        )
-    elif reply_claims_activation(llm_result.reply) and not should_activate:
-        llm_result.reply = (
-            build_confirmation_prompt(
-                llm_result.confirmation_summary,
-                llm_result.checklist,
-            )
-            if not missing
-            else build_parse_fallback_reply(llm_result.checklist.to_dict(), text)
-        )
-
+    # Помечаем ожидание подтверждения для следующего сообщения
     if llm_result.ready_for_confirmation and not missing and not should_activate:
         cfg["awaiting_confirmation"] = True
-        agent.config = cfg
-        if "подтверж" not in llm_result.reply.lower() and "запустить" not in llm_result.reply.lower():
-            llm_result.reply = build_confirmation_prompt(
-                llm_result.confirmation_summary,
-                llm_result.checklist,
-            )
     else:
         cfg["awaiting_confirmation"] = False
-        agent.config = cfg
+    agent.config = cfg
 
     assistant = await _assistant_reply(
         db,

@@ -96,33 +96,14 @@ def _parse_json(raw: str) -> dict | None:
 
 
 def should_reflect(*, user_text: str, draft_reply: str, runtime: bool) -> bool:
-    if not runtime:
+    """
+    Рефлексия только когда есть реальные признаки проблемы.
+    Не рефлексируем автоматически — это дополнительный LLM-вызов и задержка.
+    """
+    body = (draft_reply or "").strip()
+    if not body or len(body) < 20:
+        return True  # Пустой или подозрительно короткий ответ
+    # Ответ выглядит как JSON-структура вместо текста пользователю
+    if body.startswith("{") and '"reply"' in body:
         return True
-    low_reply = (draft_reply or "").lower()
-    triggers = (
-        "уточните, когда",
-        "когда агент должен срабатывать",
-        "сообщения в группу max",
-        "каждый час",
-        "расписание",
-    )
-    if any(t in low_reply for t in triggers) and _has_interactive_task_markers(user_text):
-        return True
-    return len(user_text) > 60 or len(draft_reply) > 200
-
-
-def _has_interactive_task_markers(text: str) -> bool:
-    low = (text or "").lower()
-    return any(
-        m in low
-        for m in (
-            "затрат",
-            "категори",
-            "таблиц",
-            "буду писать",
-            "слушай",
-            "фиксир",
-            "excel",
-            "отчет",
-        )
-    )
+    return False

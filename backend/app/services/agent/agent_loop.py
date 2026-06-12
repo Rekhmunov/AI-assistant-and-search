@@ -359,7 +359,7 @@ async def _tool_loop(
                     LlmTurnResult(reply=msg, checklist=checklist or ChecklistState()),
                     tool_trace,
                 )
-            for call in tool_calls[:6]:
+            for call in tool_calls[:8]:
                 if not isinstance(call, dict):
                     continue
                 tool_name = str(call.get("tool") or "")

@@ -96,7 +96,7 @@ def _result_from_data(
 
     if activate and missing:
         activate = False
-        reply = build_parse_fallback_reply(merged.to_dict(), last_user)
+        # Не заменяем ответ LLM шаблоном — он сам объяснит что не хватает
 
     return LlmTurnResult(
         reply=reply,

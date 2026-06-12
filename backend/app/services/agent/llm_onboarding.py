@@ -18,8 +18,6 @@ from app.services.agent.capabilities import (
     reply_looks_like_capabilities_template,
     user_asks_capabilities,
     user_asks_feasibility,
-    user_needs_clarification,
-    user_wants_continue,
 )
 from app.services.agent.intent_hints import DEFAULT_AGENT_TIMEZONE
 from app.services.agent.constants import CANCEL_PHRASES, SUPPORTED_ROLE_LABELS
@@ -833,47 +831,23 @@ def _context_block(
         f"missing_fields: {', '.join(missing) if missing else 'нет'}",
         "default_timezone: Europe/Moscow",
     ]
-    if user_needs_clarification(last_user_text):
-        lines.append(
-            "user_signal: needs_clarification — переформулируй последний шаг проще, "
-            "сохрани current_checklist, не начинай диалог заново"
-        )
     from app.services.agent.capabilities import user_wants_immediate_lookup
     from app.services.agent.intent_hints import user_wants_immediate_run
+    from app.services.agent.context_reset import user_wants_context_reset
 
     is_one_time = user_wants_immediate_lookup(last_user_text) or user_wants_immediate_run(last_user_text)
 
     if is_one_time:
         lines.append(
-            "action_mode: one_time — пользователь просит разовое действие, НЕ настройку автоматизации. "
-            "Игнорируй missing_fields и current_checklist.role. "
-            "Выполни немедленно через tools (web_search, max_send_message и т.п.). "
-            "checklist.role оставь null, activate=false."
+            "action_mode: one_time — разовое действие. "
+            "Выполни через tools, не спрашивай расписание, checklist.role оставь null."
         )
-    elif user_asks_feasibility(last_user_text):
-        lines.append(
-            "user_signal: asks_feasibility — ответь да/нет по существу; если да, заполни role и задай один уточняющий вопрос; без списка всех возможностей"
-        )
-    elif user_asks_capabilities(last_user_text):
-        lines.append(
-            "user_signal: asks_capabilities — кратко своими словами 3–4 примера, попроси описать задачу"
-        )
-    if user_wants_continue(last_user_text):
-        lines.append(
-            "user_signal: wants_continue — один конкретный следующий шаг по missing_fields, без сброса"
-        )
-    from app.services.agent.context_reset import user_wants_context_reset
 
     if user_wants_context_reset(last_user_text):
-        lines.append(
-            "user_signal: context_reset — контекст сброшен; не используй старый диалог; "
-            "веди себя как умный ассистент-агент, помоги с новой задачей с чистого листа"
-        )
+        lines.append("action_mode: context_reset — начинай с чистого листа, не используй старый диалог.")
+
     if str(checklist.task_mode or cfg.get("task_mode") or "").lower() == "expense_tracker":
-        lines.append(
-            "user_signal: expense_tracker — слушай группу, парси «Сумма + описание», "
-            "категории из expense_categories; расписание не спрашивай"
-        )
+        lines.append("task_mode: expense_tracker — парси «Сумма + описание», расписание не спрашивай.")
     return "\n".join(lines)
 
 

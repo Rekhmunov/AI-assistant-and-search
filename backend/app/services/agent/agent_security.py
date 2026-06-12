@@ -10,8 +10,8 @@ from app.models.agent import AgentInstance
 from app.models.user import User
 
 MAX_MESSAGE_TEXT_LEN = 4000
-MAX_TOOL_CALLS_PER_TURN = 12
-MAX_ORCHESTRATOR_ITERATIONS = 8
+MAX_TOOL_CALLS_PER_TURN = 20
+MAX_ORCHESTRATOR_ITERATIONS = 12
 
 ALLOWED_TOOLS = frozenset(
     {
