@@ -15,6 +15,7 @@ class AgentCapability:
 
 CAPABILITIES: tuple[AgentCapability, ...] = (
     AgentCapability("read_max_api_docs", "knowledge", "Документация MAX API: возможности, методы, лимиты, права"),
+    AgentCapability("read_knowledge_base", "knowledge", "Документы, загруженные пользователем в этот тред (только этого агента)"),
     AgentCapability("max_probe_chat", "max", "Проверить доступ бота к чату/каналу MAX"),
     AgentCapability("max_get_chat", "max", "Информация о чате MAX"),
     AgentCapability("max_list_bot_chats", "max", "Список чатов, куда добавлен бот"),

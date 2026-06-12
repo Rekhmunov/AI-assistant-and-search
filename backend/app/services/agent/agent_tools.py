@@ -98,6 +98,8 @@ async def execute_agent_tool(
             return _tool_update_memory(agent, safe_args)
         if name == "read_max_api_docs":
             return _tool_read_max_api_docs(safe_args)
+        if name == "read_knowledge_base":
+            return await _tool_read_knowledge_base(db, agent, safe_args)
     except Exception as exc:
         logger.exception("Agent tool %s failed: %s", name, exc)
         raw = str(exc)[:300]
@@ -412,6 +414,44 @@ async def _tool_thread_summary(db: AsyncSession, *, thread_id: UUID) -> dict:
     msgs = list(reversed(result.scalars().all()))
     lines = [f"{m.role.value}: {m.content[:400]}" for m in msgs]
     return {"ok": True, "tool": "read_thread_summary", "result": {"messages": lines}}
+
+
+async def _tool_read_knowledge_base(db: AsyncSession, agent: AgentInstance, args: dict) -> dict:
+    """
+    Читает документы из базы знаний ТЕКУЩЕГО агента.
+    Изоляция гарантирована: запрос идёт строго по agent.id текущего треда.
+    Нельзя получить данные другого агента или другого пользователя.
+    """
+    from app.services.agent.knowledge import retrieve_knowledge_context
+
+    query = str(args.get("query") or "").strip()
+    cfg = dict(agent.config or {})
+    sources = cfg.get("knowledge_sources") or []
+    chunk_count = int(cfg.get("knowledge_chunk_count") or 0)
+
+    if not chunk_count:
+        return {
+            "ok": True,
+            "tool": "read_knowledge_base",
+            "result": {
+                "has_knowledge": False,
+                "content": "",
+                "sources": [],
+                "note": "База знаний пуста. Пользователь может загрузить документы кнопкой «+» в этом треде.",
+            },
+        }
+
+    context = await retrieve_knowledge_context(db, agent, query, limit=12)
+    return {
+        "ok": True,
+        "tool": "read_knowledge_base",
+        "result": {
+            "has_knowledge": bool(context),
+            "content": context[:8000],
+            "sources": sources,
+            "chunk_count": chunk_count,
+        },
+    }
 
 
 def _tool_read_max_api_docs(args: dict) -> dict:

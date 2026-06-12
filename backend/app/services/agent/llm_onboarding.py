@@ -821,14 +821,16 @@ def _context_block(
         if user.max_user_id
         else "личные сообщения недоступны (MAX не привязан)"
     )
+    knowledge_count = int(cfg.get("knowledge_chunk_count") or 0)
+    knowledge_sources = ", ".join(cfg.get("knowledge_sources") or []) or "нет"
     lines = [
         f"max_linked: {bool(user.max_user_id)}",
         f"max_user_id: {user.max_user_id or 'нет'}",
         f"dm_send_hint: {dm_hint}",
         f"agent_status: {agent.status}",
         f"registered_group_chat_id: {registered or 'нет'}",
-        f"knowledge_chunks: {cfg.get('knowledge_chunk_count') or 0}",
-        f"knowledge_sources: {', '.join(cfg.get('knowledge_sources') or []) or 'нет'}",
+        f"knowledge_chunks: {knowledge_count}",
+        f"knowledge_sources: {knowledge_sources}",
         f"current_checklist: {json.dumps(checklist.to_dict(), ensure_ascii=False)}",
         f"missing_fields: {', '.join(missing) if missing else 'нет'}",
         "default_timezone: Europe/Moscow",
@@ -836,6 +838,12 @@ def _context_block(
     from app.services.agent.capabilities import user_wants_immediate_lookup
     from app.services.agent.intent_hints import user_wants_immediate_run
     from app.services.agent.context_reset import user_wants_context_reset
+
+    if knowledge_count > 0:
+        lines.append(
+            f"knowledge_available: {knowledge_count} фрагментов из [{knowledge_sources}] — "
+            "доступны через read_knowledge_base"
+        )
 
     is_one_time = user_wants_immediate_lookup(last_user_text) or user_wants_immediate_run(last_user_text)
 

@@ -30,6 +30,7 @@ ALLOWED_TOOLS = frozenset(
         "query_agent_records",
         "update_agent_memory",
         "read_max_api_docs",
+        "read_knowledge_base",
     }
 )
 
@@ -227,6 +228,12 @@ def validate_tool_call(
     if name == "read_max_api_docs":
         section = str(payload.get("section") or "").strip()[:200]
         payload["section"] = section
+
+    if name == "read_knowledge_base":
+        # Читает только чанки ТЕКУЩЕГО агента — agent_id жёстко привязан к объекту agent,
+        # аргументы не могут указать чужой agent_id.
+        query = str(payload.get("query") or "").strip()[:500]
+        payload["query"] = query
 
     return payload
 
