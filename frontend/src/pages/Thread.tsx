@@ -199,7 +199,9 @@ export function Thread() {
   const [imageGenStatus, setImageGenStatus] = useState<string | undefined>();
   const [agentLoading, setAgentLoading] = useState(false);
   const [agentStatusText, setAgentStatusText] = useState<string | null>(null);
-  const [agentThinkingEvents, setAgentThinkingEvents] = useState<AgentThinkingEvent[]>([]);
+  // Хранит события размышлений по ключу тёрна, чтобы не пропадали при новых запросах
+  const [agentThinkingByKey, setAgentThinkingByKey] = useState<Record<string, AgentThinkingEvent[]>>({});
+  const currentThinkingKeyRef = useRef<string | null>(null);
   const [showScrollDown, setShowScrollDown] = useState(false);
   const isDesktop = useDesktopLayout();
 
@@ -454,7 +456,8 @@ export function Thread() {
       setAgentLoading(true);
       setAgentStatusText(t("agentStatusThinking"));
       setSearchPhase("routing");
-      setAgentThinkingEvents([]);
+      currentThinkingKeyRef.current = pendingKey;
+      setAgentThinkingByKey((prev) => ({ ...prev, [pendingKey]: [] }));
       const pendingKey = `agent-${Date.now()}`;
       setTurns((prev) => [
         ...prev,
@@ -477,7 +480,13 @@ export function Thread() {
             setAgentStatusText(status);
           },
           onThinking: (event) => {
-            setAgentThinkingEvents((prev) => [...prev, event]);
+            const key = currentThinkingKeyRef.current;
+            if (key) {
+              setAgentThinkingByKey((prev) => ({
+                ...prev,
+                [key]: [...(prev[key] ?? []), event],
+              }));
+            }
           },
         });
         if (!result) {
@@ -490,13 +499,23 @@ export function Thread() {
         queryClient.invalidateQueries({ queryKey: ["thread", tid] });
         queryClient.invalidateQueries({ queryKey: ["threads"] });
         queryClient.invalidateQueries({ queryKey: ["thread-answer-status", tid] });
+        const finalKey = result.assistant_message.id;
+        // Переносим thinking-события со временного ключа на финальный messageId
+        setAgentThinkingByKey((prev) => {
+          const events = prev[pendingKey] ?? [];
+          const next = { ...prev };
+          delete next[pendingKey];
+          if (events.length > 0) next[finalKey] = events;
+          return next;
+        });
+        currentThinkingKeyRef.current = null;
         setTurns((prev) =>
           prev.map((turn) =>
             turn.key === pendingKey
               ? {
                   ...turn,
-                  key: result.assistant_message.id,
-                  messageId: result.assistant_message.id,
+                  key: finalKey,
+                  messageId: finalKey,
                   answer: result.assistant_message.content,
                   sources: result.assistant_message.sources ?? [],
                   streaming: true,
@@ -1200,9 +1219,9 @@ export function Thread() {
                           t("agentStatusThinking")
                         }
                       />
-                      {agentThinkingEvents.length > 0 && (
+                      {(agentThinkingByKey[turn.key]?.length ?? 0) > 0 && (
                         <AgentThinkingPanel
-                          events={agentThinkingEvents}
+                          events={agentThinkingByKey[turn.key] ?? []}
                           isActive={agentLoading}
                         />
                       )}
@@ -1211,8 +1230,11 @@ export function Thread() {
                     <SearchStatusLine phase={searchPhase} needsSearch={needsSearch} />
                   ))}
 
-                {isLastTurn && isAgentThread && !agentLoading && agentThinkingEvents.length > 0 && (
-                  <AgentThinkingPanel events={agentThinkingEvents} isActive={false} />
+                {isAgentThread && (agentThinkingByKey[turn.key]?.length ?? 0) > 0 && !showAgentStatus && (
+                  <AgentThinkingPanel
+                    events={agentThinkingByKey[turn.key] ?? []}
+                    isActive={isLastTurn && agentLoading}
+                  />
                 )}
 
                 {showAnswer && (
