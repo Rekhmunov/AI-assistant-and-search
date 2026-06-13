@@ -1,70 +1,9 @@
 import type { ReactNode } from "react";
 import { NavLink } from "react-router-dom";
+import { Search, Clock, User, Bot } from "lucide-react";
 import { GlosixBrand } from "./GlosixBrand";
 import { t } from "../i18n";
 import { useAuthStore } from "../store/authStore";
-
-function AgentsNavIcon() {
-  return (
-    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden>
-      <rect x="3" y="11" width="18" height="10" rx="3" stroke="currentColor" strokeWidth="1.8" />
-      <path d="M8 11V8a4 4 0 018 0v3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-      <circle cx="9" cy="16" r="1.2" fill="currentColor" />
-      <circle cx="15" cy="16" r="1.2" fill="currentColor" />
-      <path d="M9 19.5h6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function SearchNavIcon() {
-  return (
-    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden>
-      <circle cx="11" cy="11" r="6.5" stroke="currentColor" strokeWidth="1.8" />
-      <path d="M16 16l5 5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function HistoryNavIcon() {
-  return (
-    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden>
-      <path
-        d="M12 8v5l3 2"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <path
-        d="M3.5 12a8.5 8.5 0 101.2-4.3"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-      />
-      <path
-        d="M3 7v5h5"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
-function ProfileNavIcon() {
-  return (
-    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden>
-      <circle cx="12" cy="8" r="3.5" stroke="currentColor" strokeWidth="1.8" />
-      <path
-        d="M5 20c0-3.5 3.1-6 7-6s7 2.5 7 6"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-      />
-    </svg>
-  );
-}
 
 function NavItem({
   to,
@@ -87,6 +26,8 @@ function NavItem({
   );
 }
 
+const NAV_ICON_SIZE = 22;
+
 export function AppNavigation() {
   const aria = t("navMain");
   const userPlan = useAuthStore((s) => s.user?.plan);
@@ -99,20 +40,20 @@ export function AppNavigation() {
           <GlosixBrand className="glosix-wordmark--sidebar" tier={brandTier} />
         </div>
         <div className="sidebar-nav-top">
-          <NavItem to="/" end label={t("navSearch")} icon={<SearchNavIcon />} />
-          <NavItem to="/agents" label={t("navAgents")} icon={<AgentsNavIcon />} />
-          <NavItem to="/history" label={t("navHistory")} icon={<HistoryNavIcon />} />
+          <NavItem to="/" end label={t("navSearch")} icon={<Search size={NAV_ICON_SIZE} strokeWidth={1.8} />} />
+          <NavItem to="/agents" label={t("navAgents")} icon={<Bot size={NAV_ICON_SIZE} strokeWidth={1.8} />} />
+          <NavItem to="/history" label={t("navHistory")} icon={<Clock size={NAV_ICON_SIZE} strokeWidth={1.8} />} />
         </div>
         <div className="sidebar-nav-bottom">
-          <NavItem to="/profile" label={t("navProfile")} icon={<ProfileNavIcon />} />
+          <NavItem to="/profile" label={t("navProfile")} icon={<User size={NAV_ICON_SIZE} strokeWidth={1.8} />} />
         </div>
       </nav>
 
       <nav className="bottom-nav" aria-label={aria}>
-        <NavItem to="/" end label={t("navSearch")} icon={<SearchNavIcon />} />
-        <NavItem to="/agents" label={t("navAgents")} icon={<AgentsNavIcon />} />
-        <NavItem to="/history" label={t("navHistory")} icon={<HistoryNavIcon />} />
-        <NavItem to="/profile" label={t("navProfile")} icon={<ProfileNavIcon />} />
+        <NavItem to="/" end label={t("navSearch")} icon={<Search size={NAV_ICON_SIZE} strokeWidth={1.8} />} />
+        <NavItem to="/agents" label={t("navAgents")} icon={<Bot size={NAV_ICON_SIZE} strokeWidth={1.8} />} />
+        <NavItem to="/history" label={t("navHistory")} icon={<Clock size={NAV_ICON_SIZE} strokeWidth={1.8} />} />
+        <NavItem to="/profile" label={t("navProfile")} icon={<User size={NAV_ICON_SIZE} strokeWidth={1.8} />} />
       </nav>
     </>
   );

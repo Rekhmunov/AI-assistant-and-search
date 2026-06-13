@@ -2,7 +2,6 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
-  createAgentThread,
   fetchAnswerStatus,
   fetchFileMeta,
   fetchThread,
@@ -44,7 +43,6 @@ import {
   countThreadImages,
   threadHasSearchTurns,
 } from "../lib/threadImageGroups";
-import { agentMessageUsesSearchFlow } from "../lib/agentDocRouting";
 import { answerHasText, normalizeAnswerText } from "../lib/answerText";
 import { displayAnswerText } from "../lib/stripSourcesFooter";
 import { renderAnswerTextSegment } from "../lib/renderAnswerText";
@@ -1018,7 +1016,7 @@ export function Thread() {
 
   const startNewAgentThread = useCallback(async () => {
     navigate("/agents");
-  }, [token, session?.authenticated, agentStarting, navigate, queryClient]);
+  }, [navigate]);
 
   const lastCompletedIndex = findLastIndex(
     turns,

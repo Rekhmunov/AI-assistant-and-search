@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { Clock, ChevronDown } from "lucide-react";
 import type { AgentThinkingEvent } from "../api/client";
 
 interface Props {
@@ -60,16 +61,16 @@ export function AgentThinkingPanel({ events, isActive }: Props) {
           {isActive ? (
             <span className="agent-thinking-spinner" aria-hidden />
           ) : (
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden>
-              <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" />
-              <path d="M12 8v4l3 3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-            </svg>
+            <Clock size={13} strokeWidth={2} aria-hidden />
           )}
         </span>
         <span className="agent-thinking-label">Процесс размышлений</span>
-        <span className={`agent-thinking-chevron${expanded ? " agent-thinking-chevron--open" : ""}`} aria-hidden>
-          ▾
-        </span>
+        <ChevronDown
+          size={13}
+          strokeWidth={2}
+          className={`agent-thinking-chevron${expanded ? " agent-thinking-chevron--open" : ""}`}
+          aria-hidden
+        />
       </button>
 
       {expanded && (

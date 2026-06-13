@@ -1,7 +1,7 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { createAgentThread, fetchSession } from "../api/client";
+import { fetchSession } from "../api/client";
 import { GlosixBrand } from "../components/GlosixBrand";
 import { HomeMobileHeader } from "../components/HomeMobileHeader";
 import { SearchComposer, type ComposerAttachment } from "../components/SearchComposer";
