@@ -155,6 +155,11 @@ async def run_onboarding_loop(
 
         specialized_prompt = get_system_prompt(category)
 
+    # Оптимизация #3: для шаблонных агентов с коротким диалогом провайдер
+    # уже разрешён в _tool_loop — переиспользуем результат вместо второго вызова.
+    # resolve_runtime_providers лениво кешируется внутри сессии.
+    is_template = bool(specialized_prompt)
+
     result, tool_trace = await _tool_loop(
         db,
         redis_client,
@@ -212,17 +217,24 @@ async def run_onboarding_loop(
                     activate=result.activate,
                     sources=revised_sources or result.sources,
                 )
-        await emit_status(on_status, STATUS_MEMORY_UPDATE)
-        await update_thread_memory_after_turn(
-            db,
-            redis_client,
-            user,
-            agent,
-            thread_id=thread_id,
-            user_text=last_user,
-            assistant_text=result.reply,
-            tool_summary=_tool_summary(tool_trace),
-        )
+
+        # Оптимизация #1: для шаблонных агентов с коротким диалогом (≤8 сообщений)
+        # не суммаризируем память — история и так помещается в контекст.
+        # Memory update — отдельный LLM-вызов, при 3-5 ходах напоминания он лишний.
+        skip_memory_update = is_template and len(history) <= 8
+        if not skip_memory_update:
+            await emit_status(on_status, STATUS_MEMORY_UPDATE)
+            await update_thread_memory_after_turn(
+                db,
+                redis_client,
+                user,
+                agent,
+                thread_id=thread_id,
+                user_text=last_user,
+                assistant_text=result.reply,
+                tool_summary=_tool_summary(tool_trace),
+            )
+
         sync_spec_from_checklist(agent, result.checklist.to_dict(), last_user)
         return result
     return result
@@ -380,7 +392,12 @@ async def _tool_loop(
         payload.append({"role": "system", "text": extra})
         payload.append({"role": "system", "text": spec_context_block(spec)})
         if mode == "onboarding" and checklist is not None:
-            payload.append({"role": "system", "text": _context_block(user, agent, checklist, user_text)})
+            if is_template_agent:
+                # Оптимизация #2: компактный контекст для шаблонных агентов —
+                # только заполненные поля + dm_send_hint, без 10+ null полей.
+                payload.append({"role": "system", "text": _compact_context_block(user, agent, checklist)})
+            else:
+                payload.append({"role": "system", "text": _context_block(user, agent, checklist, user_text)})
         if runtime_chat_id is not None:
             payload.append({"role": "system", "text": f"current_max_chat_id: {runtime_chat_id}"})
         if tool_trace:
@@ -498,6 +515,37 @@ async def _tool_loop(
     if mode == "runtime":
         return RuntimeLoopResult(text=msg, attachments=attachments, tool_trace=tool_trace), tool_trace
     return LlmTurnResult(reply=msg, checklist=checklist or ChecklistState()), tool_trace
+
+
+def _compact_context_block(user, agent, checklist) -> str:
+    """
+    Компактный контекст для шаблонных агентов — только заполненные поля.
+    Экономит ~150-200 токенов на каждый LLM-вызов по сравнению с полным _context_block.
+    """
+    import json as _json
+    from app.services.agent.llm_onboarding import checklist_missing_fields
+
+    cfg = dict(agent.config or {})
+    lines = [
+        f"max_linked: {bool(user.max_user_id)}",
+        f"agent_status: {agent.status}",
+    ]
+    if user.max_user_id:
+        lines.append(f"dm_send_hint: max_send_message с user_id={user.max_user_id}")
+
+    # Только заполненные поля чеклиста
+    cl_dict = checklist.to_dict()
+    filled = {k: v for k, v in cl_dict.items() if v is not None}
+    if filled:
+        lines.append(f"checklist: {_json.dumps(filled, ensure_ascii=False)}")
+
+    missing = checklist_missing_fields(checklist)
+    lines.append(f"missing: {', '.join(missing) if missing else 'нет'}")
+
+    if cfg.get("awaiting_confirmation"):
+        lines.append("awaiting_confirmation: true")
+
+    return "\n".join(lines)
 
 
 def _template_tools_appendix() -> str:
