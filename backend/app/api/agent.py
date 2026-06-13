@@ -107,6 +107,51 @@ async def post_agent_message(
     )
 
 
+@router.get("/list")
+async def list_agents(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+):
+    """Список всех агентов пользователя с карточками для страницы /agents."""
+    require_agent_eligible(user)
+    from sqlalchemy import select
+    from app.models.agent import AgentInstance, AgentStatus
+    from app.models.thread import Thread
+    from app.services.agent.constants import SUPPORTED_ROLE_LABELS
+
+    result = await db.execute(
+        select(AgentInstance, Thread)
+        .join(Thread, Thread.id == AgentInstance.thread_id)
+        .where(
+            AgentInstance.user_id == user.id,
+            AgentInstance.status != AgentStatus.CANCELLED.value,
+            Thread.deleted_at.is_(None),
+        )
+        .order_by(AgentInstance.created_at.desc())
+    )
+    rows = result.all()
+
+    agents_out = []
+    for agent, thread in rows:
+        cfg = dict(agent.config or {})
+        agents_out.append({
+            "id": str(agent.id),
+            "thread_id": str(agent.thread_id),
+            "status": agent.status,
+            "role": agent.role,
+            "role_label": SUPPORTED_ROLE_LABELS.get(agent.role or "", agent.role or "Агент"),
+            "title": thread.title or "Агент",
+            "instruction_text": agent.instruction_text or "",
+            "max_chat_id": agent.max_chat_id,
+            "schedule_text": cfg.get("schedule_text"),
+            "next_run_at": cfg.get("next_run_at"),
+            "last_dispatch_error": cfg.get("last_dispatch_error"),
+            "created_at": agent.created_at.isoformat(),
+            "updated_at": agent.updated_at.isoformat(),
+        })
+    return {"agents": agents_out}
+
+
 @router.get("/threads/{thread_id}/activity-logs", response_model=AgentActivityLogsOut)
 async def get_agent_activity_logs(
     thread_id: UUID,

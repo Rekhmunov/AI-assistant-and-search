@@ -1017,25 +1017,7 @@ export function Thread() {
   };
 
   const startNewAgentThread = useCallback(async () => {
-    if (agentStarting) return;
-    const canStart = Boolean(token) || session?.authenticated === true;
-    if (!canStart) return;
-    setAgentError(null);
-    setAgentStarting(true);
-    try {
-      const data = await createAgentThread(token);
-      queryClient.invalidateQueries({ queryKey: ["threads"] });
-      navigate(`/thread/${data.thread.id}`, {
-        replace: true,
-        state: { fromHistory: true, agentRevealWelcome: true },
-      });
-    } catch (err) {
-      setAgentError(
-        err instanceof Error ? err.message : "Не удалось создать агента. Попробуйте ещё раз.",
-      );
-    } finally {
-      setAgentStarting(false);
-    }
+    navigate("/agents");
   }, [token, session?.authenticated, agentStarting, navigate, queryClient]);
 
   const lastCompletedIndex = findLastIndex(

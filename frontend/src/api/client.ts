@@ -772,6 +772,33 @@ export async function streamAgentMessage(
   return null;
 }
 
+export type AgentListItem = {
+  id: string;
+  thread_id: string;
+  status: string;
+  role: string | null;
+  role_label: string;
+  title: string;
+  instruction_text: string;
+  max_chat_id: number | null;
+  schedule_text: string | null;
+  next_run_at: string | null;
+  last_dispatch_error: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export async function fetchAgentList(
+  token: string | null,
+): Promise<{ agents: AgentListItem[] }> {
+  const res = await fetch(`${API_BASE}/api/agent/list`, {
+    credentials: "include",
+    headers: apiHeaders(token),
+  });
+  if (!res.ok) return { agents: [] };
+  return res.json();
+}
+
 export async function fetchAgentActivityLogs(
   token: string | null,
   threadId: string,

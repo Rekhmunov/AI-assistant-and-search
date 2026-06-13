@@ -4,6 +4,18 @@ import { GlosixBrand } from "./GlosixBrand";
 import { t } from "../i18n";
 import { useAuthStore } from "../store/authStore";
 
+function AgentsNavIcon() {
+  return (
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <rect x="3" y="11" width="18" height="10" rx="3" stroke="currentColor" strokeWidth="1.8" />
+      <path d="M8 11V8a4 4 0 018 0v3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      <circle cx="9" cy="16" r="1.2" fill="currentColor" />
+      <circle cx="15" cy="16" r="1.2" fill="currentColor" />
+      <path d="M9 19.5h6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 function SearchNavIcon() {
   return (
     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden>
@@ -88,6 +100,7 @@ export function AppNavigation() {
         </div>
         <div className="sidebar-nav-top">
           <NavItem to="/" end label={t("navSearch")} icon={<SearchNavIcon />} />
+          <NavItem to="/agents" label={t("navAgents")} icon={<AgentsNavIcon />} />
           <NavItem to="/history" label={t("navHistory")} icon={<HistoryNavIcon />} />
         </div>
         <div className="sidebar-nav-bottom">
@@ -97,6 +110,7 @@ export function AppNavigation() {
 
       <nav className="bottom-nav" aria-label={aria}>
         <NavItem to="/" end label={t("navSearch")} icon={<SearchNavIcon />} />
+        <NavItem to="/agents" label={t("navAgents")} icon={<AgentsNavIcon />} />
         <NavItem to="/history" label={t("navHistory")} icon={<HistoryNavIcon />} />
         <NavItem to="/profile" label={t("navProfile")} icon={<ProfileNavIcon />} />
       </nav>

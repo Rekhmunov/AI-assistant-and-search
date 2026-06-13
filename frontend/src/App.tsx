@@ -17,6 +17,7 @@ import { BlogPage } from "./pages/Blog";
 import { BlogCategoryPage } from "./pages/BlogCategory";
 import { BlogPostPage } from "./pages/BlogPost";
 import { Thread } from "./pages/Thread";
+import { AgentsPage } from "./pages/Agents";
 
 const queryClient = new QueryClient();
 
@@ -40,6 +41,7 @@ function AppRoutes() {
               <Route path="/history" element={<History />} />
               <Route path="/profile" element={<Profile />} />
               <Route path="/source-view" element={<SourceViewPage />} />
+              <Route path="/agents" element={<AgentsPage />} />
               <Route path="/blog" element={<BlogPage />} />
               <Route path="/blog/category/:slug" element={<BlogCategoryPage />} />
               <Route path="/blog/:slug" element={<BlogPostPage />} />

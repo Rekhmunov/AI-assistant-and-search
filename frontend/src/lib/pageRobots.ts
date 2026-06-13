@@ -6,6 +6,7 @@ export const PRIVATE_ROUTE_PREFIXES = [
   "/profile",
   "/login",
   "/source-view",
+  "/agents",
 ] as const;
 
 const PRIVATE_QUERY_KEYS = ["WebAppStartParam", "etext", "startapp"] as const;

@@ -64,11 +64,7 @@ export function Home() {
   });
 
   const startAgent = () => {
-    if (createAgent.isPending) return;
-    const canStart = Boolean(token) || session?.authenticated === true;
-    if (!canStart) return;
-    setAgentError(null);
-    createAgent.mutate();
+    navigate("/agents");
   };
 
   const hasDraft = Boolean(query.trim() || attachments.length > 0);
