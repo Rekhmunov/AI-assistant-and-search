@@ -620,8 +620,14 @@ export async function createAgentThread(token: string | null): Promise<AgentThre
   return res.json();
 }
 
+export type AgentThinkingEvent =
+  | { type: "thinking"; text: string }
+  | { type: "tool_call"; tool: string; arguments: Record<string, unknown> }
+  | { type: "tool_result"; tool: string; ok: boolean; summary: string };
+
 export type AgentStreamHandlers = {
   onStatus?: (status: string) => void;
+  onThinking?: (event: AgentThinkingEvent) => void;
   onUserMessage?: (message: Message) => void;
   onAssistantMessage?: (message: Message) => void;
   onDone?: (payload: { agent_status: string; agent_role: string | null }) => void;
@@ -694,6 +700,27 @@ export async function streamAgentMessage(
         switch (event) {
           case "status":
             if (typeof parsed.status === "string") handlers.onStatus?.(parsed.status);
+            break;
+          case "agent_thinking":
+            if (typeof parsed.text === "string")
+              handlers.onThinking?.({ type: "thinking", text: parsed.text });
+            break;
+          case "agent_tool_call":
+            if (typeof parsed.tool === "string")
+              handlers.onThinking?.({
+                type: "tool_call",
+                tool: parsed.tool,
+                arguments: (parsed.arguments as Record<string, unknown>) ?? {},
+              });
+            break;
+          case "agent_tool_result":
+            if (typeof parsed.tool === "string")
+              handlers.onThinking?.({
+                type: "tool_result",
+                tool: parsed.tool,
+                ok: Boolean(parsed.ok),
+                summary: typeof parsed.summary === "string" ? parsed.summary : "",
+              });
             break;
           case "user_message":
             userMessage = parsed as Message;

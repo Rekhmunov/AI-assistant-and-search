@@ -24,6 +24,8 @@ import { ImageGenProNotice } from "../components/ImageGenProNotice";
 import { ImageGenStatusLine } from "../components/ImageGenStatusLine";
 import { DocGenStatusLine } from "../components/DocGenStatusLine";
 import { AgentActivityLogPanel } from "../components/AgentActivityLogPanel";
+import { AgentThinkingPanel } from "../components/AgentThinkingPanel";
+import type { AgentThinkingEvent } from "../api/client";
 import { CollapsibleMarkdownDocument } from "../components/CollapsibleMarkdownDocument";
 import { GeneratedDocumentCard } from "../components/GeneratedDocumentCard";
 import { SearchComposer, type ComposerAttachment } from "../components/SearchComposer";
@@ -197,6 +199,7 @@ export function Thread() {
   const [imageGenStatus, setImageGenStatus] = useState<string | undefined>();
   const [agentLoading, setAgentLoading] = useState(false);
   const [agentStatusText, setAgentStatusText] = useState<string | null>(null);
+  const [agentThinkingEvents, setAgentThinkingEvents] = useState<AgentThinkingEvent[]>([]);
   const [showScrollDown, setShowScrollDown] = useState(false);
   const isDesktop = useDesktopLayout();
 
@@ -451,6 +454,7 @@ export function Thread() {
       setAgentLoading(true);
       setAgentStatusText(t("agentStatusThinking"));
       setSearchPhase("routing");
+      setAgentThinkingEvents([]);
       const pendingKey = `agent-${Date.now()}`;
       setTurns((prev) => [
         ...prev,
@@ -471,6 +475,9 @@ export function Thread() {
         const result = await streamAgentMessage(token, tid, text, fileIds, {
           onStatus: (status) => {
             setAgentStatusText(status);
+          },
+          onThinking: (event) => {
+            setAgentThinkingEvents((prev) => [...prev, event]);
           },
         });
         if (!result) {
@@ -1183,18 +1190,30 @@ export function Thread() {
                       status={imageGenStatus ?? turnAnswerStatus?.custom_status ?? undefined}
                     />
                   ) : showAgentStatus ? (
-                    <SearchStatusLine
-                      phase="routing"
-                      needsSearch={false}
-                      customStatus={
-                        agentStatusText ??
-                        turnAnswerStatus?.custom_status ??
-                        t("agentStatusThinking")
-                      }
-                    />
+                    <>
+                      <SearchStatusLine
+                        phase="routing"
+                        needsSearch={false}
+                        customStatus={
+                          agentStatusText ??
+                          turnAnswerStatus?.custom_status ??
+                          t("agentStatusThinking")
+                        }
+                      />
+                      {agentThinkingEvents.length > 0 && (
+                        <AgentThinkingPanel
+                          events={agentThinkingEvents}
+                          isActive={agentLoading}
+                        />
+                      )}
+                    </>
                   ) : (
                     <SearchStatusLine phase={searchPhase} needsSearch={needsSearch} />
                   ))}
+
+                {isLastTurn && isAgentThread && !agentLoading && agentThinkingEvents.length > 0 && (
+                  <AgentThinkingPanel events={agentThinkingEvents} isActive={false} />
+                )}
 
                 {showAnswer && (
                   <section className="answer-section">

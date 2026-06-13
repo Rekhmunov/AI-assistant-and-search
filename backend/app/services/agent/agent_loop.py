@@ -26,6 +26,7 @@ from app.services.agent.agent_status import (
     STATUS_MEMORY_UPDATE,
     STATUS_REFLECTING,
     STATUS_THINKING,
+    AgentStatusReporter,
     StatusCallback,
     emit_status,
     noop_status,
@@ -100,15 +101,13 @@ async def run_onboarding_loop(
     thread_id: UUID,
     diagnostic_mode: bool = False,
     on_status: StatusCallback | None = None,
+    reporter: AgentStatusReporter | None = None,
 ) -> LlmTurnResult:
     """Настройка в Glosix: checklist + рефлексия + память."""
     checklist = load_checklist(agent)
     history = history_messages_for_agent(messages, agent)
     last_user = history[-1]["text"] if history and history[-1]["role"] == "user" else ""
     from app.services.agent.intent_hints import _extract_max_chat_id
-    # Перед LLM — только структурное извлечение (chat_id из ссылок/чисел).
-    # Роль, поля чеклиста и намерение пользователя определяет LLM самостоятельно —
-    # никакого предзаполнения по ключевым словам.
     from app.services.agent.operational import bind_chat_to_current_agent
 
     cid = _extract_max_chat_id(last_user)
@@ -130,6 +129,7 @@ async def run_onboarding_loop(
         checklist=checklist,
         diagnostic_mode=diagnostic_mode,
         on_status=on_status,
+        reporter_obj=reporter,
     )
     if isinstance(result, LlmTurnResult):
         draft = prefer_web_search_answer(result.reply, tool_trace)
@@ -280,6 +280,7 @@ async def _tool_loop(
     allow_test_send: bool | None = None,
     runtime_chat_id: int | None = None,
     author: str = "",
+    reporter_obj: AgentStatusReporter | None = None,
 ) -> tuple[LlmTurnResult | RuntimeLoopResult, list[dict]]:
     from app.services.agent.agent_tools import agent_runtime_diagnostics
 
@@ -329,6 +330,12 @@ async def _tool_loop(
         await emit_status(status_cb, STATUS_THINKING if iteration == 0 else STATUS_ANALYZING_RESULTS)
         raw = await _llm_complete(llm, payload)
         data = _parse_llm_json(raw)
+
+        # Отправляем план-рассуждение агента
+        if data:
+            plan_text = str(data.get("plan") or "").strip()
+            if plan_text and reporter_obj is not None:
+                await reporter_obj.emit_thinking(plan_text)
         if not data and iteration < MAX_ORCHESTRATOR_ITERATIONS - 1:
             payload.append(
                 {
@@ -365,6 +372,9 @@ async def _tool_loop(
                 tool_name = str(call.get("tool") or "")
                 args = call.get("arguments") if isinstance(call.get("arguments"), dict) else {}
                 await emit_status(status_cb, tool_status_label(tool_name))
+                # Отправляем событие вызова инструмента
+                if reporter_obj is not None:
+                    await reporter_obj.emit_tool_call(tool_name, args)
                 result = await execute_agent_tool(
                     db,
                     redis_client,
@@ -380,6 +390,10 @@ async def _tool_loop(
                     on_status=status_cb,
                 )
                 tool_trace.append(result)
+                # Отправляем краткий результат инструмента
+                if reporter_obj is not None:
+                    summary = _tool_result_summary(tool_name, result)
+                    await reporter_obj.emit_tool_result(tool_name, bool(result.get("ok")), summary)
                 if tool_name in {"max_send_file", "max_send_message"} and result.get("ok"):
                     outbound_sent = True
                     attachments = []
@@ -422,6 +436,54 @@ async def _tool_loop(
     if mode == "runtime":
         return RuntimeLoopResult(text=msg, attachments=attachments, tool_trace=tool_trace), tool_trace
     return LlmTurnResult(reply=msg, checklist=checklist or ChecklistState()), tool_trace
+
+
+def _tool_result_summary(tool_name: str, result: dict) -> str:
+    """Краткое резюме результата инструмента для отображения пользователю."""
+    ok = result.get("ok", False)
+    if not ok:
+        human = result.get("error_human") or result.get("error") or "ошибка"
+        return str(human)[:200]
+    r = result.get("result") or {}
+    if tool_name == "web_search":
+        sources = r.get("sources") or []
+        return f"{len(sources)} источников найдено"
+    if tool_name in {"max_send_message", "max_send_test"}:
+        dest = r.get("chat_id") or r.get("user_id") or ""
+        return f"Отправлено{f' в {dest}' if dest else ''}"
+    if tool_name == "max_send_file":
+        fmt = r.get("format", "")
+        dest = r.get("chat_id") or r.get("user_id") or ""
+        return f"Файл ({fmt}) отправлен{f' в {dest}' if dest else ''}"
+    if tool_name == "max_probe_chat":
+        title = r.get("title") or ""
+        admin = r.get("bot_is_admin")
+        admin_str = " (бот — админ)" if admin is True else " (бот не админ)" if admin is False else ""
+        return f"Чат{f' «{title}»' if title else ''}{admin_str}"
+    if tool_name == "max_get_chat":
+        title = r.get("title") or r.get("chat_id") or ""
+        return f"Чат: {title}"
+    if tool_name == "max_resolve_channel_link":
+        cid = r.get("chat_id") or ""
+        title = r.get("title") or ""
+        return f"chat_id: {cid}{f' ({title})' if title else ''}"
+    if tool_name == "max_list_bot_chats":
+        chats = r.get("chats") or []
+        return f"{len(chats)} чатов"
+    if tool_name == "read_knowledge_base":
+        count = r.get("chunk_count") or 0
+        return f"{count} фрагментов" if count else "База знаний пуста"
+    if tool_name == "update_agent_memory":
+        facts = r.get("facts") or []
+        return f"Сохранено {len(facts)} фактов"
+    if tool_name == "store_agent_record":
+        return "Запись сохранена"
+    if tool_name == "query_agent_records":
+        items = r.get("items") or []
+        return f"{len(items)} записей"
+    if tool_name == "read_max_api_docs":
+        return "Документация прочитана"
+    return "ok"
 
 
 async def _llm_complete(llm, messages: list[dict[str, str]]) -> str:

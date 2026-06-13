@@ -17,6 +17,11 @@ logger = logging.getLogger(__name__)
 
 StatusCallback = Callable[[str], Awaitable[None]]
 
+# Типы событий мышления агента
+THINKING_EVENT = "agent_thinking"
+TOOL_CALL_EVENT = "agent_tool_call"
+TOOL_RESULT_EVENT = "agent_tool_result"
+
 STATUS_THINKING = "Анализирую задачу…"
 STATUS_CONTEXT_RESET = "Сбрасываю контекст…"
 STATUS_ANALYZING_RESULTS = "Формирую ответ по результатам проверок…"
@@ -73,10 +78,12 @@ class AgentStatusReporter:
         self._redis = redis_client
         self._thread_id = thread_id
         self._user_message_id = user_message_id
-        self._queue: asyncio.Queue[str | None] = asyncio.Queue()
+        # Очередь хранит кортежи (event_type, payload_dict)
+        self._queue: asyncio.Queue[tuple[str, dict] | None] = asyncio.Queue()
         self._closed = False
 
     async def emit(self, text: str) -> None:
+        """Стандартный текстовый статус."""
         status = (text or "").strip()
         if not status:
             return
@@ -89,7 +96,29 @@ class AgentStatusReporter:
             )
         except Exception:
             logger.warning("agent status redis update failed thread=%s", self._thread_id, exc_info=True)
-        await self._queue.put(status)
+        await self._queue.put(("status", {"status": status}))
+
+    async def emit_thinking(self, plan: str) -> None:
+        """Отправляет план/рассуждение агента."""
+        text = (plan or "").strip()
+        if not text:
+            return
+        await self._queue.put((THINKING_EVENT, {"text": text}))
+
+    async def emit_tool_call(self, tool: str, arguments: dict) -> None:
+        """Отправляет информацию о вызове инструмента."""
+        await self._queue.put((TOOL_CALL_EVENT, {
+            "tool": tool,
+            "arguments": arguments,
+        }))
+
+    async def emit_tool_result(self, tool: str, ok: bool, summary: str) -> None:
+        """Отправляет краткий результат вызова инструмента."""
+        await self._queue.put((TOOL_RESULT_EVENT, {
+            "tool": tool,
+            "ok": ok,
+            "summary": summary,
+        }))
 
     async def close(self) -> None:
         if self._closed:
@@ -105,7 +134,8 @@ class AgentStatusReporter:
             item = await self._queue.get()
             if item is None:
                 return
-            yield sse_event("status", {"status": item})
+            event_type, payload = item
+            yield sse_event(event_type, payload)
 
 
 async def emit_status(callback: StatusCallback | None, text: str) -> None:

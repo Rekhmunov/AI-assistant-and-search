@@ -129,6 +129,7 @@ async def handle_agent_message(
     *,
     file_ids: list[UUID] | None = None,
     on_status: StatusCallback | None = None,
+    reporter=None,
 ) -> tuple[Message, Message, AgentInstance]:
     result = await db.execute(
         select(Thread)
@@ -185,6 +186,7 @@ async def handle_agent_message(
             limiter,
             file_ids=file_ids,
             on_status=status_cb,
+            reporter=reporter,
         )
     except ValueError:
         raise
@@ -216,6 +218,7 @@ async def _handle_agent_message_body(
     *,
     file_ids: list[UUID] | None = None,
     on_status: StatusCallback | None = None,
+    reporter=None,
 ) -> tuple[Message, Message, AgentInstance]:
     status_cb = on_status or noop_status
     if file_ids:
@@ -282,6 +285,7 @@ async def _handle_agent_message_body(
             thread_id=thread.id,
             diagnostic_mode=diagnostic_mode,
             on_status=status_cb,
+            reporter=reporter,
         )
     except Exception as exc:
         logger.exception("Agent LLM turn failed thread=%s", thread_id)

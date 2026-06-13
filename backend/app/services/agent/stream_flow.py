@@ -15,7 +15,11 @@ from app.core.database import async_session_factory
 from app.core.limiter import RateLimiter
 from app.models.user import User
 from app.services.agent.agent_pending import clear_agent_pending, set_agent_pending
-from app.services.agent.agent_status import AgentStatusReporter, STATUS_THINKING, message_to_sse_dict
+from app.services.agent.agent_status import (
+    AgentStatusReporter,
+    STATUS_THINKING,
+    message_to_sse_dict,
+)
 from app.services.agent.flow import handle_agent_message
 from app.services.sse import sse_event
 
@@ -64,6 +68,7 @@ async def stream_agent_message(
                     redis_client,
                     file_ids=file_ids,
                     on_status=reporter.callback(),
+                    reporter=reporter,
                 )
                 result_box["value"] = (user_msg, assistant_msg, agent)
             except ValueError as exc:
@@ -85,7 +90,8 @@ async def stream_agent_message(
         except asyncio.TimeoutError:
             continue
         if item is not None:
-            yield sse_event("status", {"status": item})
+            event_type, payload = item
+            yield sse_event(event_type, payload)
 
     if "value" in error_box:
         exc = error_box["value"]
