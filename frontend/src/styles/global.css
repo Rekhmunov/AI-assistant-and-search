@@ -5719,7 +5719,8 @@ body:has(.page-thread) {
   .page-thread .thread-turn > .thread-query,
   .page-thread .thread-turn > .search-status,
   .page-thread .thread-turn > .answer-section,
-  .page-thread .thread-turn > .followups-section {
+  .page-thread .thread-turn > .followups-section,
+  .page-thread .thread-turn > .agent-thinking-panel {
     width: var(--desktop-thread-column-width);
     max-width: var(--desktop-thread-column-width);
     margin-left: auto;
