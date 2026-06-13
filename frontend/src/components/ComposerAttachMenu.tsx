@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { Plus, FileText, Image, Camera } from "lucide-react";
 import { t } from "../i18n";
 
 const DROPDOWN_ID = "composer-attach-dropdown";
@@ -174,52 +175,17 @@ export function ComposerAttachMenu({
 }
 
 function PlusIcon() {
-  return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden>
-      <path
-        d="M12 5v14M5 12h14"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-      />
-    </svg>
-  );
+  return <Plus width={22} height={22} strokeWidth={2} aria-hidden />;
 }
 
 function DocMenuIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
-      <path
-        d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6z"
-        stroke="currentColor"
-        strokeWidth="1.6"
-        strokeLinejoin="round"
-      />
-      <path d="M14 2v6h6" stroke="currentColor" strokeWidth="1.6" />
-    </svg>
-  );
+  return <FileText width={18} height={18} strokeWidth={1.6} aria-hidden />;
 }
 
 function ImageMenuIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
-      <rect x="3" y="5" width="18" height="14" rx="2" stroke="currentColor" strokeWidth="1.6" />
-      <circle cx="8.5" cy="10" r="1.5" fill="currentColor" />
-      <path d="M3 16l5-5 4 4 3-3 6 6" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
-    </svg>
-  );
+  return <Image width={18} height={18} strokeWidth={1.6} aria-hidden />;
 }
 
 function CameraMenuIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
-      <path
-        d="M4 8h4l2-2h4l2 2h4v10H4V8z"
-        stroke="currentColor"
-        strokeWidth="1.6"
-        strokeLinejoin="round"
-      />
-      <circle cx="12" cy="13" r="3" stroke="currentColor" strokeWidth="1.6" />
-    </svg>
-  );
+  return <Camera width={18} height={18} strokeWidth={1.6} aria-hidden />;
 }

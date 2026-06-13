@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Share2, Copy } from "lucide-react";
 import { answerHasText } from "../lib/answerText";
 import { formatAnswerForDisplay } from "../lib/formatAnswer";
 import { buildCopyText, isProPlan } from "../lib/copyAttribution";
@@ -68,24 +69,9 @@ export function AnswerToolbar({ answer, title }: Props) {
 }
 
 function ShareIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
-      <path
-        d="M12 5v9M8 9l4-4 4 4M6 19h12"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
+  return <Share2 width={18} height={18} strokeWidth={1.8} aria-hidden />;
 }
 
 function CopyIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
-      <rect x="9" y="9" width="11" height="11" rx="2" stroke="currentColor" strokeWidth="1.8" />
-      <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" stroke="currentColor" strokeWidth="1.8" />
-    </svg>
-  );
+  return <Copy width={18} height={18} strokeWidth={1.8} aria-hidden />;
 }

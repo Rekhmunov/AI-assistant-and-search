@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
+import { ChevronRight, ChevronDown } from "lucide-react";
 import { fetchAgentActivityLogs, type AgentActivityLogItem } from "../api/client";
 import { t } from "../i18n";
 
@@ -106,15 +107,10 @@ function formatDetails(row: AgentActivityLogItem): string {
 }
 
 function TriangleIcon({ direction }: { direction: "right" | "down" }) {
-  return (
-    <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-      {direction === "right" ? (
-        <path d="M8 5v14l11-7z" />
-      ) : (
-        <path d="M7 10l5 5 5-5z" />
-      )}
-    </svg>
-  );
+  if (direction === "right") {
+    return <ChevronRight width={12} height={12} strokeWidth={2} aria-hidden />;
+  }
+  return <ChevronDown width={12} height={12} strokeWidth={2} aria-hidden />;
 }
 
 export const AGENT_LOG_MARKER = "▶ Журнал агента";

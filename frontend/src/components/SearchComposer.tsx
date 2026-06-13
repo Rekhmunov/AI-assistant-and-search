@@ -9,6 +9,7 @@ import {
   type Dispatch,
   type SetStateAction,
 } from "react";
+import { Bot, Mic, ArrowUp, FileText, X } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { FileUploadError, uploadFile, fetchMe, fetchSession } from "../api/client";
@@ -763,16 +764,7 @@ export function SearchComposer({
 }
 
 function AgentBotIcon() {
-  return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden>
-      <rect x="7" y="8" width="10" height="10" rx="1.5" stroke="currentColor" strokeWidth="1.8" />
-      <circle cx="10" cy="12" r="1" fill="currentColor" />
-      <circle cx="14" cy="12" r="1" fill="currentColor" />
-      <path d="M10.5 15.5h3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-      <path d="M12 8V5.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-      <circle cx="12" cy="4.5" r="1" fill="currentColor" />
-    </svg>
-  );
+  return <Bot width={20} height={20} strokeWidth={1.8} aria-hidden />;
 }
 
 function AttachmentChip({
@@ -854,64 +846,17 @@ function AttachmentChip({
 }
 
 function MicIcon({ recording }: { recording?: boolean }) {
-  return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden>
-      <path
-        d="M12 14a3 3 0 003-3V6a3 3 0 00-6 0v5a3 3 0 003 3z"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        fill={recording ? "currentColor" : "none"}
-      />
-      <path
-        d="M19 11v1a7 7 0 01-14 0v-1M12 18v3M8 21h8"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
+  return <Mic width={20} height={20} strokeWidth={1.8} aria-hidden fill={recording ? "currentColor" : "none"} />;
 }
 
 function SendIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
-      <path
-        d="M12 19V5M5 12l7-7 7 7"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
+  return <ArrowUp width={18} height={18} strokeWidth={2} aria-hidden />;
 }
 
 function FileDocIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden className="composer-attachment-icon">
-      <path
-        d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6z"
-        stroke="currentColor"
-        strokeWidth="1.6"
-        strokeLinejoin="round"
-      />
-      <path d="M14 2v6h6M8 13h8M8 17h5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-    </svg>
-  );
+  return <FileText width={18} height={18} strokeWidth={1.6} aria-hidden className="composer-attachment-icon" />;
 }
 
 function CloseIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden>
-      <path
-        d="M18 6L6 18M6 6l12 12"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-      />
-    </svg>
-  );
+  return <X width={14} height={14} strokeWidth={2} aria-hidden />;
 }

@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { ChevronUp, ChevronDown } from "lucide-react";
 import { t } from "../i18n";
 import { truncateDocTitle } from "../lib/truncateDocTitle";
 import { BlockToolbarActions } from "./BlockToolbarActions";
@@ -59,15 +60,8 @@ export function CollapsibleMarkdownDocument({ title, content, collapsible }: Pro
 }
 
 function ChevronIcon({ direction }: { direction: "up" | "down" }) {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
-      <path
-        d={direction === "up" ? "M6 14l6-6 6 6" : "M6 10l6 6 6-6"}
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
+  if (direction === "up") {
+    return <ChevronUp width={16} height={16} strokeWidth={2} aria-hidden />;
+  }
+  return <ChevronDown width={16} height={16} strokeWidth={2} aria-hidden />;
 }

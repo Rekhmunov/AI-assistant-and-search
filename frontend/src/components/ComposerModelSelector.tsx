@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { ChevronDown, Lock, Check } from "lucide-react";
 import { t } from "../i18n";
 
 const DROPDOWN_ID = "composer-model-dropdown";
@@ -175,42 +176,13 @@ function ModelOption({
 }
 
 function ChevronIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden>
-      <path
-        d="M6 9l6 6 6-6"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
+  return <ChevronDown width={14} height={14} strokeWidth={2} aria-hidden />;
 }
 
 function LockIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden className="composer-model-lock">
-      <path
-        d="M7 11V8a5 5 0 0110 0v3M6 11h12v9H6V11z"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
+  return <Lock width={14} height={14} strokeWidth={1.8} aria-hidden className="composer-model-lock" />;
 }
 
 function CheckIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden className="composer-model-check">
-      <path
-        d="M5 12l4 4L19 7"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
+  return <Check width={14} height={14} strokeWidth={2} aria-hidden className="composer-model-check" />;
 }

@@ -1,5 +1,6 @@
 import type { GeneratedDocumentInfo } from "../api/client";
 import { fetchFileContent, resolveGeneratedDocumentOpenUrl } from "../api/client";
+import { FileText } from "lucide-react";
 import { t } from "../i18n";
 import { downloadRemoteFile } from "../lib/triggerBrowserDownload";
 
@@ -69,31 +70,5 @@ export async function shareGeneratedDocument(
 }
 
 function DocxIcon() {
-  return (
-    <svg className="generated-document-card-icon-svg" width="28" height="28" viewBox="0 0 32 32" fill="none">
-      <rect x="5" y="3" width="22" height="26" rx="4" fill="currentColor" opacity="0.12" />
-      <path
-        d="M11 4h7l7 7v17a2 2 0 01-2 2H11a2 2 0 01-2-2V6a2 2 0 012-2z"
-        fill="#fff"
-        stroke="currentColor"
-        strokeWidth="1.5"
-        strokeLinejoin="round"
-      />
-      <path d="M18 4v7h7" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
-      <rect x="10" y="14" width="12" height="1.5" rx="0.75" fill="currentColor" opacity="0.35" />
-      <rect x="10" y="18" width="9" height="1.5" rx="0.75" fill="currentColor" opacity="0.35" />
-      <rect x="10" y="22" width="10" height="1.5" rx="0.75" fill="currentColor" opacity="0.35" />
-      <text
-        x="16"
-        y="12.5"
-        textAnchor="middle"
-        fill="currentColor"
-        fontSize="5.5"
-        fontWeight="700"
-        fontFamily="system-ui, sans-serif"
-      >
-        DOC
-      </text>
-    </svg>
-  );
+  return <FileText className="generated-document-card-icon-svg" width={28} height={28} strokeWidth={1.5} />;
 }

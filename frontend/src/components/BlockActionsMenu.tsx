@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { ChevronRight } from "lucide-react";
 import {
   exportAnswerBlockToDocx,
   exportAnswerBlockToMarkdown,
@@ -245,15 +246,12 @@ export function BlockActionsMenu({ content, titleHint, className = "block-action
 
 function ChevronIcon({ open }: { open: boolean }) {
   return (
-    <svg
-      width="12"
-      height="12"
-      viewBox="0 0 24 24"
-      fill="currentColor"
+    <ChevronRight
+      width={12}
+      height={12}
+      strokeWidth={2}
       aria-hidden
       className={`block-actions-menu-chevron${open ? " block-actions-menu-chevron--open" : ""}`}
-    >
-      <path d="M9 7.5 15.5 12 9 16.5V7.5Z" />
-    </svg>
+    />
   );
 }

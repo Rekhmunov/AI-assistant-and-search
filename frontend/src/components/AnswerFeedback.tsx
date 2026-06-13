@@ -1,5 +1,6 @@
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { ThumbsUp, ThumbsDown } from "lucide-react";
 import type { MessageFeedback } from "../api/client";
 import { submitMessageFeedback, type FeedbackReasonCode } from "../api/client";
 import { useBodyScrollLock } from "../hooks/useBodyScrollLock";
@@ -223,44 +224,12 @@ export function AnswerFeedback({ messageId, token, initialFeedback }: Props) {
 
 function ThumbUpIcon({ filled }: { filled: boolean }) {
   return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
-      <path
-        d="M7 10v12"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <path
-        d="M15 5.88 14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2a3.13 3.13 0 0 1 3 3.88Z"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        fill={filled ? "currentColor" : "none"}
-      />
-    </svg>
+    <ThumbsUp width={18} height={18} strokeWidth={1.8} aria-hidden fill={filled ? "currentColor" : "none"} />
   );
 }
 
 function ThumbDownIcon({ filled }: { filled: boolean }) {
   return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
-      <path
-        d="M17 14V2"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <path
-        d="M9 18.12 10 14H4.17a2 2 0 0 1-1.92-2.56l2.33-8A2 2 0 0 1 6.5 2H20a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-2.76a2 2 0 0 0-1.79 1.11L12 22a3.13 3.13 0 0 1-3-3.88Z"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        fill={filled ? "currentColor" : "none"}
-      />
-    </svg>
+    <ThumbsDown width={18} height={18} strokeWidth={1.8} aria-hidden fill={filled ? "currentColor" : "none"} />
   );
 }
