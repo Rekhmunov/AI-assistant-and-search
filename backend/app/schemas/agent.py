@@ -9,7 +9,7 @@ from app.schemas.thread import MessageOut, ThreadListItem
 
 class AgentMessageIn(BaseModel):
     text: str = Field(default="", max_length=4000)
-    file_ids: list[UUID] = Field(default_factory=list)
+    file_ids: list[UUID] = Field(default_factory=list, max_length=10)
 
     @model_validator(mode="after")
     def text_or_files(self) -> "AgentMessageIn":

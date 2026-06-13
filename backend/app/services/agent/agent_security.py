@@ -47,7 +47,15 @@ def allowed_chat_ids_for_agent(
     *,
     message_chat_id: int | None = None,
 ) -> set[int]:
-    """Только чаты, привязанные к агенту этого треда (+ chat_id из текущего сообщения)."""
+    """
+    Только чаты, явно привязанные к агенту через проверенные пути:
+    - bot_added webhook → registered_group_chat_id
+    - max_resolve_channel_link после верификации → max_chat_id
+    - личный user_id владельца агента
+
+    message_chat_id из текста пользователя НЕ включается — это предотвращает
+    инъекцию chat_id и отправку в произвольные группы.
+    """
     ids: set[int] = set()
     if agent.max_chat_id:
         ids.add(int(agent.max_chat_id))
@@ -61,8 +69,6 @@ def allowed_chat_ids_for_agent(
                 ids.add(int(raw))
             except (TypeError, ValueError):
                 pass
-    if message_chat_id is not None:
-        ids.add(int(message_chat_id))
     return ids
 
 
@@ -70,9 +76,9 @@ def chat_id_allowed(
     chat_id: int,
     agent: AgentInstance,
     *,
-    message_chat_id: int | None = None,
+    message_chat_id: int | None = None,  # kept for signature compatibility, not used
 ) -> bool:
-    return int(chat_id) in allowed_chat_ids_for_agent(agent, message_chat_id=message_chat_id)
+    return int(chat_id) in allowed_chat_ids_for_agent(agent)
 
 
 def sanitize_message_text(text: str) -> str:
@@ -238,27 +244,33 @@ def validate_tool_call(
     return payload
 
 
-def user_consented_test_send(user_text: str, checklist_allow: bool = False) -> bool:
+def user_consented_test_send(
+    user_text: str,
+    checklist_allow: bool = False,
+    *,
+    agent_status: str | None = None,
+    awaiting_confirmation: bool = False,
+) -> bool:
     """
-    Проверяет, явно ли пользователь инициировал отправку в рамках текущего диалога.
+    Разрешает destructive tool calls (max_send_message, max_send_file, max_send_test).
 
-    Логика: разрешаем отправку если:
-    - checklist_allow=True (пользователь подтвердил при настройке)
-    - сообщение содержит явное намерение отправить что-то
-    - сообщение содержит подтверждение/согласие на ранее предложенное действие
-
-    Не проверяем по жёстким keyword-спискам — LLM уже проанализировал контекст
-    и решил вызвать инструмент отправки; это само по себе значит что пользователь
-    запросил действие. Наша задача — убедиться что это не случайный вызов.
+    Правила:
+    - В DRAFT/COLLECTING: разрешаем только если пользователь явно запросил
+      тест/отправку И уже было подтверждение (awaiting_confirmation) ИЛИ
+      checklist_allow=True (активация подтверждена).
+    - В ACTIVE: пользователь уже подтвердил агента при активации — разрешаем.
+    - Пустой текст — никогда.
     """
     if checklist_allow:
         return True
     text = (user_text or "").strip()
     if not text:
         return False
-    # Если пользователь написал хоть что-то непустое в Glosix-треде агента —
-    # считаем это явным взаимодействием, инициированным пользователем.
-    # Реальная защита: chat_id должен быть привязан к агенту (validate_tool_call).
-    # Дополнительная защита: агент не должен вызывать destructive tools
-    # без явного намерения в диалоге — это обеспечивается промптом и рефлексией.
-    return True
+    # Активный агент в Glosix-треде — пользователь уже подтвердил при активации
+    if agent_status == "active":
+        return True
+    # В процессе онбординга (DRAFT/COLLECTING): разрешаем только если был шаг подтверждения
+    if awaiting_confirmation:
+        return True
+    # Иначе — деструктивные tools недоступны до активации
+    return False

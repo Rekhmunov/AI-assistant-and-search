@@ -148,7 +148,7 @@ async def register_group_chat_for_user(
     *,
     max_user_id: int,
     chat_id: int,
-    include_active: bool = True,
+    include_active: bool = False,  # ACTIVE агенты не перепривязываем автоматически
 ) -> None:
     statuses = [AgentStatus.DRAFT.value, AgentStatus.COLLECTING.value]
     if include_active:

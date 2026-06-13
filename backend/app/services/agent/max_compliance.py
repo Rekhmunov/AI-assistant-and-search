@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import datetime, timezone
 from typing import Any
 
 import redis.asyncio as aioredis
@@ -18,6 +19,8 @@ MODERATION_DELETE_COOLDOWN_SEC = 3.0
 DM_COMMAND_COOLDOWN_SEC = 2.0
 # Пауза между массовой рассылкой напоминаний одному боту.
 DISPATCH_STAGGER_SEC = 0.15
+# Лимит LLM-вызовов через MAX webhook в час на пользователя
+MAX_WEBHOOK_LLM_CALLS_PER_HOUR = 60
 
 _redis_client: Any = None
 
@@ -52,6 +55,20 @@ async def group_reply_allowed(chat_id: int) -> bool:
     if await r.set(key, "1", nx=True, ex=int(DM_COMMAND_COOLDOWN_SEC)):
         return True
     return False
+
+
+async def webhook_llm_allowed(user_id: str) -> bool:
+    """
+    Ограничивает LLM-вызовы через MAX webhook (dm_assistant, group interactive).
+    Предотвращает бесплатное потребление LLM через бота в обход Glosix UI лимитов.
+    """
+    r = await _redis()
+    now = datetime.now(timezone.utc)
+    hour_key = f"max:webhook:llm:{user_id}:{now.strftime('%Y%m%d%H')}"
+    count = await r.incr(hour_key)
+    if count == 1:
+        await r.expire(hour_key, 3600)
+    return count <= MAX_WEBHOOK_LLM_CALLS_PER_HOUR
 
 
 async def dispatch_stagger(index: int) -> None:

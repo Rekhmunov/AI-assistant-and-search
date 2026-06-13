@@ -63,7 +63,7 @@ async def execute_agent_tool(
     name = str(tool).strip().lower()
     try:
         if name == "max_probe_chat":
-            return await _tool_max_probe_chat(bot, safe_args)
+            return await _tool_max_probe_chat(bot, safe_args, allow_test_send=allow_test_send)
         if name == "max_send_test":
             return await _tool_max_send_test(bot, safe_args)
         if name == "max_get_chat":
@@ -118,9 +118,10 @@ async def execute_agent_tool(
     }
 
 
-async def _tool_max_probe_chat(bot: MaxBotService, args: dict) -> dict:
+async def _tool_max_probe_chat(bot: MaxBotService, args: dict, *, allow_test_send: bool = False) -> dict:
     chat_id = int(args["chat_id"])
-    send_test = bool(args.get("send_test"))
+    # send_test разрешён только если allow_test_send=True — те же правила что у max_send_test
+    send_test = bool(args.get("send_test")) and allow_test_send
     probe = await probe_max_chat(bot, chat_id, send_test=send_test)
     return {"ok": probe.get("ok", False), "tool": "max_probe_chat", "result": probe}
 

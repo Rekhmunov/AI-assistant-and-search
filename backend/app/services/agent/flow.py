@@ -361,12 +361,30 @@ async def _handle_agent_message_body(
                         await db.commit()
                         return user_msg, assistant, agent
                     elif user_is_admin is None:
-                        # Не удалось проверить — бот не в группе или нет доступа к members.
-                        # Предупреждаем, но не блокируем: бот-preflight проверит дальше.
-                        logger.warning(
-                            "Could not verify user admin status chat_id=%s user=%s",
-                            agent.max_chat_id, user.max_user_id
+                        # Не удалось проверить — блокируем по умолчанию (fail closed).
+                        # Бот не в группе или нет доступа к members — значит бот туда
+                        # не был добавлен через стандартный путь (bot_added webhook).
+                        cfg = dict(agent.config or {})
+                        cfg["awaiting_confirmation"] = True
+                        agent.config = cfg
+                        await append_agent_activity_log(
+                            db, agent, "user_admin_check_failed",
+                            details={"chat_id": agent.max_chat_id, "reason": "cannot_verify"},
+                            level="error",
                         )
+                        assistant = await _assistant_reply(
+                            db,
+                            thread,
+                            (
+                                "Не удалось проверить ваши права в этой группе MAX.\n\n"
+                                "Убедитесь что:\n"
+                                "1. Вы являетесь администратором группы\n"
+                                "2. Бот Glosix добавлен в группу как администратор\n\n"
+                                "Затем напишите ссылку на группу снова или попробуйте ещё раз."
+                            ),
+                        )
+                        await db.commit()
+                        return user_msg, assistant, agent
 
                 probe = await probe_max_chat(bot, int(agent.max_chat_id), send_test=False)
                 await append_agent_activity_log(

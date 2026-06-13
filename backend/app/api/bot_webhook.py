@@ -113,21 +113,23 @@ def _verify_webhook_secret(
 ) -> None:
     settings = get_settings()
     expected = settings.max_bot_webhook_secret.strip()
-    # MAX official header: X-Max-Bot-Api-Secret (see POST /subscriptions)
     provided = (x_max_bot_api_secret or x_webhook_secret or query_secret or "").strip()
+
+    # Секрет обязателен в любом окружении если задан.
+    # В продакшне — всегда обязателен.
+    from app.core.secrets import secrets_match
+
     if settings.environment.strip().lower() == "production":
         if not expected:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail="Webhook not configured",
             )
-        from app.core.secrets import secrets_match
-
         if not secrets_match(provided, expected):
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
         return
-    from app.core.secrets import secrets_match
 
+    # Вне продакшна: если секрет задан — проверяем; если не задан — принимаем (dev/test).
     if expected and not secrets_match(provided, expected):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
 

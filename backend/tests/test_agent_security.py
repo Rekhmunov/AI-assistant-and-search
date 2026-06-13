@@ -28,20 +28,30 @@ def _agent(**kwargs) -> AgentInstance:
 
 def test_chat_id_allowed_for_agent():
     agent = _agent(max_chat_id=-100)
+    # Bound chat_id allowed
     assert chat_id_allowed(-100, agent)
-    assert chat_id_allowed(-200, agent, message_chat_id=-200)
+    # message_chat_id no longer added to allowlist (security fix #1)
+    assert not chat_id_allowed(-200, agent, message_chat_id=-200)
     assert not chat_id_allowed(-999, agent)
-    assert -200 in allowed_chat_ids_for_agent(agent, message_chat_id=-200)
+    # message_chat_id is NOT in allowed set
+    assert -200 not in allowed_chat_ids_for_agent(agent, message_chat_id=-200)
 
 
 def test_test_send_requires_consent():
-    # Any non-empty user text in a Glosix agent thread is considered explicit interaction.
-    # Real protection is the chat_id binding (validate_tool_call), not keyword matching.
-    assert user_consented_test_send("проверь связь с группой")
-    assert user_consented_test_send("прямо сейчас")
-    assert user_consented_test_send("привет")
-    assert not user_consented_test_send("")
-    assert not user_consented_test_send("   ")
+    # DRAFT/COLLECTING without awaiting_confirmation — destructive tools blocked
+    assert not user_consented_test_send("проверь связь с группой", agent_status="collecting")
+    assert not user_consented_test_send("прямо сейчас", agent_status="draft")
+    assert not user_consented_test_send("привет", agent_status="collecting")
+    assert not user_consented_test_send("", agent_status="active")
+
+    # ACTIVE agents — allowed
+    assert user_consented_test_send("что угодно", agent_status="active")
+
+    # awaiting_confirmation — allowed
+    assert user_consented_test_send("да", agent_status="collecting", awaiting_confirmation=True)
+
+    # checklist_allow (activation confirmed) — always allowed
+    assert user_consented_test_send("", checklist_allow=True)
 
 
 def test_max_send_message_allowed_with_consent():
@@ -88,3 +98,12 @@ def test_store_agent_record_validation():
     )
     assert payload["table"] == "expenses"
     assert payload["data"]["amount"] == 100
+
+
+def test_message_chat_id_not_added_to_allowlist():
+    """Security regression: chat_id from message text must not be auto-allowed."""
+    agent = _agent(max_chat_id=-100)
+    # Even with message_chat_id passed, it's not added
+    ids = allowed_chat_ids_for_agent(agent, message_chat_id=-99999)
+    assert -99999 not in ids
+    assert -100 in ids

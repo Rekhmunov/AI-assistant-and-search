@@ -47,6 +47,7 @@ async def handle_group_interactive(
         select(AgentInstance).where(
             AgentInstance.status == AgentStatus.ACTIVE.value,
             AgentInstance.role == AgentRole.DM_ASSISTANT.value,
+            AgentInstance.max_chat_id == chat_id,  # фильтр на уровне БД
         )
     )
     agents = list(result.scalars().all())

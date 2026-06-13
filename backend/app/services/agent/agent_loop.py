@@ -333,10 +333,12 @@ async def _tool_loop(
         # В MAX-runtime пользователь сам инициировал диалог — разрешаем всегда
         allow_test = True
     else:
-        # В Glosix-треде проверяем по истории (не только последнее сообщение),
-        # чтобы "прямо сейчас" как ответ на уточняющий вопрос тоже засчитывалось.
-        # user_consented_test_send проверяет явный контекст отправки — без жёстких keyword.
-        allow_test = user_consented_test_send(user_text)
+        cfg = dict(agent.config or {})
+        allow_test = user_consented_test_send(
+            user_text,
+            agent_status=agent.status,
+            awaiting_confirmation=bool(cfg.get("awaiting_confirmation")),
+        )
 
     tool_trace: list[dict] = []
     status_cb = on_status or noop_status

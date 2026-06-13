@@ -122,6 +122,11 @@ async def build_interactive_reply(
         run_max_interactive_loop,
         should_run_max_loop_background,
     )
+    from app.services.agent.max_compliance import webhook_llm_allowed
+
+    # Rate limit: предотвращает бесплатное потребление LLM через MAX webhook
+    if not await webhook_llm_allowed(str(user.id)):
+        return "Слишком много запросов. Попробуйте позже.", []
 
     if should_run_max_loop_background(question) and chat_id is not None:
         from app.workers.agent_tasks import enqueue_max_agent_loop_background
