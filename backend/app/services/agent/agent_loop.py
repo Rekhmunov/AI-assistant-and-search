@@ -499,7 +499,7 @@ def _tool_result_summary(tool_name: str, result: dict) -> str:
 
 async def _llm_complete(llm, messages: list[dict[str, str]]) -> str:
     return await llm.complete_text(
-        messages, model="pro", max_tokens=1400, temperature=0.35
+        messages, model="pro", max_tokens=2000, temperature=0.35
     )
 
 

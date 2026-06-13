@@ -58,13 +58,13 @@ def tools_appendix_for_mode(*, runtime: bool = False) -> str:
             "reply — готовый ответ пользователю, не описание планов."
         )
     lines.append(
-        '\nФормат JSON: {"plan": "рассуждение", "reply": "...", '
+        '\nФормат JSON (plan опционален): {"plan": "кратко (опц.)", "reply": "...", '
         '"tool_calls": [{"tool": "...", "arguments": {}}], '
         '"checklist": {...}, "ready_for_confirmation": false, "activate": false}'
     )
     if runtime:
         lines[-1] = (
-            '\nФормат JSON: {"plan": "рассуждение", "reply": "...", '
+            '\nФормат JSON (plan опционален): {"plan": "кратко (опц.)", "reply": "...", '
             '"tool_calls": [{"tool": "...", "arguments": {}}]}'
         )
     return "\n".join(lines)
