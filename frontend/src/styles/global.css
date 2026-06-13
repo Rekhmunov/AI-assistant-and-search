@@ -329,6 +329,9 @@ body:has(.page-thread) {
     max-height: 100dvh;
     min-height: 0;
     overflow: hidden;
+    padding: 0;        /* сбрасываем padding от .page-agents */
+    max-width: none;   /* убираем ограничение ширины */
+    margin: 0;
   }
 
   .page-agents--mobile .agents-scroll {
@@ -6790,8 +6793,8 @@ body:has(.page-thread) {
 }
 
 .page-agents--mobile {
-  padding-top: 0;
-  padding-bottom: 0;
+  /* Все мобильные стили в @media ниже (flex, 100dvh, overflow) */
+  padding: 0;
 }
 
 .agents-catalog-hint {
