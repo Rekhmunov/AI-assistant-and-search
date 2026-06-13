@@ -186,9 +186,17 @@ async def max_webhook(
         text = message_text(payload)
         is_dm = is_direct_message(payload)
         chat_id = parse_chat_id(payload)
+        # Полная структура payload для диагностики парсинга chat_id
+        import json as _json
+        msg_obj = payload.get("message") or {}
+        recipient = msg_obj.get("recipient") or {}
         logger.info(
-            "WEBHOOK message_created: is_dm=%s chat_id=%s user_id=%s text_len=%s",
+            "WEBHOOK message_created: is_dm=%s chat_id=%s user_id=%s text_len=%s "
+            "payload_keys=%s message_keys=%s recipient=%s",
             is_dm, chat_id, max_user_id, len(text or ""),
+            list(payload.keys()),
+            list(msg_obj.keys()),
+            _json.dumps(recipient)[:200],
         )
 
         if is_dm and max_user_id is not None:
