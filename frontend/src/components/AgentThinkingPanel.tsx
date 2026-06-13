@@ -33,7 +33,8 @@ function formatArguments(args: Record<string, unknown>): string {
 }
 
 export function AgentThinkingPanel({ events, isActive }: Props) {
-  const [expanded, setExpanded] = useState(false);
+  // Раскрыт по умолчанию — пользователь может свернуть вручную
+  const [expanded, setExpanded] = useState(true);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // Автоскролл вниз при новых событиях
@@ -42,11 +43,6 @@ export function AgentThinkingPanel({ events, isActive }: Props) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [events, expanded]);
-
-  // Автораскрытие пока активно
-  useEffect(() => {
-    if (isActive) setExpanded(true);
-  }, [isActive]);
 
   if (events.length === 0) return null;
 
