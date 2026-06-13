@@ -39,26 +39,24 @@ async def stream_agent_message(
     reporter = AgentStatusReporter(redis_client, thread_id)
     result_box: dict = {}
     error_box: dict = {}
-
-    # Захватываем user_id — задача создаёт собственную сессию,
-    # не зависящую от жизненного цикла SSE-генератора.
-    # Если клиент закрывает соединение во время обработки (MAX mini-app),
-    # генератор получает GeneratorExit и его сессия закрывается,
-    # но задача продолжает работу со своей сессией и коммит проходит.
     user_id = user.id
 
+    logger.info("AGENT_STREAM_START thread=%s user=%s text_len=%s", thread_id, user_id, len(text or ""))
+
     async def run() -> None:
+        logger.info("AGENT_TASK_START thread=%s", thread_id)
         async with async_session_factory() as task_db:
             try:
-                # Перезагружаем пользователя в собственной сессии задачи
                 res = await task_db.execute(
                     select(User).where(User.id == user_id, User.deleted_at.is_(None))
                 )
                 task_user = res.scalar_one_or_none()
                 if not task_user:
+                    logger.warning("AGENT_TASK_NO_USER thread=%s user=%s", thread_id, user_id)
                     error_box["value"] = ValueError("user_not_found")
                     return
 
+                logger.info("AGENT_TASK_HANDLE_START thread=%s", thread_id)
                 user_msg, assistant_msg, agent = await handle_agent_message(
                     task_db,
                     task_user,
@@ -70,13 +68,17 @@ async def stream_agent_message(
                     on_status=reporter.callback(),
                     reporter=reporter,
                 )
+                logger.info("AGENT_TASK_HANDLE_DONE thread=%s status=%s", thread_id, agent.status)
                 result_box["value"] = (user_msg, assistant_msg, agent)
             except ValueError as exc:
+                logger.warning("AGENT_TASK_VALUE_ERROR thread=%s err=%s", thread_id, exc)
                 error_box["value"] = exc
             except Exception as exc:
-                logger.exception("Agent stream failed thread=%s", thread_id)
+                logger.exception("AGENT_TASK_EXCEPTION thread=%s", thread_id)
                 error_box["value"] = exc
             finally:
+                logger.info("AGENT_TASK_FINALLY thread=%s has_result=%s has_error=%s",
+                            thread_id, "value" in result_box, "value" in error_box)
                 await reporter.close()
                 await clear_agent_pending(redis_client, thread_id)
 
