@@ -385,10 +385,11 @@ async def _tool_loop(
                 )
 
         payload: list[dict[str, str]] = []
-        if mode == "runtime":
-            payload.append({"role": "system", "text": RUNTIME_SYSTEM_PROMPT})
-        elif override_system_prompt:
+        if override_system_prompt:
+            # Шаблонный промпт имеет приоритет — и в онбординге, и в runtime
             payload.append({"role": "system", "text": override_system_prompt})
+        elif mode == "runtime":
+            payload.append({"role": "system", "text": RUNTIME_SYSTEM_PROMPT})
         else:
             payload.append({"role": "system", "text": AGENT_SYSTEM_PROMPT})
         payload.append({"role": "system", "text": extra})
