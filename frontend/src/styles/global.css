@@ -6751,6 +6751,47 @@ body:has(.page-thread) {
   padding: 40px 16px 80px;
 }
 
+.page-agents--mobile {
+  padding-top: 0;
+  padding-bottom: 80px;
+}
+
+.page-agents--mobile .agents-catalog {
+  padding: 0 16px;
+}
+
+.page-agents--mobile .agents-pro-gate {
+  padding: 60px 24px;
+}
+
+.agents-catalog-hint {
+  margin-top: -20px;
+  margin-bottom: 20px;
+}
+
+.agents-pro-gate {
+  text-align: center;
+  padding: 60px 16px;
+}
+
+.agents-pro-gate-icon {
+  font-size: 3rem;
+  margin-bottom: 16px;
+}
+
+.agents-pro-gate-title {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--text);
+  margin: 0 0 8px;
+}
+
+.agents-pro-gate-sub {
+  font-size: 0.875rem;
+  color: var(--muted);
+  margin: 0 0 24px;
+}
+
 .agents-page-header {
   margin-bottom: 36px;
 }

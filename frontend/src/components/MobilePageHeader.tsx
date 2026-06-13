@@ -4,7 +4,7 @@ import { t } from "../i18n";
 import { HistoryIcon, ProfileIcon, SearchIcon } from "./MobileNavIcons";
 
 type Props = {
-  variant: "profile" | "history";
+  variant: "profile" | "history" | "agents";
   title: string;
   historySearchActive?: boolean;
   onHistorySearchToggle?: () => void;
@@ -34,6 +34,25 @@ export function MobilePageHeader({
               <HistoryIcon />
             </Link>
             <span className="thread-header-icon-spacer" aria-hidden />
+          </>
+        ) : variant === "agents" ? (
+          <>
+            <Link
+              to="/profile"
+              className="thread-header-icon-btn"
+              aria-label={t("navProfile")}
+              title={t("navProfile")}
+            >
+              <ProfileIcon />
+            </Link>
+            <Link
+              to="/history"
+              className="thread-header-icon-btn"
+              aria-label={t("navHistory")}
+              title={t("navHistory")}
+            >
+              <HistoryIcon />
+            </Link>
           </>
         ) : (
           <>

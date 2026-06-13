@@ -2,7 +2,11 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { Bell, ChevronRight } from "lucide-react";
 import { createAgentThreadWithTemplate } from "../api/client";
+import { MobilePageHeader } from "../components/MobilePageHeader";
+import { MobileNewThreadButton } from "../components/MobileNewThreadButton";
+import { useDesktopLayout } from "../hooks/useDesktopLayout";
 import { useAuthStore } from "../store/authStore";
+import { t } from "../i18n";
 
 interface AgentTemplate {
   id: string;
@@ -26,8 +30,12 @@ const AGENT_TEMPLATES: AgentTemplate[] = [
 
 export function AgentsPage() {
   const token = useAuthStore((s) => s.token);
+  const user = useAuthStore((s) => s.user);
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const isDesktop = useDesktopLayout();
+
+  const isPro = user?.plan === "pro";
 
   const createAgent = useMutation({
     mutationFn: (templateId: string) => createAgentThreadWithTemplate(token, templateId),
@@ -40,24 +48,58 @@ export function AgentsPage() {
   });
 
   return (
-    <div className="page page-agents">
-      <div className="agents-page-header">
-        <h1 className="agents-page-title">Агенты</h1>
-        <p className="agents-page-sub">
-          Автоматизация в MAX: напоминания, дайджесты, модерация, ИИ-помощник
-        </p>
-      </div>
+    <div className={`page page-agents${isDesktop ? "" : " page-agents--mobile"}`}>
+      {isDesktop ? (
+        <div className="agents-page-header">
+          <h1 className="agents-page-title">{t("navAgents")}</h1>
+          <p className="agents-page-sub">
+            Автоматизация в MAX: напоминания, дайджесты, модерация, ИИ-помощник
+          </p>
+        </div>
+      ) : (
+        <MobilePageHeader
+          variant="agents"
+          title={t("navAgents")}
+        />
+      )}
 
-      <div className="agents-catalog">
-        {AGENT_TEMPLATES.map((tmpl) => (
-          <AgentTemplateCard
-            key={tmpl.id}
-            template={tmpl}
-            loading={createAgent.isPending && createAgent.variables === tmpl.id}
-            onClick={() => createAgent.mutate(tmpl.id)}
-          />
-        ))}
-      </div>
+      {!isPro ? (
+        <div className="agents-pro-gate">
+          <div className="agents-pro-gate-icon">🤖</div>
+          <p className="agents-pro-gate-title">Агенты доступны в тарифе Pro</p>
+          <p className="agents-pro-gate-sub">
+            Подключите Pro чтобы автоматизировать задачи в MAX
+          </p>
+          <button
+            className="btn-primary"
+            onClick={() => navigate("/profile")}
+          >
+            Перейти в Pro
+          </button>
+        </div>
+      ) : (
+        <>
+          {isDesktop && (
+            <p className="agents-page-sub agents-catalog-hint">
+              Выберите тип агента для настройки
+            </p>
+          )}
+          <div className="agents-catalog">
+            {AGENT_TEMPLATES.map((tmpl) => (
+              <AgentTemplateCard
+                key={tmpl.id}
+                template={tmpl}
+                loading={createAgent.isPending && createAgent.variables === tmpl.id}
+                onClick={() => createAgent.mutate(tmpl.id)}
+              />
+            ))}
+          </div>
+        </>
+      )}
+
+      {!isDesktop && (
+        <MobileNewThreadButton variant="labeled" onClick={() => navigate("/")} />
+      )}
     </div>
   );
 }
