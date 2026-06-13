@@ -47,10 +47,14 @@ async def handle_group_interactive(
         select(AgentInstance).where(
             AgentInstance.status == AgentStatus.ACTIVE.value,
             AgentInstance.role == AgentRole.DM_ASSISTANT.value,
-            AgentInstance.max_chat_id == chat_id,  # фильтр на уровне БД
+            AgentInstance.max_chat_id == chat_id,
         )
     )
     agents = list(result.scalars().all())
+    logger.info(
+        "GROUP_INTERACTIVE chat_id=%s found_agents=%s text_preview=%s",
+        chat_id, len(agents), (text or "")[:50],
+    )
     if not agents:
         return False
 

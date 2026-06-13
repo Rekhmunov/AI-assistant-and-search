@@ -184,7 +184,14 @@ async def max_webhook(
             return {"ok": True}
 
         text = message_text(payload)
-        if is_direct_message(payload) and max_user_id is not None:
+        is_dm = is_direct_message(payload)
+        chat_id = parse_chat_id(payload)
+        logger.info(
+            "WEBHOOK message_created: is_dm=%s chat_id=%s user_id=%s text_len=%s",
+            is_dm, chat_id, max_user_id, len(text or ""),
+        )
+
+        if is_dm and max_user_id is not None:
             background_tasks.add_task(
                 process_dm_message_background,
                 max_user_id=max_user_id,
@@ -194,7 +201,6 @@ async def max_webhook(
             )
             return {"ok": True}
 
-        chat_id = parse_chat_id(payload)
         if chat_id is not None:
             background_tasks.add_task(
                 process_group_message_background,
@@ -204,6 +210,8 @@ async def max_webhook(
                 message_id_value=message_id(payload),
                 payload=payload,
             )
+        else:
+            logger.warning("WEBHOOK message_created: could not parse chat_id from payload: %s", str(payload)[:500])
         return {"ok": True}
 
     return {"ok": True}
