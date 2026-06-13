@@ -31,6 +31,7 @@ ALLOWED_TOOLS = frozenset(
         "update_agent_memory",
         "read_max_api_docs",
         "read_knowledge_base",
+        "read_group_history",
     }
 )
 
@@ -236,10 +237,25 @@ def validate_tool_call(
         payload["section"] = section
 
     if name == "read_knowledge_base":
-        # Читает только чанки ТЕКУЩЕГО агента — agent_id жёстко привязан к объекту agent,
-        # аргументы не могут указать чужой agent_id.
         query = str(payload.get("query") or "").strip()[:500]
         payload["query"] = query
+
+    if name == "read_group_history":
+        # Читает историю только из чатов, привязанных к агенту
+        chat_id = payload.get("chat_id")
+        if chat_id is None:
+            chat_id = agent.max_chat_id
+        if chat_id is None:
+            raise AgentSecurityError("chat_id_required")
+        cid = int(chat_id)
+        if not chat_id_allowed(cid, agent, message_chat_id=message_chat_id):
+            raise AgentSecurityError("chat_id_forbidden")
+        payload["chat_id"] = cid
+        count = int(payload.get("count") or 50)
+        payload["count"] = min(count, 100)
+        from_ts = payload.get("from_timestamp")
+        if from_ts is not None:
+            payload["from_timestamp"] = int(from_ts)
 
     return payload
 

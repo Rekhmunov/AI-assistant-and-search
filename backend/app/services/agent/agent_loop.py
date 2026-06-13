@@ -559,9 +559,10 @@ def _template_tools_appendix(*, runtime: bool = False) -> str:
         return (
             "Доступные инструменты:\n"
             "- store_agent_record(table, data) — сохранить запись\n"
-            "- query_agent_records(table, category=null) — получить записи\n"
+            "- query_agent_records(table, category=null) — получить записи из БД\n"
             "- max_send_message(chat_id, text) — отправить текст в чат\n"
             "- max_send_file(chat_id, instruction, format) — файл (xlsx/docx/pdf)\n"
+            "- read_group_history(chat_id, count=50, from_timestamp=null) — история сообщений группы\n"
             "\n"
             'Формат JSON: {"plan": "кратко", "reply": "...", '
             '"tool_calls": [{"tool": "...", "arguments": {}}]}'

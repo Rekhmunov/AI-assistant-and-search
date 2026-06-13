@@ -243,6 +243,50 @@ class MaxBotService:
 
         return str(token) if token else None
 
+    async def get_group_messages(
+        self,
+        chat_id: int,
+        *,
+        from_timestamp: int | None = None,
+        count: int = 50,
+    ) -> list[dict]:
+        """
+        GET /messages?chat_id=...&from=...&count=...
+        Читает историю сообщений группы для восстановления пропущенных записей.
+        Требует что бот — администратор чата.
+        """
+        if not self.settings.bot_token.strip():
+            return []
+        params: dict = {"chat_id": int(chat_id), "count": min(count, 100)}
+        if from_timestamp is not None:
+            params["from"] = int(from_timestamp)
+
+        async def _get():
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                return await client.get(
+                    f"{BOT_API_BASE}/messages",
+                    params=params,
+                    headers=self._auth_headers(json_body=False),
+                )
+
+        try:
+            response = await self._request_with_rate_limit(_get)
+        except httpx.HTTPError as exc:
+            logger.warning("MAX get_group_messages network error chat_id=%s: %s", chat_id, exc)
+            return []
+        if not response.is_success:
+            logger.warning(
+                "MAX get_group_messages failed chat_id=%s HTTP %s: %s",
+                chat_id, response.status_code, response.text[:300],
+            )
+            return []
+        try:
+            data = response.json()
+        except ValueError:
+            return []
+        messages = data.get("messages") if isinstance(data, dict) else None
+        return messages if isinstance(messages, list) else []
+
     async def get_messages_by_ids(self, message_ids: list[str]) -> list[dict]:
         if not self.settings.bot_token.strip() or not message_ids:
             return []

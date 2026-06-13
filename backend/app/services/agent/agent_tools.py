@@ -100,6 +100,8 @@ async def execute_agent_tool(
             return _tool_read_max_api_docs(safe_args)
         if name == "read_knowledge_base":
             return await _tool_read_knowledge_base(db, agent, safe_args)
+        if name == "read_group_history":
+            return await _tool_read_group_history(bot, safe_args)
     except Exception as exc:
         logger.exception("Agent tool %s failed: %s", name, exc)
         raw = str(exc)[:300]
@@ -415,6 +417,48 @@ async def _tool_thread_summary(db: AsyncSession, *, thread_id: UUID) -> dict:
     msgs = list(reversed(result.scalars().all()))
     lines = [f"{m.role.value}: {m.content[:400]}" for m in msgs]
     return {"ok": True, "tool": "read_thread_summary", "result": {"messages": lines}}
+
+
+async def _tool_read_group_history(bot: MaxBotService, args: dict) -> dict:
+    """
+    Читает последние N сообщений из группы MAX.
+    Используется секретарём для восстановления пропущенных записей.
+    Требует бот — администратор группы.
+    """
+    chat_id = int(args["chat_id"])
+    count = int(args.get("count") or 50)
+    from_ts = args.get("from_timestamp")
+
+    messages = await bot.get_group_messages(
+        chat_id,
+        from_timestamp=int(from_ts) if from_ts is not None else None,
+        count=count,
+    )
+
+    # Упрощаем до текста и временной метки для LLM
+    simplified = []
+    for m in messages:
+        body = m.get("body") or {}
+        text = body.get("text") or m.get("text") or ""
+        sender = m.get("sender") or {}
+        is_bot = sender.get("is_bot", False)
+        timestamp = body.get("timestamp") or m.get("timestamp")
+        if text and not is_bot:
+            simplified.append({
+                "text": text[:500],
+                "timestamp": timestamp,
+                "author": sender.get("name") or "пользователь",
+            })
+
+    return {
+        "ok": True,
+        "tool": "read_group_history",
+        "result": {
+            "messages": simplified[:50],
+            "count": len(simplified),
+            "note": "Сообщения от пользователей, не от бота. Сравни с записями в БД для поиска пропусков.",
+        },
+    }
 
 
 async def _tool_read_knowledge_base(db: AsyncSession, agent: AgentInstance, args: dict) -> dict:
