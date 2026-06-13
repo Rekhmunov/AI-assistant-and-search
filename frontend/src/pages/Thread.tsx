@@ -395,10 +395,12 @@ export function Thread() {
   }, [id]);
 
   useEffect(() => {
-    if (thread && !streamingRef.current && !isRevealingRef.current) {
+    // Не синхронизируем пока агент обрабатывает запрос — иначе pending-тёрн
+    // исчезнет из UI когда фоновый рефетч вернёт API-состояние без нового сообщения.
+    if (thread && !streamingRef.current && !isRevealingRef.current && !agentLoading) {
       syncTurnsFromThread();
     }
-  }, [thread, syncTurnsFromThread]);
+  }, [thread, syncTurnsFromThread, agentLoading]);
 
   const updateScrollDownVisible = useCallback(() => {
     const el = getAnswerScrollEl();
