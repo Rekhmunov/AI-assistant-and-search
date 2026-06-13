@@ -39,8 +39,10 @@ export function AgentsPage() {
 
   const createAgent = useMutation({
     mutationFn: (templateId: string) => createAgentThreadWithTemplate(token, templateId),
-    onSuccess: (result) => {
-      queryClient.invalidateQueries({ queryKey: ["threads"] });
+    onSuccess: async (result) => {
+      // Сначала инвалидируем кеш — чтобы История обновилась сразу при заходе
+      await queryClient.invalidateQueries({ queryKey: ["threads"] });
+      queryClient.invalidateQueries({ queryKey: ["agents-list"] });
       navigate(`/thread/${result.thread.id}`, {
         state: { agentRevealWelcome: true },
       });
@@ -79,7 +81,7 @@ export function AgentsPage() {
                   key={tmpl.id}
                   template={tmpl}
                   loading={createAgent.isPending && createAgent.variables === tmpl.id}
-                  onClick={() => createAgent.mutate(tmpl.id)}
+                  onClick={() => { createAgent.reset(); createAgent.mutate(tmpl.id); }}
                 />
               ))}
             </div>
@@ -102,7 +104,7 @@ export function AgentsPage() {
                     key={tmpl.id}
                     template={tmpl}
                     loading={createAgent.isPending && createAgent.variables === tmpl.id}
-                    onClick={() => createAgent.mutate(tmpl.id)}
+                    onClick={() => { createAgent.reset(); createAgent.mutate(tmpl.id); }}
                   />
                 ))}
               </div>
