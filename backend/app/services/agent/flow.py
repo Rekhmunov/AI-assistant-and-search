@@ -120,7 +120,9 @@ async def create_agent_thread(
     db.add(agent)
     await db.flush()
 
-    welcome = await _assistant_reply(db, thread, AGENT_WELCOME)
+    from app.services.agent.templates import get_template_welcome
+    welcome_text = get_template_welcome(template) or AGENT_WELCOME
+    welcome = await _assistant_reply(db, thread, welcome_text)
     return thread, agent, welcome
 
 
