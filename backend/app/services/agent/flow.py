@@ -96,8 +96,10 @@ async def create_agent_thread(
 ) -> tuple[Thread, AgentInstance, Message]:
     from app.services.thread_factory import create_thread, next_agent_seq
 
+    from app.services.agent.templates import get_template_title
     seq = await next_agent_seq(db, user.id)
-    title = f"Агент {seq}"
+    template_name = get_template_title(template)
+    title = f"{template_name} {seq}" if template_name else f"Агент {seq}"
     thread = await create_thread(
         db,
         user_id=user.id,
