@@ -362,7 +362,7 @@ async def _tool_loop(
     # шаблонный промпт сам описывает только нужные инструменты.
     is_template_agent = bool(override_system_prompt)
     if is_template_agent:
-        extra = _template_tools_appendix()
+        extra = _template_tools_appendix(runtime=mode == "runtime")
     else:
         extra = tools_appendix_for_mode(runtime=mode == "runtime")
     if diagnostic_mode and mode == "onboarding":
@@ -553,8 +553,19 @@ def _compact_context_block(user, agent, checklist) -> str:
     return "\n".join(lines)
 
 
-def _template_tools_appendix() -> str:
-    """Минимальный appendix для шаблонных агентов — только формат ответа."""
+def _template_tools_appendix(*, runtime: bool = False) -> str:
+    """Appendix для шаблонных агентов — инструменты и формат ответа."""
+    if runtime:
+        return (
+            "Доступные инструменты:\n"
+            "- store_agent_record(table, data) — сохранить запись\n"
+            "- query_agent_records(table, category=null) — получить записи\n"
+            "- max_send_message(chat_id, text) — отправить текст в чат\n"
+            "- max_send_file(chat_id, instruction, format) — файл (xlsx/docx/pdf)\n"
+            "\n"
+            'Формат JSON: {"plan": "кратко", "reply": "...", '
+            '"tool_calls": [{"tool": "...", "arguments": {}}]}'
+        )
     return (
         'Формат JSON: {"plan": "...", "reply": "...", '
         '"tool_calls": [{"tool": "...", "arguments": {}}], '
