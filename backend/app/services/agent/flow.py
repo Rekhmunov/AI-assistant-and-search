@@ -18,7 +18,7 @@ from app.models.user import User
 from app.services.agent.constants import AGENT_WELCOME
 from app.services.agent.activity_log import append_agent_activity_log
 from app.services.agent.dispatch import dispatch_due_reminders
-from app.services.agent.max_group import enrich_group_admin_status
+from app.services.agent.max_group import enrich_group_admin_status, check_user_is_group_admin
 from app.services.agent.profile import agent_profile
 from app.services.agent.lifecycle import cancel_agent, get_agent_for_thread
 from app.services.agent.agent_loop import run_onboarding_loop
@@ -333,6 +333,41 @@ async def _handle_agent_message_body(
             if agent.max_chat_id:
                 await emit_status(status_cb, STATUS_PREFLIGHT)
                 bot = MaxBotService()
+
+                # Безопасность: пользователь должен быть администратором группы
+                # чтобы не допустить публикации в чужие группы
+                if user.max_user_id:
+                    user_is_admin = await check_user_is_group_admin(
+                        bot, int(agent.max_chat_id), int(user.max_user_id)
+                    )
+                    if user_is_admin is False:
+                        cfg = dict(agent.config or {})
+                        cfg["awaiting_confirmation"] = True
+                        agent.config = cfg
+                        await append_agent_activity_log(
+                            db, agent, "user_not_group_admin",
+                            details={"chat_id": agent.max_chat_id, "max_user_id": user.max_user_id},
+                            level="error",
+                        )
+                        assistant = await _assistant_reply(
+                            db,
+                            thread,
+                            (
+                                "Не могу запустить агента: вы не являетесь администратором этой группы MAX.\n\n"
+                                "Для публикации в группу вам нужны права администратора. "
+                                "Попросите владельца группы выдать вам права, затем попробуйте снова."
+                            ),
+                        )
+                        await db.commit()
+                        return user_msg, assistant, agent
+                    elif user_is_admin is None:
+                        # Не удалось проверить — бот не в группе или нет доступа к members.
+                        # Предупреждаем, но не блокируем: бот-preflight проверит дальше.
+                        logger.warning(
+                            "Could not verify user admin status chat_id=%s user=%s",
+                            agent.max_chat_id, user.max_user_id
+                        )
+
                 probe = await probe_max_chat(bot, int(agent.max_chat_id), send_test=False)
                 await append_agent_activity_log(
                     db,
