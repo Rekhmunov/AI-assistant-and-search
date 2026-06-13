@@ -13,6 +13,7 @@ from app.schemas.agent import (
     AgentActivityLogOut,
     AgentActivityLogsOut,
     AgentMessageIn,
+    AgentThreadCreateIn,
     AgentThreadCreateOut,
 )
 from app.schemas.thread import MessageOut, ThreadListItem
@@ -35,10 +36,12 @@ router = APIRouter(prefix="/agent", tags=["agent"])
 async def create_agent_thread_endpoint(
     db: Annotated[AsyncSession, Depends(get_db)],
     user: Annotated[User, Depends(get_current_user)],
+    body: AgentThreadCreateIn | None = None,
 ):
     require_agent_eligible(user)
+    template = (body.template if body else None) or None
 
-    thread, _agent, welcome = await create_agent_thread(db, user)
+    thread, _agent, welcome = await create_agent_thread(db, user, template=template)
     await db.commit()
     await db.refresh(thread)
     await db.refresh(welcome)

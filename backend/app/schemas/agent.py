@@ -18,6 +18,10 @@ class AgentMessageIn(BaseModel):
         return self
 
 
+class AgentThreadCreateIn(BaseModel):
+    template: str | None = Field(default=None, max_length=64)
+
+
 class AgentThreadCreateOut(BaseModel):
     thread: ThreadListItem
     welcome_message: MessageOut

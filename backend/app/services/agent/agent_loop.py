@@ -118,10 +118,23 @@ async def run_onboarding_loop(
 
     sync_spec_from_checklist(agent, checklist.to_dict(), last_user)
 
-    # Шаг 1 — классификация (каждое сообщение)
-    category = "answer_here"
+    # Шаг 1 — выбор промпта
+    # Приоритет: template из конфига агента → классификатор → общий промпт
+    from app.services.agent.templates import get_template_prompt
+
+    agent_cfg = dict(agent.config or {})
+    template = agent_cfg.get("template")
+    template_prompt = get_template_prompt(template)
+
+    specialized_prompt: str | None = None
     classification_plan: str | None = None
-    if last_user and not diagnostic_mode:
+
+    if template_prompt:
+        # Шаблонный агент — используем специализированный промпт без классификатора
+        specialized_prompt = template_prompt
+        logger.info("Agent using template=%s prompt", template)
+    elif last_user and not diagnostic_mode:
+        # Нет шаблона — классифицируем задачу
         await emit_status(on_status, "Определяю задачу…")
         llm_for_classify, _, _, _, _ = await resolve_runtime_providers(db, redis_client, user=user)
         clf = await classify_user_intent(llm_for_classify, last_user, history[:-1])
@@ -129,7 +142,6 @@ async def run_onboarding_loop(
         classification_plan = clf.plan
         logger.info("Agent classified: category=%s plan=%s ready=%s", category, clf.plan[:80], clf.ready)
 
-        # Если классификатор хочет уточнить — отвечаем сразу
         if not clf.ready and clf.confirm:
             return LlmTurnResult(
                 reply=clf.confirm,
@@ -138,12 +150,10 @@ async def run_onboarding_loop(
                 activate=False,
             )
 
-        # Сообщаем план в панель размышлений
         if reporter and classification_plan:
             await reporter.emit_thinking(f"[{category}] {classification_plan}")
 
-    # Шаг 2 — выбор специализированного промпта
-    specialized_prompt = get_system_prompt(category)
+        specialized_prompt = get_system_prompt(category)
 
     result, tool_trace = await _tool_loop(
         db,

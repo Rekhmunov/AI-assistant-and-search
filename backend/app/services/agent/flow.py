@@ -91,6 +91,8 @@ async def _user_message(db: AsyncSession, thread: Thread, content: str) -> Messa
 async def create_agent_thread(
     db: AsyncSession,
     user: User,
+    *,
+    template: str | None = None,
 ) -> tuple[Thread, AgentInstance, Message]:
     from app.services.thread_factory import create_thread, next_agent_seq
 
@@ -104,12 +106,16 @@ async def create_agent_thread(
         agent_seq=seq,
     )
     max_uid = int(user.max_user_id) if user.max_user_id else 0
+    agent_config: dict = {"checklist": {}}
+    if template:
+        agent_config["template"] = template
+
     agent = AgentInstance(
         thread_id=thread.id,
         user_id=user.id,
         max_user_id=max_uid,
         status=AgentStatus.DRAFT.value,
-        config={"checklist": {}},
+        config=agent_config,
     )
     db.add(agent)
     await db.flush()

@@ -620,6 +620,23 @@ export async function createAgentThread(token: string | null): Promise<AgentThre
   return res.json();
 }
 
+export async function createAgentThreadWithTemplate(
+  token: string | null,
+  template: string,
+): Promise<AgentThreadCreateResponse> {
+  const res = await fetchAgentWithRetry(
+    `${API_BASE}/api/agent/threads`,
+    token,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ template }),
+    },
+    "Не удалось создать агента. Попробуйте ещё раз.",
+  );
+  return res.json();
+}
+
 export type AgentThinkingEvent =
   | { type: "thinking"; text: string }
   | { type: "tool_call"; tool: string; arguments: Record<string, unknown> }
