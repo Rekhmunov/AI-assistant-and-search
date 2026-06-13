@@ -63,42 +63,55 @@ export function AgentsPage() {
         />
       )}
 
-      {!isPro ? (
-        <div className="agents-pro-gate">
-          <div className="agents-pro-gate-icon">🤖</div>
-          <p className="agents-pro-gate-title">Агенты доступны в тарифе Pro</p>
-          <p className="agents-pro-gate-sub">
-            Подключите Pro чтобы автоматизировать задачи в MAX
-          </p>
-          <button
-            className="btn-primary"
-            onClick={() => navigate("/profile")}
-          >
-            Перейти в Pro
-          </button>
-        </div>
+      {isDesktop ? (
+        <>
+          {!isPro ? (
+            <div className="agents-pro-gate">
+              <div className="agents-pro-gate-icon">🤖</div>
+              <p className="agents-pro-gate-title">Агенты доступны в тарифе Pro</p>
+              <p className="agents-pro-gate-sub">Подключите Pro чтобы автоматизировать задачи в MAX</p>
+              <button className="btn-primary" onClick={() => navigate("/profile")}>Перейти в Pro</button>
+            </div>
+          ) : (
+            <div className="agents-catalog">
+              {AGENT_TEMPLATES.map((tmpl) => (
+                <AgentTemplateCard
+                  key={tmpl.id}
+                  template={tmpl}
+                  loading={createAgent.isPending && createAgent.variables === tmpl.id}
+                  onClick={() => createAgent.mutate(tmpl.id)}
+                />
+              ))}
+            </div>
+          )}
+        </>
       ) : (
         <>
-          {isDesktop && (
-            <p className="agents-page-sub agents-catalog-hint">
-              Выберите тип агента для настройки
-            </p>
-          )}
-          <div className="agents-catalog">
-            {AGENT_TEMPLATES.map((tmpl) => (
-              <AgentTemplateCard
-                key={tmpl.id}
-                template={tmpl}
-                loading={createAgent.isPending && createAgent.variables === tmpl.id}
-                onClick={() => createAgent.mutate(tmpl.id)}
-              />
-            ))}
+          <div className="agents-scroll">
+            {!isPro ? (
+              <div className="agents-pro-gate">
+                <div className="agents-pro-gate-icon">🤖</div>
+                <p className="agents-pro-gate-title">Агенты доступны в тарифе Pro</p>
+                <p className="agents-pro-gate-sub">Подключите Pro чтобы автоматизировать задачи в MAX</p>
+                <button className="btn-primary" onClick={() => navigate("/profile")}>Перейти в Pro</button>
+              </div>
+            ) : (
+              <div className="agents-catalog">
+                {AGENT_TEMPLATES.map((tmpl) => (
+                  <AgentTemplateCard
+                    key={tmpl.id}
+                    template={tmpl}
+                    loading={createAgent.isPending && createAgent.variables === tmpl.id}
+                    onClick={() => createAgent.mutate(tmpl.id)}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+          <div className="mobile-new-thread-bar mobile-new-thread-bar--docked">
+            <MobileNewThreadButton variant="labeled" onClick={() => navigate("/")} />
           </div>
         </>
-      )}
-
-      {!isDesktop && (
-        <MobileNewThreadButton variant="labeled" onClick={() => navigate("/")} />
       )}
     </div>
   );

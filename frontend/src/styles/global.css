@@ -312,7 +312,8 @@ body:has(.page-thread) {
   }
 
   .page-profile--mobile > .mobile-new-thread-bar--docked,
-  .page-history--mobile > .mobile-new-thread-bar--docked {
+  .page-history--mobile > .mobile-new-thread-bar--docked,
+  .page-agents--mobile > .mobile-new-thread-bar--docked {
     position: static;
     flex-shrink: 0;
     pointer-events: auto;
@@ -323,6 +324,34 @@ body:has(.page-thread) {
     background: var(--bg);
     border-top: 1px solid var(--border-subtle);
     z-index: auto;
+  }
+
+  .page-agents--mobile {
+    display: flex;
+    flex-direction: column;
+    height: 100dvh;
+    max-height: 100dvh;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .page-agents--mobile .agents-scroll {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    padding: 0 16px 16px;
+  }
+
+  .page-agents--mobile .agents-pro-gate {
+    padding: 40px 16px;
+  }
+
+  .page-profile > :not(.thread-mobile-header):not(.mobile-new-thread-bar),
+  .page-history > :not(.thread-mobile-header):not(.mobile-new-thread-bar),
+  .page-agents > :not(.thread-mobile-header):not(.mobile-new-thread-bar):not(.agents-scroll) {
+    padding-left: 16px;
+    padding-right: 16px;
   }
 
   .page-history--mobile .history-list {
@@ -6753,15 +6782,7 @@ body:has(.page-thread) {
 
 .page-agents--mobile {
   padding-top: 0;
-  padding-bottom: 80px;
-}
-
-.page-agents--mobile .agents-catalog {
-  padding: 0 16px;
-}
-
-.page-agents--mobile .agents-pro-gate {
-  padding: 60px 24px;
+  padding-bottom: 0;
 }
 
 .agents-catalog-hint {
