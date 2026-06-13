@@ -118,18 +118,18 @@ async def run_onboarding_loop(
 
     sync_spec_from_checklist(agent, checklist.to_dict(), last_user)
 
-    # Шаг 1 — классификация (только для новых сообщений, не диагностики)
+    # Шаг 1 — классификация (каждое сообщение)
     category = "answer_here"
     classification_plan: str | None = None
     if last_user and not diagnostic_mode:
         await emit_status(on_status, "Определяю задачу…")
-        llm_for_classify, _, answer_model, _, _ = await resolve_runtime_providers(db, redis_client, user=user)
+        llm_for_classify, _, _, _, _ = await resolve_runtime_providers(db, redis_client, user=user)
         clf = await classify_user_intent(llm_for_classify, last_user, history[:-1])
         category = clf.category
         classification_plan = clf.plan
         logger.info("Agent classified: category=%s plan=%s ready=%s", category, clf.plan[:80], clf.ready)
 
-        # Если классификатор хочет уточнить и есть вопрос — отвечаем сразу
+        # Если классификатор хочет уточнить — отвечаем сразу
         if not clf.ready and clf.confirm:
             return LlmTurnResult(
                 reply=clf.confirm,
