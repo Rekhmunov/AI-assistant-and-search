@@ -1003,16 +1003,9 @@ export function Thread() {
     attachments: ComposerAttachment[];
   }) => {
     if (isAgentThread) {
-      if (agentMessageUsesSearchFlow(payload.query, payload.attachmentIds)) {
-        runSearch(
-          payload.query,
-          threadId,
-          payload.attachmentIds,
-          mapComposerAttachments(payload.attachments),
-        );
-      } else {
-        void runAgentMessage(payload.query, threadId, payload.attachmentIds);
-      }
+      // В агентском треде ВСЕ сообщения идут в агент — без keyword-роутинга.
+      // Агент сам решает что делать: выполнить сразу или настроить автоматизацию.
+      void runAgentMessage(payload.query, threadId, payload.attachmentIds);
       return;
     }
     runSearch(
