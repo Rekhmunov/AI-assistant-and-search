@@ -456,9 +456,9 @@ export function Thread() {
       setAgentLoading(true);
       setAgentStatusText(t("agentStatusThinking"));
       setSearchPhase("routing");
+      const pendingKey = `agent-${Date.now()}`;
       currentThinkingKeyRef.current = pendingKey;
       setAgentThinkingByKey((prev) => ({ ...prev, [pendingKey]: [] }));
-      const pendingKey = `agent-${Date.now()}`;
       setTurns((prev) => [
         ...prev,
         {
