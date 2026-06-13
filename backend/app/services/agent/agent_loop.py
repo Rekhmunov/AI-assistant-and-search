@@ -103,18 +103,47 @@ async def run_onboarding_loop(
     on_status: StatusCallback | None = None,
     reporter: AgentStatusReporter | None = None,
 ) -> LlmTurnResult:
-    """Настройка в Glosix: checklist + рефлексия + память."""
+    """Настройка в Glosix: классификатор → специализированный промпт → рефлексия → память."""
+    from app.services.agent.classifier import classify_user_intent, get_system_prompt
+    from app.services.agent.intent_hints import _extract_max_chat_id
+    from app.services.agent.operational import bind_chat_to_current_agent
+
     checklist = load_checklist(agent)
     history = history_messages_for_agent(messages, agent)
     last_user = history[-1]["text"] if history and history[-1]["role"] == "user" else ""
-    from app.services.agent.intent_hints import _extract_max_chat_id
-    from app.services.agent.operational import bind_chat_to_current_agent
 
     cid = _extract_max_chat_id(last_user)
     if cid is not None:
         bind_chat_to_current_agent(agent, int(cid))
 
     sync_spec_from_checklist(agent, checklist.to_dict(), last_user)
+
+    # Шаг 1 — классификация (только для новых сообщений, не диагностики)
+    category = "answer_here"
+    classification_plan: str | None = None
+    if last_user and not diagnostic_mode:
+        await emit_status(on_status, "Определяю задачу…")
+        llm_for_classify, _, answer_model, _, _ = await resolve_runtime_providers(db, redis_client, user=user)
+        clf = await classify_user_intent(llm_for_classify, last_user, history[:-1])
+        category = clf.category
+        classification_plan = clf.plan
+        logger.info("Agent classified: category=%s plan=%s ready=%s", category, clf.plan[:80], clf.ready)
+
+        # Если классификатор хочет уточнить и есть вопрос — отвечаем сразу
+        if not clf.ready and clf.confirm:
+            return LlmTurnResult(
+                reply=clf.confirm,
+                checklist=checklist,
+                ready_for_confirmation=False,
+                activate=False,
+            )
+
+        # Сообщаем план в панель размышлений
+        if reporter and classification_plan:
+            await reporter.emit_thinking(f"[{category}] {classification_plan}")
+
+    # Шаг 2 — выбор специализированного промпта
+    specialized_prompt = get_system_prompt(category)
 
     result, tool_trace = await _tool_loop(
         db,
@@ -130,6 +159,7 @@ async def run_onboarding_loop(
         diagnostic_mode=diagnostic_mode,
         on_status=on_status,
         reporter_obj=reporter,
+        override_system_prompt=specialized_prompt,
     )
     if isinstance(result, LlmTurnResult):
         draft = prefer_web_search_answer(result.reply, tool_trace)
@@ -281,6 +311,7 @@ async def _tool_loop(
     runtime_chat_id: int | None = None,
     author: str = "",
     reporter_obj: AgentStatusReporter | None = None,
+    override_system_prompt: str | None = None,
 ) -> tuple[LlmTurnResult | RuntimeLoopResult, list[dict]]:
     from app.services.agent.agent_tools import agent_runtime_diagnostics
 
@@ -324,6 +355,8 @@ async def _tool_loop(
         payload: list[dict[str, str]] = []
         if mode == "runtime":
             payload.append({"role": "system", "text": RUNTIME_SYSTEM_PROMPT})
+        elif override_system_prompt:
+            payload.append({"role": "system", "text": override_system_prompt})
         else:
             payload.append({"role": "system", "text": AGENT_SYSTEM_PROMPT})
         payload.append({"role": "system", "text": extra})
