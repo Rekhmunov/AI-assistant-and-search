@@ -35,8 +35,13 @@ def test_chat_id_allowed_for_agent():
 
 
 def test_test_send_requires_consent():
+    # Any non-empty user text in a Glosix agent thread is considered explicit interaction.
+    # Real protection is the chat_id binding (validate_tool_call), not keyword matching.
     assert user_consented_test_send("проверь связь с группой")
-    assert not user_consented_test_send("привет")
+    assert user_consented_test_send("прямо сейчас")
+    assert user_consented_test_send("привет")
+    assert not user_consented_test_send("")
+    assert not user_consented_test_send("   ")
 
 
 def test_max_send_message_allowed_with_consent():
