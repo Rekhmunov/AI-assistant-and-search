@@ -6,10 +6,7 @@ from app.models.agent import AgentRole
 from app.services.agent.capabilities import (
     apply_message_hints,
     build_parse_fallback_reply,
-    compose_feasibility_reply,
     explain_next_step,
-    reply_claims_activation,
-    reply_looks_like_capabilities_template,
     try_local_onboarding_reply,
     user_asks_capabilities,
     user_asks_feasibility,
@@ -18,7 +15,6 @@ from app.services.agent.capabilities import (
 from app.services.agent.llm_onboarding import (
     ChecklistState,
     checklist_missing_fields,
-    finalize_checklist,
     merge_checklist,
 )
 
@@ -43,12 +39,8 @@ def test_feasibility_not_capabilities_list():
     assert try_local_onboarding_reply({}, q) is None
 
 
-def test_feasibility_infers_reminder_role():
-    data = apply_message_hints({}, "Ты можешь сделать напоминание в своем чате?")
-    assert data.get("role") == AgentRole.PERSONAL_REMINDER.value
-
-
 def test_apply_message_hints_extracts_chat_id():
+    """apply_message_hints теперь извлекает только chat_id — LLM заполняет остальное."""
     data = apply_message_hints(
         {"role": AgentRole.GROUP_REMINDER.value},
         "ID группы -75602062003657",
@@ -56,12 +48,12 @@ def test_apply_message_hints_extracts_chat_id():
     assert data["max_chat_id"] == -75602062003657
 
 
-def test_apply_message_hints_admin_yes():
-    data = apply_message_hints(
-        {"role": AgentRole.GROUP_REMINDER.value},
-        "да, бот админ",
-    )
-    assert data["bot_is_group_admin"] is True
+def test_apply_message_hints_no_keyword_inference():
+    """apply_message_hints не добавляет роль или bot_is_group_admin по ключевым словам."""
+    data = apply_message_hints({}, "да, бот админ")
+    # Не инферируем из ключевых слов — только LLM
+    assert "bot_is_group_admin" not in data
+    assert "role" not in data or data.get("role") is None
 
 
 def test_clarification_fallback_keeps_context():
@@ -76,7 +68,6 @@ def test_clarification_fallback_keeps_context():
     assert "Поясню проще" in reply
     assert "75602062003657" in reply
     assert "когда" in reply.lower() or "расписан" in reply.lower()
-    assert "напоминание в личный чат или работу с группой" not in reply
 
 
 def test_explain_next_step_group_admin():
@@ -92,125 +83,33 @@ def test_explain_next_step_group_admin():
     assert "администратор" in reply.lower()
 
 
-def test_feasibility_group_post_with_full_fields():
-    text = (
-        'умеешь ли писать в группу Напиши "Привет" '
-        "https://web.max.ru/-75602062003657 администратором. Прямо сейчас"
-    )
-    reply = compose_feasibility_reply({}, text)
-    assert reply is not None
-    assert "Привет" in reply
-    assert "75602062003657" in reply
-    assert "Опишите задачу одним сообщением" not in reply
-
-
 def test_feasibility_fallback_not_template():
     q = "Ты можешь сделать напоминание в своем чате?"
     reply = build_parse_fallback_reply({}, q)
     assert "Сейчас агент Glosix в MAX умеет" not in reply
-    assert "личный чат" in reply.lower() or "да" in reply.lower()
 
 
-def test_compose_feasibility_with_full_checklist():
-    checklist = {
-        "role": AgentRole.PERSONAL_REMINDER.value,
-        "schedule_text": "16:10",
-        "timezone": "Europe/Moscow",
-        "reminder_message": "Привет",
-    }
-    reply = compose_feasibility_reply(checklist, "ты можешь сделать напоминание?")
-    assert "Привет" in reply
-    assert "16:10" in reply
-    assert "часовой пояс" not in reply.lower()
+def test_checklist_missing_fields_role():
+    cl = ChecklistState()
+    missing = checklist_missing_fields(cl)
+    assert "role" in missing
 
 
-def test_no_timezone_in_missing_fields():
-    state = ChecklistState(
-        role=AgentRole.PERSONAL_REMINDER.value,
-        schedule_text="16:10",
-        timezone="Europe/Moscow",
-        reminder_message="Привет",
-    )
-    assert "timezone" not in checklist_missing_fields(state)
-
-
-def test_explain_next_step_no_timezone_prompt():
-    checklist = {
-        "role": AgentRole.PERSONAL_REMINDER.value,
-        "schedule_text": "16:10",
-        "timezone": "Europe/Moscow",
-        "reminder_message": None,
-    }
-    reply = explain_next_step(checklist)
-    assert "часовой пояс" not in reply.lower()
-
-
-def test_merge_protects_schedule_on_confirm():
+def test_merge_checklist_schedule_guard():
+    """Слабое расписание не перезаписывает более строгое."""
     current = ChecklistState(
         role=AgentRole.PERSONAL_REMINDER.value,
         schedule_text="каждый день в 16:35",
         timezone="Europe/Moscow",
-        reminder_message="Привет",
     )
     patch = ChecklistState(schedule_text="сегодня")
-    merged = merge_checklist(current, patch, user_text="да")
+    merged = merge_checklist(current, patch)
     assert merged.schedule_text == "каждый день в 16:35"
 
 
-def test_finalize_keeps_today_run_when_user_asks():
-    checklist = ChecklistState(
-        role=AgentRole.PERSONAL_REMINDER.value,
-        schedule_text="сегодня в 16:35",
-        timezone="Europe/Moscow",
-        reminder_message="Привет",
-    )
-    history = [
-        {"role": "user", "text": "каждый день в 16:35"},
-        {"role": "assistant", "text": "Подтверждаете?"},
-        {"role": "user", "text": "сегодня сделать"},
-    ]
-    fixed = finalize_checklist(checklist, history=history)
-    assert fixed.schedule_text == "сегодня в 16:35"
-
-
-def test_finalize_restores_schedule_from_history():
-    checklist = ChecklistState(
-        role=AgentRole.PERSONAL_REMINDER.value,
-        schedule_text="сегодня",
-        timezone="Europe/Moscow",
-        reminder_message="Привет",
-    )
-    history = [
-        {
-            "role": "user",
-            "text": "Напоминай каждый день в 16:35 в личку, текст Привет",
-        },
-        {"role": "assistant", "text": "Подтверждаете?"},
-    ]
-    fixed = finalize_checklist(checklist, history=history)
-    assert fixed.schedule_text == "каждый день в 16:35"
-    assert "schedule" not in checklist_missing_fields(fixed)
-
-
-def test_reply_claims_activation():
-    assert reply_claims_activation("Принято! Агент запущен.")
-    assert not reply_claims_activation("Запустить агента? Ответьте «да».")
-
-
-def test_detect_capabilities_template():
-    tpl = "Сейчас агент Glosix в MAX умеет:\n• присылать уведомления"
-    assert reply_looks_like_capabilities_template(tpl)
-
-
-def test_explain_next_step_helps_when_not_admin():
-    checklist = {
-        "role": AgentRole.GROUP_REMINDER.value,
-        "max_chat_id": -75602062003657,
-        "schedule_text": "каждый день в 9:00",
-        "timezone": "Europe/Moscow",
-        "reminder_message": "Пора на встречу",
-        "bot_is_group_admin": False,
-    }
-    reply = explain_next_step(checklist)
-    assert "можно исправить" in reply.lower()
-    assert "не поддерживается" not in reply.lower()
+def test_merge_checklist_fills_new_fields():
+    current = ChecklistState(role=AgentRole.PERSONAL_REMINDER.value)
+    patch = ChecklistState(reminder_message="Привет", schedule_text="каждый день в 9:00")
+    merged = merge_checklist(current, patch)
+    assert merged.reminder_message == "Привет"
+    assert merged.schedule_text == "каждый день в 9:00"

@@ -2,43 +2,22 @@
 
 from __future__ import annotations
 
-import re
 from uuid import UUID
 
 from app.models.agent import AgentInstance, AgentStatus
 from app.models.message import Message, MessageRole
-from app.services.agent.capabilities import _has_task_hint
 from app.services.agent.llm_onboarding import user_wants_cancel
 
-_CONTEXT_RESET_MARKERS = (
+# Минимальный набор явных команд сброса — достаточно узких чтобы не ловить случайные фразы.
+# LLM обрабатывает более тонкие вариации через системный промпт.
+_CONTEXT_RESET_PHRASES = (
     "сбрось контекст",
     "сбросить контекст",
     "очисти контекст",
-    "очистить контекст",
-    "сброс контекста",
-    "сбрось историю",
-    "сбросить историю",
-    "забудь предыдущ",
-    "забудь всё",
-    "забудь все",
-    "забудь контекст",
     "начни заново",
     "начни сначала",
-    "начнём заново",
-    "начнем заново",
-    "начать заново",
-    "новый диалог",
-    "очисти историю",
-    "очистить историю",
     "reset context",
     "clear context",
-)
-
-_PURE_RESET_RE = re.compile(
-    r"^[\s,.!?«»\"'`—–-]*(?:"
-    + "|".join(re.escape(m) for m in _CONTEXT_RESET_MARKERS)
-    + r")[\s,.!?«»\"'`—–-]*$",
-    re.I,
 )
 
 
@@ -46,7 +25,7 @@ def user_wants_context_reset(text: str) -> bool:
     low = (text or "").strip().lower()
     if not low or user_wants_cancel(text):
         return False
-    return any(marker in low for marker in _CONTEXT_RESET_MARKERS)
+    return any(phrase in low for phrase in _CONTEXT_RESET_PHRASES)
 
 
 def is_pure_context_reset_request(text: str) -> bool:
@@ -54,15 +33,11 @@ def is_pure_context_reset_request(text: str) -> bool:
     raw = (text or "").strip()
     if not raw or not user_wants_context_reset(raw):
         return False
-    if _PURE_RESET_RE.match(raw):
-        return True
-    if _has_task_hint(raw):
-        return False
     low = raw.lower()
-    for marker in _CONTEXT_RESET_MARKERS:
-        if marker not in low:
+    for phrase in _CONTEXT_RESET_PHRASES:
+        if phrase not in low:
             continue
-        remainder = low.replace(marker, " ").strip(" .,!?:;—-")
+        remainder = low.replace(phrase, " ").strip(" .,!?:;—-")
         if not remainder or len(remainder) < 8:
             return True
     return False

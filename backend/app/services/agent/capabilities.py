@@ -279,27 +279,20 @@ def compose_feasibility_reply(checklist: dict[str, Any], user_text: str) -> str 
 
 
 def apply_message_hints(checklist: dict[str, Any], text: str) -> dict[str, Any]:
-    """Извлекает из реплики пользователя поля чеклиста без участия LLM."""
-    from app.services.agent.intent_hints import infer_checklist_fields
-    from app.services.agent.operational import is_assist_turn
-
+    """Извлекает только структурные данные (chat_id) — LLM заполняет остальное."""
     data = dict(checklist)
     clean = (text or "").strip()
     if not clean:
         return data
 
-    if is_assist_turn(clean):
-        from app.services.agent.intent_hints import _extract_max_chat_id
+    # Единственное что извлекаем без LLM — числовой chat_id из ссылки/сообщения.
+    # Всё остальное (роль, режим, scope) — на усмотрение LLM.
+    from app.services.agent.intent_hints import _extract_max_chat_id
+    chat_id = extract_chat_id(clean) or _extract_max_chat_id(clean)
+    if chat_id is not None:
+        data["max_chat_id"] = chat_id
 
-        chat_id = extract_chat_id(clean) or _extract_max_chat_id(clean)
-        if chat_id is not None:
-            data["max_chat_id"] = chat_id
-        data["role"] = None
-        for key in ("interaction_mode", "scope", "support_instructions", "dm_command"):
-            data.pop(key, None)
-        return _ensure_timezone(data)
-
-    data = infer_checklist_fields(clean, data)
+    return data
 
     chat_id = extract_chat_id(clean)
     if chat_id is not None:

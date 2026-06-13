@@ -145,7 +145,7 @@ async def handle_dm_message(
             mode = interaction_mode(agent_config(agent))
             if mode in {"support", "both"}:
                 lines.append("Можно писать обычным текстом — бот ответит как поддержка.")
-                if has_images or True:
+                if has_images:
                     lines.append("Можно отправить фото с подписью «переведи текст с картинки».")
                 break
         await bot.send_message(max_user_id, "\n\n".join(lines) if lines else "Агенты активны.")

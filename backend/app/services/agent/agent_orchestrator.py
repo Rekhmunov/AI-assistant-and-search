@@ -22,7 +22,6 @@ from app.services.agent.llm_onboarding import (
     merge_checklist,
 )
 from app.services.agent.intent_hints import user_wants_immediate_run, user_wants_today_run
-from app.services.agent.llm_onboarding import user_wants_confirm  # noqa: F401 — re-export path
 
 logger = logging.getLogger(__name__)
 
@@ -110,25 +109,16 @@ def _str_or_none(value: Any) -> str | None:
 
 
 def user_wants_diagnostic(text: str) -> bool:
+    """
+    Определяет диагностический запрос — когда пользователь спрашивает о проблеме
+    с работой агента, а не задаёт новую задачу настройки.
+    Используется только как хинт для выбора diagnostic_mode в tool loop.
+    """
     from app.services.agent.operational import is_operational_max_query
 
+    # Явные проверки доступа/прав — всегда диагностика
     if is_operational_max_query(text):
         return True
-    low = (text or "").lower()
-    markers = (
-        "почему не",
-        "не отправ",
-        "не работ",
-        "не пишет",
-        "не постит",
-        "ошибк",
-        "журнал",
-        "диагност",
-        "проверь",
-        "что не так",
-        "статус агента",
-        "не приход",
-        "сломал",
-        "перестал",
-    )
-    return any(m in low for m in markers)
+    # Для остального — LLM рассуждает через diagnostic_snapshot в контексте
+    # если agent_status=ACTIVE и пользователь описывает проблему
+    return False

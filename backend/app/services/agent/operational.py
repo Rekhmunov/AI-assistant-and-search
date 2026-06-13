@@ -1,29 +1,11 @@
-"""Операционные запросы в треде агента (проверка админа, связи) без онбординга."""
+"""Вспомогательные функции операционного контекста агента."""
 
 from __future__ import annotations
 
 import re
-from uuid import UUID
-
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.agent import AgentInstance
-from datetime import datetime, timezone
-
-from app.models.message import Message, MessageRole
-from app.models.thread import Thread
-from app.models.user import User
-from app.services.agent.activity_log import append_agent_activity_log
 from app.services.agent.intent_hints import _extract_max_chat_id
-from app.services.agent.max_probe import probe_max_chat
-from app.services.agent.agent_status import (
-    STATUS_ADMIN_CHECK,
-    STATUS_MAX_CHAT,
-    StatusCallback,
-    emit_status,
-    noop_status,
-)
-from app.services.bot import MaxBotService
 
 
 def user_wants_admin_check(text: str) -> bool:
@@ -32,110 +14,65 @@ def user_wants_admin_check(text: str) -> bool:
         return False
     if _has_write_to_group_intent(low):
         return False
-    if any(
-        q in low
-        for q in (
-            "ты там админ",
-            "ты админ",
-            "админ ли",
-            "ли админ",
-            "являешься админ",
-            "является админ",
-            "где ты админ",
-            "в которых ты админ",
-            "чаты, в которых",
-            "чатах, в которых",
-        )
-    ):
-        return True
-    if "бот админ" in low and ("?" in low or re.search(r"провер\w*|ли\b", low)):
-        return True
-    if re.search(r"чат", low) and re.search(r"админ", low) and re.search(r"провер\w*|какие|где|список", low):
-        return True
-    if "?" in low and re.search(r"провер\w*", low):
-        return True
-    return False
+    return True
 
 
 def is_bare_max_link_message(text: str) -> bool:
-    """Сообщение в основном ссылка или ID группы MAX — контекст, не задача на настройку."""
-    clean = (text or "").strip()
-    chat_id = _extract_max_chat_id(clean)
-    if chat_id is None:
-        return False
-    remainder = re.sub(r"https?://\S+", "", clean)
-    remainder = re.sub(r"-?\d{5,}", "", remainder)
-    remainder = re.sub(r"[^\wа-яё]+", " ", remainder, flags=re.I).strip().lower()
-    noise = {"max", "ru", "web", "группа", "чат", "ссылка", "вот", "id"}
-    tokens = [t for t in remainder.split() if t and t not in noise]
-    return len("".join(tokens)) < 12
-
-
-def is_assist_turn(text: str) -> bool:
-    """Помощь/диагностика — агент сам решает через tools, без автозаполнения checklist."""
+    """Сообщение содержит только ссылку/ID группы MAX без другого контента."""
     clean = (text or "").strip()
     if not clean:
         return False
-    low = clean.lower()
-    if _has_write_to_group_intent(low):
+    cid = _extract_max_chat_id(clean)
+    if cid is None:
         return False
-    if is_operational_max_query(clean):
-        return True
-    if is_bare_max_link_message(clean):
-        return True
-    if user_wants_admin_check(clean):
-        return True
-    if re.search(r"провер\w*", low) and re.search(r"чат|групп|max|бот", low):
-        return True
-    if _extract_max_chat_id(clean) and re.search(r"выше|раньше|писал|скинул|прислал", low):
-        return True
-    return False
+    noise = {"max", "ru", "web", "http", "https", "группа", "чат", "канал", "ссылка"}
+    remainder = clean.lower()
+    remainder = re.sub(r"https?://\S+", "", remainder)
+    remainder = re.sub(r"-?\d{5,}", "", remainder)
+    for token in noise:
+        remainder = remainder.replace(token, "")
+    remainder = re.sub(r"[^a-zа-яё]", " ", remainder).strip()
+    return len(remainder) < 12
 
 
 def _has_write_to_group_intent(low: str) -> bool:
     return any(
-        m in low
-        for m in (
+        p in low
+        for p in (
             "напиши",
-            "напис",
-            "пиши",
             "отправ",
-            "пост ",
+            "опубликуй",
+            "публикуй",
             "прямо сейчас",
             "сейчас напиши",
         )
     )
 
 
-def is_operational_max_query(text: str) -> bool:
-    """Запросы про MAX здесь и сейчас — не настройка нового агента."""
-    low = (text or "").lower()
-    if user_wants_admin_check(text):
-        return True
-    if _has_write_to_group_intent(low):
+def is_assist_turn(text: str) -> bool:
+    """Запрос на проверку/диагностику, а не настройку автоматизации."""
+    clean = (text or "").strip()
+    if not clean:
         return False
-    if _extract_max_chat_id(text) and any(
-        m in low
-        for m in (
-            "проверь связь",
-            "проверь групп",
-            "проверь чат",
-            "есть ли доступ",
-            "добавлен ли бот",
-            "бот в группе",
-        )
-    ):
+    if is_operational_max_query(clean):
+        return True
+    if is_bare_max_link_message(clean):
         return True
     return False
 
 
-async def _assistant_reply(db: AsyncSession, thread: Thread, content: str) -> Message:
-    msg = Message(thread_id=thread.id, role=MessageRole.ASSISTANT, content=content)
-    db.add(msg)
-    thread.message_count = (thread.message_count or 0) + 1
-    thread.last_message_at = datetime.now(timezone.utc)
-    await db.flush()
-    return msg
+def is_operational_max_query(text: str) -> bool:
+    """Диагностический запрос: проверка прав/доступа бота."""
+    low = (text or "").lower()
+    if _has_write_to_group_intent(low):
+        return False
+    if user_wants_admin_check(text):
+        return True
+    cid = _extract_max_chat_id(text)
+    probe_phrases = ("провер", "доступ", "бот там", "бот в", "добавлен ли")
+    if cid and any(p in low for p in probe_phrases):
+        return True
+    return False
 
 
 def bind_chat_to_current_agent(agent: AgentInstance, chat_id: int) -> None:
@@ -146,80 +83,3 @@ def bind_chat_to_current_agent(agent: AgentInstance, chat_id: int) -> None:
     cfg["max_chat_id"] = cid
     cfg["thread_chat_id"] = cid
     agent.config = cfg
-
-
-async def handle_operational_query(
-    db: AsyncSession,
-    user: User,
-    agent: AgentInstance,
-    thread: Thread,
-    text: str,
-    *,
-    user_msg: Message,
-    on_status: StatusCallback | None = None,
-) -> tuple[Message, Message, AgentInstance] | None:
-    """
-    Быстрый ответ на проверку админа/чата в контексте текущего треда.
-    Возвращает None, если запрос не операционный.
-    """
-    if not is_operational_max_query(text):
-        return None
-
-    chat_id = _extract_max_chat_id(text) or agent.max_chat_id
-    if chat_id is None:
-        assistant = await _assistant_reply(
-            db,
-            thread,
-            "Укажите ссылку на группу MAX (web.max.ru/-ID) или добавьте бота Glosix в группу.",
-        )
-        await db.commit()
-        return user_msg, assistant, agent
-
-    bind_chat_to_current_agent(agent, int(chat_id))
-    status_cb = on_status or noop_status
-    if user_wants_admin_check(text):
-        await emit_status(status_cb, STATUS_ADMIN_CHECK)
-    else:
-        await emit_status(status_cb, STATUS_MAX_CHAT)
-    bot = MaxBotService()
-    probe = await probe_max_chat(bot, int(chat_id), send_test=False)
-    admin = probe.get("bot_is_admin")
-    if admin is None and probe.get("ok"):
-        admin = await bot.check_bot_is_group_admin(int(chat_id))
-
-    await append_agent_activity_log(
-        db,
-        agent,
-        "admin_check",
-        details={"chat_id": int(chat_id), "probe": probe, "bot_is_admin": admin},
-    )
-
-    lines = [f"**Группа MAX:** `{chat_id}`"]
-    if probe.get("title"):
-        lines.append(f"**Название:** {probe['title']}")
-    if probe.get("status"):
-        lines.append(f"**Статус бота в чате:** {probe['status']}")
-
-    if not probe.get("ok"):
-        lines.append("")
-        lines.append(probe.get("explanation") or "Не удалось получить данные о чате.")
-    elif admin is True:
-        lines.append("")
-        lines.append("**Да — бот Glosix является администратором** этой группы.")
-    elif admin is False:
-        lines.append("")
-        lines.append(
-            "**Нет — бот в группе, но не администратор.** "
-            "Для модерации и чтения всех сообщений назначьте Glosix админом в MAX."
-        )
-    else:
-        lines.append("")
-        lines.append(
-            "Бот в чате, но MAX API не вернул права администратора "
-            "(нужны права админа для запроса /members). "
-            "Для обычных постов в группу админ часто не обязателен."
-        )
-
-    assistant = await _assistant_reply(db, thread, "\n".join(lines))
-    await db.commit()
-    return user_msg, assistant, agent

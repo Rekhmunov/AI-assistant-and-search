@@ -30,7 +30,6 @@ from app.services.agent.llm_onboarding import (
     load_checklist,
     try_validate_checklist,
     user_wants_cancel,
-    user_wants_confirm,
 )
 from app.services.agent.max_probe import probe_max_chat
 from app.services.bot import MaxBotService

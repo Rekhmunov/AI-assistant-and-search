@@ -14,10 +14,6 @@ from app.models.user import User
 from app.services.agent.capabilities import (
     apply_message_hints,
     build_parse_fallback_reply,
-    compose_feasibility_reply,
-    reply_looks_like_capabilities_template,
-    user_asks_capabilities,
-    user_asks_feasibility,
 )
 from app.services.agent.intent_hints import DEFAULT_AGENT_TIMEZONE
 from app.services.agent.constants import CANCEL_PHRASES, SUPPORTED_ROLE_LABELS
@@ -33,20 +29,6 @@ from app.services.agent.profile import (
 from app.services.providers.factory import resolve_runtime_providers
 
 logger = logging.getLogger(__name__)
-
-CONFIRM_PHRASES = (
-    "да",
-    "подтверждаю",
-    "всё верно",
-    "все верно",
-    "запускай",
-    "активируй",
-    "согласен",
-    "согласна",
-    "ок",
-    "okay",
-    "верно",
-)
 
 AGENT_SYSTEM_PROMPT = """Ты — умный ассистент Glosix для работы с MAX: понимаешь задачи пользователя, знаешь возможности MAX API,
 проверяешь выполнимость и либо выполняешь задачу, либо уточняешь недостающее.
@@ -365,10 +347,8 @@ def user_wants_cancel(text: str) -> bool:
 
 
 def user_wants_confirm(text: str) -> bool:
-    low = (text or "").strip().lower()
-    if low in CONFIRM_PHRASES:
-        return True
-    return any(low.startswith(p + " ") or low.endswith(" " + p) for p in ("да", "подтверждаю", "согласен"))
+    """Устарел — activate решает LLM. Оставлен для обратной совместимости."""
+    return False
 
 
 def load_checklist(agent: AgentInstance) -> ChecklistState:
@@ -463,11 +443,8 @@ def merge_checklist(
     user_text: str = "",
 ) -> ChecklistState:
     data = current.to_dict()
-    lock_core = user_wants_confirm(user_text) and bool(data.get("role"))
     for key, value in patch.to_dict().items():
         if value is None:
-            continue
-        if lock_core and key in _CHECKLIST_CORE_FIELDS:
             continue
         if key == "schedule_text" and _is_weaker_schedule(str(value), data.get("schedule_text")):
             continue

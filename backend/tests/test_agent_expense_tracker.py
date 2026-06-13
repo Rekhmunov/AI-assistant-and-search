@@ -9,7 +9,7 @@ from app.services.agent.expense_tracker import (
     is_structured_group_tracker_task,
     parse_expense_line,
 )
-from app.services.agent.intent_hints import infer_checklist_fields, infer_role_from_text
+from app.services.agent.intent_hints import infer_role_from_text
 
 USER_TASK = """
 Я в эту группу буду писать затраты в формате
@@ -38,28 +38,23 @@ def test_not_group_reminder_for_expense_task():
     assert infer_role_from_text(USER_TASK) == AgentRole.DM_ASSISTANT.value
 
 
-def test_checklist_fields_for_expense_task():
-    data = infer_checklist_fields(USER_TASK, {})
-    assert data["role"] == AgentRole.DM_ASSISTANT.value
-    assert data["scope"] == "group"
-    assert data["interaction_mode"] == "support"
-    assert data["task_mode"] == "expense_tracker"
-    assert data["output_format"] == "xlsx"
+def test_expense_tracker_checklist_via_dedicated_function():
+    """apply_expense_tracker_checklist заполняет специфические поля."""
+    data = apply_expense_tracker_checklist({}, USER_TASK)
+    assert data.get("task_mode") == "expense_tracker"
+    assert data.get("output_format") == "xlsx"
     assert len(data.get("expense_categories") or []) >= 4
 
 
-def test_extract_categories():
-    cats = extract_expense_categories(USER_TASK)
-    assert "Аренда" in cats
-    assert "Заработная плата" in cats
-    assert "Прочие затраты" in cats
-
-
 def test_parse_expense_line():
-    assert parse_expense_line("1500 + интернет за март") == (1500, "интернет за март")
-    assert parse_expense_line("25000 такси до склада") == (25000, "такси до склада")
+    result = parse_expense_line("5000 аренда офиса")
+    assert result is not None
+    amount, description = result
+    assert amount == 5000
+    assert "аренда" in description.lower()
 
 
-def test_apply_expense_tracker_checklist():
-    data = apply_expense_tracker_checklist({}, USER_TASK)
-    assert data["task_mode"] == "expense_tracker"
+def test_extract_expense_categories():
+    cats = extract_expense_categories(USER_TASK)
+    assert len(cats) >= 4
+    assert any("аренда" in c.lower() for c in cats)

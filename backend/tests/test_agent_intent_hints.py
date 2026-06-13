@@ -1,4 +1,4 @@
-"""Тесты локального распознавания задачи агента."""
+"""Тесты распознавания намерений агента."""
 
 from __future__ import annotations
 
@@ -21,13 +21,9 @@ def test_infer_personal_reminder():
     assert role == AgentRole.PERSONAL_REMINDER.value
 
 
-def test_infer_dm_assistant_group_support():
-    text = "Отвечай в группе на вопросы по FAQ и переводи текст с фото"
-    role = infer_role_from_text(text)
+def test_infer_dm_assistant():
+    role = infer_role_from_text("Отвечай на вопросы в группе как поддержка")
     assert role == AgentRole.DM_ASSISTANT.value
-    data = infer_checklist_fields(text, {})
-    assert data["scope"] == "group"
-    assert data["interaction_mode"] == "support"
 
 
 def test_local_reply_after_capabilities_not_loop():
@@ -51,104 +47,41 @@ def test_tvoey_gruppe_means_personal_chat():
     assert role == AgentRole.PERSONAL_REMINDER.value
 
 
-def test_correction_personal_reminder_with_time_and_text():
-    polluted = {
-        "role": AgentRole.GROUP_REMINDER.value,
-        "reminder_message": "Ты можешь сделать напоминание в своем чате?",
-        "schedule_text": None,
-    }
-    text = 'Нет, напоминание в твоем чате Glosix. В 16:10. Текст напоминания "Привет"'
-    data = infer_checklist_fields(text, polluted)
-    assert data["role"] == AgentRole.PERSONAL_REMINDER.value
-    assert "16:10" in (data.get("schedule_text") or "")
-    assert data["reminder_message"] == "Привет"
-    assert data["timezone"] == "Europe/Moscow"
-
-
-def test_daily_schedule_includes_time():
-    data = infer_checklist_fields(
-        "каждый день в 16:35 в личный чат, текст Привет",
-        {},
-    )
-    assert data["schedule_text"] == "каждый день в 16:35"
-
-
-def test_bare_today_not_extracted_without_time():
-    data = infer_checklist_fields("сегодня", {"role": AgentRole.PERSONAL_REMINDER.value})
-    assert "schedule_text" not in data or data.get("schedule_text") is None
-
-
-def test_today_run_intent():
-    assert user_wants_today_run("сегодня сделать")
-    data = infer_checklist_fields(
-        "сегодня сделать",
-        {
-            "role": AgentRole.PERSONAL_REMINDER.value,
-            "schedule_text": "каждый день в 16:35",
-            "reminder_message": "Привет",
-        },
-    )
-    assert data["schedule_text"] == "сегодня в 16:35"
-
-
-def test_today_run_without_time_is_soon():
-    data = infer_checklist_fields(
-        "сегодня сделай",
-        {
-            "role": AgentRole.PERSONAL_REMINDER.value,
-            "reminder_message": "Привет",
-        },
-    )
-    assert data["schedule_text"] == "через 2 минуты"
-
-
-def test_group_post_with_link_and_immediate():
-    text = (
-        'Давай проверим, умеешь ли ты писать в группу. Напиши в эту группу "Привет" '
-        "https://web.max.ru/-75602062003657 Я тебя сделал администратором. Прямо сейчас напиши"
-    )
-    assert infer_role_from_text(text) == AgentRole.GROUP_REMINDER.value
-    assert user_wants_immediate_run(text)
+def test_infer_checklist_extracts_chat_id():
+    """infer_checklist_fields теперь извлекает только chat_id — LLM заполняет остальное."""
+    text = "Напиши в группу https://web.max.ru/-75602062003657 привет"
     data = infer_checklist_fields(text, {})
-    assert data["role"] == AgentRole.GROUP_REMINDER.value
     assert data["max_chat_id"] == -75602062003657
-    assert data["reminder_message"] == "Привет"
-    assert data["schedule_text"] == "через 2 минуты"
-    assert data["bot_is_group_admin"] is True
 
 
-def test_bare_time_gets_default_timezone():
-    data = infer_checklist_fields("каждый день в 16:10", {"role": AgentRole.PERSONAL_REMINDER.value})
-    assert data["timezone"] == "Europe/Moscow"
-
-
-def test_hourly_news_post_to_group():
-    text = (
-        "Нужно в группу https://web.max.ru/-75735901261257 раз в час публиковать "
-        "актуальные новости об ИИ. Количество символов в статье от 500 до 1000. "
-        "В посте так же от 1 до 3 фото."
-    )
-    assert infer_role_from_text(text) == AgentRole.NEWS_DIGEST.value
+def test_infer_checklist_no_role_injection():
+    """infer_checklist_fields больше не проставляет role — только LLM."""
+    text = "Публикуй новости про ИИ каждый час"
     data = infer_checklist_fields(text, {})
-    assert data["role"] == AgentRole.NEWS_DIGEST.value
-    assert data["delivery_mode"] == "group"
-    assert data["max_chat_id"] == -75735901261257
-    assert data["schedule_text"] == "каждый час"
-    assert data["content_pipeline"] == "web_digest_images"
-    assert data["post_min_chars"] == 500
-    assert data["post_max_chars"] == 1000
-    assert data["post_image_count_min"] == 1
-    assert data["post_image_count_max"] == 3
-    assert "искусствен" in (data.get("search_topic") or "").lower()
+    # Только chat_id если есть, роль не трогаем
+    assert "role" not in data or data.get("role") is None
 
 
-def test_hourly_schedule_followup():
-    base = {
-        "role": AgentRole.NEWS_DIGEST.value,
-        "delivery_mode": "group",
-        "max_chat_id": -75735901261257,
-        "search_topic": "новости искусственного интеллекта",
-        "content_pipeline": "web_digest_images",
-    }
-    data = infer_checklist_fields("Раз в час", base)
-    assert data["schedule_text"] == "каждый час"
+def test_infer_checklist_preserves_existing_chat_id():
+    """Если chat_id нет в тексте — не трогаем существующий."""
+    base = {"max_chat_id": -12345}
+    data = infer_checklist_fields("напомни мне про встречу", base)
+    assert data["max_chat_id"] == -12345
+
+
+def test_user_wants_immediate_run():
+    assert user_wants_immediate_run("разово")
+    assert user_wants_immediate_run("один раз")
+    assert not user_wants_immediate_run("каждый день")
+
+
+def test_user_wants_today_run():
+    assert user_wants_today_run("сегодня сделай")
+    assert not user_wants_today_run("завтра")
+
+
+def test_group_post_chat_id_extracted():
+    """chat_id из ссылки извлекается корректно."""
+    text = "Напиши в группу https://web.max.ru/-75602062003657 Привет"
+    data = infer_checklist_fields(text, {})
+    assert data["max_chat_id"] == -75602062003657

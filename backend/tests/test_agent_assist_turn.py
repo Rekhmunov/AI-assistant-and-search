@@ -21,30 +21,36 @@ def test_bare_group_link_is_assist_not_setup():
     assert is_assist_turn(GROUP_URL)
     data = apply_message_hints({}, GROUP_URL)
     assert data.get("max_chat_id") == -75602062003657
+    # apply_message_hints больше не инферирует роль — только LLM
     assert data.get("role") is None
 
 
-def test_admin_check_with_link_is_assist():
+def test_admin_check_with_link_extracts_chat_id():
     text = f"Вот группа {GROUP_URL}\nПроверь, ты там админ?"
     assert is_assist_turn(text)
-    data = infer_checklist_fields(text, {"role": AgentRole.DM_ASSISTANT.value})
-    assert data.get("role") is None
+    data = infer_checklist_fields(text, {})
+    # infer_checklist_fields извлекает только chat_id
     assert data.get("max_chat_id") == -75602062003657
 
 
-def test_user_rejection_clears_role():
+def test_user_rejection_does_not_clear_role():
+    """user_corrects_understanding обнаруживает коррекцию, но apply_message_hints
+    больше не очищает роль по ключевым словам — LLM управляет чеклистом."""
     text = "Я тебе задачу никакую не давал, почему ты решил, что это твоя задача?"
     assert user_corrects_understanding(text)
+    # apply_message_hints только извлекает chat_id если есть — не трогает role
     data = apply_message_hints(
-        {"role": AgentRole.DM_ASSISTANT.value, "scope": "group", "interaction_mode": "command"},
+        {"role": AgentRole.DM_ASSISTANT.value, "scope": "group"},
         text,
     )
-    assert data.get("role") is None
-    assert data.get("scope") is None
+    # Роль остаётся нетронутой — LLM её обнулит если нужно
+    assert data.get("role") == AgentRole.DM_ASSISTANT.value
 
 
-def test_setup_task_still_infers_role():
+def test_apply_message_hints_only_extracts_chat_id():
+    """apply_message_hints теперь минималистичен — только chat_id."""
     text = "Напоминай мне каждый день в 9 про встречу в личке MAX"
-    assert not is_assist_turn(text)
     data = apply_message_hints({}, text)
-    assert data.get("role") == AgentRole.PERSONAL_REMINDER.value
+    # Нет chat_id в тексте — ничего не добавляем
+    assert data.get("role") is None
+    assert data.get("schedule_text") is None
