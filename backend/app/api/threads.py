@@ -57,13 +57,20 @@ async def list_threads(
     user: Annotated[User, Depends(get_current_user)],
 ):
     cutoff = _history_cutoff(user)
+    from sqlalchemy import case, nulls_last
     q = (
         select(Thread)
         .where(Thread.user_id == user.id, Thread.deleted_at.is_(None))
-        .order_by(Thread.last_message_at.desc())
+        .order_by(
+            # Закреплённые — всегда первые, сортируются по pinned_at DESC
+            nulls_last(Thread.pinned_at.desc()),
+            Thread.last_message_at.desc(),
+        )
     )
     if cutoff:
-        q = q.where(Thread.last_message_at >= cutoff)
+        q = q.where(
+            (Thread.last_message_at >= cutoff) | Thread.pinned_at.isnot(None)
+        )
     result = await db.execute(q)
     return result.scalars().all()
 
@@ -320,8 +327,13 @@ async def update_thread(
     thread = result.scalar_one_or_none()
     if not thread:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Thread not found")
-    thread.title = body.title.strip()
+    if body.title is not None:
+        thread.title = body.title.strip()
+    if body.pinned is not None:
+        from datetime import datetime, timezone
+        thread.pinned_at = datetime.now(timezone.utc) if body.pinned else None
     await db.flush()
+    await db.commit()
     await db.refresh(thread)
     return thread
 

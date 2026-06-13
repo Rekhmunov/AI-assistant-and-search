@@ -5102,6 +5102,20 @@ body:has(.page-thread) {
   background: rgba(91, 108, 255, 0.12);
 }
 
+.history-pinned-label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--accent, #20808d);
+}
+
+.history-pin-icon {
+  flex-shrink: 0;
+  color: var(--accent, #20808d);
+  vertical-align: middle;
+  margin-right: 3px;
+}
+
 .history-card-title {
   display: block;
   font-size: 1rem;

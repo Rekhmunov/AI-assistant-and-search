@@ -10,16 +10,17 @@ import {
   type FormEvent,
   type PointerEvent as ReactPointerEvent,
 } from "react";
-import { MoreVertical, Pencil, Trash2, X } from "lucide-react";
+import { MoreVertical, Pencil, Trash2, X, Pin, PinOff } from "lucide-react";
 import { createPortal } from "react-dom";
 import { useNavigate, useParams } from "react-router-dom";
-import { deleteThread, renameThread, type ThreadListItem } from "../api/client";
+import { deleteThread, renameThread, pinThread, type ThreadListItem } from "../api/client";
 import { t } from "../i18n";
 import { useAuthStore } from "../store/authStore";
 
 type Props = {
   threadId: string;
   title: string;
+  pinned?: boolean;
 };
 
 const MENU_WIDTH = 220;
@@ -44,7 +45,7 @@ function computeMenuPlacement(anchor: DOMRect, menuHeight: number): MenuPlacemen
   return { top: anchor.top - MENU_GAP, left, transform: "translateY(-100%)" };
 }
 
-export function ThreadHistoryMenu({ threadId, title }: Props) {
+export function ThreadHistoryMenu({ threadId, title, pinned = false }: Props) {
   const menuId = useId();
   const token = useAuthStore((s) => s.token);
   const queryClient = useQueryClient();
@@ -97,6 +98,14 @@ export function ThreadHistoryMenu({ threadId, title }: Props) {
       setError("");
     },
     onError: (e: Error) => setError(e.message),
+  });
+
+  const pinMutation = useMutation({
+    mutationFn: (newPinned: boolean) => pinThread(token!, threadId, newPinned),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["threads"] });
+      setMenuOpen(false);
+    },
   });
 
   const deleteMutation = useMutation({
@@ -213,8 +222,20 @@ export function ThreadHistoryMenu({ threadId, title }: Props) {
                   openRename();
                 }}
               >
-                <PencilIcon />
+                <Pencil size={16} strokeWidth={1.8} />
                 {t("renameThread")}
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                disabled={pinMutation.isPending}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  pinMutation.mutate(!pinned);
+                }}
+              >
+                {pinned ? <PinOff size={16} strokeWidth={1.8} /> : <Pin size={16} strokeWidth={1.8} />}
+                {pinned ? "Открепить" : "Закрепить"}
               </button>
               <button
                 type="button"
@@ -226,7 +247,7 @@ export function ThreadHistoryMenu({ threadId, title }: Props) {
                   setError("");
                 }}
               >
-                <TrashIcon />
+                <Trash2 size={16} strokeWidth={1.8} />
                 {t("deleteThread")}
               </button>
             </div>
@@ -352,14 +373,6 @@ export function ThreadHistoryMenu({ threadId, title }: Props) {
 
 function KebabIcon() {
   return <MoreVertical width={20} height={20} fill="currentColor" aria-hidden />;
-}
-
-function PencilIcon() {
-  return <Pencil width={18} height={18} strokeWidth={1.8} aria-hidden />;
-}
-
-function TrashIcon() {
-  return <Trash2 width={18} height={18} strokeWidth={1.8} aria-hidden />;
 }
 
 function ClearIcon() {

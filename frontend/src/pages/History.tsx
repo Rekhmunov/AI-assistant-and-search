@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { Pin } from "lucide-react";
 import { deleteThreadsBulk, fetchThreads, searchThreads } from "../api/client";
 import { AuthGate } from "../components/AuthGate";
 import { HistoryBulkBar } from "../components/HistoryBulkBar";
@@ -142,8 +143,11 @@ export function History() {
     );
   }
 
+  const pinnedThreads = visibleThreads.filter((th) => !!th.pinned_at);
+  const unpinnedThreads = visibleThreads.filter((th) => !th.pinned_at);
+
   const groups = new Map<string, typeof visibleThreads>();
-  for (const th of visibleThreads) {
+  for (const th of unpinnedThreads) {
     const label = dayLabel(new Date(th.last_message_at));
     if (!groups.has(label)) groups.set(label, []);
     groups.get(label)!.push(th);
@@ -207,6 +211,51 @@ export function History() {
         {!isLoading && !isSearching && visibleThreads.length === 0 && (
           <p className="muted-text">{isFiltering ? t("historySearchEmpty") : t("historyEmpty")}</p>
         )}
+
+        {pinnedThreads.length > 0 && (
+          <div>
+            <div className="section-title history-pinned-label">
+              <Pin size={12} strokeWidth={2} aria-hidden />
+              {t("historyPinned")}
+            </div>
+            <ul className="history-list">
+              {pinnedThreads.map((th) => {
+                const isSelected = selectedIds.has(th.id);
+                return (
+                  <li key={th.id} className={`history-row${isSelected ? " history-row--selected" : ""}`}>
+                    {selectionMode && (
+                      <label className="history-row-check">
+                        <input type="checkbox" checked={isSelected} onChange={() => toggleThreadSelected(th.id)} aria-label={th.title} />
+                      </label>
+                    )}
+                    <button
+                      type="button"
+                      className="history-card"
+                      onClick={() => {
+                        if (selectionMode) { toggleThreadSelected(th.id); return; }
+                        navigate(`/thread/${th.id}`, { state: { fromHistory: true } });
+                      }}
+                    >
+                      <span className="history-card-title">
+                        <Pin size={12} strokeWidth={2} className="history-pin-icon" aria-hidden />
+                        {th.title}
+                        {th.thread_type === "agent" && (
+                          <span className="history-card-badge">{t("agentThreadBadge")}</span>
+                        )}
+                      </span>
+                      <small className="history-card-meta">
+                        {th.message_count} {t("questionsCount")} •{" "}
+                        {new Date(th.last_message_at).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}
+                      </small>
+                    </button>
+                    {!selectionMode && <ThreadHistoryMenu threadId={th.id} title={th.title} pinned={true} />}
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        )}
+
         {[...groups.entries()].map(([label, items]) => (
           <div key={label}>
             <div className="section-title">{label}</div>
@@ -253,7 +302,7 @@ export function History() {
                         })}
                       </small>
                     </button>
-                    {!selectionMode && <ThreadHistoryMenu threadId={th.id} title={th.title} />}
+                    {!selectionMode && <ThreadHistoryMenu threadId={th.id} title={th.title} pinned={false} />}
                   </li>
                 );
               })}

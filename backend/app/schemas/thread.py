@@ -61,6 +61,7 @@ class ThreadListItem(BaseModel):
     agent_seq: int | None = None
     message_count: int
     is_saved: bool
+    pinned_at: datetime | None = None
     last_message_at: datetime
 
     model_config = {"from_attributes": True}
@@ -72,13 +73,15 @@ class ThreadDetail(BaseModel):
     thread_type: str = "search"
     agent_seq: int | None = None
     is_saved: bool
+    pinned_at: datetime | None = None
     messages: list[MessageOut]
 
     model_config = {"from_attributes": True}
 
 
 class ThreadUpdate(BaseModel):
-    title: str = Field(..., min_length=1, max_length=500)
+    title: str | None = Field(default=None, min_length=1, max_length=500)
+    pinned: bool | None = None
 
 
 class ThreadBulkDeleteIn(BaseModel):

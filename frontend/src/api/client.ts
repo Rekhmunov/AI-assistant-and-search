@@ -49,6 +49,7 @@ export interface ThreadListItem {
   agent_seq?: number | null;
   message_count: number;
   is_saved: boolean;
+  pinned_at?: string | null;
   last_message_at: string;
 }
 
@@ -506,6 +507,17 @@ export async function saveThread(token: string, id: string): Promise<void> {
     headers: apiHeaders(token),
     credentials: "include",
   });
+}
+
+export async function pinThread(token: string, id: string, pinned: boolean): Promise<ThreadListItem> {
+  const res = await fetch(`${API_BASE}/api/threads/${id}`, {
+    method: "PATCH",
+    headers: apiHeaders(token),
+    credentials: "include",
+    body: JSON.stringify({ pinned }),
+  });
+  if (!res.ok) throw new Error("Failed to pin thread");
+  return res.json();
 }
 
 export async function renameThread(token: string, id: string, title: string): Promise<ThreadListItem> {
