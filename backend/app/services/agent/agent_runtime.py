@@ -55,6 +55,18 @@ async def run_max_interactive_loop(
     if vision_context:
         enriched = f"{enriched}\n\n[Анализ изображения]\n{vision_context[:3500]}"
 
+    # Для шаблонных агентов подставляем support_instructions в runtime промпт
+    cfg = dict(agent.config or {})
+    template = str(cfg.get("template") or "")
+    override_runtime_prompt: str | None = None
+    if template:
+        from app.services.agent.templates.secretary import SECRETARY_RUNTIME_PROMPT
+        if template == "secretary":
+            instructions = str(cfg.get("support_instructions") or "")
+            override_runtime_prompt = SECRETARY_RUNTIME_PROMPT.replace(
+                "{support_instructions}", instructions or "(инструкция не задана)"
+            )
+
     result = await run_runtime_loop(
         db,
         redis_client,
@@ -65,6 +77,7 @@ async def run_max_interactive_loop(
         user_text=enriched or "Помоги пользователю.",
         chat_id=chat_id,
         author=author,
+        override_runtime_prompt=override_runtime_prompt,
     )
     return result
 

@@ -1,18 +1,22 @@
 """Шаблоны агентов — специализированные промпты, приветствия и названия."""
 
 from app.services.agent.templates.reminder import REMINDER_SETUP_PROMPT, REMINDER_WELCOME
+from app.services.agent.templates.secretary import SECRETARY_SETUP_PROMPT, SECRETARY_WELCOME
 
 TEMPLATE_PROMPTS: dict[str, str] = {
     "reminder": REMINDER_SETUP_PROMPT,
+    "secretary": SECRETARY_SETUP_PROMPT,
 }
 
 TEMPLATE_WELCOMES: dict[str, str] = {
     "reminder": REMINDER_WELCOME,
+    "secretary": SECRETARY_WELCOME,
 }
 
 # Название шаблона — используется как prefix в заголовке треда: «Напоминания 1»
 TEMPLATE_TITLES: dict[str, str] = {
     "reminder": "Напоминания",
+    "secretary": "Секретарь",
 }
 
 

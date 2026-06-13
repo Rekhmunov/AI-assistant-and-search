@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
-import { Bell, ChevronRight } from "lucide-react";
+import { Bell, ChevronRight, ClipboardList } from "lucide-react";
 import { createAgentThreadWithTemplate } from "../api/client";
 import { MobilePageHeader } from "../components/MobilePageHeader";
 import { MobileNewThreadButton } from "../components/MobileNewThreadButton";
@@ -25,6 +25,14 @@ const AGENT_TEMPLATES: AgentTemplate[] = [
     badges: ["Разовые", "По расписанию", "Личка и группы"],
     icon: <Bell size={26} strokeWidth={1.8} />,
     color: "#20808d",
+  },
+  {
+    id: "secretary",
+    title: "Секретарь",
+    description: "Слушает чат и записывает данные по вашей инструкции",
+    badges: ["Любой формат", "Excel / Word / PDF", "По команде"],
+    icon: <ClipboardList size={26} strokeWidth={1.8} />,
+    color: "#7c3aed",
   },
 ];
 

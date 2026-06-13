@@ -252,6 +252,7 @@ async def run_runtime_loop(
     chat_id: int | None = None,
     author: str = "",
     on_status: StatusCallback | None = None,
+    override_runtime_prompt: str | None = None,
 ) -> RuntimeLoopResult:
     """Исполнение в MAX: tools + рефлексия без checklist."""
     spec = load_agent_spec(agent)
@@ -270,6 +271,7 @@ async def run_runtime_loop(
         checklist=None,
         diagnostic_mode=False,
         on_status=on_status,
+        override_system_prompt=override_runtime_prompt,
         allow_test_send=allow_test,
         runtime_chat_id=chat_id,
         author=author,
@@ -407,7 +409,9 @@ async def _tool_loop(
         payload.extend(history if mode == "onboarding" else history[-6:])
 
         await emit_status(status_cb, STATUS_THINKING if iteration == 0 else STATUS_ANALYZING_RESULTS)
-        raw = await _llm_complete(llm, payload)
+        # Runtime-режим с шаблонным промптом (секретарь): ответы короткие, экономим токены
+        call_max_tokens = 500 if (mode == "runtime" and override_system_prompt) else 2000
+        raw = await _llm_complete(llm, payload, max_tokens=call_max_tokens)
         data = _parse_llm_json(raw)
 
         # Отправляем план-рассуждение агента
@@ -605,9 +609,9 @@ def _tool_result_summary(tool_name: str, result: dict) -> str:
     return "ok"
 
 
-async def _llm_complete(llm, messages: list[dict[str, str]]) -> str:
+async def _llm_complete(llm, messages: list[dict[str, str]], *, max_tokens: int = 2000) -> str:
     return await llm.complete_text(
-        messages, model="pro", max_tokens=2000, temperature=0.35
+        messages, model="pro", max_tokens=max_tokens, temperature=0.35
     )
 
 
