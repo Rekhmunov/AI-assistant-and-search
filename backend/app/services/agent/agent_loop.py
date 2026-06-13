@@ -342,7 +342,13 @@ async def _tool_loop(
     status_cb = on_status or noop_status
     spec = load_agent_spec(agent)
 
-    extra = tools_appendix_for_mode(runtime=mode == "runtime")
+    # Для шаблонных агентов не добавляем общий каталог инструментов —
+    # шаблонный промпт сам описывает только нужные инструменты.
+    is_template_agent = bool(override_system_prompt)
+    if is_template_agent:
+        extra = _template_tools_appendix()
+    else:
+        extra = tools_appendix_for_mode(runtime=mode == "runtime")
     if diagnostic_mode and mode == "onboarding":
         diag = await agent_runtime_diagnostics(db, agent)
         extra += f"\n\ndiagnostic_snapshot: {json.dumps(diag, ensure_ascii=False)}"
@@ -490,6 +496,15 @@ async def _tool_loop(
     if mode == "runtime":
         return RuntimeLoopResult(text=msg, attachments=attachments, tool_trace=tool_trace), tool_trace
     return LlmTurnResult(reply=msg, checklist=checklist or ChecklistState()), tool_trace
+
+
+def _template_tools_appendix() -> str:
+    """Минимальный appendix для шаблонных агентов — только формат ответа."""
+    return (
+        'Формат JSON: {"plan": "...", "reply": "...", '
+        '"tool_calls": [{"tool": "...", "arguments": {}}], '
+        '"checklist": {...}, "ready_for_confirmation": false, "activate": false}'
+    )
 
 
 def _tool_result_summary(tool_name: str, result: dict) -> str:
