@@ -248,9 +248,12 @@ async def _handle_agent_message_body(
                 if (f.media_kind or "").lower() == "image":
                     continue
                 raw_text = (f.extracted_text or "").strip()
+                logger.warning("File hint: id=%s filename=%s extracted_len=%s storage_key=%s",
+                               f.id, f.filename, len(raw_text), bool(f.storage_key))
                 if not raw_text and f.storage_key:
                     data = await load_upload_bytes(f.storage_key)
                     raw_text = _extract_text(f.filename, data).strip()
+                    logger.warning("File hint after storage load: len=%s", len(raw_text))
                 if raw_text:
                     file_texts.append(raw_text[:6000])
         except Exception as exc:
