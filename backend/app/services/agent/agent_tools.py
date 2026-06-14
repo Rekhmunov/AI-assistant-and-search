@@ -10,7 +10,7 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.agent import AgentInstance, AgentReminder, AgentStatus
+from app.models.agent import AgentInstance, AgentReminder, AgentRole, AgentStatus
 from app.models.message import Message
 from app.models.user import User
 from app.services.agent.activity_log import list_agent_activity_logs
@@ -102,6 +102,8 @@ async def execute_agent_tool(
             return await _tool_read_knowledge_base(db, agent, safe_args)
         if name == "read_group_history":
             return await _tool_read_group_history(bot, safe_args)
+        if name == "query_secretary_records":
+            return await _tool_query_secretary_records(db, user, safe_args)
     except Exception as exc:
         logger.exception("Agent tool %s failed: %s", name, exc)
         raw = str(exc)[:300]
@@ -399,6 +401,46 @@ def _tool_query_records(agent: AgentInstance, args: dict) -> dict:
         category=str(args["category"]) if args.get("category") else None,
     )
     return {"ok": True, "tool": "query_agent_records", "result": {"items": rows, "count": len(rows)}}
+
+
+async def _tool_query_secretary_records(
+    db: AsyncSession,
+    user: User,
+    args: dict,
+) -> dict:
+    """Читает записи секретаря (dm_assistant с template=secretary) того же пользователя."""
+    from app.services.agent.agent_records import query_records
+    from sqlalchemy import select
+
+    result = await db.execute(
+        select(AgentInstance).where(
+            AgentInstance.user_id == user.id,
+            AgentInstance.role == AgentRole.DM_ASSISTANT.value,
+            AgentInstance.status == AgentStatus.ACTIVE.value,
+        )
+    )
+    all_agents = result.scalars().all()
+    secretary_agents = [a for a in all_agents if str((a.config or {}).get("template") or "") == "secretary"]
+
+    if not secretary_agents:
+        return {"ok": False, "tool": "query_secretary_records", "error": "Активный секретарь не найден"}
+
+    table = str(args.get("table") or "default")
+    category = str(args["category"]) if args.get("category") else None
+    limit = int(args.get("limit") or 100)
+
+    all_rows: list[dict] = []
+    for sec_agent in secretary_agents:
+        rows = query_records(sec_agent, table, category=category, limit=limit)
+        chat_id = sec_agent.max_chat_id
+        for row in rows:
+            row = dict(row)
+            if chat_id and "chat_id" not in row:
+                row["chat_id"] = chat_id
+            all_rows.append(row)
+
+    all_rows.sort(key=lambda r: str(r.get("at") or ""), reverse=True)
+    return {"ok": True, "tool": "query_secretary_records", "result": {"items": all_rows[:limit], "count": len(all_rows)}}
 
 
 def _tool_update_memory(agent: AgentInstance, args: dict) -> dict:

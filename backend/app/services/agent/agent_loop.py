@@ -70,6 +70,7 @@ RUNTIME_SYSTEM_PROMPT = """Ты — умный агент Glosix в мессен
 • Документ/Excel: max_send_file(chat_id=..., instruction="...", format="docx"/"pdf"/"xlsx")
 • Интернет: web_search
 • Учёт: store_agent_record / query_agent_records
+• Записи секретаря: query_secretary_records(table, category=null, limit=100) — читает данные из группового секретаря пользователя
 • Возможности MAX: read_max_api_docs
 • База знаний: read_knowledge_base
 
@@ -567,6 +568,7 @@ def _template_tools_appendix(*, runtime: bool = False) -> str:
             "Доступные инструменты:\n"
             "- store_agent_record(table, data) — сохранить запись\n"
             "- query_agent_records(table, category=null) — получить записи из БД\n"
+            "- query_secretary_records(table, category=null, limit=100) — читать записи секретаря группы\n"
             "- max_send_message(chat_id, text) — отправить текст в чат\n"
             "- max_send_file(chat_id, instruction, format) — файл (xlsx/docx/pdf)\n"
             "- read_group_history(chat_id, count=50, from_timestamp=null) — история сообщений группы\n"

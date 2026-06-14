@@ -32,6 +32,7 @@ ALLOWED_TOOLS = frozenset(
         "read_max_api_docs",
         "read_knowledge_base",
         "read_group_history",
+        "query_secretary_records",
     }
 )
 
