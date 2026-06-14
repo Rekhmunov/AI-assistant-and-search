@@ -418,7 +418,13 @@ async def _tool_loop(
 
         await emit_status(status_cb, STATUS_THINKING if iteration == 0 else STATUS_ANALYZING_RESULTS)
         # Runtime-режим с шаблонным промптом (секретарь): ответы короткие, экономим токены
-        call_max_tokens = 500 if (mode == "runtime" and override_system_prompt) else 2000
+        # При длинном тексте пользователя (инструкция) даём больше токенов на ответ
+        if mode == "runtime" and override_system_prompt:
+            call_max_tokens = 500
+        elif len(user_text or "") > 800:
+            call_max_tokens = 3000
+        else:
+            call_max_tokens = 2000
         raw = await _llm_complete(llm, payload, max_tokens=call_max_tokens)
         data = _parse_llm_json(raw)
 
@@ -441,6 +447,12 @@ async def _tool_loop(
             logger.warning("Unified loop JSON failed iter=%s: %s", iteration, raw[:300])
             if mode == "runtime":
                 return RuntimeLoopResult(text="Сейчас не удалось обработать запрос.", attachments=[]), tool_trace
+            # Для шаблонных агентов (secretary и др.) не показываем общий fallback про напоминания
+            if override_system_prompt:
+                return LlmTurnResult(
+                    reply="Не удалось обработать сообщение. Попробуйте сформулировать короче или разбить на части.",
+                    checklist=checklist or ChecklistState(),
+                ), tool_trace
             fb = finalize_checklist(
                 ChecklistState.from_dict(apply_message_hints((checklist or ChecklistState()).to_dict(), user_text)),
                 history=history,
