@@ -1,4 +1,4 @@
-"""Извлечение и загрузка изображений из сообщений MAX."""
+"""Извлечение и загрузка изображений и голосовых сообщений из MAX."""
 
 from __future__ import annotations
 
@@ -12,6 +12,7 @@ from app.services.bot import MaxBotService
 logger = logging.getLogger(__name__)
 
 _IMAGE_TYPES = frozenset({"image", "photo"})
+_VOICE_TYPES = frozenset({"audio_msg", "voice", "audio"})
 
 
 def _message_obj(payload: dict[str, Any]) -> dict[str, Any] | None:
@@ -59,6 +60,59 @@ def message_has_images(payload: dict[str, Any]) -> bool:
         if att_type in _IMAGE_TYPES:
             return True
     return False
+
+
+def extract_voice_url(payload: dict[str, Any]) -> str | None:
+    """Возвращает URL голосового сообщения или None если его нет."""
+    for att in message_attachments(payload):
+        att_type = str(att.get("type") or "").lower()
+        if att_type not in _VOICE_TYPES:
+            continue
+        att_payload = att.get("payload")
+        if not isinstance(att_payload, dict):
+            continue
+        for key in ("url", "link", "download_url"):
+            url = att_payload.get(key)
+            if isinstance(url, str) and url.startswith("http"):
+                return url
+    return None
+
+
+async def transcribe_voice_message(
+    payload: dict[str, Any],
+    *,
+    bot: MaxBotService | None = None,
+) -> str | None:
+    """
+    Если в payload есть голосовое сообщение — скачивает и транскрибирует его.
+    Возвращает текст или None если голосовых нет или транскрибация не удалась.
+    """
+    url = extract_voice_url(payload)
+    if not url:
+        return None
+
+    bot = bot or MaxBotService()
+    try:
+        audio_data = await bot.download_url(url)
+    except Exception as exc:
+        logger.warning("Voice download failed url=%s: %s", url[:80], exc)
+        return None
+
+    if not audio_data:
+        logger.warning("Voice download returned empty data url=%s", url[:80])
+        return None
+
+    try:
+        from app.core.config import get_settings
+        from app.services.yandex_stt import transcribe_audio, SpeechTranscriptionError
+        settings = get_settings()
+        text = await transcribe_audio(audio_data, "audio/ogg", settings)
+        if text:
+            logger.info("Voice transcribed len=%s", len(text))
+            return text.strip()
+    except Exception as exc:
+        logger.warning("Voice transcription failed: %s", exc)
+    return None
 
 
 async def load_message_vision_images(

@@ -54,12 +54,20 @@ async def process_group_message_background(
     try:
         async with async_session_factory() as db:
             from app.services.agent.group_interactive import handle_group_interactive
+            from app.services.agent.max_media import transcribe_voice_message
+
+            effective_text = text
+            if not effective_text and payload:
+                voice_text = await transcribe_voice_message(payload)
+                if voice_text:
+                    effective_text = voice_text
+                    logger.info("Group voice transcribed chat_id=%s len=%s", chat_id, len(voice_text))
 
             interactive = await handle_group_interactive(
                 db,
                 redis_client,
                 chat_id=chat_id,
-                text=text,
+                text=effective_text,
                 author=author,
                 payload=payload or {},
                 message_id_value=message_id_value,
