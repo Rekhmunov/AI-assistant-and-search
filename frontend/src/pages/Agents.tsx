@@ -28,9 +28,9 @@ const AGENT_TEMPLATES: AgentTemplate[] = [
   },
   {
     id: "secretary",
-    title: "Секретарь",
-    description: "Слушает чат и записывает данные по вашей инструкции",
-    badges: ["Любой формат", "Excel / Word / PDF", "По команде"],
+    title: "Учет затрат",
+    description: "Записывает расходы из чата группы и формирует отчёты в Excel",
+    badges: ["Сумма + примечание", "Категории", "Отчёт в Excel"],
     icon: <ClipboardList size={26} strokeWidth={1.8} />,
     color: "#7c3aed",
   },

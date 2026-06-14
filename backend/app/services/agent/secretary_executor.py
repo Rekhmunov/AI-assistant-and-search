@@ -267,7 +267,7 @@ async def execute_secretary_message(
                         agent.config = cfg
                     break
             _set_pending(agent, None)
-            confirm = responses.get("on_success", "✅ {amount} → {category}")
+            confirm = responses.get("on_success", "✅ Записано в категорию: {category}")
             return ExecutorResult(text=confirm.format(
                 amount=int(amount) if amount == int(amount) else amount,
                 category=entity["name"],
@@ -291,17 +291,8 @@ async def execute_secretary_message(
             filtered = _filter_records_by_period(records, start, end)
             if not filtered:
                 return ExecutorResult(text=f"За период {label} записей не найдено.")
-            columns = commands.get("report", {}).get("columns", ["Категория", "Сумма", "Примечание"])
+            columns = commands.get("report", {}).get("columns", ["Категория", "Затрата", "Примечание"])
             title = commands.get("report", {}).get("title_template", "Отчёт за {period}").format(period=label)
-            instruction = (
-                f"Создай Excel-таблицу «{title}».\n"
-                f"Столбцы: {', '.join(columns)}.\n"
-                f"Данные:\n" +
-                "\n".join(
-                    f"{r.get('category', '')}, {r.get('amount', '')}, {r.get('note', '')}"
-                    for r in filtered
-                )
-            )
             return ExecutorResult(
                 text=f"Отчёт за {label} — {len(filtered)} записей:",
                 xlsx_data={"title": title, "columns": columns, "records": filtered},
@@ -323,7 +314,7 @@ async def execute_secretary_message(
             filtered = _filter_records_by_period(records, start, end)
             if not filtered:
                 return ExecutorResult(text=f"За период {label} записей не найдено.")
-            columns = commands.get("report", {}).get("columns", ["Категория", "Сумма", "Примечание"])
+            columns = commands.get("report", {}).get("columns", ["Категория", "Затрата", "Примечание"])
             title = commands.get("report", {}).get("title_template", "Отчёт за {period}").format(period=label)
             return ExecutorResult(
                 text=f"Отчёт за {label} — {len(filtered)} записей:",
@@ -369,11 +360,11 @@ async def execute_secretary_message(
         amount, rest = _parse_line(line)
 
         if amount is None:
-            # Нет числа — проверяем сообщение из правил
-            no_amount_msg = responses.get("on_missing_amount", "")
-            if no_amount_msg:
-                return ExecutorResult(text=no_amount_msg)
-            return None  # Отдаём LLM
+            no_amount_msg = responses.get(
+                "on_missing_amount",
+                "Для корректной записи нужно указать сумму и категорию затраты",
+            )
+            return ExecutorResult(text=no_amount_msg)
 
         entity = _match_entity(rest, entities) if rest else None
 
@@ -384,11 +375,11 @@ async def execute_secretary_message(
             return ExecutorResult(text=unknown_msg.format(token=rest[:50]))
 
         if entity is None:
-            # Нет ни суммы ни категории
-            no_amount_msg = responses.get("on_missing_amount", "")
-            if no_amount_msg:
-                return ExecutorResult(text=no_amount_msg)
-            return None
+            no_amount_msg = responses.get(
+                "on_missing_amount",
+                "Для корректной записи нужно указать сумму и категорию затраты",
+            )
+            return ExecutorResult(text=no_amount_msg)
 
         # Нужно уточнение варианта (например белая/серая стежка)
         if entity.get("require_clarification") and entity.get("clarification_options"):
@@ -404,7 +395,7 @@ async def execute_secretary_message(
             "author": author,
             "chat_id": chat_id,
         })
-        confirm = responses.get("on_success", "✅ {amount} → {category}")
+        confirm = responses.get("on_success", "✅ Записано в категорию: {category}")
         amt_str = str(int(amount)) if amount == int(amount) else str(amount)
         results.append(confirm.format(amount=amt_str, category=entity["name"]))
 

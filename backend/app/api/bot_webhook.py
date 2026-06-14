@@ -23,6 +23,7 @@ from app.services.agent.webhook import (
 from app.services.agent.webhook_tasks import (
     process_dm_message_background,
     process_group_message_background,
+    process_callback_background,
 )
 from app.services.bot_welcome import send_bot_welcome
 
@@ -192,6 +193,29 @@ async def max_webhook(
         if chat_id is not None:
             await handle_bot_removed_from_chat(db, chat_id=chat_id)
             await db.commit()
+        return {"ok": True}
+
+    update_type = str(payload.get("update_type") or payload.get("type") or "").lower()
+    if update_type in {"message_callback", "message.callback"}:
+        callback = payload.get("callback") or {}
+        callback_id = str(callback.get("callback_id") or payload.get("callback_id") or "")
+        callback_payload = str(callback.get("payload") or "")
+        # Извлекаем user_id нажавшего кнопку (MAX: callback.user.user_id)
+        callback_user = callback.get("user") or {}
+        clicker_user_id: int | None = None
+        raw_uid = callback_user.get("user_id") or callback_user.get("id")
+        if raw_uid is not None:
+            try:
+                clicker_user_id = int(raw_uid)
+            except (TypeError, ValueError):
+                pass
+        if callback_id:
+            background_tasks.add_task(
+                process_callback_background,
+                callback_id=callback_id,
+                callback_payload=callback_payload,
+                clicker_user_id=clicker_user_id,
+            )
         return {"ok": True}
 
     if is_message_created(payload):

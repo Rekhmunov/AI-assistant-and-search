@@ -85,3 +85,38 @@ async def process_group_message_background(
         logger.exception("MAX webhook group background failed chat=%s", chat_id)
     finally:
         await redis_client.aclose()
+
+
+async def process_callback_background(
+    *,
+    callback_id: str,
+    callback_payload: str,
+    clicker_user_id: int | None = None,
+) -> None:
+    """
+    Обрабатывает нажатие inline-кнопки (message_callback).
+    ВСЕГДА вызывает answer_callback — иначе кнопка висит в loading вечно.
+    """
+    from app.services.bot import MaxBotService
+    bot = MaxBotService()
+    try:
+        if callback_payload.startswith("secretary:"):
+            async with async_session_factory() as db:
+                from app.services.agent.secretary_callbacks import handle_secretary_callback
+                handled = await handle_secretary_callback(
+                    db,
+                    callback_id=callback_id,
+                    payload=callback_payload,
+                    clicker_user_id=clicker_user_id,
+                )
+                if handled:
+                    await db.commit()
+        else:
+            # Неизвестный payload — всё равно отвечаем чтобы снять spinner с кнопки
+            await bot.answer_callback(callback_id)
+    except Exception:
+        logger.exception("MAX webhook callback background failed callback_id=%s", callback_id)
+        try:
+            await bot.answer_callback(callback_id)
+        except Exception:
+            pass

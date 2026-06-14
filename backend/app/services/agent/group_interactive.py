@@ -71,7 +71,7 @@ async def handle_group_interactive(
                             from app.services.doc_gen_schema import DocumentStructure, DocTable
                             xd = exec_result.xlsx_data
                             title = xd.get("title", "Отчёт")
-                            columns = xd.get("columns", ["Категория", "Сумма", "Примечание"])
+                            columns = xd.get("columns", ["Категория", "Затрата", "Примечание"])
                             records_data = xd.get("records", [])
                             field_keys = ["category", "amount", "note"]
                             rows = [[str(r.get(k, "")) for k in field_keys] for r in records_data]

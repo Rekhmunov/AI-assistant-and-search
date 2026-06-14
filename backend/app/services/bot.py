@@ -138,6 +138,47 @@ class MaxBotService:
 
         return BotSendResult(ok=False, error="send failed")
 
+    @staticmethod
+    def make_keyboard_attachment(rows: list[list[dict]]) -> dict:
+        """Формирует вложение типа inline_keyboard для MAX API."""
+        return {
+            "type": "inline_keyboard",
+            "payload": {"buttons": rows},
+        }
+
+    async def answer_callback(
+        self,
+        callback_id: str,
+        notification: str = "",
+    ) -> bool:
+        """
+        Отвечает на нажатие inline-кнопки (POST /answers).
+        Обязателен после любого message_callback — иначе кнопка остаётся «нажатой».
+        """
+        if not self.settings.bot_token.strip():
+            return False
+        try:
+            body: dict = {}
+            if notification:
+                body["notification"] = notification[:200]
+
+            async def _post():
+                async with httpx.AsyncClient(timeout=15.0) as client:
+                    return await client.post(
+                        f"{BOT_API_BASE}/answers",
+                        params={"callback_id": callback_id},
+                        headers=self._auth_headers(),
+                        json=body,
+                    )
+
+            response = await self._request_with_rate_limit(_post)
+            if not response.is_success:
+                logger.warning("answer_callback failed: HTTP %s %s", response.status_code, response.text[:200])
+            return response.is_success
+        except Exception as exc:
+            logger.warning("answer_callback error: %s", exc)
+            return False
+
     async def delete_message(self, message_id: str, *, max_attempts: int = 2) -> BotSendResult:
         """
         Удаляет сообщение в MAX (DELETE /messages?message_id=…).
@@ -515,6 +556,62 @@ class MaxBotService:
         except ValueError:
             return None
         return data if isinstance(data, dict) else None
+
+    async def register_webhook(
+        self,
+        url: str,
+        *,
+        secret: str | None = None,
+    ) -> bool:
+        """
+        Регистрирует или обновляет webhook (POST /subscriptions).
+        Включает все необходимые типы событий, в т.ч. message_callback.
+
+        Должен вызываться при первом деплое или смене URL.
+        Пример: await MaxBotService().register_webhook("https://example.com/api/bot/webhook", secret="xxx")
+        """
+        if not self.settings.bot_token.strip():
+            return False
+
+        body: dict = {
+            "url": url,
+            "update_types": [
+                "message_created",
+                "message_callback",
+                "bot_started",
+                "bot_added",
+                "bot_removed",
+                "message_edited",
+                "message_removed",
+                "user_added",
+                "user_removed",
+                "chat_title_changed",
+            ],
+        }
+        if secret:
+            body["secret"] = secret
+
+        try:
+            async def _post():
+                async with httpx.AsyncClient(timeout=30.0) as client:
+                    return await client.post(
+                        f"{BOT_API_BASE}/subscriptions",
+                        headers=self._auth_headers(),
+                        json=body,
+                    )
+
+            response = await self._request_with_rate_limit(_post)
+            if response.is_success:
+                logger.info("Webhook registered OK: url=%s", url)
+                return True
+            logger.warning(
+                "Webhook registration failed: HTTP %s %s",
+                response.status_code, response.text[:300],
+            )
+            return False
+        except Exception as exc:
+            logger.warning("Webhook registration error: %s", exc)
+            return False
 
     async def list_subscriptions(self) -> list[dict]:
         """GET /subscriptions — webhook-подписки (содержат chat_id чатов бота)."""
