@@ -500,6 +500,8 @@ async def _tool_loop(
                     await reporter_obj.emit_tool_result(tool_name, bool(result.get("ok")), summary)
                 if tool_name in {"max_send_file", "max_send_message", "max_confirm_record", "max_send_date_picker"} and result.get("ok"):
                     outbound_sent = True
+                if result.get("outbound_sent"):
+                    outbound_sent = True
                     attachments = []
                 elif tool_name == "max_send_file" and result.get("ok") and isinstance(result.get("result"), dict):
                     att = result["result"].get("attachments")

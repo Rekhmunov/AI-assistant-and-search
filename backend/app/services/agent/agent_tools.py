@@ -95,7 +95,28 @@ async def execute_agent_tool(
         if name == "search_thread_history":
             return await _tool_search_thread_history(db, thread_id=thread_id, args=safe_args)
         if name == "store_agent_record":
-            return _tool_store_record(agent, safe_args, author=author, chat_id=runtime_chat_id)
+            result = _tool_store_record(agent, safe_args, author=author, chat_id=runtime_chat_id)
+            # Для агента «Учет затрат»: автоматически отправляем подтверждение с кнопкой удаления.
+            # Это гарантирует единый формат ответа независимо от поведения LLM.
+            if (
+                result.get("ok")
+                and str((agent.config or {}).get("template") or "") == "secretary"
+                and runtime_chat_id is not None
+                and allow_test_send
+            ):
+                entry = (result.get("result") or {}).get("entry") or {}
+                record_id = str(entry.get("_id") or "")
+                category = str(entry.get("category") or "")
+                amount = entry.get("amount", "")
+                amt_str = str(int(amount)) if isinstance(amount, float) and amount == int(amount) else str(amount)
+                confirm_text = f"✅ Записано в категорию: {category} — {amt_str}"
+                await _tool_max_confirm_record(bot, agent, {
+                    "text": confirm_text,
+                    "chat_id": runtime_chat_id,
+                    "record_id": record_id,
+                })
+                result["outbound_sent"] = True
+            return result
         if name == "query_agent_records":
             return _tool_query_records(agent, safe_args)
         if name == "update_agent_memory":
