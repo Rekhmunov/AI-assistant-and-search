@@ -148,7 +148,7 @@ async def max_webhook(
     has_max_secret = bool(x_max_bot_api_secret)
     has_webhook_secret = bool(x_webhook_secret)
     has_query_secret = bool(secret)
-    logger.info(
+    logger.warning(
         "WEBHOOK incoming: ip=%s has_X-Max-Bot-Api-Secret=%s has_X-Webhook-Secret=%s has_query_secret=%s",
         client_ip, has_max_secret, has_webhook_secret, has_query_secret,
     )
@@ -205,7 +205,7 @@ async def max_webhook(
         import json as _json
         msg_obj = payload.get("message") or {}
         recipient = msg_obj.get("recipient") or {}
-        logger.info(
+        logger.warning(
             "WEBHOOK message_created: is_dm=%s chat_id=%s user_id=%s text_len=%s "
             "payload_keys=%s message_keys=%s recipient=%s",
             is_dm, chat_id, max_user_id, len(text or ""),
