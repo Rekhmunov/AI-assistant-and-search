@@ -565,7 +565,11 @@ def _compact_context_block(user, agent, checklist) -> str:
     lines.append(f"missing: {', '.join(missing) if missing else 'нет'}")
 
     if cfg.get("awaiting_confirmation"):
-        lines.append("awaiting_confirmation: true")
+        lines.append(
+            "awaiting_confirmation: true — пользователь уже получил итоговое резюме и ждёт запуска. "
+            "Если в его сообщении есть согласие (да, запускай, ок, подтверждаю, верно, go и т.п.) — "
+            "немедленно установи activate=true. Не задавай дополнительных вопросов."
+        )
 
     return "\n".join(lines)
 
