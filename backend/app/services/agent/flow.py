@@ -169,9 +169,7 @@ async def handle_agent_message(
         raise ValueError("rate_limit")
 
     display_text = text.strip()
-    if file_ids and not display_text:
-        raise ValueError("text_required_with_files")
-    user_msg = await _user_message(db, thread, display_text)
+    user_msg = await _user_message(db, thread, display_text or "📎 Файл загружен")
     status_cb = on_status or noop_status
     await set_agent_pending(
         redis_client,
