@@ -346,9 +346,18 @@ def user_wants_cancel(text: str) -> bool:
     return any(phrase in low for phrase in CANCEL_PHRASES)
 
 
+_CONFIRM_PHRASES = (
+    "да", "запускай", "запусти", "активируй", "подтверждаю", "подтвердить",
+    "ок", "окей", "ok", "yes", "go", "верно", "всё верно", "все верно",
+    "поехали", "готово", "давай", "конечно", "согласен", "согласна", "запуск",
+)
+
+
 def user_wants_confirm(text: str) -> bool:
-    """Устарел — activate решает LLM. Оставлен для обратной совместимости."""
-    return False
+    """True если пользователь явно подтверждает запуск агента."""
+    low = (text or "").strip().lower()
+    return any(phrase == low or low.startswith(phrase + " ") or low.endswith(" " + phrase)
+               for phrase in _CONFIRM_PHRASES)
 
 
 def load_checklist(agent: AgentInstance) -> ChecklistState:

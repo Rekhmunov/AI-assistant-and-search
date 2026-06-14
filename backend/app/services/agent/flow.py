@@ -357,8 +357,14 @@ async def _handle_agent_message_body(
         agent.config = cfg
     missing = checklist_missing_fields(llm_result.checklist)
 
-    # LLM решает activate — не форсируем по ключевым словам.
+    # LLM решает activate. Исключение: если все поля заполнены и пользователь явно подтверждает —
+    # форсируем activate чтобы не застревать в бесконечном онбординге.
     should_activate = llm_result.activate
+    if not should_activate and not missing and not was_active:
+        from app.services.agent.llm_onboarding import user_wants_confirm
+        if user_wants_confirm(text):
+            logger.warning("AGENT_FLOW: force activate — missing=[], user confirmed, LLM missed it thread=%s", thread_id)
+            should_activate = True
 
     logger.warning(
         "AGENT_FLOW: thread=%s should_activate=%s missing=%s checklist_role=%s checklist_chat_id=%s bot_admin=%s",
