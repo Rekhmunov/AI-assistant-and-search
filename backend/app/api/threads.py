@@ -132,6 +132,7 @@ async def bulk_delete_threads(
         await on_thread_soft_deleted(db, thread)
     if thread_ids:
         await purge_generated_files_exclusive_to_threads(db, user.id, thread_ids)
+    await db.commit()
     deleted = len(threads)
     return ThreadBulkDeleteOut(deleted=deleted, not_found=len(unique_ids) - deleted)
 
@@ -357,6 +358,7 @@ async def delete_thread(
     thread.deleted_at = datetime.now(timezone.utc)
     await on_thread_soft_deleted(db, thread)
     await purge_generated_files_exclusive_to_threads(db, user.id, {thread_id})
+    await db.commit()
 
 
 @router.post("/{thread_id}/save")
