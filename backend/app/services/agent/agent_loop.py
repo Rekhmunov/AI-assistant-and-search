@@ -513,6 +513,22 @@ async def _tool_loop(
                     # Для шаблонных агентов: probe вызывается один раз — выходим из цикла
                     if is_template_agent and result.get("ok") is not None:
                         outbound_sent = True
+                        # Подменяем reply: LLM пишет его до получения результата probe
+                        if result.get("ok"):
+                            if bot_is_admin is True:
+                                data["reply"] = (
+                                    "Отлично! Бот Glosix подтверждён как администратор группы. "
+                                    "Готов к запуску — подтвердите запуск агента."
+                                )
+                            elif bot_is_admin is False:
+                                data["reply"] = (
+                                    "Бот Glosix есть в группе, но не является администратором. "
+                                    "Сделайте Glosix администратором группы в MAX и напишите «да»."
+                                )
+                        else:
+                            data["reply"] = (
+                                "Не удалось подключиться к группе. Проверьте ссылку и попробуйте снова."
+                            )
                 # save_agent_instructions вызывается один раз — после ok прекращаем итерации
                 if tool_name == "save_agent_instructions" and result.get("ok") and mode == "onboarding":
                     outbound_sent = True
