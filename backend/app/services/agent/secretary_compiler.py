@@ -94,41 +94,64 @@ def _validate_rules(data: dict[str, Any]) -> bool:
     return True
 
 
-_ANALYZER_PROMPT = """Ты — аналитик инструкций для агента-секретаря.
-Инструкция для агента есть, но она неполная или неоднозначная.
-Твоя задача — найти ВСЕ пункты которые нужно уточнить для создания чётких правил.
+_SELF_CORRECT_PROMPT = """Ты — компилятор правил агента-секретаря. Первая попытка компиляции не удалась.
 
-Выдай список вопросов в формате JSON:
+Проанализируй инструкцию. Сделай следующее:
+1. Найди что именно помешало создать правила (неоднозначность, противоречие, нехватка данных)
+2. Если можешь ДОДУМАТЬ/ПРЕДПОЛОЖИТЬ недостающее из контекста — сделай это и скомпилируй правила
+3. Если информации объективно не хватает (нет ни одной подсказки в тексте) — верни вопрос
+
+Ответ СТРОГО в JSON:
 {
-  "unclear_aspects": [
-    {"aspect": "что именно неясно", "question": "конкретный вопрос пользователю"}
-  ],
-  "first_question": "первый вопрос для уточнения (самый важный)"
+  "can_fix": true/false,
+  "fixed_rules": { ...полные правила по той же схеме если can_fix=true... },
+  "missing_info": "что конкретно не хватает если can_fix=false",
+  "question_for_user": "один конкретный вопрос если can_fix=false"
 }
-
-Если что-то неясно — спроси. Не додумывай сам.
 """
 
+_SCHEMA_REMINDER = """Схема правил:
+{
+  "version": 1, "task_description": "...",
+  "input_patterns": [{"type": "amount_keyword", "description": "..."}],
+  "entities": [{"name": "...", "triggers": ["..."], "require_clarification": false, "clarification_options": [], "clarification_question": ""}],
+  "record_schema": {"fields": [{"name": "category","type":"entity","required":true},{"name":"amount","type":"number","required":true},{"name":"note","type":"text","required":false}], "table": "records"},
+  "responses": {"on_success":"✅ {amount} → {category}","on_missing_amount":"...","on_unknown_entity":"❓ Не распознана категория '{token}'. Уточните:","on_multi_record":"✅ Записано {count} позиций"},
+  "commands": {"report":{"triggers":["отчёт"],"require_period":true,"period_question":"За какой период?","format":"xlsx","columns":["Категория","Сумма","Примечание"],"title_template":"Отчёт за {period}"},"show_records":{"triggers":["покажи"],"limit":20},"delete":{"triggers":["удали"],"require_confirmation":true}}
+}"""
 
-async def analyze_instruction_gaps(llm, instruction: str) -> str:
+
+async def analyze_instruction_gaps(llm, instruction: str) -> tuple[dict | None, str]:
     """
-    Анализирует инструкцию и возвращает первый уточняющий вопрос.
-    Вызывается когда compile_secretary_rules вернул None.
+    Пытается самостоятельно исправить инструкцию и скомпилировать правила.
+    Возвращает (compiled_rules, question_for_user).
+    - Если исправил сам → (rules, "")
+    - Если нужен юзер → (None, "вопрос")
     """
     messages = [
-        {"role": "system", "text": _ANALYZER_PROMPT},
+        {"role": "system", "text": _SELF_CORRECT_PROMPT + "\n\n" + _SCHEMA_REMINDER},
         {"role": "user", "text": f"Инструкция:\n\n{instruction}"},
     ]
     try:
-        raw = await llm.complete_text(messages, model="pro", max_tokens=1000, temperature=0.3)
+        raw = await llm.complete_text(messages, model="pro", max_tokens=3000, temperature=0.2)
         raw = (raw or "").strip()
         if raw.startswith("```"):
             lines = raw.split("\n")
             raw = "\n".join(lines[1:-1] if lines[-1].strip() == "```" else lines[1:])
         data = json.loads(raw)
-        return data.get("first_question") or "Уточните подробнее что и как записывать."
-    except Exception:
-        return "Уточните: какой формат сообщений ожидается и какие категории/типы нужно различать?"
+
+        if data.get("can_fix") and isinstance(data.get("fixed_rules"), dict):
+            rules = data["fixed_rules"]
+            if _validate_rules(rules):
+                logger.info("Secretary compiler self-corrected successfully")
+                return rules, ""
+
+        question = data.get("question_for_user") or "Уточните: какой формат сообщений и какие категории нужно различать?"
+        return None, question
+
+    except Exception as exc:
+        logger.warning("Secretary self-correct failed: %s", exc)
+        return None, "Уточните: какой формат сообщений ожидается и какие категории/типы нужно различать?"
 
 
 async def compile_secretary_rules(

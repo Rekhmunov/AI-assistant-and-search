@@ -571,25 +571,45 @@ async def _tool_loop(
                                     )
                                     logger.info("Secretary rules compiled and saved for agent=%s entities=%s", agent.id, len(entities))
                                 else:
-                                    # Компиляция не удалась — анализируем что непонятно
-                                    # и задаём первый уточняющий вопрос
+                                    # Компиляция не удалась — пробуем самоисправление
                                     try:
                                         from app.services.agent.secretary_compiler import analyze_instruction_gaps
-                                        first_q = await analyze_instruction_gaps(llm, instruction)
-                                        _forced_reply = (
-                                            "Мне нужно уточнить несколько моментов чтобы настроить правила точно.\n\n"
-                                            f"❓ {first_q}"
-                                        )
-                                        # Сохраняем флаг — идёт уточнение инструкции
-                                        cfg2 = dict(agent.config or {})
-                                        cfg2["secretary_refining"] = True
-                                        agent.config = cfg2
-                                    except Exception:
+                                        fixed_rules, question = await analyze_instruction_gaps(llm, instruction)
+                                        if fixed_rules:
+                                            # Самоисправление удалось
+                                            cfg2 = dict(agent.config or {})
+                                            cfg2["compiled_rules"] = fixed_rules
+                                            cfg2.pop("secretary_refining", None)
+                                            agent.config = cfg2
+                                            entities = fixed_rules.get("entities", [])
+                                            cmds = list(fixed_rules.get("commands", {}).keys())
+                                            entity_lines = "\n".join(
+                                                f"  • {e['name']}" + (f" (синонимы: {', '.join(e['triggers'][1:])})" if len(e.get('triggers', [])) > 1 else "")
+                                                for e in entities[:20]
+                                            )
+                                            _forced_reply = (
+                                                f"✅ Правила скомпилированы (после автоисправления).\n\n"
+                                                f"📂 Категорий: {len(entities)}\n{entity_lines}\n\n"
+                                                f"⚙️ Команды: {', '.join(cmds)}\n\n"
+                                                f"Всё верно?"
+                                            )
+                                            logger.info("Secretary compiler self-corrected agent=%s", agent.id)
+                                        else:
+                                            # Нужна помощь пользователя
+                                            cfg2 = dict(agent.config or {})
+                                            cfg2["secretary_refining"] = True
+                                            agent.config = cfg2
+                                            _forced_reply = (
+                                                f"Проанализировал инструкцию — нужно уточнить один момент.\n\n"
+                                                f"❓ {question}"
+                                            )
+                                            logger.warning("Secretary compilation needs user clarification")
+                                    except Exception as exc:
+                                        logger.warning("Secretary self-correct error: %s", exc)
                                         _forced_reply = (
                                             "❓ Уточните: какой формат сообщений ожидается "
                                             "и какие категории нужно различать?"
                                         )
-                                    logger.warning("Secretary rules compilation failed, starting refinement")
                             except Exception as exc:
                                 logger.warning("Secretary compiler error: %s", exc)
             if mode == "onboarding" and checklist is not None:
