@@ -1,6 +1,29 @@
 # Glosix — в индекс: главная, блог, юридические страницы.
 # Приватные разделы и URL с трекинг-параметрами — закрыты.
 
+# Яндекс: трекинговые параметры — считать дублями, не индексировать
+User-agent: Yandex
+Clean-param: etext
+Clean-param: yclid
+Clean-param: ymclid
+Clean-param: gclid
+Clean-param: fbclid
+Clean-param: utm_source&utm_medium&utm_campaign&utm_term&utm_content
+Disallow: /thread
+Disallow: /thread/
+Disallow: /history
+Disallow: /history/
+Disallow: /profile
+Disallow: /profile/
+Disallow: /login
+Disallow: /login/
+Disallow: /source-view
+Disallow: /source-view/
+Disallow: /api/
+Disallow: /*?*WebAppStartParam=
+Disallow: /*?*etext=
+Disallow: /*?*startapp=
+
 User-agent: *
 
 # Приватные маршруты приложения
