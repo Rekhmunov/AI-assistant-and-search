@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import uuid
 from datetime import datetime, timezone
 from typing import Any
 
@@ -28,6 +29,7 @@ def store_record(
     tables = _tables(cfg)
     rows = list(tables.get(name) or [])
     entry = dict(data)
+    entry.setdefault("_id", uuid.uuid4().hex[:12])
     entry.setdefault("at", datetime.now(timezone.utc).isoformat())
     if author:
         entry["author"] = author
@@ -54,6 +56,25 @@ def query_records(
         cat_low = category.lower()
         rows = [r for r in rows if str(r.get("category", "")).lower() == cat_low]
     return rows[-limit:]
+
+
+def delete_record_by_id(
+    agent: AgentInstance,
+    table: str,
+    record_id: str,
+) -> bool:
+    """Удаляет запись по полю _id. Возвращает True если запись была найдена и удалена."""
+    name = (table or "default").strip().lower()[:64]
+    cfg = dict(agent.config or {})
+    tables = _tables(cfg)
+    rows = list(tables.get(name) or [])
+    new_rows = [r for r in rows if r.get("_id") != record_id]
+    if len(new_rows) == len(rows):
+        return False
+    tables[name] = new_rows
+    cfg["agent_records"] = tables
+    agent.config = cfg
+    return True
 
 
 def delete_record(

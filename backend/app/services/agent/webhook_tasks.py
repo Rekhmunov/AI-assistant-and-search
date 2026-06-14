@@ -85,3 +85,19 @@ async def process_group_message_background(
         logger.exception("MAX webhook group background failed chat=%s", chat_id)
     finally:
         await redis_client.aclose()
+
+
+async def process_callback_background(
+    *,
+    callback_id: str,
+    callback_payload: str,
+) -> None:
+    """Обрабатывает нажатие inline-кнопки (message_callback)."""
+    try:
+        async with async_session_factory() as db:
+            from app.services.agent.secretary_callbacks import handle_secretary_callback
+            handled = await handle_secretary_callback(db, callback_id=callback_id, payload=callback_payload)
+            if handled:
+                await db.commit()
+    except Exception:
+        logger.exception("MAX webhook callback background failed callback_id=%s", callback_id)

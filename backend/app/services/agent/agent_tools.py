@@ -88,6 +88,10 @@ async def execute_agent_tool(
             )
         if name == "max_send_message":
             return await _tool_max_send_message(bot, safe_args)
+        if name == "max_confirm_record":
+            return await _tool_max_confirm_record(bot, agent, safe_args)
+        if name == "max_send_date_picker":
+            return await _tool_max_send_date_picker(bot, agent, safe_args)
         if name == "search_thread_history":
             return await _tool_search_thread_history(db, thread_id=thread_id, args=safe_args)
         if name == "store_agent_record":
@@ -369,6 +373,71 @@ async def _tool_max_send_message(bot: MaxBotService, args: dict) -> dict:
             result["error"] = send.error
             result["error_human"] = explain_max_send_error(send.error, chat_id=int(chat_id))
         return {"ok": send.ok, "tool": "max_send_message", "result": result}
+
+
+async def _tool_max_confirm_record(
+    bot: MaxBotService,
+    agent: AgentInstance,
+    args: dict,
+) -> dict:
+    """
+    Отправляет подтверждение записи с кнопкой «🗑 Удалить».
+    Инструмент только для агента «Учет затрат» (template=secretary).
+    Аргументы: text, chat_id, record_id.
+    """
+    text = str(args.get("text") or "✅ Записано")
+    chat_id = int(args["chat_id"])
+    record_id = str(args.get("record_id") or "")
+
+    keyboard = bot.make_keyboard_attachment([
+        [{"type": "callback", "text": "🗑 Удалить запись", "payload": f"secretary:delete:{agent.id}:{record_id}"}]
+    ])
+    send = await bot.send_message(None, text, attachments=[keyboard], chat_id=chat_id, notify=False)
+    result: dict = {"chat_id": chat_id, "message_id": send.message_id}
+    if not send.ok:
+        from app.services.agent.max_errors import explain_max_send_error
+        result["error"] = send.error
+        result["error_human"] = explain_max_send_error(send.error, chat_id=chat_id)
+    return {"ok": send.ok, "tool": "max_confirm_record", "result": result}
+
+
+async def _tool_max_send_date_picker(
+    bot: MaxBotService,
+    agent: AgentInstance,
+    args: dict,
+) -> dict:
+    """
+    Отправляет кнопки выбора периода для отчёта.
+    Аргументы: chat_id.
+    """
+    chat_id = int(args["chat_id"])
+    aid = str(agent.id)
+    keyboard = bot.make_keyboard_attachment([
+        [
+            {"type": "callback", "text": "Сегодня", "payload": f"secretary:report:{aid}:today"},
+            {"type": "callback", "text": "Вчера", "payload": f"secretary:report:{aid}:yesterday"},
+        ],
+        [
+            {"type": "callback", "text": "За неделю", "payload": f"secretary:report:{aid}:week"},
+            {"type": "callback", "text": "За месяц", "payload": f"secretary:report:{aid}:month"},
+        ],
+        [
+            {"type": "callback", "text": "Ввести дату вручную", "payload": f"secretary:report:{aid}:custom"},
+        ],
+    ])
+    send = await bot.send_message(
+        None,
+        "За какой период сформировать отчёт?",
+        attachments=[keyboard],
+        chat_id=chat_id,
+        notify=False,
+    )
+    result: dict = {"chat_id": chat_id}
+    if not send.ok:
+        from app.services.agent.max_errors import explain_max_send_error
+        result["error"] = send.error
+        result["error_human"] = explain_max_send_error(send.error, chat_id=chat_id)
+    return {"ok": send.ok, "tool": "max_send_date_picker", "result": result}
 
 
 async def _tool_search_thread_history(db: AsyncSession, *, thread_id: UUID, args: dict) -> dict:

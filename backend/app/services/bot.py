@@ -138,6 +138,47 @@ class MaxBotService:
 
         return BotSendResult(ok=False, error="send failed")
 
+    @staticmethod
+    def make_keyboard_attachment(rows: list[list[dict]]) -> dict:
+        """Формирует вложение типа inline_keyboard для MAX API."""
+        return {
+            "type": "inline_keyboard",
+            "payload": {"buttons": rows},
+        }
+
+    async def answer_callback(
+        self,
+        callback_id: str,
+        notification: str = "",
+    ) -> bool:
+        """
+        Отвечает на нажатие inline-кнопки (POST /answers).
+        Обязателен после любого message_callback — иначе кнопка остаётся «нажатой».
+        """
+        if not self.settings.bot_token.strip():
+            return False
+        try:
+            body: dict = {}
+            if notification:
+                body["notification"] = notification[:200]
+
+            async def _post():
+                async with httpx.AsyncClient(timeout=15.0) as client:
+                    return await client.post(
+                        f"{BOT_API_BASE}/answers",
+                        params={"callback_id": callback_id},
+                        headers=self._auth_headers(),
+                        json=body,
+                    )
+
+            response = await self._request_with_rate_limit(_post)
+            if not response.is_success:
+                logger.warning("answer_callback failed: HTTP %s %s", response.status_code, response.text[:200])
+            return response.is_success
+        except Exception as exc:
+            logger.warning("answer_callback error: %s", exc)
+            return False
+
     async def delete_message(self, message_id: str, *, max_attempts: int = 2) -> BotSendResult:
         """
         Удаляет сообщение в MAX (DELETE /messages?message_id=…).

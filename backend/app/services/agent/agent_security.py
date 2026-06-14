@@ -35,11 +35,16 @@ ALLOWED_TOOLS = frozenset(
         "query_secretary_records",
         "save_agent_instructions",
         "delete_agent_record",
+        "max_confirm_record",
+        "max_send_date_picker",
     }
 )
 
 # Инструменты, меняющие состояние снаружи Glosix — только с явным флагом
-DESTRUCTIVE_TOOLS = frozenset({"max_send_test", "max_send_file", "max_send_message"})
+DESTRUCTIVE_TOOLS = frozenset({
+    "max_send_test", "max_send_file", "max_send_message",
+    "max_confirm_record", "max_send_date_picker",
+})
 
 
 class AgentSecurityError(ValueError):
@@ -177,6 +182,19 @@ def validate_tool_call(
 
     if name == "max_send_test" and not allow_test_send:
         raise AgentSecurityError("test_send_not_allowed")
+
+    if name in {"max_confirm_record", "max_send_date_picker"}:
+        raw_chat_id = payload.get("chat_id")
+        if raw_chat_id is None:
+            raw_chat_id = agent.max_chat_id
+        if raw_chat_id is None:
+            raise AgentSecurityError("chat_id_required")
+        cid = int(raw_chat_id)
+        if not chat_id_allowed(cid, agent, message_chat_id=message_chat_id):
+            raise AgentSecurityError("chat_id_forbidden")
+        payload["chat_id"] = cid
+        if not allow_test_send:
+            raise AgentSecurityError("file_send_not_allowed")
 
     if name in {"max_send_file", "max_send_message"}:
         if not allow_test_send:
