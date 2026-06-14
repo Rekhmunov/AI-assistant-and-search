@@ -650,12 +650,10 @@ def checklist_missing_fields(checklist: ChecklistState) -> list[str]:
         role in {AgentRole.NEWS_DIGEST.value, AgentRole.IMAGE_POST.value}
         and (checklist.delivery_mode or "dm") == "group"
     )
-    # Роли, требующие прав администратора в группе (модерация, чтение всех сообщений)
-    _ADMIN_REQUIRED_ROLES = {AgentRole.GROUP_MODERATION.value, AgentRole.GROUP_MESSAGE_LOG.value}
     if needs_group:
         if not checklist.max_chat_id:
             missing.append("group_chat")
-        if role in _ADMIN_REQUIRED_ROLES and checklist.bot_is_group_admin is not True:
+        if checklist.bot_is_group_admin is not True:
             missing.append("bot_admin")
         if role == AgentRole.GROUP_MESSAGE_LOG.value and checklist.bot_can_read_messages is not True:
             missing.append("bot_read")

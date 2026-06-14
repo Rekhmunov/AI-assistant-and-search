@@ -532,6 +532,27 @@ async def _handle_agent_message_body(
             await db.commit()
             return user_msg, assistant, agent
 
+    # Если LLM хотел активировать но есть незаполненные поля — показываем явную ошибку
+    if should_activate and missing:
+        logger.warning("Agent activation blocked: missing=%s thread=%s", missing, thread_id)
+        if "bot_admin" in missing:
+            error_reply = (
+                "Не могу запустить агента: бот Glosix не является администратором группы MAX.\n\n"
+                "Зайдите в настройки группы → Администраторы → добавьте бота Glosix как администратора. "
+                "Затем напишите «да» снова."
+            )
+        elif "group_chat" in missing:
+            error_reply = "Укажите ссылку на группу MAX (например, max.ru/-123456789)."
+        else:
+            error_reply = (
+                f"Не хватает данных для запуска: {', '.join(missing)}. Уточните настройки и напишите «да» снова."
+            )
+        cfg["awaiting_confirmation"] = True
+        agent.config = cfg
+        assistant = await _assistant_reply(db, thread, error_reply)
+        await db.commit()
+        return user_msg, assistant, agent
+
     # Помечаем ожидание подтверждения для следующего сообщения
     if llm_result.ready_for_confirmation and not missing and not should_activate:
         cfg["awaiting_confirmation"] = True
