@@ -110,7 +110,7 @@ async def compile_secretary_rules(
     ]
 
     try:
-        raw = await llm.complete(messages, max_tokens=3000)
+        raw = await llm.complete_text(messages, model="pro", max_tokens=3000, temperature=0.2)
         raw = (raw or "").strip()
 
         # Убираем markdown если LLM обернул
