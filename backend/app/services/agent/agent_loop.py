@@ -378,6 +378,7 @@ async def _tool_loop(
 
     attachments: list[dict] = []
     outbound_sent = False
+    _forced_reply: str | None = None  # принудительный ответ (override LLM reply)
 
     for iteration in range(MAX_ORCHESTRATOR_ITERATIONS):
         if iteration > 0:
@@ -513,20 +514,26 @@ async def _tool_loop(
                     # Для шаблонных агентов: probe вызывается один раз — выходим из цикла
                     if is_template_agent and result.get("ok") is not None:
                         outbound_sent = True
-                        # Подменяем reply: LLM пишет его до получения результата probe
+                        # Принудительно задаём reply на основе реального результата probe
                         if result.get("ok"):
                             if bot_is_admin is True:
-                                data["reply"] = (
-                                    "Отлично! Бот Glosix подтверждён как администратор группы. "
-                                    "Готов к запуску — подтвердите запуск агента."
+                                _forced_reply = (
+                                    "Отлично! Бот Glosix подтверждён как администратор группы «"
+                                    + str(result.get("title") or "")
+                                    + "». Готов к запуску — подтвердите запуск агента, написав «да»."
                                 )
                             elif bot_is_admin is False:
-                                data["reply"] = (
+                                _forced_reply = (
                                     "Бот Glosix есть в группе, но не является администратором. "
                                     "Сделайте Glosix администратором группы в MAX и напишите «да»."
                                 )
+                            else:
+                                _forced_reply = (
+                                    "Проверка прав бота не удалась. Убедитесь что бот добавлен "
+                                    "в группу как администратор и напишите «да»."
+                                )
                         else:
-                            data["reply"] = (
+                            _forced_reply = (
                                 "Не удалось подключиться к группе. Проверьте ссылку и попробуйте снова."
                             )
                 # save_agent_instructions вызывается один раз — после ok прекращаем итерации
@@ -541,7 +548,10 @@ async def _tool_loop(
             # В onboarding-режиме после сохранения инструкции — выходим из цикла,
             # чтобы LLM не вызывал save_agent_instructions повторно.
             if mode == "onboarding" and outbound_sent:
-                reply = str(data.get("reply") or "Инструкция сохранена. Укажите ссылку на группу MAX.").strip()
+                if _forced_reply:
+                    reply = _forced_reply
+                else:
+                    reply = str(data.get("reply") or "Инструкция сохранена. Укажите ссылку на группу MAX.").strip()
                 return LlmTurnResult(reply=reply, checklist=checklist or ChecklistState()), tool_trace
             continue
 
