@@ -360,6 +360,13 @@ async def _handle_agent_message_body(
     # LLM решает activate — не форсируем по ключевым словам.
     should_activate = llm_result.activate
 
+    logger.warning(
+        "AGENT_FLOW: thread=%s should_activate=%s missing=%s checklist_role=%s checklist_chat_id=%s bot_admin=%s",
+        thread_id, should_activate, missing,
+        llm_result.checklist.role, llm_result.checklist.max_chat_id,
+        llm_result.checklist.bot_is_group_admin,
+    )
+
     if should_activate and not missing:
         try:
             try_validate_checklist(llm_result.checklist)
