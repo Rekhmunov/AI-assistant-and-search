@@ -144,7 +144,22 @@ async def max_webhook(
     secret: Annotated[str | None, Query()] = None,
 ):
     """MAX Bot API webhook: отправляет приветствие при bot_started (/start)."""
-    _verify_webhook_secret(x_max_bot_api_secret, x_webhook_secret, secret)
+    client_ip = request.client.host if request.client else "unknown"
+    has_max_secret = bool(x_max_bot_api_secret)
+    has_webhook_secret = bool(x_webhook_secret)
+    has_query_secret = bool(secret)
+    logger.info(
+        "WEBHOOK incoming: ip=%s has_X-Max-Bot-Api-Secret=%s has_X-Webhook-Secret=%s has_query_secret=%s",
+        client_ip, has_max_secret, has_webhook_secret, has_query_secret,
+    )
+    try:
+        _verify_webhook_secret(x_max_bot_api_secret, x_webhook_secret, secret)
+    except HTTPException as exc:
+        logger.warning(
+            "WEBHOOK 403 Forbidden: ip=%s has_X-Max-Bot-Api-Secret=%s has_X-Webhook-Secret=%s has_query_secret=%s",
+            client_ip, has_max_secret, has_webhook_secret, has_query_secret,
+        )
+        raise
     await _ensure_bot_username_loaded()
     try:
         payload = await request.json()
