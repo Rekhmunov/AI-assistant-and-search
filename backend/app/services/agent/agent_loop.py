@@ -73,6 +73,7 @@ RUNTIME_SYSTEM_PROMPT = """Ты — умный агент Glosix в мессен
 • Записи секретаря: query_secretary_records(table, category=null, limit=100) — читает данные из группового секретаря пользователя
 • Возможности MAX: read_max_api_docs
 • База знаний: read_knowledge_base
+• Сохранить инструкцию: save_agent_instructions(text) — сохраняет текст как инструкцию агента
 
 Память:
 • После важных открытий — update_agent_memory (chat_id, предпочтения, права бота).
@@ -104,6 +105,7 @@ async def run_onboarding_loop(
     diagnostic_mode: bool = False,
     on_status: StatusCallback | None = None,
     reporter: AgentStatusReporter | None = None,
+    file_hint: str = "",
 ) -> LlmTurnResult:
     """Настройка в Glosix: классификатор → специализированный промпт → рефлексия → память."""
     from app.services.agent.classifier import classify_user_intent, get_system_prompt
@@ -162,6 +164,7 @@ async def run_onboarding_loop(
     # resolve_runtime_providers лениво кешируется внутри сессии.
     is_template = bool(specialized_prompt)
 
+    effective_user_text = last_user + file_hint if file_hint else last_user
     result, tool_trace = await _tool_loop(
         db,
         redis_client,
@@ -169,7 +172,7 @@ async def run_onboarding_loop(
         agent,
         limiter,
         thread_id=thread_id,
-        user_text=last_user,
+        user_text=effective_user_text,
         history=history,
         mode="onboarding",
         checklist=checklist,

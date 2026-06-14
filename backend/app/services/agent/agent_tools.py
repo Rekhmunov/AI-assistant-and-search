@@ -104,6 +104,8 @@ async def execute_agent_tool(
             return await _tool_read_group_history(bot, safe_args)
         if name == "query_secretary_records":
             return await _tool_query_secretary_records(db, user, safe_args)
+        if name == "save_agent_instructions":
+            return _tool_save_agent_instructions(agent, safe_args)
     except Exception as exc:
         logger.exception("Agent tool %s failed: %s", name, exc)
         raw = str(exc)[:300]
@@ -401,6 +403,18 @@ def _tool_query_records(agent: AgentInstance, args: dict) -> dict:
         category=str(args["category"]) if args.get("category") else None,
     )
     return {"ok": True, "tool": "query_agent_records", "result": {"items": rows, "count": len(rows)}}
+
+
+def _tool_save_agent_instructions(agent: AgentInstance, args: dict) -> dict:
+    """Сохраняет текст как инструкцию агента (support_instructions в config)."""
+    text = str(args.get("text") or "").strip()
+    if not text:
+        return {"ok": False, "tool": "save_agent_instructions", "error": "Текст инструкции пустой"}
+    cfg = dict(agent.config or {})
+    cfg["support_instructions"] = text
+    agent.config = cfg
+    agent.instruction_text = text[:500]
+    return {"ok": True, "tool": "save_agent_instructions", "result": {"saved_chars": len(text)}}
 
 
 async def _tool_query_secretary_records(

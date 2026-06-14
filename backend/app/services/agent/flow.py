@@ -230,6 +230,7 @@ async def _handle_agent_message_body(
     reporter=None,
 ) -> tuple[Message, Message, AgentInstance]:
     status_cb = on_status or noop_status
+    file_hint = ""
     if file_ids:
         await emit_status(status_cb, STATUS_INGEST_FILES)
         chunk_count = await ingest_agent_files(db, agent, user_id=user.id, file_ids=file_ids)
@@ -237,6 +238,14 @@ async def _handle_agent_message_body(
             cfg = dict(agent.config or {})
             cfg["knowledge_chunk_count"] = chunk_count
             agent.config = cfg
+            file_hint = (
+                "\n\n[СИСТЕМНАЯ ПОДСКАЗКА: Пользователь загрузил файл. "
+                "Содержимое добавлено в базу знаний (read_knowledge_base). "
+                "Уточни у пользователя: это ИНСТРУКЦИЯ для агента (тогда прочитай через read_knowledge_base "
+                "и сохрани через save_agent_instructions) "
+                "или ДОПОЛНЕНИЕ К БАЗЕ ЗНАНИЙ (тогда оставь как есть)? "
+                "Задай ОДИН вопрос.]"
+            )
 
     if user_wants_cancel(text):
         await cancel_agent(db, agent, reason="user_cancel")
@@ -295,6 +304,7 @@ async def _handle_agent_message_body(
             diagnostic_mode=diagnostic_mode,
             on_status=status_cb,
             reporter=reporter,
+            file_hint=file_hint,
         )
     except Exception as exc:
         logger.exception("Agent LLM turn failed thread=%s", thread_id)

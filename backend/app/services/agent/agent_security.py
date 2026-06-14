@@ -33,6 +33,7 @@ ALLOWED_TOOLS = frozenset(
         "read_knowledge_base",
         "read_group_history",
         "query_secretary_records",
+        "save_agent_instructions",
     }
 )
 
