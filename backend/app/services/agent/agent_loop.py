@@ -487,6 +487,10 @@ async def _tool_loop(
                         attachments = att
             if mode == "onboarding" and checklist is not None:
                 checklist = _merge_checklist_from_data(data, checklist, user_text, history)
+            # В runtime-режиме после отправки сообщения не продолжаем цикл —
+            # ждём следующего сообщения от пользователя.
+            if mode == "runtime" and outbound_sent:
+                return RuntimeLoopResult(text="", attachments=[]), tool_trace
             continue
 
         reply = str(data.get("reply") or "").strip()
