@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from typing import Any
 
 from sqlalchemy import select
@@ -63,24 +64,35 @@ async def handle_group_interactive(
                     db, _agent, bot, chat_id, text, author
                 )
                 if exec_result is not None:
-                    if exec_result.file_instruction:
-                        from app.services.agent.document_delivery import build_document_delivery_content
-                        from app.models.user import User
-                        _owner = await db.execute(_select(User).where(User.id == _agent.user_id).limit(1))
-                        _owner_user = _owner.scalar_one_or_none()
-                        if _owner_user:
-                            content = await build_document_delivery_content(
-                                db, redis_client, _owner_user,
-                                exec_result.file_instruction,
-                                output_format=exec_result.file_format,
-                                bot=bot,
+                    if exec_result.xlsx_data:
+                        # Генерируем Excel напрямую из данных — без LLM
+                        try:
+                            from app.services.xlsx_builder import build_xlsx_bytes
+                            from app.services.doc_gen_schema import DocumentStructure, DocTable
+                            xd = exec_result.xlsx_data
+                            title = xd.get("title", "Отчёт")
+                            columns = xd.get("columns", ["Категория", "Сумма", "Примечание"])
+                            records_data = xd.get("records", [])
+                            field_keys = ["category", "amount", "note"]
+                            rows = [[str(r.get(k, "")) for k in field_keys] for r in records_data]
+                            structure = DocumentStructure(
+                                title=title,
+                                tables=[DocTable(caption=title, headers=columns, rows=rows)],
                             )
+                            xlsx_bytes = build_xlsx_bytes(structure)
+                            safe_title = re.sub(r"[^\w\-]", "_", title)[:40]
+                            filename = f"{safe_title}.xlsx"
+                            token = await bot.upload_media(xlsx_bytes, filename, "file")
+                            attachment = {"type": "file", "payload": {"token": token}} if token else None
                             await bot.send_message(
                                 None,
-                                exec_result.text or "Файл:",
-                                attachments=content.attachments or None,
+                                exec_result.text or title,
+                                attachments=[attachment] if attachment else None,
                                 chat_id=chat_id,
                             )
+                        except Exception as exc:
+                            logger.warning("Secretary xlsx generation failed: %s", exc)
+                            await bot.send_message(None, f"{exec_result.text}\n\n⚠️ Не удалось сформировать файл.", chat_id=chat_id)
                     elif exec_result.text:
                         await bot.send_message(None, exec_result.text, chat_id=chat_id)
                 # Если executor вернул None — сообщение не распознано.

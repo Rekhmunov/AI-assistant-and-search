@@ -21,8 +21,9 @@ logger = logging.getLogger(__name__)
 @dataclass
 class ExecutorResult:
     text: str = ""
-    file_instruction: str | None = None
+    file_instruction: str | None = None  # LLM-генерация (не используется для секретаря)
     file_format: str = "xlsx"
+    xlsx_data: dict | None = None  # Прямая генерация xlsx без LLM
     handled: bool = True
 
 
@@ -303,8 +304,7 @@ async def execute_secretary_message(
             )
             return ExecutorResult(
                 text=f"Отчёт за {label} — {len(filtered)} записей:",
-                file_instruction=instruction,
-                file_format=commands.get("report", {}).get("format", "xlsx"),
+                xlsx_data={"title": title, "columns": columns, "records": filtered},
             )
         else:
             return ExecutorResult(
@@ -325,19 +325,9 @@ async def execute_secretary_message(
                 return ExecutorResult(text=f"За период {label} записей не найдено.")
             columns = commands.get("report", {}).get("columns", ["Категория", "Сумма", "Примечание"])
             title = commands.get("report", {}).get("title_template", "Отчёт за {period}").format(period=label)
-            instruction = (
-                f"Создай Excel-таблицу «{title}».\n"
-                f"Столбцы: {', '.join(columns)}.\n"
-                f"Данные:\n" +
-                "\n".join(
-                    f"{r.get('category', '')}, {r.get('amount', '')}, {r.get('note', '')}"
-                    for r in filtered
-                )
-            )
             return ExecutorResult(
                 text=f"Отчёт за {label} — {len(filtered)} записей:",
-                file_instruction=instruction,
-                file_format=commands.get("report", {}).get("format", "xlsx"),
+                xlsx_data={"title": title, "columns": columns, "records": filtered},
             )
         else:
             period_q = commands.get("report", {}).get("period_question", "За какой период нужен отчёт?")
