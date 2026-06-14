@@ -503,6 +503,10 @@ async def _tool_loop(
                 if result.get("outbound_sent"):
                     outbound_sent = True
                     attachments = []
+                # Как только одно исходящее сообщение отправлено — прерываем обработку
+                # оставшихся tool_calls чтобы не отправить второе сообщение
+                if outbound_sent and mode == "runtime":
+                    break
                 elif tool_name == "max_send_file" and result.get("ok") and isinstance(result.get("result"), dict):
                     att = result["result"].get("attachments")
                     if isinstance(att, list):
