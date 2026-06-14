@@ -753,6 +753,14 @@ def _context_block(
 
     if str(checklist.task_mode or cfg.get("task_mode") or "").lower() == "expense_tracker":
         lines.append("task_mode: expense_tracker — парси «Сумма + описание», расписание не спрашивай.")
+
+    if cfg.get("awaiting_confirmation"):
+        lines.append(
+            "awaiting_confirmation: true — пользователь уже получил итоговое резюме и ждёт запуска. "
+            "Если в его сообщении есть согласие (да, запускай, ок, подтверждаю, верно, go и т.п.) — "
+            "немедленно установи activate=true. Не задавай дополнительных вопросов."
+        )
+
     return "\n".join(lines)
 
 
