@@ -571,14 +571,25 @@ async def _tool_loop(
                                     )
                                     logger.info("Secretary rules compiled and saved for agent=%s entities=%s", agent.id, len(entities))
                                 else:
-                                    _forced_reply = (
-                                        "⚠️ Не удалось скомпилировать правила из инструкции.\n\n"
-                                        "Попробуйте:\n"
-                                        "1. Упростить или переформулировать инструкцию\n"
-                                        "2. Начать настройку заново\n\n"
-                                        "Секретарь работает только по скомпилированным правилам."
-                                    )
-                                    logger.warning("Secretary rules compilation failed")
+                                    # Компиляция не удалась — анализируем что непонятно
+                                    # и задаём первый уточняющий вопрос
+                                    try:
+                                        from app.services.agent.secretary_compiler import analyze_instruction_gaps
+                                        first_q = await analyze_instruction_gaps(llm, instruction)
+                                        _forced_reply = (
+                                            "Мне нужно уточнить несколько моментов чтобы настроить правила точно.\n\n"
+                                            f"❓ {first_q}"
+                                        )
+                                        # Сохраняем флаг — идёт уточнение инструкции
+                                        cfg2 = dict(agent.config or {})
+                                        cfg2["secretary_refining"] = True
+                                        agent.config = cfg2
+                                    except Exception:
+                                        _forced_reply = (
+                                            "❓ Уточните: какой формат сообщений ожидается "
+                                            "и какие категории нужно различать?"
+                                        )
+                                    logger.warning("Secretary rules compilation failed, starting refinement")
                             except Exception as exc:
                                 logger.warning("Secretary compiler error: %s", exc)
             if mode == "onboarding" and checklist is not None:

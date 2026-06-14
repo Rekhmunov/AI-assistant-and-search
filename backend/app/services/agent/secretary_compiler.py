@@ -1,6 +1,7 @@
 """
 Компилятор правил секретаря: преобразует текстовую инструкцию в DSL-правила (JSON).
-LLM вызывается ОДИН РАЗ. Дальше агент работает детерминированно по этим правилам.
+LLM вызывается ОДИН РАЗ для компиляции. Дальше агент работает детерминированно.
+При неудаче — анализирует что неясно и возвращает первый уточняющий вопрос.
 """
 from __future__ import annotations
 
@@ -91,6 +92,43 @@ def _validate_rules(data: dict[str, Any]) -> bool:
     if not isinstance(data.get("commands"), dict):
         return False
     return True
+
+
+_ANALYZER_PROMPT = """Ты — аналитик инструкций для агента-секретаря.
+Инструкция для агента есть, но она неполная или неоднозначная.
+Твоя задача — найти ВСЕ пункты которые нужно уточнить для создания чётких правил.
+
+Выдай список вопросов в формате JSON:
+{
+  "unclear_aspects": [
+    {"aspect": "что именно неясно", "question": "конкретный вопрос пользователю"}
+  ],
+  "first_question": "первый вопрос для уточнения (самый важный)"
+}
+
+Если что-то неясно — спроси. Не додумывай сам.
+"""
+
+
+async def analyze_instruction_gaps(llm, instruction: str) -> str:
+    """
+    Анализирует инструкцию и возвращает первый уточняющий вопрос.
+    Вызывается когда compile_secretary_rules вернул None.
+    """
+    messages = [
+        {"role": "system", "text": _ANALYZER_PROMPT},
+        {"role": "user", "text": f"Инструкция:\n\n{instruction}"},
+    ]
+    try:
+        raw = await llm.complete_text(messages, model="pro", max_tokens=1000, temperature=0.3)
+        raw = (raw or "").strip()
+        if raw.startswith("```"):
+            lines = raw.split("\n")
+            raw = "\n".join(lines[1:-1] if lines[-1].strip() == "```" else lines[1:])
+        data = json.loads(raw)
+        return data.get("first_question") or "Уточните подробнее что и как записывать."
+    except Exception:
+        return "Уточните: какой формат сообщений ожидается и какие категории/типы нужно различать?"
 
 
 async def compile_secretary_rules(
