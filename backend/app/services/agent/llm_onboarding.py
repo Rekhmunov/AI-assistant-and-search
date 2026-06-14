@@ -638,8 +638,8 @@ def checklist_missing_fields(checklist: ChecklistState) -> list[str]:
         if scope in {"group", "both"}:
             if not checklist.max_chat_id:
                 missing.append("group_chat")
-            if checklist.bot_is_group_admin is not True:
-                missing.append("bot_admin")
+            # dm_assistant может слать сообщения без прав администратора —
+            # проверка bot_admin не блокирует активацию
     elif role == AgentRole.GROUP_MODERATION.value:
         if not checklist.moderation_stop_words and checklist.moderation_block_links is not True:
             missing.append("moderation_rules")
