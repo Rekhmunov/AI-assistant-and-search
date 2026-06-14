@@ -233,18 +233,45 @@ async def _handle_agent_message_body(
     file_hint = ""
     if file_ids:
         await emit_status(status_cb, STATUS_INGEST_FILES)
+        # Читаем полный текст файлов ДО нарезки на чанки — для передачи в контекст LLM
+        file_texts: list[str] = []
+        try:
+            from app.models.uploaded_file import UploadedFile
+            from app.services.file_parser import extract_text as _extract_text
+            from app.services.upload_storage import load_upload_bytes
+            from sqlalchemy import select as _select
+            files_result = await db.execute(
+                _select(UploadedFile).where(
+                    UploadedFile.user_id == user.id,
+                    UploadedFile.id.in_(file_ids),
+                )
+            )
+            for f in files_result.scalars().all():
+                if (f.media_kind or "").lower() == "image":
+                    continue
+                raw_text = (f.extracted_text or "").strip()
+                if not raw_text and f.storage_key:
+                    data = await load_upload_bytes(f.storage_key)
+                    raw_text = _extract_text(f.filename, data).strip()
+                if raw_text:
+                    file_texts.append(raw_text[:6000])
+        except Exception as exc:
+            logger.warning("File text extraction for hint failed: %s", exc)
+
         chunk_count = await ingest_agent_files(db, agent, user_id=user.id, file_ids=file_ids)
         if chunk_count:
             cfg = dict(agent.config or {})
             cfg["knowledge_chunk_count"] = chunk_count
             agent.config = cfg
+
+        if file_texts:
+            combined = "\n\n---\n\n".join(file_texts)
             file_hint = (
-                "\n\n[СИСТЕМНАЯ ПОДСКАЗКА: Пользователь загрузил файл. "
-                "Содержимое добавлено в базу знаний (read_knowledge_base). "
-                "Уточни у пользователя: это ИНСТРУКЦИЯ для агента (тогда прочитай через read_knowledge_base "
-                "и сохрани через save_agent_instructions) "
-                "или ДОПОЛНЕНИЕ К БАЗЕ ЗНАНИЙ (тогда оставь как есть)? "
-                "Задай ОДИН вопрос.]"
+                f"\n\n[СИСТЕМНАЯ ПОДСКАЗКА: Пользователь загрузил файл. Содержимое файла:\n"
+                f"```\n{combined}\n```\n"
+                "Уточни у пользователя ОДНИМ вопросом: это ИНСТРУКЦИЯ для агента "
+                "(сохранить через save_agent_instructions) "
+                "или ДОПОЛНЕНИЕ К БАЗЕ ЗНАНИЙ (оставить как есть)?]"
             )
 
     if user_wants_cancel(text):
