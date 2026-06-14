@@ -510,6 +510,9 @@ async def _tool_loop(
                     if bot_is_admin is not None:
                         checklist.bot_is_group_admin = bool(bot_is_admin)
                         logger.info("Auto-set bot_is_group_admin=%s from max_probe_chat", bot_is_admin)
+                    # Для шаблонных агентов: probe вызывается один раз — выходим из цикла
+                    if is_template_agent and result.get("ok") is not None:
+                        outbound_sent = True
                 # save_agent_instructions вызывается один раз — после ok прекращаем итерации
                 if tool_name == "save_agent_instructions" and result.get("ok") and mode == "onboarding":
                     outbound_sent = True
