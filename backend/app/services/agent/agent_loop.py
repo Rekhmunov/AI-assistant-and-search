@@ -571,6 +571,7 @@ def _template_tools_appendix(*, runtime: bool = False) -> str:
             "Доступные инструменты:\n"
             "- store_agent_record(table, data) — сохранить запись\n"
             "- query_agent_records(table, category=null) — получить записи из БД\n"
+            "- delete_agent_record(table, last=false, index=null, match=null) — удалить запись\n"
             "- query_secretary_records(table, category=null, limit=100) — читать записи секретаря группы\n"
             "- max_send_message(chat_id, text) — отправить текст в чат\n"
             "- max_send_file(chat_id, instruction, format) — файл (xlsx/docx/pdf)\n"

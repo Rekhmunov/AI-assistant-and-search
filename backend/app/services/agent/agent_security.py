@@ -34,6 +34,7 @@ ALLOWED_TOOLS = frozenset(
         "read_group_history",
         "query_secretary_records",
         "save_agent_instructions",
+        "delete_agent_record",
     }
 )
 

@@ -54,3 +54,44 @@ def query_records(
         cat_low = category.lower()
         rows = [r for r in rows if str(r.get("category", "")).lower() == cat_low]
     return rows[-limit:]
+
+
+def delete_record(
+    agent: AgentInstance,
+    table: str,
+    *,
+    last: bool = False,
+    index: int | None = None,
+    match: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Удаляет запись из таблицы. Возвращает {"deleted": [...], "remaining": N}."""
+    name = (table or "default").strip().lower()[:64]
+    cfg = dict(agent.config or {})
+    tables = _tables(cfg)
+    rows = list(tables.get(name) or [])
+    deleted: list[dict] = []
+
+    if last:
+        if rows:
+            deleted.append(rows.pop())
+    elif index is not None:
+        real_idx = index if index >= 0 else len(rows) + index
+        if 0 <= real_idx < len(rows):
+            deleted.append(rows.pop(real_idx))
+    elif match:
+        keep = []
+        for row in rows:
+            matched = all(
+                str(row.get(k, "")).lower() == str(v).lower()
+                for k, v in match.items()
+            )
+            if matched and not deleted:
+                deleted.append(row)
+            else:
+                keep.append(row)
+        rows = keep
+
+    tables[name] = rows
+    cfg["agent_records"] = tables
+    agent.config = cfg
+    return {"deleted": deleted, "remaining": len(rows)}

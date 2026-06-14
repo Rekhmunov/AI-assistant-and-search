@@ -106,6 +106,8 @@ async def execute_agent_tool(
             return await _tool_query_secretary_records(db, user, safe_args)
         if name == "save_agent_instructions":
             return _tool_save_agent_instructions(agent, safe_args)
+        if name == "delete_agent_record":
+            return _tool_delete_agent_record(agent, safe_args)
     except Exception as exc:
         logger.exception("Agent tool %s failed: %s", name, exc)
         raw = str(exc)[:300]
@@ -403,6 +405,19 @@ def _tool_query_records(agent: AgentInstance, args: dict) -> dict:
         category=str(args["category"]) if args.get("category") else None,
     )
     return {"ok": True, "tool": "query_agent_records", "result": {"items": rows, "count": len(rows)}}
+
+
+def _tool_delete_agent_record(agent: AgentInstance, args: dict) -> dict:
+    """Удаляет запись из таблицы агента."""
+    from app.services.agent.agent_records import delete_record
+
+    table = str(args.get("table") or "default")
+    last = bool(args.get("last"))
+    index = int(args["index"]) if args.get("index") is not None else None
+    match = dict(args["match"]) if isinstance(args.get("match"), dict) else None
+
+    result = delete_record(agent, table, last=last, index=index, match=match)
+    return {"ok": True, "tool": "delete_agent_record", "result": result}
 
 
 def _tool_save_agent_instructions(agent: AgentInstance, args: dict) -> dict:
