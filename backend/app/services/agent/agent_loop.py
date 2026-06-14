@@ -510,12 +510,20 @@ async def _tool_loop(
                     if bot_is_admin is not None:
                         checklist.bot_is_group_admin = bool(bot_is_admin)
                         logger.info("Auto-set bot_is_group_admin=%s from max_probe_chat", bot_is_admin)
+                # save_agent_instructions вызывается один раз — после ok прекращаем итерации
+                if tool_name == "save_agent_instructions" and result.get("ok") and mode == "onboarding":
+                    outbound_sent = True
             if mode == "onboarding" and checklist is not None:
                 checklist = _merge_checklist_from_data(data, checklist, user_text, history)
             # В runtime-режиме после отправки сообщения не продолжаем цикл —
             # ждём следующего сообщения от пользователя.
             if mode == "runtime" and outbound_sent:
                 return RuntimeLoopResult(text="", attachments=[], outbound_sent=True), tool_trace
+            # В onboarding-режиме после сохранения инструкции — выходим из цикла,
+            # чтобы LLM не вызывал save_agent_instructions повторно.
+            if mode == "onboarding" and outbound_sent:
+                reply = str(data.get("reply") or "Инструкция сохранена. Укажите ссылку на группу MAX.").strip()
+                return LlmTurnResult(reply=reply, checklist=checklist or ChecklistState()), tool_trace
             continue
 
         reply = str(data.get("reply") or "").strip()
