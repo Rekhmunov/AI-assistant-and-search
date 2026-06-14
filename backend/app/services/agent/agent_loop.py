@@ -543,6 +543,23 @@ async def _tool_loop(
                 # save_agent_instructions вызывается один раз — после ok прекращаем итерации
                 if tool_name == "save_agent_instructions" and result.get("ok") and mode == "onboarding":
                     outbound_sent = True
+                    # Запускаем компиляцию правил для секретаря в фоне
+                    agent_template = str((agent.config or {}).get("template") or "")
+                    if agent_template == "secretary":
+                        instruction = str((agent.config or {}).get("support_instructions") or "")
+                        if instruction:
+                            try:
+                                from app.services.agent.secretary_compiler import compile_secretary_rules
+                                compiled = await compile_secretary_rules(llm, instruction)
+                                if compiled:
+                                    cfg = dict(agent.config or {})
+                                    cfg["compiled_rules"] = compiled
+                                    agent.config = cfg
+                                    logger.info("Secretary rules compiled and saved for agent=%s", agent.id)
+                                else:
+                                    logger.warning("Secretary rules compilation failed, using LLM fallback")
+                            except Exception as exc:
+                                logger.warning("Secretary compiler error: %s", exc)
             if mode == "onboarding" and checklist is not None:
                 checklist = _merge_checklist_from_data(data, checklist, user_text, history)
             # В runtime-режиме после отправки сообщения не продолжаем цикл —

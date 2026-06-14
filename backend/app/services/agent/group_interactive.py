@@ -41,6 +41,54 @@ async def handle_group_interactive(
         return False
 
     bot = bot or MaxBotService()
+
+    # ── Быстрый путь: compiled_rules executor (без LLM) ──────────────────────
+    # Ищем активного секретаря с compiled_rules для данного chat_id
+    from sqlalchemy import select as _select
+    _res = await db.execute(
+        _select(AgentInstance).where(
+            AgentInstance.status == AgentStatus.ACTIVE.value,
+            AgentInstance.role == AgentRole.DM_ASSISTANT.value,
+            AgentInstance.max_chat_id == chat_id,
+        )
+    )
+    _quick_agents = list(_res.scalars().all())
+    for _agent in _quick_agents:
+        _cfg = _agent.config or {}
+        if _cfg.get("template") == "secretary" and isinstance(_cfg.get("compiled_rules"), dict):
+            try:
+                from app.services.agent.secretary_executor import execute_secretary_message, ExecutorResult
+                exec_result = await execute_secretary_message(
+                    db, _agent, bot, chat_id, text, author
+                )
+                if exec_result is not None and exec_result.handled:
+                    if exec_result.file_instruction:
+                        # Нужно сгенерировать файл через LLM
+                        from app.services.agent.document_delivery import build_document_delivery_content
+                        from app.models.user import User
+                        _owner = await db.execute(_select(User).where(User.id == _agent.user_id).limit(1))
+                        _owner_user = _owner.scalar_one_or_none()
+                        if _owner_user:
+                            content = await build_document_delivery_content(
+                                db, redis_client, _owner_user,
+                                exec_result.file_instruction,
+                                output_format=exec_result.file_format,
+                                bot=bot,
+                            )
+                            await bot.send_message(
+                                None,
+                                exec_result.text or "Файл:",
+                                attachments=content.attachments or None,
+                                chat_id=chat_id,
+                            )
+                    elif exec_result.text:
+                        await bot.send_message(None, exec_result.text, chat_id=chat_id)
+                    await db.commit()
+                    return True
+            except Exception as exc:
+                logger.exception("Secretary executor error agent=%s: %s", _agent.id, exc)
+                # Продолжаем стандартным LLM-путём
+    # ─────────────────────────────────────────────────────────────────────────
     has_images = message_has_images(payload)
 
     result = await db.execute(
