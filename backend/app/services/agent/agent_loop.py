@@ -507,9 +507,11 @@ async def _tool_loop(
                         attachments = att
                 # Автоматически переносим bot_is_admin из max_probe_chat в checklist
                 if tool_name == "max_probe_chat" and mode == "onboarding" and checklist is not None:
-                    bot_is_admin = result.get("bot_is_admin")
-                    logger.warning("PROBE result keys=%s ok=%s bot_is_admin=%s type=%s",
-                                   list(result.keys()), result.get("ok"), bot_is_admin, type(bot_is_admin))
+                    probe_inner = result.get("result") if isinstance(result.get("result"), dict) else result
+                    bot_is_admin = probe_inner.get("bot_is_admin")
+                    logger.warning("PROBE result keys=%s ok=%s bot_is_admin=%s type=%s inner_keys=%s",
+                                   list(result.keys()), result.get("ok"), bot_is_admin, type(bot_is_admin),
+                                   list(probe_inner.keys()))
                     if bot_is_admin is not None:
                         checklist.bot_is_group_admin = bool(bot_is_admin)
                         logger.info("Auto-set bot_is_group_admin=%s from max_probe_chat", bot_is_admin)
