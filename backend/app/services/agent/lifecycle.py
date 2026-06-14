@@ -62,7 +62,7 @@ async def reactivate_cancelled_agent(db: AsyncSession, agent: AgentInstance) -> 
     agent.status = AgentStatus.DRAFT.value
     agent.role = None
     agent.max_chat_id = None
-    agent.instruction_text = None
+    agent.instruction_text = ""
     cfg = dict(agent.config or {})
     cfg["checklist"] = ChecklistState().to_dict()
     cfg.pop("schedule_text", None)
