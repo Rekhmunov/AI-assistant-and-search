@@ -199,12 +199,22 @@ async def max_webhook(
     if update_type in {"message_callback", "message.callback"}:
         callback = payload.get("callback") or {}
         callback_id = str(callback.get("callback_id") or payload.get("callback_id") or "")
-        callback_payload = str(callback.get("payload") or payload.get("payload") or "")
-        if callback_id and callback_payload.startswith("secretary:"):
+        callback_payload = str(callback.get("payload") or "")
+        # Извлекаем user_id нажавшего кнопку (MAX: callback.user.user_id)
+        callback_user = callback.get("user") or {}
+        clicker_user_id: int | None = None
+        raw_uid = callback_user.get("user_id") or callback_user.get("id")
+        if raw_uid is not None:
+            try:
+                clicker_user_id = int(raw_uid)
+            except (TypeError, ValueError):
+                pass
+        if callback_id:
             background_tasks.add_task(
                 process_callback_background,
                 callback_id=callback_id,
                 callback_payload=callback_payload,
+                clicker_user_id=clicker_user_id,
             )
         return {"ok": True}
 

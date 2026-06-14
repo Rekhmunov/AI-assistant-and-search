@@ -196,6 +196,12 @@ def validate_tool_call(
         if not allow_test_send:
             raise AgentSecurityError("file_send_not_allowed")
 
+    if name == "max_confirm_record":
+        text = str(payload.get("text") or "").strip()
+        if not text or len(text) > MAX_MESSAGE_TEXT_LEN:
+            raise AgentSecurityError("invalid_message_text")
+        payload["text"] = text
+
     if name in {"max_send_file", "max_send_message"}:
         if not allow_test_send:
             raise AgentSecurityError("file_send_not_allowed")

@@ -14,7 +14,7 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.agent import AgentInstance, AgentStatus
+from app.models.agent import AgentInstance
 from app.services.bot import MaxBotService
 
 logger = logging.getLogger(__name__)
@@ -25,14 +25,17 @@ async def handle_secretary_callback(
     *,
     callback_id: str,
     payload: str,
+    clicker_user_id: int | None = None,
 ) -> bool:
     """
     Разбирает payload кнопки и выполняет нужное действие.
     Возвращает True если событие обработано.
+    clicker_user_id — MAX user_id нажавшего кнопку (из callback.user.user_id).
     """
     bot = MaxBotService()
     parts = payload.split(":")
     if len(parts) < 3 or parts[0] != "secretary":
+        await bot.answer_callback(callback_id)
         return False
 
     action = parts[1]
@@ -51,6 +54,16 @@ async def handle_secretary_callback(
         logger.warning("secretary_callback: agent %s not found", agent_id)
         await bot.answer_callback(callback_id, "Ошибка: агент не найден")
         return False
+
+    # Только владелец агента может управлять записями
+    if clicker_user_id is not None and agent.max_user_id is not None:
+        if int(clicker_user_id) != int(agent.max_user_id):
+            await bot.answer_callback(callback_id, "Только владелец агента может управлять записями")
+            logger.warning(
+                "secretary_callback: access denied clicker=%s owner=%s agent=%s",
+                clicker_user_id, agent.max_user_id, agent_id,
+            )
+            return False
 
     if action == "delete":
         return await _handle_delete(db, bot, agent, callback_id, parts)
