@@ -56,14 +56,14 @@ async def handle_group_interactive(
     for _agent in _quick_agents:
         _cfg = _agent.config or {}
         if _cfg.get("template") == "secretary" and isinstance(_cfg.get("compiled_rules"), dict):
+            # Секретарь с compiled_rules работает ТОЛЬКО по коду — LLM не вызывается
             try:
                 from app.services.agent.secretary_executor import execute_secretary_message, ExecutorResult
                 exec_result = await execute_secretary_message(
                     db, _agent, bot, chat_id, text, author
                 )
-                if exec_result is not None and exec_result.handled:
+                if exec_result is not None:
                     if exec_result.file_instruction:
-                        # Нужно сгенерировать файл через LLM
                         from app.services.agent.document_delivery import build_document_delivery_content
                         from app.models.user import User
                         _owner = await db.execute(_select(User).where(User.id == _agent.user_id).limit(1))
@@ -83,11 +83,14 @@ async def handle_group_interactive(
                             )
                     elif exec_result.text:
                         await bot.send_message(None, exec_result.text, chat_id=chat_id)
-                    await db.commit()
-                    return True
+                # Если executor вернул None — сообщение не распознано.
+                # Для секретаря с compiled_rules LLM НЕ вызывается.
+                # Просто игнорируем (агент молчит на нераспознанные сообщения).
+                await db.commit()
+                return True  # Всегда возвращаем True — LLM не нужен
             except Exception as exc:
                 logger.exception("Secretary executor error agent=%s: %s", _agent.id, exc)
-                # Продолжаем стандартным LLM-путём
+                return True  # Даже при ошибке не вызываем LLM
     # ─────────────────────────────────────────────────────────────────────────
     has_images = message_has_images(payload)
 

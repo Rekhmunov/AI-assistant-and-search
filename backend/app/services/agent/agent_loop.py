@@ -572,10 +572,13 @@ async def _tool_loop(
                                     logger.info("Secretary rules compiled and saved for agent=%s entities=%s", agent.id, len(entities))
                                 else:
                                     _forced_reply = (
-                                        "Инструкция сохранена. Правила скомпилировать не удалось — "
-                                        "агент будет работать через LLM как обычно."
+                                        "⚠️ Не удалось скомпилировать правила из инструкции.\n\n"
+                                        "Попробуйте:\n"
+                                        "1. Упростить или переформулировать инструкцию\n"
+                                        "2. Начать настройку заново\n\n"
+                                        "Секретарь работает только по скомпилированным правилам."
                                     )
-                                    logger.warning("Secretary rules compilation failed, using LLM fallback")
+                                    logger.warning("Secretary rules compilation failed")
                             except Exception as exc:
                                 logger.warning("Secretary compiler error: %s", exc)
             if mode == "onboarding" and checklist is not None:
