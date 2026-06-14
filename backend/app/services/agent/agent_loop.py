@@ -555,8 +555,26 @@ async def _tool_loop(
                                     cfg = dict(agent.config or {})
                                     cfg["compiled_rules"] = compiled
                                     agent.config = cfg
-                                    logger.info("Secretary rules compiled and saved for agent=%s", agent.id)
+                                    # Формируем читаемый отчёт о компиляции
+                                    entities = compiled.get("entities", [])
+                                    cmds = list(compiled.get("commands", {}).keys())
+                                    entity_lines = "\n".join(
+                                        f"  • {e['name']}" + (f" (синонимы: {', '.join(e['triggers'][1:])})" if len(e.get('triggers', [])) > 1 else "")
+                                        for e in entities[:20]
+                                    )
+                                    cmds_str = ", ".join(cmds)
+                                    _forced_reply = (
+                                        f"✅ Правила скомпилированы. Агент будет работать без LLM.\n\n"
+                                        f"📂 Распознано категорий: {len(entities)}\n{entity_lines}\n\n"
+                                        f"⚙️ Команды: {cmds_str}\n\n"
+                                        f"Всё верно? Если нужно что-то исправить — напишите что изменить."
+                                    )
+                                    logger.info("Secretary rules compiled and saved for agent=%s entities=%s", agent.id, len(entities))
                                 else:
+                                    _forced_reply = (
+                                        "Инструкция сохранена. Правила скомпилировать не удалось — "
+                                        "агент будет работать через LLM как обычно."
+                                    )
                                     logger.warning("Secretary rules compilation failed, using LLM fallback")
                             except Exception as exc:
                                 logger.warning("Secretary compiler error: %s", exc)
