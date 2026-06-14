@@ -150,7 +150,7 @@ async def analyze_instruction_gaps(llm, instruction: str) -> tuple[dict | None, 
         return None, question
 
     except Exception as exc:
-        logger.warning("Secretary self-correct failed: %s", exc)
+        logger.warning("Secretary self-correct failed: %s | raw=%s", exc, locals().get("raw", "")[:300])
         return None, "Уточните: какой формат сообщений ожидается и какие категории/типы нужно различать?"
 
 
@@ -173,15 +173,23 @@ async def compile_secretary_rules(
     try:
         raw = await llm.complete_text(messages, model="pro", max_tokens=3000, temperature=0.2)
         raw = (raw or "").strip()
+        logger.warning("COMPILER raw first 300: %s", raw[:300])
 
         # Убираем markdown если LLM обернул
         if raw.startswith("```"):
             lines = raw.split("\n")
             raw = "\n".join(lines[1:-1] if lines[-1].strip() == "```" else lines[1:])
 
+        # Ищем JSON-блок если ответ содержит текст вокруг
+        if not raw.startswith("{"):
+            start = raw.find("{")
+            end = raw.rfind("}") + 1
+            if start >= 0 and end > start:
+                raw = raw[start:end]
+
         data = json.loads(raw)
         if not _validate_rules(data):
-            logger.warning("Secretary compiler: invalid rules structure")
+            logger.warning("COMPILER invalid structure: keys=%s version=%s", list(data.keys()), data.get("version"))
             return None
 
         logger.info(
@@ -192,5 +200,5 @@ async def compile_secretary_rules(
         return data
 
     except Exception as exc:
-        logger.warning("Secretary compiler failed: %s", exc)
+        logger.warning("Secretary compiler failed: %s | raw=%s", exc, locals().get("raw", "")[:300])
         return None
