@@ -88,6 +88,7 @@ class RuntimeLoopResult:
     text: str
     attachments: list[dict] = field(default_factory=list)
     tool_trace: list[dict] = field(default_factory=list)
+    outbound_sent: bool = False  # True = сообщение уже отправлено инструментом
 
 
 async def run_onboarding_loop(
@@ -285,6 +286,8 @@ async def run_runtime_loop(
                 tool_trace=result.tool_trace,
             )
         llm, _, answer_model, _, _ = await resolve_runtime_providers(db, redis_client, user=user)
+        if result.outbound_sent:
+            return result
         if should_reflect(user_text=user_text, draft_reply=result.text, runtime=True, tool_trace=result.tool_trace):
             await emit_status(on_status, STATUS_REFLECTING)
             reflection = await critique_agent_reply(
@@ -490,7 +493,7 @@ async def _tool_loop(
             # В runtime-режиме после отправки сообщения не продолжаем цикл —
             # ждём следующего сообщения от пользователя.
             if mode == "runtime" and outbound_sent:
-                return RuntimeLoopResult(text="", attachments=[]), tool_trace
+                return RuntimeLoopResult(text="", attachments=[], outbound_sent=True), tool_trace
             continue
 
         reply = str(data.get("reply") or "").strip()
