@@ -448,11 +448,17 @@ class MaxBotService:
         """
         me = await self.get_me()
         if not me:
+            logger.warning("check_bot_is_group_admin: get_me() returned None, chat_id=%s", chat_id)
             return None
         bot_user_id = me.get("user_id")
         if bot_user_id is None:
+            logger.warning("check_bot_is_group_admin: no user_id in /me response, chat_id=%s", chat_id)
             return None
         members = await self.get_chat_members(int(chat_id), user_ids=[int(bot_user_id)], count=1)
+        logger.warning(
+            "check_bot_is_group_admin: chat_id=%s bot_user_id=%s members_count=%s",
+            chat_id, bot_user_id, len(members),
+        )
         if not members:
             chat = await self.get_chat(int(chat_id))
             if isinstance(chat, dict):
@@ -461,9 +467,15 @@ class MaxBotService:
                     return False
             return None
         member = members[0] if isinstance(members[0], dict) else {}
-        if member.get("is_admin") is True or member.get("is_owner") is True:
+        is_admin = member.get("is_admin")
+        is_owner = member.get("is_owner")
+        logger.warning(
+            "check_bot_is_group_admin: chat_id=%s is_admin=%s is_owner=%s",
+            chat_id, is_admin, is_owner,
+        )
+        if is_admin is True or is_owner is True:
             return True
-        if member.get("is_admin") is False and member.get("is_owner") is False:
+        if is_admin is False and is_owner is False:
             return False
         permissions = member.get("permissions")
         if isinstance(permissions, list) and permissions:
