@@ -153,6 +153,9 @@ async def build_interactive_reply(
         bot=bot,
     )
     reply_text = (loop_result.text or "").strip()
+    # Если агент уже отправил сообщение через max_send_message — не отправляем дополнительный текст
+    if loop_result.outbound_sent:
+        return "", []
     if not reply_text and not loop_result.attachments:
         reply_text = "Готово."
     return reply_text, loop_result.attachments
