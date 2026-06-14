@@ -11,8 +11,8 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
-_COMPILER_PROMPT = """Ты — компилятор правил агента-секретаря. Твоя задача:
-проанализировать инструкцию пользователя и создать ТОЧНЫЕ машиночитаемые правила в JSON.
+_COMPILER_PROMPT = """Ты — компилятор правил агента «Учет затрат». Твоя задача:
+проанализировать список категорий затрат и создать машиночитаемые правила в JSON.
 
 Правила должны охватывать ВСЕ аспекты работы агента так, чтобы он мог работать
 ПОЛНОСТЬЮ без LLM — только по этим правилам.
@@ -21,17 +21,17 @@ _COMPILER_PROMPT = """Ты — компилятор правил агента-с
 
 {
   "version": 1,
-  "task_description": "краткое описание задачи агента",
+  "task_description": "Учет затрат: записывает расходы из группы в формате сумма+примечание",
   "input_patterns": [
     {
       "type": "amount_keyword",
-      "description": "описание формата входного сообщения"
+      "description": "число + текст или текст + число, например: 1500 доставка или ПЗР 3000"
     }
   ],
   "entities": [
     {
-      "name": "точное название сущности/категории",
-      "triggers": ["ключевое слово 1", "синоним 2", "синоним 3"],
+      "name": "точное название категории как в инструкции",
+      "triggers": ["ключевое слово 1", "синоним 2", "сокращение"],
       "require_clarification": false,
       "clarification_options": [],
       "clarification_question": ""
@@ -46,18 +46,18 @@ _COMPILER_PROMPT = """Ты — компилятор правил агента-с
     "table": "records"
   },
   "responses": {
-    "on_success": "✅ {amount} → {category}",
-    "on_missing_amount": "сообщение когда нет суммы",
-    "on_unknown_entity": "❓ Не распознана категория '{token}'. Уточните:",
+    "on_success": "✅ Записано в категорию: {category}",
+    "on_missing_amount": "Для корректной записи нужно указать сумму и категорию затраты",
+    "on_unknown_entity": "❓ К какой категории отнести «{token}»?",
     "on_multi_record": "✅ Записано {count} позиций"
   },
   "commands": {
     "report": {
-      "triggers": ["отчёт", "пришли отчёт", "сформируй", "пришли excel", "excel"],
+      "triggers": ["отчёт", "пришли отчёт", "сформируй", "пришли excel", "excel", "пришли отчет", "генерируй отчет", "сгенерируй отчет"],
       "require_period": true,
-      "period_question": "За какой период нужен отчёт?",
+      "period_question": "За какой период нужен отчёт? Укажите дату или диапазон (например: 14.06.2026 или с 01.06 по 14.06)",
       "format": "xlsx",
-      "columns": ["Категория", "Сумма", "Примечание"],
+      "columns": ["Категория", "Затрата", "Примечание"],
       "title_template": "Отчёт за {period}"
     },
     "show_records": {
@@ -73,11 +73,12 @@ _COMPILER_PROMPT = """Ты — компилятор правил агента-с
 
 ВАЖНО:
 - triggers пиши строчными буквами
-- Если у сущности есть уточняющие варианты (например "стежка белая/серая") — 
-  добавь их в clarification_options и поставь require_clarification: true
-- Если сущности/категории нет, но есть другой тип задачи — адаптируй схему
-- Включи ВСЕ синонимы и варианты написания в triggers
-- on_missing_amount: сообщение из инструкции если оно есть, иначе стандартное
+- Для каждой категории добавляй очевидные сокращения и синонимы в triggers
+  (например, для "Заработная плата" — ["зарплата", "зп", "заработная плата"])
+- Если у категории есть варианты в скобках в названии — используй их как triggers
+  (например, "Аренда (аренда, коммуналка)" → triggers: ["аренда", "коммуналка", "вывоз мусора"])
+- name категории — точно как в списке пользователя (включая скобки)
+- on_missing_amount и on_success — используй ТОЧНО как в шаблоне выше
 """
 
 
@@ -112,12 +113,12 @@ _SELF_CORRECT_PROMPT = """Ты — компилятор правил агент�
 
 _SCHEMA_REMINDER = """Схема правил:
 {
-  "version": 1, "task_description": "...",
-  "input_patterns": [{"type": "amount_keyword", "description": "..."}],
+  "version": 1, "task_description": "Учет затрат: записывает расходы из группы в формате сумма+примечание",
+  "input_patterns": [{"type": "amount_keyword", "description": "число + текст или текст + число"}],
   "entities": [{"name": "...", "triggers": ["..."], "require_clarification": false, "clarification_options": [], "clarification_question": ""}],
   "record_schema": {"fields": [{"name": "category","type":"entity","required":true},{"name":"amount","type":"number","required":true},{"name":"note","type":"text","required":false}], "table": "records"},
-  "responses": {"on_success":"✅ {amount} → {category}","on_missing_amount":"...","on_unknown_entity":"❓ Не распознана категория '{token}'. Уточните:","on_multi_record":"✅ Записано {count} позиций"},
-  "commands": {"report":{"triggers":["отчёт"],"require_period":true,"period_question":"За какой период?","format":"xlsx","columns":["Категория","Сумма","Примечание"],"title_template":"Отчёт за {period}"},"show_records":{"triggers":["покажи"],"limit":20},"delete":{"triggers":["удали"],"require_confirmation":true}}
+  "responses": {"on_success":"✅ Записано в категорию: {category}","on_missing_amount":"Для корректной записи нужно указать сумму и категорию затраты","on_unknown_entity":"❓ К какой категории отнести «{token}»?","on_multi_record":"✅ Записано {count} позиций"},
+  "commands": {"report":{"triggers":["отчёт","пришли отчёт","пришли excel","excel","генерируй отчет","сгенерируй отчет"],"require_period":true,"period_question":"За какой период нужен отчёт? Укажите дату или диапазон (например: 14.06.2026 или с 01.06 по 14.06)","format":"xlsx","columns":["Категория","Затрата","Примечание"],"title_template":"Отчёт за {period}"},"show_records":{"triggers":["покажи","что записано","покажи записи","итого","сколько"],"limit":20},"delete":{"triggers":["удали","отмени запись","убери","удали последнюю"],"require_confirmation":true}}
 }"""
 
 

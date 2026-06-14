@@ -16,7 +16,7 @@ TEMPLATE_WELCOMES: dict[str, str] = {
 # Название шаблона — используется как prefix в заголовке треда: «Напоминания 1»
 TEMPLATE_TITLES: dict[str, str] = {
     "reminder": "Напоминания",
-    "secretary": "Секретарь",
+    "secretary": "Учет затрат",
 }
 
 
