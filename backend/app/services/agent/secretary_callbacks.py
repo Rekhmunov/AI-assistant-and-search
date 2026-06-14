@@ -144,6 +144,10 @@ async def _handle_report(
             chat_id=int(chat_id),
             notify=False,
         )
+        # Сохраняем состояние: ждём ввод даты от пользователя
+        cfg = dict(agent.config or {})
+        cfg["secretary_pending_report"] = True
+        agent.config = cfg
         return True
     else:
         await bot.answer_callback(callback_id, "Неизвестный период")
