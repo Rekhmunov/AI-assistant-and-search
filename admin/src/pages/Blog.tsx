@@ -14,6 +14,7 @@ type BlogPostItem = {
   status: string;
   published_at: string | null;
   reading_time_min: number;
+  view_count?: number;
   category: { name: string } | null;
   cover_image?: { url: string } | null;
   updated_at?: string;
@@ -207,6 +208,7 @@ export function BlogPage() {
                 <th>Статья</th>
                 <th>Статус</th>
                 <th>Категория</th>
+                <th>👁</th>
                 <th>Время чтения</th>
                 <th>Опубликовано</th>
                 <th aria-label="Действия" />
@@ -247,6 +249,9 @@ export function BlogPage() {
                       <StatusBadge status={post.status} />
                     </td>
                     <td data-label="Категория">{post.category?.name ?? "—"}</td>
+                    <td data-label="👁" className="blog-views-cell">
+                      {(post.view_count ?? 0).toLocaleString("ru-RU")}
+                    </td>
                     <td data-label="Время чтения">{post.reading_time_min} мин</td>
                     <td data-label="Опубликовано">{formatDate(post.published_at)}</td>
                     <td className="admin-table-action-cell" data-label="">

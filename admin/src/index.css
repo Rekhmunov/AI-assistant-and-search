@@ -3492,12 +3492,20 @@ pre.small {
   background: var(--surface-hover);
 }
 
-.blog-table th:nth-child(1) { width: 44%; }
-.blog-table th:nth-child(2) { width: 12%; }
-.blog-table th:nth-child(3) { width: 14%; }
-.blog-table th:nth-child(4) { width: 9%; }
-.blog-table th:nth-child(5) { width: 12%; }
-.blog-table th:nth-child(6) { width: 9%; }
+.blog-table th:nth-child(1) { width: 40%; }
+.blog-table th:nth-child(2) { width: 11%; }
+.blog-table th:nth-child(3) { width: 13%; }
+.blog-table th:nth-child(4) { width: 7%; text-align: right; }
+.blog-table th:nth-child(5) { width: 9%; }
+.blog-table th:nth-child(6) { width: 11%; }
+.blog-table th:nth-child(7) { width: 9%; }
+
+.blog-views-cell {
+  text-align: right;
+  font-size: 0.85rem;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
 
 .blog-post-cell {
   display: flex;

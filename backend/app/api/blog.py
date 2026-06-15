@@ -2,12 +2,13 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
+from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_db, get_rate_limiter
+from app.api.deps import get_db, get_rate_limiter, get_redis
 from app.core.auth_limits import client_ip
 from app.core.limiter import RateLimiter
-from app.models.blog import BlogMedia
+from app.models.blog import BlogMedia, BlogPost
 from app.schemas.blog import BlogCategoryOut, BlogCommentCreate, BlogCommentOut, BlogPostListItem
 from app.services.blog_comments import add_comment, list_approved_comments
 from app.services.blog_posts import (
@@ -53,6 +54,43 @@ async def public_posts(
         }
         for p in posts
     ]
+
+
+@router.post("/posts/{slug}/view", status_code=status.HTTP_204_NO_CONTENT)
+async def public_post_view(
+    slug: str,
+    request: Request,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    redis=Depends(get_redis),
+):
+    """
+    Инкрементирует счётчик просмотров статьи.
+    Защита от накрутки: один IP — один просмотр в 24 часа.
+    Redis-ключ: blog:views:{post_id} — буфер, сбрасывается в БД каждые 20 просмотров.
+    """
+    post = await get_post_by_slug(db, slug, locale=DEFAULT_LOCALE)
+    if not post or post.status != "published":
+        return  # тихо игнорируем
+
+    ip = client_ip(request)
+    dedup_key = f"blog:view_ip:{post.id}:{ip}"
+    already_viewed = await redis.set(dedup_key, "1", nx=True, ex=86400)  # 24 часа
+    if not already_viewed:
+        return  # уже считали этот IP сегодня
+
+    counter_key = f"blog:views:{post.id}"
+    count = await redis.incr(counter_key)
+
+    # Каждые 20 просмотров — сбрасываем в БД атомарно
+    FLUSH_EVERY = 20
+    if count % FLUSH_EVERY == 0:
+        await redis.set(counter_key, 0)
+        await db.execute(
+            update(BlogPost)
+            .where(BlogPost.id == post.id)
+            .values(view_count=BlogPost.view_count + FLUSH_EVERY)
+        )
+        await db.commit()
 
 
 @router.get("/posts/{slug}/comments", response_model=list[BlogCommentOut])

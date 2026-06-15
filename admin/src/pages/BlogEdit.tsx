@@ -28,6 +28,7 @@ type PostForm = {
   robots_index: boolean;
   author_name: string;
   comments_enabled: boolean;
+  view_count: number;
 };
 
 type AdminComment = {
@@ -54,6 +55,7 @@ const EMPTY: PostForm = {
   robots_index: true,
   author_name: "",
   comments_enabled: false,
+  view_count: 0,
 };
 
 function mediaSrc(url: string | undefined): string {
@@ -140,6 +142,7 @@ export function BlogEditPage() {
       robots_index: post.robots_index,
       author_name: post.author_name || "",
       comments_enabled: post.comments_enabled || false,
+      view_count: (post as any).view_count || 0,
     });
     setCoverUrl(post.cover_image?.url || "");
   };
@@ -362,6 +365,20 @@ export function BlogEditPage() {
                 disabled={!canWrite}
               />
               <span>Комментарии к статье</span>
+            </label>
+            <label className="blog-field">
+              <span className="blog-field-label">👁 Начальное число просмотров</span>
+              <input
+                type="number"
+                min={0}
+                value={form.view_count}
+                onChange={(e) => patch({ view_count: Math.max(0, parseInt(e.target.value) || 0) })}
+                disabled={!canWrite}
+                placeholder="0"
+              />
+              <span className="hint" style={{ fontSize: "0.75rem" }}>
+                Реальные просмотры прибавляются автоматически
+              </span>
             </label>
           </section>
 

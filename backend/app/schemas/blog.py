@@ -44,6 +44,7 @@ class BlogPostListItem(BaseModel):
     excerpt: str
     published_at: datetime | None
     reading_time_min: int
+    view_count: int = 0
     category: BlogCategoryOut | None = None
     cover_image: BlogMediaOut | None = None
 
@@ -106,6 +107,7 @@ class BlogPostAdminOut(BlogPostListItem):
     author_name: str = ""
     comments_enabled: bool = False
     locale: str = "ru"
+    view_count: int = 0
 
 
 class BlogPostCreate(BaseModel):
@@ -148,6 +150,7 @@ class BlogPostUpdate(BaseModel):
     author_name: str | None = None
     comments_enabled: bool | None = None
     locale: str | None = None
+    view_count: int | None = None
 
 
 class BlogMediaUploadOut(BaseModel):

@@ -65,6 +65,7 @@ class BlogPost(Base):
     locale: Mapped[str] = mapped_column(String(8), default="ru", index=True)
     published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     reading_time_min: Mapped[int] = mapped_column(Integer, default=1)
+    view_count: Mapped[int] = mapped_column(BigInteger, default=0)
     meta_title: Mapped[str] = mapped_column(String(255), default="")
     meta_description: Mapped[str] = mapped_column(String(500), default="")
     meta_keywords: Mapped[str] = mapped_column(String(500), default="")

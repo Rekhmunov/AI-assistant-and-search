@@ -138,6 +138,7 @@ def post_to_admin(post: BlogPost, *, author_email: str | None = None) -> dict:
         "author_name": post.author_name or "",
         "comments_enabled": bool(post.comments_enabled),
         "locale": post.locale or DEFAULT_LOCALE,
+        "view_count": post.view_count or 0,
     }
 
 
@@ -296,5 +297,8 @@ async def update_post(db: AsyncSession, post: BlogPost, data: dict) -> BlogPost:
     ):
         if field in data and data[field] is not None:
             setattr(post, field, data[field])
+    # view_count: admin can set an arbitrary initial value (≥0)
+    if "view_count" in data and data["view_count"] is not None:
+        post.view_count = max(0, int(data["view_count"]))
     await db.flush()
     return post
