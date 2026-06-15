@@ -304,9 +304,12 @@ class SearchFlowService:
                 yield sse_event("error", {"code": "rate_limit", "message": msg})
             return
 
+        # Claude Search доступен только для Pro-пользователей с Claude LLM
         _is_claude_search = (
             search_provider_id == "claude_search"
             and llm_provider_id == "anthropic_claude"
+            and user is not None
+            and getattr(user, "plan", None) == "pro"
         )
 
         if llm_provider_id != PERPLEXITY_PROVIDER_ID and not _is_claude_search:
