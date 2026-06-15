@@ -372,6 +372,11 @@ async def _tool_loop(
         extra = _template_tools_appendix(runtime=mode == "runtime")
     else:
         extra = tools_appendix_for_mode(runtime=mode == "runtime")
+
+    # Агент «Учет затрат» (template=secretary) использует lite-модель —
+    # задача простая (категоризация + запись), не требует pro.
+    _agent_template = str((agent.config or {}).get("template") or "")
+    _llm_model = "lite" if _agent_template == "secretary" else "pro"
     if diagnostic_mode and mode == "onboarding":
         diag = await agent_runtime_diagnostics(db, agent)
         extra += f"\n\ndiagnostic_snapshot: {json.dumps(diag, ensure_ascii=False)}"
@@ -426,7 +431,7 @@ async def _tool_loop(
             call_max_tokens = 3000
         else:
             call_max_tokens = 2000
-        raw = await _llm_complete(llm, payload, max_tokens=call_max_tokens)
+        raw = await _llm_complete(llm, payload, max_tokens=call_max_tokens, model=_llm_model)
         data = _parse_llm_json(raw)
 
         # Отправляем план-рассуждение агента
@@ -441,7 +446,7 @@ async def _tool_loop(
                     "text": "Ответ должен быть валидным JSON. Повтори с done=true если готов ответить.",
                 }
             )
-            raw = await _llm_complete(llm, payload)
+            raw = await _llm_complete(llm, payload, model=_llm_model)
             data = _parse_llm_json(raw)
 
         if not data:
@@ -704,9 +709,9 @@ def _tool_result_summary(tool_name: str, result: dict) -> str:
     return "ok"
 
 
-async def _llm_complete(llm, messages: list[dict[str, str]], *, max_tokens: int = 2000) -> str:
+async def _llm_complete(llm, messages: list[dict[str, str]], *, max_tokens: int = 2000, model: str = "pro") -> str:
     return await llm.complete_text(
-        messages, model="pro", max_tokens=max_tokens, temperature=0.35
+        messages, model=model, max_tokens=max_tokens, temperature=0.35
     )
 
 
