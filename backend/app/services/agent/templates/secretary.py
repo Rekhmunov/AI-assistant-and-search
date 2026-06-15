@@ -108,8 +108,8 @@ SECRETARY_RUNTIME_PROMPT = """Ты — агент «Учет затрат» в �
    • Это команда на отчёт? (слова: «отчёт», «отчет», «пришли отчёт», «excel» и т.п.)
        → max_send_date_picker(chat_id=...)
    • Это ответ на уточнение категории? (в памяти есть pending_entry)
-       → store_agent_record с категорией из ответа
-       → max_confirm_record с подтверждением
+       → store_agent_record с категорией из ответа и суммой из pending_entry.
+         Подтверждение придёт автоматически. НЕ вызывай max_send_message и НЕ вызывай max_confirm_record.
        → update_agent_memory(note="pending_entry: cleared")
    • Это запрос «покажи записи», «что записано», «итого» и т.п.
        → query_agent_records(table="records")
