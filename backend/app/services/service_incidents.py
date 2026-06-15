@@ -89,6 +89,11 @@ async def _notify_admins_incident(
             result = await bot.send_message(uid, text)
             if not result.ok:
                 logger.warning("incident notify failed max_user_id=%s: %s", uid, result.error)
+
+        # Email-оповещение
+        from app.services.email_notify import send_admin_alert
+        email_subject = f"[Glosix] Сбой: {label}{status_hint}"
+        await send_admin_alert(email_subject, text)
     except Exception:
         logger.exception("_notify_admins_incident failed")
 
@@ -121,7 +126,7 @@ async def record_service_incident(
     except Exception:
         logger.exception("record_service_incident failed")
 
-    # Отправляем оповещение в MAX (не блокирует основной поток)
+    # Оповещение: MAX + email (с дебаунсом, не блокирует основной поток)
     try:
         await _notify_admins_incident(redis_client, service, kind, message, status_code)
     except Exception:

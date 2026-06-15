@@ -131,6 +131,16 @@ class Settings(BaseSettings):
     admin_api_key: str = ""
     admin_session_expire_hours: int = 12
     admin_bootstrap_email: str = ""
+
+    # SMTP — оповещения администратора о сбоях
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_user: str = ""
+    smtp_password: str = ""
+    smtp_from: str = ""          # От кого (если пусто — используется smtp_user)
+    smtp_use_tls: bool = True    # STARTTLS
+    # Куда слать оповещения о сбоях (через запятую)
+    alert_emails: str = ""
     admin_bootstrap_password: str = ""
 
     @property
@@ -156,6 +166,10 @@ class Settings(BaseSettings):
     @property
     def perplexity_configured(self) -> bool:
         return bool(self.perplexity_api_key.strip())
+
+    @property
+    def smtp_configured(self) -> bool:
+        return bool(self.smtp_host.strip() and self.smtp_user.strip() and self.alert_emails.strip())
 
     def yandex_model_uri(self, model: str) -> str:
         folder = self.yandex_folder_id
