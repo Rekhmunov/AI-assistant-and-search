@@ -3456,7 +3456,7 @@ pre.small {
 
 .blog-table-wrap {
   width: 100%;
-  overflow-x: auto;
+  overflow-x: hidden;
   border: 1px solid var(--border);
   border-radius: 12px;
   background: var(--surface);
@@ -3467,6 +3467,7 @@ pre.small {
   width: 100%;
   border-collapse: collapse;
   table-layout: fixed;
+  min-width: 0;
 }
 
 .blog-table th,
@@ -3475,6 +3476,7 @@ pre.small {
   border-bottom: 1px solid var(--border-subtle);
   text-align: left;
   vertical-align: middle;
+  overflow: hidden;
 }
 
 .blog-table th {

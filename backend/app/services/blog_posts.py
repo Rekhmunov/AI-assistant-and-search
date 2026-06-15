@@ -108,6 +108,7 @@ def post_to_public(post: BlogPost) -> dict:
         "locale": post.locale or DEFAULT_LOCALE,
         "canonical_path": blog_canonical_path(post.slug, post.locale or DEFAULT_LOCALE),
         "robots_index": post.robots_index and post.status == "published",
+        "view_count": post.view_count or 0,
     }
 
 

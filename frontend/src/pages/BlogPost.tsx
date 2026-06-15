@@ -83,6 +83,9 @@ export function BlogPostPage() {
           {formatDate(post.published_at)}
           {post.author_name && ` · ${post.author_name}`}
           {post.reading_time_min > 0 && ` · ${post.reading_time_min} мин чтения`}
+          {post.view_count > 0 && (
+            <span className="blog-post-views"> · 👁 {post.view_count.toLocaleString("ru-RU")}</span>
+          )}
         </p>
       </header>
       {cover && <img src={cover} alt="" className="blog-post-cover" />}

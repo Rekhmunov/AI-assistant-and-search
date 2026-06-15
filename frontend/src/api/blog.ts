@@ -47,6 +47,7 @@ export type BlogPostPublic = BlogPostListItem & {
   og_image: BlogMedia | null;
   canonical_path: string;
   robots_index: boolean;
+  view_count: number;
 };
 
 function mediaUrl(path: string): string {
