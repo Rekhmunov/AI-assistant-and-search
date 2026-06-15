@@ -110,11 +110,16 @@ async def execute_agent_tool(
                 amount = entry.get("amount", "")
                 amt_str = str(int(amount)) if isinstance(amount, float) and amount == int(amount) else str(amount)
                 confirm_text = f"✅ Записано в категорию: {category} — {amt_str}"
-                await _tool_max_confirm_record(bot, agent, {
+                confirm_result = await _tool_max_confirm_record(bot, agent, {
                     "text": confirm_text,
                     "chat_id": runtime_chat_id,
                     "record_id": record_id,
                 })
+                # Сохраняем message_id подтверждения в запись для последующего редактирования
+                confirm_msg_id = (confirm_result.get("result") or {}).get("message_id")
+                if confirm_msg_id and record_id:
+                    from app.services.agent.agent_records import patch_record_field
+                    patch_record_field(agent, str(safe_args.get("table") or "records"), record_id, "_mid", confirm_msg_id)
                 # Очищаем pending_entry из памяти агента — LLM не успеет вызвать
                 # update_agent_memory из-за break в tool loop после outbound_sent=True
                 from app.services.agent.agent_spec import load_agent_spec, save_agent_spec

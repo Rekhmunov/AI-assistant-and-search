@@ -58,6 +58,28 @@ def query_records(
     return rows[-limit:]
 
 
+def patch_record_field(
+    agent: AgentInstance,
+    table: str,
+    record_id: str,
+    field: str,
+    value,
+) -> bool:
+    """Обновляет одно поле записи по _id. Возвращает True если запись найдена."""
+    name = (table or "default").strip().lower()[:64]
+    cfg = dict(agent.config or {})
+    tables = _tables(cfg)
+    rows = list(tables.get(name) or [])
+    for row in rows:
+        if row.get("_id") == record_id:
+            row[field] = value
+            tables[name] = rows
+            cfg["agent_records"] = tables
+            agent.config = cfg
+            return True
+    return False
+
+
 def delete_record_by_id(
     agent: AgentInstance,
     table: str,

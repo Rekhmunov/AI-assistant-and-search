@@ -146,6 +146,46 @@ class MaxBotService:
             "payload": {"buttons": rows},
         }
 
+    async def edit_message(
+        self,
+        message_id: str,
+        text: str,
+        *,
+        remove_keyboard: bool = False,
+    ) -> bool:
+        """
+        Редактирует сообщение бота (PUT /messages?message_id=...).
+        remove_keyboard=True — убирает inline_keyboard передав attachments=[].
+        Сообщения с inline_keyboard редактируются без ограничения по давности.
+        """
+        if not self.settings.bot_token.strip():
+            return False
+        mid = (message_id or "").strip()
+        if not mid:
+            return False
+
+        body: dict = {"text": text}
+        if remove_keyboard:
+            body["attachments"] = []
+
+        try:
+            async def _put():
+                async with httpx.AsyncClient(timeout=15.0) as client:
+                    return await client.put(
+                        f"{BOT_API_BASE}/messages",
+                        params={"message_id": mid},
+                        headers=self._auth_headers(),
+                        json=body,
+                    )
+
+            response = await self._request_with_rate_limit(_put)
+            if not response.is_success:
+                logger.warning("edit_message failed mid=%s: HTTP %s %s", mid, response.status_code, response.text[:200])
+            return response.is_success
+        except Exception as exc:
+            logger.warning("edit_message error mid=%s: %s", mid, exc)
+            return False
+
     async def answer_callback(
         self,
         callback_id: str,

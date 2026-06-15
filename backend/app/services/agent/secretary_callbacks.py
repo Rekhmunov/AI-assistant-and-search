@@ -77,20 +77,42 @@ async def _handle_delete(
     callback_id: str,
     parts: list[str],
 ) -> bool:
-    """Удаляет запись по _id и подтверждает через answer_callback."""
+    """Удаляет запись по _id, убирает кнопку из сообщения и подтверждает через answer_callback."""
     record_id = parts[3] if len(parts) > 3 else ""
     if not record_id:
         await bot.answer_callback(callback_id, "Ошибка: ID записи не найден")
         return False
 
-    from app.services.agent.agent_records import delete_record_by_id
+    from app.services.agent.agent_records import delete_record_by_id, query_records
+
+    # Находим запись до удаления, чтобы получить message_id и текст подтверждения
+    all_records = query_records(agent, "records", limit=5000)
+    target = next((r for r in all_records if r.get("_id") == record_id), None)
+    confirm_msg_id: str | None = target.get("_mid") if target else None
+    confirm_text: str = ""
+    if target:
+        category = str(target.get("category") or "")
+        amount = target.get("amount", "")
+        amt_str = str(int(amount)) if isinstance(amount, float) and amount == int(amount) else str(amount)
+        confirm_text = f"✅ Записано в категорию: {category} — {amt_str}"
+
     deleted = delete_record_by_id(agent, "records", record_id)
 
     if deleted:
         await bot.answer_callback(callback_id, "✅ Запись удалена")
-        logger.info("secretary_callback: deleted record _id=%s agent=%s", record_id, agent.id)
+        # Редактируем исходное сообщение — убираем кнопку, добавляем пометку об удалении
+        if confirm_msg_id:
+            await bot.edit_message(
+                confirm_msg_id,
+                text=f"~~{confirm_text}~~ _(удалено)_",
+                remove_keyboard=True,
+            )
+        logger.info("secretary_callback: deleted record _id=%s agent=%s mid=%s", record_id, agent.id, confirm_msg_id)
     else:
         await bot.answer_callback(callback_id, "Запись уже была удалена")
+        # Убираем кнопку если она ещё есть
+        if confirm_msg_id:
+            await bot.edit_message(confirm_msg_id, text=f"{confirm_text} _(удалено)_", remove_keyboard=True)
         logger.info("secretary_callback: record _id=%s not found agent=%s", record_id, agent.id)
 
     return True
