@@ -133,6 +133,26 @@ async def schedule_next_recurrence(db: AsyncSession, reminder: AgentReminder) ->
         await db.flush()
         return new_reminder
 
+    if reminder.recurrence in {"quarterly", "biannual", "yearly"}:
+        from app.services.agent.schedule import next_interval_run
+        months_map = {"quarterly": 3, "biannual": 6, "yearly": 12}
+        months = months_map[reminder.recurrence]
+        next_run = next_interval_run(reminder.run_at, months, tz=user_tz)
+        new_reminder = AgentReminder(
+            agent_id=reminder.agent_id,
+            run_at=next_run.astimezone(timezone.utc),
+            message_text=reminder.message_text,
+            recurrence=reminder.recurrence,
+            status="pending",
+        )
+        db.add(new_reminder)
+        if agent_result:
+            cfg = dict(agent_result.config or {})
+            cfg["next_run_at"] = next_run.astimezone(timezone.utc).isoformat()
+            agent_result.config = cfg
+        await db.flush()
+        return new_reminder
+
     if not reminder.recurrence or not reminder.recurrence.startswith("weekly:"):
         return None
     try:

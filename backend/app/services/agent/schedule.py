@@ -74,6 +74,16 @@ def next_weekly_run(
     return target + timedelta(days=days_ahead)
 
 
+def _add_months(dt: datetime, months: int) -> datetime:
+    """Прибавляет N месяцев к дате, корректно обрабатывая конец месяца."""
+    import calendar
+    month = dt.month - 1 + months
+    year = dt.year + month // 12
+    month = month % 12 + 1
+    day = min(dt.day, calendar.monthrange(year, month)[1])
+    return dt.replace(year=year, month=month, day=day)
+
+
 def next_monthly_run(
     day: int,
     hour: int,
@@ -89,17 +99,38 @@ def next_monthly_run(
     candidate = now.replace(day=min(day, calendar.monthrange(now.year, now.month)[1]),
                             hour=hour, minute=minute, second=0, microsecond=0)
     if candidate <= now:
-        # Переходим к следующему месяцу
-        if now.month == 12:
-            year, month = now.year + 1, 1
-        else:
-            year, month = now.year, now.month + 1
+        next_dt = _add_months(now.replace(day=1), 1)
         candidate = candidate.replace(
-            year=year,
-            month=month,
-            day=min(day, calendar.monthrange(year, month)[1]),
+            year=next_dt.year,
+            month=next_dt.month,
+            day=min(day, calendar.monthrange(next_dt.year, next_dt.month)[1]),
         )
     return candidate
+
+
+def next_interval_run(
+    prev: datetime,
+    months: int,
+    *,
+    tz: timezone | None = None,
+) -> datetime:
+    """Следующий запуск через N месяцев от предыдущего (сохраняет день и время)."""
+    tz = tz or MSK
+    prev_local = prev.astimezone(tz)
+    return _add_months(prev_local, months)
+
+
+def _parse_month_name(raw: str) -> int | None:
+    """Возвращает номер месяца из русского названия."""
+    months = {
+        "январ": 1, "феврал": 2, "март": 3, "апрел": 4,
+        "май": 5, "мая": 5, "июн": 6, "июл": 7, "август": 8,
+        "сентябр": 9, "октябр": 10, "ноябр": 11, "декабр": 12,
+    }
+    for name, num in months.items():
+        if name in raw:
+            return num
+    return None
 
 
 def parse_reminder_schedule(
@@ -137,16 +168,69 @@ def parse_reminder_schedule(
         run = now_local + timedelta(hours=1)
         return run.astimezone(timezone.utc), "hourly"
 
-    # Monthly: "каждое 20-е", "раз в месяц каждое 20", "20-го числа каждый месяц", "ежемесячно 20"
-    monthly_m = re.search(
-        r"(?:кажд\w+\s+месяц|раз\s+в\s+месяц|ежемесячно|кажд\w+\s+(\d{1,2})[-\w]*\s+числ|(\d{1,2})[-\w]*\s+числ\w*\s+каждый)",
-        raw,
-    )
+    # ── Helpers: извлечение дня месяца и даты ───────────────────────────────
+    def _extract_day() -> int | None:
+        m = re.search(r"(\d{1,2})[-\w]*\s+(?:числ|го\b)", raw)
+        if not m:
+            m = re.search(r"каждое\s+(\d{1,2})", raw)
+        return int(m.group(1)) if m else None
+
+    def _extract_month_day() -> tuple[int, int] | None:
+        m = re.search(
+            r"(\d{1,2})\s+(январ\w*|феврал\w*|март\w*|апрел\w*|май\w*|мая|июн\w*|июл\w*|август\w*|сентябр\w*|октябр\w*|ноябр\w*|декабр\w*)",
+            raw,
+        )
+        if m:
+            month = _parse_month_name(m.group(2))
+            if month:
+                return month, int(m.group(1))
+        m2 = re.search(r"\b(\d{1,2})[./](\d{1,2})\b", raw)
+        if m2:
+            return int(m2.group(2)), int(m2.group(1))
+        return None
+
+    # ── Yearly: раз в год, ежегодно, каждый год ─────────────────────────────
+    if re.search(r"(?:раз\s+в\s+год|ежегодно|кажд\w+\s+год|каждые\s+12\s+месяц)", raw):
+        hm = _parse_time_hm(raw) or (9, 0)
+        md = _extract_month_day()
+        if md:
+            import calendar as _cal
+            month, day = md
+            candidate = now_local.replace(
+                month=month,
+                day=min(day, _cal.monthrange(now_local.year, month)[1]),
+                hour=hm[0], minute=hm[1], second=0, microsecond=0,
+            )
+            if candidate <= now_local:
+                candidate = candidate.replace(year=now_local.year + 1)
+        else:
+            candidate = _add_months(now_local, 12).replace(hour=hm[0], minute=hm[1], second=0, microsecond=0)
+        return candidate.astimezone(timezone.utc), "yearly"
+
+    # ── Biannual: раз в полгода, раз в полугодие, каждые 6 месяцев ─────────
+    if re.search(r"(?:раз\s+в\s+пол\w*\s*год|раз\s+в\s+полугодие|каждые\s+6\s+месяц|два\s+раза\s+в\s+год|2\s+раза\s+в\s+год)", raw):
+        hm = _parse_time_hm(raw) or (9, 0)
+        day = _extract_day()
+        if day and 1 <= day <= 31:
+            run = next_monthly_run(day, hm[0], hm[1], now=now_local, tz=user_tz)
+        else:
+            run = _add_months(now_local, 6).replace(hour=hm[0], minute=hm[1], second=0, microsecond=0)
+        return run.astimezone(timezone.utc), "biannual"
+
+    # ── Quarterly: раз в квартал, ежеквартально, каждые 3 месяца ───────────
+    if re.search(r"(?:раз\s+в\s+квартал|ежеквартально|кажд\w+\s+квартал|каждые\s+3\s+месяц)", raw):
+        hm = _parse_time_hm(raw) or (9, 0)
+        day = _extract_day()
+        if day and 1 <= day <= 31:
+            run = next_monthly_run(day, hm[0], hm[1], now=now_local, tz=user_tz)
+        else:
+            run = _add_months(now_local, 3).replace(hour=hm[0], minute=hm[1], second=0, microsecond=0)
+        return run.astimezone(timezone.utc), "quarterly"
+
+    # ── Monthly: раз в месяц, каждое N-е, ежемесячно ────────────────────────
     monthly_day_m = re.search(r"(\d{1,2})[-\w]*\s+(?:числ|го\b)", raw)
     if not monthly_day_m:
         monthly_day_m = re.search(r"каждое\s+(\d{1,2})", raw)
-    if not monthly_day_m:
-        monthly_day_m = re.search(r"(\d{1,2})-?е?\s+(?:числ|го)", raw)
 
     if re.search(r"(?:кажд\w+\s+месяц|раз\s+в\s+месяц|ежемесячно|кажд\w+\s+\d{1,2}[-\w]*\s*числ)", raw) and monthly_day_m:
         day = int(monthly_day_m.group(1))
