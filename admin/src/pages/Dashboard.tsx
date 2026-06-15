@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { apiFetch } from "../api";
 
 interface FeedbackReasonStat {
@@ -34,6 +35,20 @@ interface FeedbackDashboardBlock {
   recent_total: number;
 }
 
+interface ServiceIncidentService {
+  service: string;
+  service_label: string;
+  count_24h: number;
+  count_7d: number;
+  last_message: string | null;
+  last_at: string | null;
+}
+
+interface ServiceIncidentsDashboard {
+  totals_24h: number;
+  by_service: ServiceIncidentService[];
+}
+
 interface DashboardMetrics {
   users_total: number;
   users_new_7d: number;
@@ -63,12 +78,19 @@ function formatDate(iso: string): string {
 
 export function DashboardPage() {
   const [data, setData] = useState<DashboardMetrics | null>(null);
+  const [incidents, setIncidents] = useState<ServiceIncidentsDashboard | null>(null);
   const [error, setError] = useState("");
   const [recentOpen, setRecentOpen] = useState(false);
   const [recentPage, setRecentPage] = useState(1);
   const [recentData, setRecentData] = useState<FeedbackRecentPage | null>(null);
   const [recentLoading, setRecentLoading] = useState(false);
   const [recentError, setRecentError] = useState("");
+  useEffect(() => {
+    apiFetch<ServiceIncidentsDashboard>("/api/admin/audit/service-incidents")
+      .then(setIncidents)
+      .catch(() => setIncidents(null));
+  }, []);
+
   useEffect(() => {
     apiFetch<DashboardMetrics>("/api/admin/dashboard")
       .then(setData)
@@ -148,6 +170,44 @@ export function DashboardPage() {
           <strong>{data.broadcasts_total}</strong>
         </div>
       </div>
+
+      {incidents && (
+        <section className="card incidents-dashboard" aria-labelledby="incidents-title">
+          <div className="incidents-header">
+            <div>
+              <h2 id="incidents-title">Сбои провайдеров</h2>
+              <p className="admin-page-subtitle">За последние 24 часа</p>
+            </div>
+            <Link to="/audit" className="btn-secondary btn-secondary--compact">
+              Все инциденты
+            </Link>
+          </div>
+          {incidents.totals_24h === 0 ? (
+            <p className="incidents-ok">✅ Сбоев не зафиксировано</p>
+          ) : (
+            <div className="incidents-list">
+              {incidents.by_service.map((svc) => (
+                <div key={svc.service} className={`incidents-row${svc.count_24h > 0 ? " incidents-row--alert" : ""}`}>
+                  <div className="incidents-row-info">
+                    <span className="incidents-row-label">{svc.service_label}</span>
+                    {svc.last_message && (
+                      <span className="incidents-row-msg">{svc.last_message}</span>
+                    )}
+                  </div>
+                  <div className="incidents-row-counts">
+                    <span className={`incidents-badge${svc.count_24h > 0 ? " incidents-badge--red" : ""}`}>
+                      {svc.count_24h} за 24ч
+                    </span>
+                    <span className="incidents-badge incidents-badge--muted">
+                      {svc.count_7d} за 7д
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
 
       <section className="feedback-dashboard card" aria-labelledby="feedback-dashboard-title">
         <div className="feedback-dashboard-header">

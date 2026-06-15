@@ -16,7 +16,7 @@ from app.services.gigachat import GigaChatProvider
 from app.services.perplexity import PerplexityProvider
 from app.services.prompts.defaults import DEFAULT_FREE_LLM_PROVIDER, DEFAULT_LLM_PROVIDER, DEFAULT_SEARCH_PROVIDER
 from app.services.prompts.store import PromptStore
-from app.services.providers.llm_fallback import ClaudeWithYandexFallback, DeepSeekWithYandexFallback
+from app.services.providers.llm_fallback import ClaudeWithYandexFallback, DeepSeekWithYandexFallback, FreeLLMWithFallback
 from app.services.providers.registry import VALID_FREE_LLM_IDS, VALID_LLM_IDS, VALID_SEARCH_IDS
 from app.services.yandex_gpt import YandexGPTProvider
 from app.services.yandex_search import YandexSearchService
@@ -29,6 +29,7 @@ ChatLLM = Union[
     PerplexityProvider,
     ClaudeWithYandexFallback,
     DeepSeekWithYandexFallback,
+    FreeLLMWithFallback,
 ]
 
 
@@ -104,17 +105,23 @@ def _wrap_llm_fallback(llm_id: str, llm: ChatLLM, settings: Settings, prompt_sto
         log.warning(
             "llm_provider=anthropic_claude but ANTHROPIC_API_KEY missing — answers use mock, no API calls"
         )
-    elif llm_id == "deepseek" and settings.yandex_configured:
-        yandex_llm = YandexGPTProvider(settings, prompt_store=prompt_store)
-        return DeepSeekWithYandexFallback(llm, yandex_llm)  # type: ignore[assignment]
-    elif llm_id == "deepseek" and not settings.deepseek_configured:
-        log.warning(
-            "llm_provider=deepseek but DEEPSEEK_API_KEY missing — answers use mock, no API calls"
-        )
-    elif llm_id == "gigachat" and not settings.gigachat_configured:
-        log.warning(
-            "llm_provider=gigachat but GIGACHAT_CREDENTIALS missing — answers use mock"
-        )
+    elif llm_id == "deepseek":
+        # Lite: DeepSeek выбран основным → GigaChat резервный (если настроен)
+        if settings.gigachat_configured:
+            fallback_llm = GigaChatProvider(settings, prompt_store=prompt_store)
+            return FreeLLMWithFallback(llm, fallback_llm, "DeepSeek", "GigaChat")  # type: ignore[return-value]
+        elif settings.yandex_configured:
+            yandex_llm = YandexGPTProvider(settings, prompt_store=prompt_store)
+            return DeepSeekWithYandexFallback(llm, yandex_llm)  # type: ignore[assignment]
+        elif not settings.deepseek_configured:
+            log.warning("llm_provider=deepseek but DEEPSEEK_API_KEY missing — answers use mock, no API calls")
+    elif llm_id == "gigachat":
+        # Lite: GigaChat выбран основным → DeepSeek резервный (если настроен)
+        if settings.deepseek_configured:
+            fallback_llm = DeepSeekProvider(settings, prompt_store=prompt_store)
+            return FreeLLMWithFallback(llm, fallback_llm, "GigaChat", "DeepSeek")  # type: ignore[return-value]
+        if not settings.gigachat_configured:
+            log.warning("llm_provider=gigachat but GIGACHAT_CREDENTIALS missing — answers use mock")
     elif llm_id == "perplexity" and not settings.perplexity_configured:
         log.warning(
             "llm_provider=perplexity but PERPLEXITY_API_KEY missing — answers use mock"
