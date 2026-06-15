@@ -39,6 +39,49 @@ logger = logging.getLogger(__name__)
 
 AnswerModel = Literal["lite", "pro"]
 MESSAGES_URL = "https://api.anthropic.com/v1/messages"
+
+
+def _extract_source_from_tool_result_item(item: dict, index: int) -> dict | None:
+    """
+    Извлекает источник из одного элемента tool_result контента.
+    Anthropic возвращает документы в формате:
+      {"type": "document", "document": {"url": "...", "title": "...", "snippet": "..."}}
+    или
+      {"type": "web_search_result", "url": "...", "title": "...", "snippet": "..."}
+    """
+    if not isinstance(item, dict):
+        return None
+
+    itype = item.get("type", "")
+
+    # Формат document
+    if itype == "document":
+        doc = item.get("document") or {}
+        url = doc.get("url") or doc.get("source") or ""
+        title = doc.get("title") or ""
+        snippet = doc.get("encrypted_snippet") or doc.get("snippet") or ""
+        if url:
+            return {"url": url, "title": title or url, "snippet": snippet, "index": index}
+
+    # Формат web_search_result (более ранние версии)
+    if itype in {"web_search_result", "search_result"}:
+        url = item.get("url") or ""
+        title = item.get("title") or ""
+        snippet = item.get("snippet") or item.get("content") or ""
+        if url:
+            return {"url": url, "title": title or url, "snippet": snippet, "index": index}
+
+    # Плоский формат с url на верхнем уровне
+    url = item.get("url") or ""
+    if url:
+        return {
+            "url": url,
+            "title": item.get("title") or url,
+            "snippet": item.get("snippet") or item.get("content") or "",
+            "index": index,
+        }
+
+    return None
 API_VERSION = "2023-06-01"
 
 # Инструменты Claude Pro: веб-поиск, загрузка URL, выполнение кода
@@ -493,6 +536,125 @@ class AnthropicClaudeProvider(PromptedLLMMixin, LLMProvider):
             temperature=0.4,
         ):
             yield chunk
+
+    async def stream_search_with_claude_sources(
+        self,
+        query: str,
+        history: list[tuple[str, str]],
+        *,
+        model: AnswerModel = "pro",
+    ):
+        """
+        Режим Claude Search: поиск и ответ только через Claude web_search.
+        Yields tuples: ("text", str) | ("source", dict) | ("done", None).
+
+        source dict: {"url": str, "title": str, "snippet": str, "index": int}
+        """
+        if not self.configured:
+            yield ("text", "Claude недоступен (mock). Задайте ANTHROPIC_API_KEY.")
+            yield ("done", None)
+            return
+
+        from app.services.prompts.anthropic_claude_defaults import ANTHROPIC_CLAUDE_SEARCH_PROMPT
+
+        history_text = ""
+        for role, text in history[-6:]:
+            prefix = "Пользователь" if role == "user" else "Ассистент"
+            history_text += f"{prefix}: {text}\n\n"
+
+        user_content = f"{history_text}Вопрос: {query}".strip()
+
+        payload: dict = {
+            "model": self._model_name(model),
+            "max_tokens": 5000,
+            "temperature": 0.3,
+            "stream": True,
+            "system": ANTHROPIC_CLAUDE_SEARCH_PROMPT,
+            "messages": [{"role": "user", "content": user_content}],
+            "tools": _PRO_TOOLS,
+        }
+
+        sources: list[dict] = []
+        source_index = 0
+
+        try:
+            async with self._http_client(timeout=180.0) as client:
+                async with client.stream(
+                    "POST", MESSAGES_URL,
+                    headers=self._headers(model="pro"),
+                    json=payload,
+                ) as response:
+                    if response.status_code >= 400:
+                        body = (await response.aread()).decode("utf-8", errors="replace")[:500]
+                        raise YandexServiceError(
+                            "gpt",
+                            _anthropic_http_error_message(
+                                httpx.Response(response.status_code, request=httpx.Request("POST", MESSAGES_URL), content=body.encode()),
+                                model=self._model_name(model),
+                            ),
+                            response.status_code,
+                        )
+
+                    # Состояние текущего блока
+                    current_block_type: str = ""
+                    current_tool_result_content: list = []
+
+                    async for line in response.aiter_lines():
+                        if not line.startswith("data:"):
+                            continue
+                        raw = line[5:].strip()
+                        if not raw or raw == "[DONE]":
+                            continue
+                        try:
+                            event = json.loads(raw)
+                        except json.JSONDecodeError:
+                            continue
+
+                        et = event.get("type")
+
+                        if et == "error":
+                            err = (event.get("error") or {}).get("message", "unknown")
+                            raise YandexServiceError("gpt", f"Claude Search stream: {err}")
+
+                        # Начало нового блока контента
+                        if et == "content_block_start":
+                            block = event.get("content_block") or {}
+                            btype = block.get("type", "")
+                            current_block_type = btype
+                            current_tool_result_content = []
+
+                            # Результаты поиска (server_tool_use завершился)
+                            if btype == "tool_result":
+                                content = block.get("content") or []
+                                for item in content:
+                                    src = _extract_source_from_tool_result_item(item, source_index + 1)
+                                    if src:
+                                        source_index += 1
+                                        sources.append(src)
+                                        yield ("source", src)
+
+                        # Дельта блока
+                        elif et == "content_block_delta":
+                            delta = event.get("delta") or {}
+                            dtype = delta.get("type", "")
+
+                            if dtype == "text_delta" and current_block_type == "text":
+                                text = delta.get("text", "")
+                                if text:
+                                    yield ("text", text)
+
+                            elif dtype == "input_json_delta":
+                                # Часть search query — не показываем
+                                pass
+
+                        # Конец блока — если tool_result с накопленным контентом
+                        elif et == "content_block_stop":
+                            current_block_type = ""
+
+        except httpx.HTTPError as exc:
+            raise YandexServiceError("gpt", f"Claude Search недоступен (сеть): {exc}") from exc
+
+        yield ("done", None)
 
     async def generate_follow_ups(self, query: str, answer: str) -> list[str]:
         from app.services.yandex_gpt import (

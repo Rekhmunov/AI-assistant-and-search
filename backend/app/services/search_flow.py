@@ -304,7 +304,12 @@ class SearchFlowService:
                 yield sse_event("error", {"code": "rate_limit", "message": msg})
             return
 
-        if llm_provider_id != PERPLEXITY_PROVIDER_ID:
+        _is_claude_search = (
+            search_provider_id == "claude_search"
+            and llm_provider_id == "anthropic_claude"
+        )
+
+        if llm_provider_id != PERPLEXITY_PROVIDER_ID and not _is_claude_search:
             if not await limiter.check_global_yandex_limit():
                 await limiter.release_search(user_id_str)
                 yield sse_event("error", {"code": "global_limit", "message": "Сервис временно перегружен"})
@@ -570,7 +575,50 @@ class SearchFlowService:
                         yield sse_event("error", {"code": "vision_unavailable", "message": str(e)})
                         return
 
-                if route.needs_search and llm_provider_id == PERPLEXITY_PROVIDER_ID:
+                if route.needs_search and _is_claude_search:
+                    # ── Claude Search: только web_search Claude, без Yandex ──────────
+                    from app.services.anthropic_claude import AnthropicClaudeProvider
+                    if not isinstance(llm, AnthropicClaudeProvider):
+                        # Если обёрнут в fallback — пытаемся добраться до провайдера
+                        _inner = getattr(llm, "primary", llm)
+                        if not isinstance(_inner, AnthropicClaudeProvider):
+                            yield sse_event("error", {"code": "claude_search_unavailable", "message": "Claude Search требует Claude как LLM провайдер"})
+                            return
+                        _claude_provider = _inner
+                    else:
+                        _claude_provider = llm
+
+                    sources_out: list[dict] = []
+                    source_map: dict[int, dict] = {}
+
+                    async for event_type, payload in _claude_provider.stream_search_with_claude_sources(
+                        llm_query,
+                        llm_history,
+                        model="pro",
+                    ):
+                        if event_type == "source":
+                            src = payload
+                            idx = src["index"]
+                            source_map[idx] = src
+                            sources_out.append({
+                                "title": src["title"],
+                                "url": src["url"],
+                                "snippet": src.get("snippet", ""),
+                                "index": idx,
+                            })
+                            yield sse_event("sources", {"sources": [
+                                {"title": s["title"], "url": s["url"], "snippet": s.get("snippet", ""), "display_url": s["url"]}
+                                for s in sources_out
+                            ]})
+                        elif event_type == "text":
+                            full_answer += payload
+                            yield sse_event("token", {"text": payload})
+                        elif event_type == "done":
+                            break
+
+                    # Сохранение и follow-ups обрабатывается в общем блоке ниже
+
+                elif route.needs_search and llm_provider_id == PERPLEXITY_PROVIDER_ID:
                     rewrite_trace = {
                         "provider": "perplexity",
                         "yandex_search_skipped": True,

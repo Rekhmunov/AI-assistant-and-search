@@ -79,6 +79,7 @@ def list_llm_providers(settings: Settings) -> list[ProviderInfo]:
 
 def list_search_providers(settings: Settings) -> list[ProviderInfo]:
     yandex_ok = settings.yandex_configured
+    claude_ok = settings.anthropic_configured
     return [
         ProviderInfo(
             id="yandex_search",
@@ -87,12 +88,19 @@ def list_search_providers(settings: Settings) -> list[ProviderInfo]:
             configured=yandex_ok,
             hint=None if yandex_ok else "Нужны YANDEX_FOLDER_ID и YANDEX_API_KEY в .env",
         ),
+        ProviderInfo(
+            id="claude_search",
+            label="Claude Search (только Claude Pro)",
+            kind="search",
+            configured=claude_ok,
+            hint=None if claude_ok else "Нужен ANTHROPIC_API_KEY в .env + LLM провайдер = Claude",
+        ),
     ]
 
 
 VALID_LLM_IDS = frozenset({"yandex_gpt", "anthropic_claude", "deepseek", "gigachat", "perplexity"})
 VALID_FREE_LLM_IDS = frozenset({"deepseek", "gigachat"})
-VALID_SEARCH_IDS = frozenset({"yandex_search"})
+VALID_SEARCH_IDS = frozenset({"yandex_search", "claude_search"})
 VALID_VISION_IDS = frozenset({"alice_vlm", "anthropic_claude", "gigachat"})
 VALID_IMAGE_GEN_IDS = frozenset({"gigachat"})
 DEFAULT_IMAGE_GEN_PROVIDER = "gigachat"
