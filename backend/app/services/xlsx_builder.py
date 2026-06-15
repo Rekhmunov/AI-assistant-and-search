@@ -10,6 +10,28 @@ from openpyxl.styles import Font
 from app.services.doc_gen_schema import DocumentStructure
 
 
+def build_report_xlsx_bytes(headers: list[str], rows: list[list[str]], sheet_name: str = "Отчёт") -> bytes:
+    """
+    Упрощённый builder для табличных отчётов — без заголовка документа и подписи таблицы.
+    Первая строка = жирные заголовки столбцов, далее данные.
+    """
+    wb = Workbook()
+    ws = wb.active
+    ws.title = sheet_name[:31]
+
+    for col_idx, header in enumerate(headers, start=1):
+        cell = ws.cell(row=1, column=col_idx, value=header)
+        cell.font = Font(bold=True)
+
+    for row_idx, row in enumerate(rows, start=2):
+        for col_idx, value in enumerate(row, start=1):
+            ws.cell(row=row_idx, column=col_idx, value=value)
+
+    buffer = io.BytesIO()
+    wb.save(buffer)
+    return buffer.getvalue()
+
+
 def build_xlsx_bytes(structure: DocumentStructure) -> bytes:
     wb = Workbook()
     ws = wb.active

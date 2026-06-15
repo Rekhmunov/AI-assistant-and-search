@@ -185,15 +185,10 @@ async def _handle_report(
 
     try:
         import re as _re
-        from app.services.xlsx_builder import build_xlsx_bytes
-        from app.services.doc_gen_schema import DocumentStructure, DocTable
+        from app.services.xlsx_builder import build_report_xlsx_bytes
 
         rows = [[str(r.get(k, "")) for k in field_keys] for r in filtered]
-        structure = DocumentStructure(
-            title=title,
-            tables=[DocTable(caption=title, headers=columns, rows=rows)],
-        )
-        xlsx_bytes = build_xlsx_bytes(structure)
+        xlsx_bytes = build_report_xlsx_bytes(columns, rows, sheet_name=label[:31])
         safe_title = _re.sub(r"[^\w\-]", "_", title)[:40]
         filename = f"{safe_title}.xlsx"
 
