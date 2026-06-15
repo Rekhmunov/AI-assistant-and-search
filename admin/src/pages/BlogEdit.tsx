@@ -366,8 +366,9 @@ export function BlogEditPage() {
               />
               <span>Комментарии к статье</span>
             </label>
+            <hr style={{ margin: "0", border: "none", borderTop: "1px solid var(--border-subtle)" }} />
             <label className="blog-field">
-              <span className="blog-field-label">👁 Начальное число просмотров</span>
+              <span className="blog-field-label">👁 Просмотры (начальное значение)</span>
               <input
                 type="number"
                 min={0}
@@ -376,9 +377,7 @@ export function BlogEditPage() {
                 disabled={!canWrite}
                 placeholder="0"
               />
-              <span className="hint" style={{ fontSize: "0.75rem" }}>
-                Реальные просмотры прибавляются автоматически
-              </span>
+              <span className="hint">Реальные просмотры прибавляются автоматически</span>
             </label>
           </section>
 

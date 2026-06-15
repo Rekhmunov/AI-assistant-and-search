@@ -3673,16 +3673,22 @@ pre.small {
 
 .blog-panel {
   padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
 .blog-panel-title {
-  margin: 0 0 12px;
+  margin: 0;
   font-size: 0.9375rem;
   font-weight: 600;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border-subtle);
 }
 
 .blog-panel--collapsible {
   padding: 0;
+  gap: 0;
   overflow: hidden;
 }
 
