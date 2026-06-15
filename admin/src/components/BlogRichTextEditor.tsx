@@ -45,7 +45,8 @@ export const BlogRichTextEditor = forwardRef<BlogRichTextEditorHandle, Props>(fu
         form,
       );
       const src = media.url.startsWith("http") ? media.url : `${API}${media.url}`;
-      const imgHtml = `<p><img src="${src}" alt="${media.alt_text || ""}" loading="lazy" style="max-width:100%;height:auto;border-radius:8px;" /></p>`;
+      const alt = (media.alt_text || "").replace(/"/g, "&quot;");
+      const imgHtml = `<p><img src="${src}" alt="${alt}" loading="lazy" style="max-width:100%;height:auto;border-radius:8px;display:block;margin-left:auto;margin-right:auto;" /></p>`;
       if (!insertImageHtml(imgHtml)) {
         const next = (value || "<p></p>").replace(/<\/p>\s*$/, "") + imgHtml;
         onChange(next.endsWith("</p>") ? next : `${next}<p></p>`);

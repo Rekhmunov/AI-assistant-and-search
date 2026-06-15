@@ -2173,13 +2173,142 @@ pre.small {
 }
 
 .rte-editor {
-  min-height: 280px;
-  max-height: 480px;
+  min-height: 320px;
+  max-height: 600px;
   overflow-y: auto;
-  padding: 14px 16px;
+  padding: 16px 18px;
   font-size: 0.95rem;
-  line-height: 1.55;
+  line-height: 1.6;
   outline: none;
+}
+
+/* Клик по картинке в редакторе — подсветка */
+.rte-editor img {
+  cursor: pointer;
+  transition: outline 0.15s;
+}
+.rte-editor img:hover {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Панель свойств картинки */
+.rte-img-panel {
+  position: absolute;
+  left: 0;
+  right: 0;
+  z-index: 30;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.14);
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.rte-img-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.rte-img-panel-title {
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.rte-img-panel-close {
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 1rem;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+.rte-img-panel-close:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.rte-img-panel-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.rte-img-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.78rem;
+  color: var(--muted);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.rte-img-field input {
+  font-size: 0.88rem;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  margin: 0;
+}
+
+.rte-img-panel-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.rte-img-panel-label {
+  font-size: 0.82rem;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.rte-img-align-btns {
+  display: flex;
+  gap: 4px;
+}
+
+.rte-img-align-btn {
+  font-size: 1rem;
+  min-width: 34px;
+  height: 34px;
+  padding: 0 6px;
+}
+
+.rte-img-align-btn--active {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.rte-img-panel-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  border-top: 1px solid var(--border-subtle);
+  padding-top: 10px;
+}
+
+.rte-img-action-btn {
+  font-size: 0.82rem;
+  height: 30px;
+  padding: 0 10px;
+}
+
+.rte-img-apply-btn {
+  margin-left: auto;
+  font-size: 0.85rem;
+  padding: 6px 16px;
+  height: auto;
 }
 
 .rte-editor:focus {
@@ -3668,9 +3797,10 @@ pre.small {
   margin: 0;
 }
 
-.blog-rte-editor-wrap .rte-editor {
-  min-height: 360px;
-  max-height: 640px;
+.blog-rte-editor-wrap .rte-editor,
+.blog-edit-section .rte-editor {
+  min-height: 420px;
+  max-height: none;
 }
 
 .blog-cat-create {

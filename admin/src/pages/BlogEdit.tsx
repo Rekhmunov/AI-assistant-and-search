@@ -545,7 +545,7 @@ export function BlogEditPage() {
         }}
         onApplyInlineImage={(url, altText) => {
           const src = mediaSrc(url);
-          const imgHtml = `<p><img src="${src}" alt="${altText.replace(/"/g, "&quot;")}" loading="lazy" style="max-width:100%;height:auto;border-radius:8px;" /></p>`;
+          const imgHtml = `<p><img src="${src}" alt="${altText.replace(/"/g, "&quot;")}" title="${altText.replace(/"/g, "&quot;")}" loading="lazy" style="max-width:100%;height:auto;border-radius:8px;display:block;margin-left:auto;margin-right:auto;" /></p>`;
           const inserted = editorRef.current?.insertImageHtml(imgHtml);
           setMsg(
             inserted
