@@ -428,55 +428,23 @@ async def _tool_max_send_date_picker(
     args: dict,
 ) -> dict:
     """
-    Отправляет «календарь» дат с записями + кнопку ручного ввода.
-    Каждая дата показывается кнопкой: «📊 15.06.2026 — 5 записей».
+    Спрашивает период для отчёта простым текстом (без кнопок).
+    Ставит флаг secretary_pending_report — следующее сообщение
+    будет распознано как дата/диапазон и обработано детерминированно.
     """
-    from datetime import datetime, timezone
-    from app.services.agent.agent_records import query_records
-    from collections import Counter
-
     chat_id = int(args["chat_id"])
-    aid = str(agent.id)
 
-    # Собираем даты из имеющихся записей
-    records = query_records(agent, "records", limit=5000)
-    date_counts: Counter = Counter()
-    for r in records:
-        at_str = r.get("at", "")
-        try:
-            at = datetime.fromisoformat(at_str)
-            if at.tzinfo is None:
-                at = at.replace(tzinfo=timezone.utc)
-            date_key = at.strftime("%d.%m.%Y")
-            date_counts[date_key] += 1
-        except Exception:
-            pass
+    # Ставим флаг: следующее сообщение в группе — это ввод периода
+    cfg = dict(agent.config or {})
+    cfg["secretary_pending_report"] = True
+    agent.config = cfg
 
-    # Формируем кнопки — последние 10 уникальных дат (новейшие сверху)
-    sorted_dates = sorted(date_counts.keys(), key=lambda d: datetime.strptime(d, "%d.%m.%Y"), reverse=True)[:10]
-
-    button_rows: list[list[dict]] = []
-    for date_str in sorted_dates:
-        count = date_counts[date_str]
-        noun = "запись" if count == 1 else ("записи" if 2 <= count <= 4 else "записей")
-        label = f"📊 {date_str} — {count} {noun}"
-        # Payload: secretary:report:{aid}:date:DD.MM.YYYY
-        button_rows.append([{
-            "type": "callback",
-            "text": label,
-            "payload": f"secretary:report:{aid}:date:{date_str}",
-        }])
-
-    # Кнопка ручного ввода — всегда в конце
-    button_rows.append([{
-        "type": "callback",
-        "text": "✏️ Ввести дату или диапазон",
-        "payload": f"secretary:report:{aid}:custom",
-    }])
-
-    header = "Выберите дату для отчёта:" if sorted_dates else "Записей пока нет. Введите дату вручную:"
-    keyboard = bot.make_keyboard_attachment(button_rows)
-    send = await bot.send_message(None, header, attachments=[keyboard], chat_id=chat_id, notify=False)
+    send = await bot.send_message(
+        None,
+        "За какой период сформировать отчёт?",
+        chat_id=chat_id,
+        notify=False,
+    )
     result: dict = {"chat_id": chat_id}
     if not send.ok:
         from app.services.agent.max_errors import explain_max_send_error

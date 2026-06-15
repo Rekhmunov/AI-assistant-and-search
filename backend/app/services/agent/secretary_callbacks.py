@@ -3,12 +3,10 @@
 
 Форматы payload:
   secretary:delete:{agent_id}:{record_id}   — удалить запись
-  secretary:report:{agent_id}:{period}      — сформировать отчёт за период
 """
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
 from sqlalchemy import select
@@ -68,9 +66,6 @@ async def handle_secretary_callback(
     if action == "delete":
         return await _handle_delete(db, bot, agent, callback_id, parts)
 
-    if action == "report":
-        return await _handle_report(db, bot, agent, callback_id, parts)
-
     await bot.answer_callback(callback_id)
     return False
 
@@ -101,121 +96,3 @@ async def _handle_delete(
     return True
 
 
-async def _handle_report(
-    db: AsyncSession,
-    bot: MaxBotService,
-    agent: AgentInstance,
-    callback_id: str,
-    parts: list[str],
-) -> bool:
-    """Формирует Excel-отчёт за выбранный период и отправляет в группу."""
-    period_code = parts[3] if len(parts) > 3 else ""
-    chat_id = agent.max_chat_id
-    if not chat_id:
-        await bot.answer_callback(callback_id, "Ошибка: группа не привязана")
-        return False
-
-    today = datetime.now(timezone.utc)
-
-    if period_code == "today":
-        start = today.replace(hour=0, minute=0, second=0, microsecond=0)
-        end = today.replace(hour=23, minute=59, second=59)
-        label = today.strftime("%d.%m.%Y")
-    elif period_code == "yesterday":
-        yesterday = today - timedelta(days=1)
-        start = yesterday.replace(hour=0, minute=0, second=0, microsecond=0)
-        end = yesterday.replace(hour=23, minute=59, second=59)
-        label = yesterday.strftime("%d.%m.%Y")
-    elif period_code == "week":
-        start = (today - timedelta(days=6)).replace(hour=0, minute=0, second=0, microsecond=0)
-        end = today.replace(hour=23, minute=59, second=59)
-        label = f"{start.strftime('%d.%m')} – {today.strftime('%d.%m.%Y')}"
-    elif period_code == "month":
-        start = today.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-        end = today.replace(hour=23, minute=59, second=59)
-        label = today.strftime("%B %Y")
-    elif period_code == "custom":
-        await bot.answer_callback(callback_id)
-        await bot.send_message(
-            None,
-            "Введите дату или диапазон в чат, например:\n"
-            "• 14.06.2026\n"
-            "• с 01.06 по 14.06",
-            chat_id=int(chat_id),
-            notify=False,
-        )
-        # Сохраняем состояние: ждём ввод даты от пользователя
-        cfg = dict(agent.config or {})
-        cfg["secretary_pending_report"] = True
-        agent.config = cfg
-        return True
-    else:
-        await bot.answer_callback(callback_id, "Неизвестный период")
-        return False
-
-    from app.services.agent.agent_records import query_records
-    records = query_records(agent, "records", limit=5000)
-
-    filtered = []
-    for r in records:
-        at_str = r.get("at", "")
-        try:
-            at = datetime.fromisoformat(at_str)
-            if at.tzinfo is None:
-                at = at.replace(tzinfo=timezone.utc)
-            if start <= at <= end:
-                filtered.append(r)
-        except Exception:
-            pass
-
-    await bot.answer_callback(callback_id, f"Формирую отчёт за {label}...")
-
-    if not filtered:
-        await bot.send_message(
-            None,
-            f"За период {label} записей не найдено.",
-            chat_id=int(chat_id),
-            notify=False,
-        )
-        return True
-
-    title = f"Отчёт за {label}"
-    columns = ["Категория", "Затрата", "Примечание"]
-    field_keys = ["category", "amount", "note"]
-
-    try:
-        import re as _re
-        from app.services.xlsx_builder import build_report_xlsx_bytes
-
-        rows = [[str(r.get(k, "")) for k in field_keys] for r in filtered]
-        xlsx_bytes = build_report_xlsx_bytes(columns, rows, sheet_name=label[:31])
-        safe_title = _re.sub(r"[^\w\-]", "_", title)[:40]
-        filename = f"{safe_title}.xlsx"
-
-        token = await bot.upload_media(xlsx_bytes, filename, "file")
-        if token:
-            attachment = {"type": "file", "payload": {"token": token}}
-            await bot.send_message(
-                None,
-                f"{title} — {len(filtered)} записей:",
-                attachments=[attachment],
-                chat_id=int(chat_id),
-                notify=False,
-            )
-        else:
-            await bot.send_message(
-                None,
-                f"⚠️ Не удалось загрузить файл отчёта.",
-                chat_id=int(chat_id),
-                notify=False,
-            )
-    except Exception as exc:
-        logger.exception("secretary report generation failed agent=%s: %s", agent.id, exc)
-        await bot.send_message(
-            None,
-            f"⚠️ Ошибка при формировании отчёта: {exc!s:.100}",
-            chat_id=int(chat_id),
-            notify=False,
-        )
-
-    return True
