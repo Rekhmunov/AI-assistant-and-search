@@ -13,7 +13,7 @@ from app.core.config import get_settings
 
 logger = logging.getLogger(__name__)
 
-# Дебаунс: не отправлять оповещение чаще чем раз в N секунд для одного сервиса
+# Дебаунс: не отправлять email чаще чем раз в N секунд для одного сервиса
 _NOTIFY_DEBOUNCE_SEC = 300  # 5 минут
 
 _PREFIX = "svcinc:v1:"
@@ -55,45 +55,23 @@ async def _notify_admins_incident(
     message: str,
     status_code: int | None,
 ) -> None:
-    """Отправляет оповещение о сбое в MAX всем admin MAX-пользователям (с дебаунсом 5 мин)."""
+    """Отправляет email-оповещение о сбое администраторам (с дебаунсом 5 мин)."""
     debounce_key = f"{_PREFIX}notified:{service}"
     try:
         acquired = await redis_client.set(debounce_key, "1", nx=True, ex=_NOTIFY_DEBOUNCE_SEC)
         if not acquired:
             return  # Уже отправляли недавно
 
-        # Читаем список admin MAX ID из app_settings
-        raw_ids = await redis_client.get("setting:support_notify_max_user_ids")
-        if not raw_ids:
-            return
-        max_ids: list[int] = []
-        for part in str(raw_ids).replace(";", ",").split(","):
-            piece = part.strip()
-            try:
-                max_ids.append(int(piece))
-            except ValueError:
-                pass
-        if not max_ids:
-            return
-
         label = SERVICE_LABELS.get(service, service)
         status_hint = f" (HTTP {status_code})" if status_code else ""
-        text = (
-            f"⚠️ Сбой сервиса: {label}{status_hint}\n"
+        body = (
+            f"Сбой сервиса: {label}{status_hint}\n"
             f"Тип: {kind}\n"
             f"{(message or '')[:300]}"
         )
-        from app.services.bot import MaxBotService
-        bot = MaxBotService()
-        for uid in max_ids:
-            result = await bot.send_message(uid, text)
-            if not result.ok:
-                logger.warning("incident notify failed max_user_id=%s: %s", uid, result.error)
-
-        # Email-оповещение
         from app.services.email_notify import send_admin_alert
-        email_subject = f"[Glosix] Сбой: {label}{status_hint}"
-        await send_admin_alert(email_subject, text)
+        subject = f"[Glosix] Сбой: {label}{status_hint}"
+        await send_admin_alert(subject, body)
     except Exception:
         logger.exception("_notify_admins_incident failed")
 
@@ -126,7 +104,7 @@ async def record_service_incident(
     except Exception:
         logger.exception("record_service_incident failed")
 
-    # Оповещение: MAX + email (с дебаунсом, не блокирует основной поток)
+    # Email-оповещение (с дебаунсом 5 мин, не блокирует основной поток)
     try:
         await _notify_admins_incident(redis_client, service, kind, message, status_code)
     except Exception:
