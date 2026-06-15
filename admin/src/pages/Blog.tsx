@@ -124,9 +124,6 @@ export function BlogPage() {
       <header className="admin-page-header">
         <div>
           <h1>Блог</h1>
-          <p className="admin-page-subtitle">
-            Публичные статьи на {PUBLIC_SITE}/blog. Черновики и SEO настраиваются в редакторе.
-          </p>
         </div>
         <div className="admin-page-meta">
           {!loading && <span className="admin-count-badge">{total}</span>}
