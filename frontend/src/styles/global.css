@@ -6965,10 +6965,23 @@ body:has(.page-thread) {
    BLOG — двухколоночный layout в стиле основного сервиса
    ═══════════════════════════════════════════════════════ */
 
+/* Снимаем ограничения app-main для блога */
+.app-main:has(.blog-layout) {
+  max-height: none;
+  min-height: 100dvh;
+  overflow: visible;
+}
+
+.app-shell:has(.blog-layout) {
+  padding-bottom: 0;
+}
+
 .blog-layout {
   display: flex;
-  min-height: 100dvh;
+  flex: 1;
+  min-height: calc(100dvh - var(--bottom-nav-height, 56px));
   background: var(--bg, #f5f7f8);
+  width: 100%;
 }
 
 /* ── Боковая панель (категории) ─────────────────────── */
@@ -6981,7 +6994,8 @@ body:has(.page-thread) {
   flex-direction: column;
   position: sticky;
   top: 0;
-  height: 100dvh;
+  align-self: flex-start;
+  min-height: 100dvh;
   overflow-y: auto;
 }
 
@@ -7241,12 +7255,15 @@ a.blog-sidebar-title:hover {
   .blog-layout {
     flex-direction: column;
     min-height: 0;
+    flex: 1;
   }
 
   .blog-sidebar {
     width: 100%;
     height: auto;
+    min-height: 0;
     position: static;
+    align-self: auto;
     border-right: none;
     border-bottom: 1px solid var(--border-subtle, #e8edf0);
   }
@@ -7292,7 +7309,7 @@ a.blog-sidebar-title:hover {
   }
 
   .blog-main {
-    padding: 16px 16px 80px;
+    padding: 16px 16px calc(var(--bottom-nav-height, 56px) + 24px);
     max-width: 100%;
   }
 
