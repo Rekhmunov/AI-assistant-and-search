@@ -115,6 +115,12 @@ async def execute_agent_tool(
                     "chat_id": runtime_chat_id,
                     "record_id": record_id,
                 })
+                # Очищаем pending_entry из памяти агента — LLM не успеет вызвать
+                # update_agent_memory из-за break в tool loop после outbound_sent=True
+                from app.services.agent.agent_spec import load_agent_spec, save_agent_spec
+                _spec = load_agent_spec(agent)
+                _spec.facts = [f for f in _spec.facts if not f.lower().startswith("pending_entry")]
+                save_agent_spec(agent, _spec)
                 result["outbound_sent"] = True
             return result
         if name == "query_agent_records":
