@@ -57,6 +57,18 @@ async def handle_group_interactive(
     for _agent in _quick_agents:
         _cfg = _agent.config or {}
 
+        # ── Отмена ожидающей записи ───────────────────────────────────────────
+        if _cfg.get("template") == "secretary" and text.strip().lower() in {"отмена", "отменить", "cancel"}:
+            from app.services.agent.agent_spec import load_agent_spec, save_agent_spec
+            _spec = load_agent_spec(_agent)
+            has_pending = any(f.lower().startswith("pending_entry") for f in _spec.facts)
+            if has_pending:
+                _spec.facts = [f for f in _spec.facts if not f.lower().startswith("pending_entry")]
+                save_agent_spec(_agent, _spec)
+                await bot.send_message(None, "❌ Отменено. Запись не сохранена.", chat_id=chat_id, notify=False)
+                await db.commit()
+                return True
+
         # ── Ожидание ввода даты для отчёта (после нажатия «Ввести дату вручную») ──
         if _cfg.get("template") == "secretary" and _cfg.get("secretary_pending_report"):
             try:
