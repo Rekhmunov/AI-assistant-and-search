@@ -41,6 +41,12 @@ AnswerModel = Literal["lite", "pro"]
 MESSAGES_URL = "https://api.anthropic.com/v1/messages"
 API_VERSION = "2023-06-01"
 
+# Инструменты веб-поиска Claude (только для Pro)
+_WEB_SEARCH_TOOLS = [
+    {"type": "web_search_20260209", "name": "web_search"},
+]
+_WEB_SEARCH_BETA_HEADER = "code-execution-web-tools-2026-02-09"
+
 
 def _anthropic_http_error_message(response: httpx.Response, *, model: str) -> str:
     """Текст для UI: 403 чаще всего = нет доступа к модели в консоли Anthropic."""
@@ -106,12 +112,15 @@ class AnthropicClaudeProvider(PromptedLLMMixin, LLMProvider):
             return self.settings.anthropic_model_pro
         return self.settings.anthropic_model_lite
 
-    def _headers(self) -> dict[str, str]:
-        return {
+    def _headers(self, *, web_search: bool = False) -> dict[str, str]:
+        headers = {
             "x-api-key": self.settings.anthropic_api_key,
             "anthropic-version": API_VERSION,
             "content-type": "application/json",
         }
+        if web_search:
+            headers["anthropic-beta"] = _WEB_SEARCH_BETA_HEADER
+        return headers
 
     def _http_client(self, *, timeout: float) -> httpx.AsyncClient:
         proxy = (self.settings.anthropic_http_proxy or "").strip()
@@ -281,6 +290,7 @@ class AnthropicClaudeProvider(PromptedLLMMixin, LLMProvider):
         temperature: float,
     ) -> AsyncIterator[str]:
         system, msg_list = _to_anthropic_messages(messages)
+        use_web_search = (model == "pro")
         payload: dict = {
             "model": self._model_name(model),
             "max_tokens": max_tokens,
@@ -290,6 +300,8 @@ class AnthropicClaudeProvider(PromptedLLMMixin, LLMProvider):
         }
         if system:
             payload["system"] = system
+        if use_web_search:
+            payload["tools"] = _WEB_SEARCH_TOOLS
 
         def _delta_text(event: dict) -> str | None:
             et = event.get("type")
@@ -299,7 +311,8 @@ class AnthropicClaudeProvider(PromptedLLMMixin, LLMProvider):
                 raise YandexServiceError("gpt", f"Claude stream: {msg}")
             if et == "content_block_delta":
                 delta = event.get("delta") or {}
-                if delta.get("type") in (None, "text_delta"):
+                # Берём только текстовые блоки, tool_use и input_json_delta игнорируем
+                if delta.get("type") == "text_delta":
                     text = delta.get("text")
                     if text:
                         return str(text)
@@ -313,7 +326,7 @@ class AnthropicClaudeProvider(PromptedLLMMixin, LLMProvider):
         try:
             async with self._http_client(timeout=120.0) as client:
                 async with client.stream(
-                    "POST", MESSAGES_URL, headers=self._headers(), json=payload
+                    "POST", MESSAGES_URL, headers=self._headers(web_search=use_web_search), json=payload
                 ) as response:
                     if response.status_code >= 400:
                         body = (await response.aread()).decode("utf-8", errors="replace")[:500]
