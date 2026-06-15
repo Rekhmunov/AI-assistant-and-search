@@ -27,9 +27,9 @@ VISION_UNAVAILABLE_MSG = (
     "Проверьте ключи vision-провайдера в .env на сервере или выберите другой провайдер в админке."
 )
 
-# Базовый порядок fallback: Alice → GigaChat → Claude.
+# Приоритет Vision: Claude → GigaChat (Alice VLM как последний резерв).
 # Выбранный в админке провайдер ставится первым, остальные — в этом порядке.
-VISION_FALLBACK_ORDER: tuple[str, ...] = ("alice_vlm", "gigachat", "anthropic_claude")
+VISION_FALLBACK_ORDER: tuple[str, ...] = ("anthropic_claude", "gigachat", "alice_vlm")
 
 _VISION_REFUSAL_RE = re.compile(
     r"(не\s+могу\s+(помочь|обработать|анализировать|рассмотреть|просмотреть)"
@@ -41,6 +41,34 @@ _VISION_REFUSAL_RE = re.compile(
 
 class VisionNotSupportedError(Exception):
     """Нет настроенного vision-провайдера."""
+
+
+_PROVIDER_LABELS = {
+    "anthropic_claude": "Claude",
+    "gigachat": "GigaChat",
+    "alice_vlm": "Alice VLM",
+}
+
+
+async def _record_vision_fallback(
+    primary: str,
+    fallback: str,
+    error: Exception,
+    redis_client,
+) -> None:
+    """Записывает инцидент переключения Vision-провайдера и отправляет email."""
+    try:
+        from app.services.service_incidents import record_service_incident
+        primary_label = _PROVIDER_LABELS.get(primary, primary)
+        fallback_label = _PROVIDER_LABELS.get(fallback, fallback)
+        await record_service_incident(
+            redis_client,
+            service="vision",
+            kind="fallback_activated",
+            message=f"Vision: {primary_label} → {fallback_label}: {error!s:.300}",
+        )
+    except Exception:
+        logger.exception("_record_vision_fallback failed")
 
 
 class VisionProviderRefusedError(YandexServiceError):
@@ -197,6 +225,7 @@ async def summarize_vision_for_search(
     chain = build_vision_fallback_chain(primary)
     last_error: Exception | None = None
 
+    succeeded_provider: str | None = None
     for provider_id in chain:
         if not _vision_configured(provider_id, settings):
             continue
@@ -211,6 +240,10 @@ async def summarize_vision_for_search(
                 prior_sources_block=prior_sources_block,
             )
             logger.info("Vision summary succeeded provider=%s", provider_id)
+            succeeded_provider = provider_id
+            if last_error is not None and provider_id != chain[0]:
+                # Переключились на резервный — записываем инцидент
+                await _record_vision_fallback(chain[0], provider_id, last_error, redis_client)
             return result
         except (YandexServiceError, VisionProviderRefusedError) as e:
             logger.warning("Vision summary failed (%s), trying next provider: %s", provider_id, e)
@@ -257,6 +290,8 @@ async def stream_vision_answer(
             ):
                 yield chunk
             logger.info("Vision stream succeeded provider=%s", provider_id)
+            if last_error is not None and provider_id != chain[0]:
+                await _record_vision_fallback(chain[0], provider_id, last_error, redis_client)
             return
         except (YandexServiceError, VisionProviderRefusedError) as e:
             logger.warning("Vision stream failed (%s), trying next provider: %s", provider_id, e)

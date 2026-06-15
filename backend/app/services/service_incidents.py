@@ -28,6 +28,7 @@ SERVICE_LABELS: dict[str, str] = {
     "image_gen": "GigaChat (картинки)",
     "gpt": "LLM (ответ)",
     "perplexity": "Perplexity",
+    "vision": "Vision (анализ фото)",
 }
 
 
