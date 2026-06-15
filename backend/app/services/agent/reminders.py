@@ -68,7 +68,7 @@ async def activate_agent_reminders(db: AsyncSession, agent: AgentInstance) -> Ag
 async def schedule_next_recurrence(db: AsyncSession, reminder: AgentReminder) -> AgentReminder | None:
     from datetime import timedelta
 
-    from app.services.agent.schedule import next_weekly_run, resolve_user_timezone
+    from app.services.agent.schedule import next_weekly_run, next_monthly_run, resolve_user_timezone
 
     agent_result = await db.get(AgentInstance, reminder.agent_id)
     tz_name = "Europe/Moscow"
@@ -107,6 +107,28 @@ async def schedule_next_recurrence(db: AsyncSession, reminder: AgentReminder) ->
         if agent_result:
             cfg = dict(agent_result.config or {})
             cfg["next_run_at"] = next_run.isoformat()
+            agent_result.config = cfg
+        await db.flush()
+        return new_reminder
+
+    if reminder.recurrence and reminder.recurrence.startswith("monthly:"):
+        try:
+            day = int(reminder.recurrence.split(":", 1)[1])
+        except (IndexError, ValueError):
+            return None
+        prev_local = reminder.run_at.astimezone(user_tz)
+        next_run = next_monthly_run(day, prev_local.hour, prev_local.minute, now=prev_local, tz=user_tz)
+        new_reminder = AgentReminder(
+            agent_id=reminder.agent_id,
+            run_at=next_run.astimezone(timezone.utc),
+            message_text=reminder.message_text,
+            recurrence=reminder.recurrence,
+            status="pending",
+        )
+        db.add(new_reminder)
+        if agent_result:
+            cfg = dict(agent_result.config or {})
+            cfg["next_run_at"] = next_run.astimezone(timezone.utc).isoformat()
             agent_result.config = cfg
         await db.flush()
         return new_reminder

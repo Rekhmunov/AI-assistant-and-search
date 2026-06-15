@@ -9,6 +9,9 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 MSK = timezone(timedelta(hours=3))
 DEFAULT_TZ_NAME = "Europe/Moscow"
 
+# Максимальное число переносов pending-напоминания при временных ошибках
+MAX_REMINDER_DEFERS = 12  # 12 × 10 мин = 2 часа
+
 _WEEKDAY_MAP = {
     "понедельник": 0,
     "пн": 0,
@@ -71,6 +74,34 @@ def next_weekly_run(
     return target + timedelta(days=days_ahead)
 
 
+def next_monthly_run(
+    day: int,
+    hour: int,
+    minute: int,
+    *,
+    now: datetime | None = None,
+    tz: timezone | None = None,
+) -> datetime:
+    """Следующий запуск в N-й день месяца в HH:MM (в часовом поясе пользователя)."""
+    import calendar
+    tz = tz or MSK
+    now = now or datetime.now(tz)
+    candidate = now.replace(day=min(day, calendar.monthrange(now.year, now.month)[1]),
+                            hour=hour, minute=minute, second=0, microsecond=0)
+    if candidate <= now:
+        # Переходим к следующему месяцу
+        if now.month == 12:
+            year, month = now.year + 1, 1
+        else:
+            year, month = now.year, now.month + 1
+        candidate = candidate.replace(
+            year=year,
+            month=month,
+            day=min(day, calendar.monthrange(year, month)[1]),
+        )
+    return candidate
+
+
 def parse_reminder_schedule(
     schedule_text: str,
     *,
@@ -79,7 +110,7 @@ def parse_reminder_schedule(
 ) -> tuple[datetime, str | None]:
     """
     Возвращает (run_at UTC, recurrence).
-    recurrence: None | daily | weekly:<weekday>
+    recurrence: None | daily | weekly:<weekday> | monthly:<day>
     """
     user_tz = resolve_user_timezone(tz_name)
     now_local = now or datetime.now(user_tz)
@@ -106,6 +137,29 @@ def parse_reminder_schedule(
         run = now_local + timedelta(hours=1)
         return run.astimezone(timezone.utc), "hourly"
 
+    # Monthly: "каждое 20-е", "раз в месяц каждое 20", "20-го числа каждый месяц", "ежемесячно 20"
+    monthly_m = re.search(
+        r"(?:кажд\w+\s+месяц|раз\s+в\s+месяц|ежемесячно|кажд\w+\s+(\d{1,2})[-\w]*\s+числ|(\d{1,2})[-\w]*\s+числ\w*\s+каждый)",
+        raw,
+    )
+    monthly_day_m = re.search(r"(\d{1,2})[-\w]*\s+(?:числ|го\b)", raw)
+    if not monthly_day_m:
+        monthly_day_m = re.search(r"каждое\s+(\d{1,2})", raw)
+    if not monthly_day_m:
+        monthly_day_m = re.search(r"(\d{1,2})-?е?\s+(?:числ|го)", raw)
+
+    if re.search(r"(?:кажд\w+\s+месяц|раз\s+в\s+месяц|ежемесячно|кажд\w+\s+\d{1,2}[-\w]*\s*числ)", raw) and monthly_day_m:
+        day = int(monthly_day_m.group(1))
+        if 1 <= day <= 31:
+            hm = _parse_time_hm(raw) or (9, 0)
+            run = next_monthly_run(day, hm[0], hm[1], now=now_local, tz=user_tz)
+            return run.astimezone(timezone.utc), f"monthly:{day}"
+
+    if "послезавтра" in raw:
+        hm = _parse_time_hm(raw) or (9, 0)
+        run = (now_local + timedelta(days=2)).replace(hour=hm[0], minute=hm[1], second=0, microsecond=0)
+        return run.astimezone(timezone.utc), None
+
     if "сегодня" in raw:
         hm = _parse_time_hm(raw)
         if hm:
@@ -130,7 +184,7 @@ def parse_reminder_schedule(
         return run.astimezone(timezone.utc), "daily"
 
     for name, wd in _WEEKDAY_MAP.items():
-        if name in raw:
+        if re.search(rf"\b{re.escape(name)}\b", raw):
             hm = _parse_time_hm(raw) or (9, 0)
             run = next_weekly_run(wd, hm[0], hm[1], now=now_local, tz=user_tz)
             return run.astimezone(timezone.utc), f"weekly:{wd}"
@@ -142,12 +196,13 @@ def parse_reminder_schedule(
             dt = dt.replace(tzinfo=user_tz)
         return dt.astimezone(timezone.utc), None
 
+    # Голое время HH:MM — теперь РАЗОВОЕ (не ежедневное)
     hm = _parse_time_hm(raw)
     if hm:
         run = now_local.replace(hour=hm[0], minute=hm[1], second=0, microsecond=0)
         if run <= now_local:
             run += timedelta(days=1)
-        return run.astimezone(timezone.utc), "daily"
+        return run.astimezone(timezone.utc), None  # None = одноразовое
 
     raise ValueError("schedule_unparseable")
 
@@ -164,9 +219,20 @@ def normalize_schedule_phrase(text: str) -> str | None:
     if re.search(r"кажд\w+\s+день", low) or "ежедневно" in low:
         return f"каждый день в {time_part}" if time_part else "каждый день"
 
+    # Monthly
+    monthly_day_m = re.search(r"(\d{1,2})[-\w]*\s+(?:числ|го\b)", low)
+    if not monthly_day_m:
+        monthly_day_m = re.search(r"каждое\s+(\d{1,2})", low)
+    if re.search(r"(?:кажд\w+\s+месяц|раз\s+в\s+месяц|ежемесячно)", low) and monthly_day_m:
+        day = monthly_day_m.group(1)
+        return f"раз в месяц каждое {day} число в {time_part}" if time_part else f"раз в месяц каждое {day} число"
+
     for name in _WEEKDAY_MAP:
-        if name in low:
+        if re.search(rf"\b{re.escape(name)}\b", low):
             return f"каждый {name} в {time_part}" if time_part else f"каждый {name}"
+
+    if "послезавтра" in low:
+        return f"послезавтра в {time_part}" if time_part else "послезавтра"
 
     if "сегодня" in low:
         if time_part:
@@ -184,8 +250,9 @@ def normalize_schedule_phrase(text: str) -> str | None:
     if re.search(r"(?:раз\s+в\s+час|кажд\w+\s+час|every\s+hour|hourly)", low):
         return "каждый час"
 
+    # Голое время — одноразовое (не ежедневное)
     if time_part:
-        return f"каждый день в {time_part}"
+        return f"сегодня в {time_part}"
 
     return raw
 

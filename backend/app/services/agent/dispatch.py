@@ -88,12 +88,21 @@ async def dispatch_due_reminders(
 
     for index, reminder in enumerate(reminders):
         await dispatch_stagger(index)
+
+        # Redis-блокировка: один воркер на одно напоминание
+        lock_key = f"reminder_dispatch:{reminder.id}"
+        acquired = await redis_client.set(lock_key, "1", nx=True, ex=120)
+        if not acquired:
+            logger.info("Reminder %s already being processed by another worker, skipping", reminder.id)
+            continue
+
         agent_result = await db.execute(
             select(AgentInstance).where(AgentInstance.id == reminder.agent_id)
         )
         agent = agent_result.scalar_one_or_none()
         if not agent or agent.status != AgentStatus.ACTIVE.value:
             reminder.status = "cancelled"
+            await redis_client.delete(lock_key)
             continue
 
         ready, ready_err = _delivery_ready(agent)
@@ -158,6 +167,21 @@ async def dispatch_due_reminders(
                     if reminder.recurrence:
                         await schedule_next_recurrence(db, reminder)
                     continue
+                # Лимит переносов: не более MAX_REMINDER_DEFERS раз
+                from app.services.agent.schedule import MAX_REMINDER_DEFERS
+                defer_count = int((agent.config or {}).get("reminder_defer_count") or 0)
+                if defer_count >= MAX_REMINDER_DEFERS:
+                    reminder.status = "failed"
+                    reminder.last_error = f"max_defers_reached ({MAX_REMINDER_DEFERS})"
+                    cfg2 = dict(agent.config or {})
+                    cfg2.pop("reminder_defer_count", None)
+                    agent.config = cfg2
+                    if reminder.recurrence:
+                        await schedule_next_recurrence(db, reminder)
+                    continue
+                cfg2 = dict(agent.config or {})
+                cfg2["reminder_defer_count"] = defer_count + 1
+                agent.config = cfg2
                 reminder.run_at = now + timedelta(minutes=10)
                 continue
 
@@ -226,7 +250,9 @@ async def dispatch_due_reminders(
             cfg = dict(agent.config or {})
             cfg.pop("last_dispatch_error", None)
             cfg.pop("last_dispatch_explanation", None)
+            cfg.pop("reminder_defer_count", None)
             agent.config = cfg
+            await redis_client.delete(lock_key)
             logger.info("Agent reminder sent agent=%s reminder=%s", agent.id, reminder.id)
             await append_agent_activity_log(
                 db,
@@ -263,6 +289,7 @@ async def dispatch_due_reminders(
                 reminder.status = "failed"
                 if reminder.recurrence:
                     await schedule_next_recurrence(db, reminder)
+            await redis_client.delete(lock_key)
 
     if reminders:
         await db.flush()
