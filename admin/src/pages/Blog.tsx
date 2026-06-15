@@ -135,30 +135,32 @@ export function BlogPage() {
 
       <div className="blog-toolbar card">
         <form className="blog-toolbar-form" onSubmit={onSearch}>
-          <label className="blog-field blog-field--search">
-            <span className="blog-field-label">Поиск</span>
-            <input
-              placeholder="Заголовок или slug"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-          </label>
-          <label className="blog-field blog-field--status">
-            <span className="blog-field-label">Статус</span>
-            <select value={status} onChange={(e) => setStatus(e.target.value)}>
-              <option value="">Все</option>
-              <option value="draft">Черновики</option>
-              <option value="published">Опубликованные</option>
-              <option value="archived">Архив</option>
-            </select>
-          </label>
-          <div className="blog-toolbar-actions">
-            <button type="submit" className="btn-primary">
+          <div className="blog-toolbar-top">
+            <label className="blog-field blog-field--search">
+              <span className="blog-field-label">Поиск</span>
+              <input
+                placeholder="Заголовок или slug"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </label>
+            <label className="blog-field blog-field--status">
+              <span className="blog-field-label">Статус</span>
+              <select value={status} onChange={(e) => setStatus(e.target.value)}>
+                <option value="">Все</option>
+                <option value="draft">Черновики</option>
+                <option value="published">Опубликованные</option>
+                <option value="archived">Архив</option>
+              </select>
+            </label>
+            <button type="submit" className="btn-primary" style={{ alignSelf: "flex-end" }}>
               Найти
             </button>
-            <button type="button" className="btn-secondary" onClick={() => void load()}>
+            <button type="button" className="btn-secondary" style={{ alignSelf: "flex-end" }} onClick={() => void load()}>
               Обновить
             </button>
+          </div>
+          <div className="blog-toolbar-actions">
             <Link to="/blog/categories" className="btn-secondary">
               Категории
             </Link>
@@ -173,7 +175,7 @@ export function BlogPage() {
                   {rebuildBusy ? "Prerender…" : "Обновить prerender"}
                 </button>
                 <Link to="/blog/new" className="btn-primary">
-                  Новая статья
+                  + Новая статья
                 </Link>
               </>
             )}
