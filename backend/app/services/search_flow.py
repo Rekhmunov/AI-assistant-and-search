@@ -835,6 +835,10 @@ class SearchFlowService:
                         )
                         query_url_trace.bootstrap_count += extra_trace.bootstrap_count
 
+                    # Очередь для доменов из Yandex Search — UI показывает их в статусе
+                    sites_queue: asyncio.Queue[list[str]] = asyncio.Queue()
+                    fact_pipeline.sites_queue = sites_queue
+
                     pipeline_task = asyncio.create_task(
                         fact_pipeline.run(
                             llm_query,
@@ -852,6 +856,7 @@ class SearchFlowService:
                     pipeline_result = None
                     images_emitted = False
                     image_ready_task: asyncio.Task | None = None
+                    _sites_emitted = False
 
                     if image_task is not None:
 
@@ -879,6 +884,15 @@ class SearchFlowService:
                         done, pending_tasks = await asyncio.wait(
                             pending_tasks, return_when=asyncio.FIRST_COMPLETED
                         )
+                        # Проверяем очередь доменов и отправляем в UI
+                        if not _sites_emitted and not sites_queue.empty():
+                            try:
+                                domains = sites_queue.get_nowait()
+                                if domains:
+                                    yield sse_event("search_sites", {"domains": domains})
+                                    _sites_emitted = True
+                            except Exception:
+                                pass
                         for task in done:
                             if task is image_ready_task and not images_emitted:
                                 images_emitted = True

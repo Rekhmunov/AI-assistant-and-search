@@ -1063,6 +1063,7 @@ export interface SSEHandlers {
   onFollowUps?: (questions: string[]) => void;
   onDone?: (payload: SearchDonePayload) => void;
   onClaudeSearchStep?: (step: string, query?: string) => void;
+  onSearchSites?: (domains: string[]) => void;
   onError?: (message: string, code?: string) => void;
 }
 
@@ -1572,6 +1573,11 @@ export async function streamSearch(
             break;
           case "claude_search_step":
             handlers.onClaudeSearchStep?.(String(parsed.step ?? ""), parsed.query ? String(parsed.query) : undefined);
+            break;
+          case "search_sites":
+            if (Array.isArray(parsed.domains)) {
+              handlers.onSearchSites?.(parsed.domains.map(String).filter(Boolean));
+            }
             break;
           case "doc_gen_start":
             if (typeof parsed.status === "string") handlers.onDocGenStart?.(parsed.status);

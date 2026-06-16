@@ -46,10 +46,12 @@ class FactPipeline:
         self,
         search: YandexSearchService | None = None,
         llm: ChatLLM | None = None,
+        sites_queue: "asyncio.Queue[list[str]] | None" = None,
     ) -> None:
         self.search = search or YandexSearchService()
         self.llm = llm or YandexGPTProvider()
         self.orchestrator = FactOrchestrator()
+        self.sites_queue = sites_queue  # домены после Yandex Search → для UI
 
     def _max_fetch_pages(self, slots: list[str], *, howto: bool, answer_model: str) -> int:
         settings = get_settings()
@@ -149,6 +151,23 @@ class FactPipeline:
             batches.append(ranked)
             yandex_batches = 1
             retrieval_ok = assessment.ok
+
+            # Отправляем домены в UI сразу после первого Yandex-поиска (до page fetch)
+            if self.sites_queue is not None and ranked:
+                try:
+                    from urllib.parse import urlparse as _urlparse
+                    domains = []
+                    seen: set[str] = set()
+                    for src in ranked[:8]:
+                        d = _urlparse(src.url).netloc.replace("www.", "")
+                        if d and d not in seen:
+                            seen.add(d)
+                            domains.append(d)
+                    if domains:
+                        self.sites_queue.put_nowait(domains)
+                except Exception:
+                    pass
+
             search_attempts.append(
                 {
                     "query": search_q,

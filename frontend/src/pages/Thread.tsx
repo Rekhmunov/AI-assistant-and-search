@@ -178,6 +178,7 @@ export function Thread() {
   const [claudeSearchQuery, setClaudeSearchQuery] = useState<string | null>(null);
   const [claudeSearchStep, setClaudeSearchStep] = useState<"searching" | "reading" | "composing">("searching");
   const [isClaudeSearchMode, setIsClaudeSearchMode] = useState(false);
+  const [searchSiteDomains, setSearchSiteDomains] = useState<string[]>([]);
   const [composerQuery, setComposerQuery] = useState("");
   const [agentError, setAgentError] = useState<string | null>(null);
   const [agentStarting, setAgentStarting] = useState(false);
@@ -589,6 +590,7 @@ export function Thread() {
       setClaudeSearchQuery(null);
       setClaudeSearchStep("searching");
       setIsClaudeSearchMode(false);
+      setSearchSiteDomains([]);
       if (retryPending && resumeTurnKey) {
         setTurns((prev) =>
           prev.map((turn) =>
@@ -689,6 +691,9 @@ export function Thread() {
         onImageGenStatus: (status) => {
           setSearchPhase("image_generating");
           if (status?.trim()) setImageGenStatus(status.trim());
+        },
+        onSearchSites: (domains) => {
+          setSearchSiteDomains(domains.slice(0, 6));
         },
         onClaudeSearchStep: (step, query) => {
           setIsClaudeSearchMode(true);  // активируем режим Claude Search
@@ -1221,7 +1226,11 @@ export function Thread() {
                     </>
                   ) : (
                     <>
-                      <SearchStatusLine phase={searchPhase} needsSearch={needsSearch} />
+                      <SearchStatusLine
+                        phase={searchPhase}
+                        needsSearch={needsSearch}
+                        searchSiteDomains={isLastTurn ? searchSiteDomains : undefined}
+                      />
                       {isClaudeSearchMode && isLastTurn && streaming && !answerHasText(turn.answer) && (
                         <AnswerErrorBoundary>
                           <ClaudeSearchTimeline
