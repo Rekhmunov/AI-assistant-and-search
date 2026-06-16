@@ -100,6 +100,10 @@ export function BlockActionsMenu({ content, titleHint, className = "block-action
   };
 
   const runExport = (format: ExportFormat) => {
+    if (!isPro) {
+      setProModalOpen(true);
+      return;
+    }
     if (isLegalDocumentContent(content, titleHint)) {
       setPendingFormat(format);
       setConfirmOpen(true);
@@ -182,7 +186,7 @@ export function BlockActionsMenu({ content, titleHint, className = "block-action
             <ChevronIcon open={open} />
           </span>
         </button>
-        {open ? (
+        {open && isPro ? (
           <div className="block-actions-menu-dropdown" role="menu">
             <button
               type="button"
