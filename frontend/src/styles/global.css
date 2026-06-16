@@ -2969,8 +2969,10 @@ body:has(.page-thread) {
 
 /* ── Claude Search Timeline ────────────────────────────────── */
 .claude-search-timeline {
-  margin: 8px 0 16px;
+  margin: 4px 0 12px;
   padding: 12px 14px;
+  width: 100%;
+  box-sizing: border-box;
   background: var(--surface, #fff);
   border: 1px solid var(--border-subtle, #e8edf0);
   border-radius: 12px;
@@ -5846,7 +5848,8 @@ body:has(.page-thread) {
   .page-thread .thread-turn > .search-status,
   .page-thread .thread-turn > .answer-section,
   .page-thread .thread-turn > .followups-section,
-  .page-thread .thread-turn > .agent-thinking-panel {
+  .page-thread .thread-turn > .agent-thinking-panel,
+  .page-thread .thread-turn > .claude-search-timeline {
     width: var(--desktop-thread-column-width);
     max-width: var(--desktop-thread-column-width);
     margin-left: auto;

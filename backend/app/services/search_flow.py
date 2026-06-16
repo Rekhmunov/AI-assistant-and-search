@@ -646,6 +646,7 @@ class SearchFlowService:
                         elif event_type == "text":
                             if not _answer_phase_set:
                                 await update_search_pending(redis_client, thread.id, phase="answering")
+                                yield sse_event("claude_search_step", {"step": "composing"})
                                 _answer_phase_set = True
                             full_answer += payload
                             yield sse_event("token", {"text": payload})
