@@ -506,10 +506,33 @@ class GigaChatProvider(PromptedLLMMixin, LLMProvider):
         if raw.startswith("```"):
             raw = re.sub(r"^```\w*\n?", "", raw)
             raw = re.sub(r"\n?```$", "", raw)
+
+        # Сначала пробуем найти JSON-массив в тексте (GigaChat может добавлять текст вокруг)
+        match = re.search(r"\[.*?\]", raw, re.DOTALL)
+        if match:
+            try:
+                data = json.loads(match.group())
+                if isinstance(data, list) and all(isinstance(x, str) for x in data):
+                    return [x.strip() for x in data if x.strip()][:5]
+            except json.JSONDecodeError:
+                pass
+
+        # Fallback: прямой json.loads
         try:
             data = json.loads(raw)
             if isinstance(data, list):
-                return [str(x).strip() for x in data if str(x).strip()][:5]
+                # Если список содержит строки — возвращаем
+                flat: list[str] = []
+                for x in data:
+                    if isinstance(x, str):
+                        flat.append(x.strip())
+                    elif isinstance(x, list):
+                        # Вложенный список — разворачиваем
+                        flat.extend(str(s).strip() for s in x if str(s).strip())
+                return [s for s in flat if s][:5]
         except json.JSONDecodeError:
             pass
-        return []
+
+        # Fallback: разбивка по строкам
+        lines = [q.strip() for q in raw.split("\n") if q.strip() and not q.strip().startswith("[")]
+        return [l for l in lines if len(l) > 5][:5]
