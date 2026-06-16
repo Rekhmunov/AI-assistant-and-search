@@ -9,6 +9,7 @@ export const PRIVATE_ROUTE_PREFIXES = [
   "/agents",
 ] as const;
 
+// Включаем ?q= на /thread — это поисковый запрос, не нужен в индексе
 const PRIVATE_QUERY_KEYS = ["WebAppStartParam", "etext", "startapp"] as const;
 const PRIVATE_QUERY_RE = /(?:^|&)(?:WebAppStartParam|etext|startapp)(?:=|&|$)/i;
 
