@@ -84,6 +84,10 @@ def create_search_provider(provider_id: str, settings: Settings | None) -> Yande
     settings = settings or get_settings()
     if provider_id == "yandex_search":
         return YandexSearchService(settings)
+    if provider_id == "claude_search":
+        # Claude Search не использует Yandex; возвращаем заглушку,
+        # которая никогда не вызывается когда _is_claude_search=True
+        return YandexSearchService(settings)
     raise ValueError(f"Unknown search provider: {provider_id}")
 
 
