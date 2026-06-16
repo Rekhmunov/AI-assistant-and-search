@@ -1198,6 +1198,7 @@ export function Thread() {
                       phase={preparingPhase}
                       needsSearch={preparingNeedsSearch}
                       customStatus={turnAnswerStatus?.custom_status}
+                      searchSiteDomains={isLastTurn ? searchSiteDomains : undefined}
                     />
                   ) : isDocumentGenTurn ? (
                     <DocGenStatusLine active={Boolean(isActive && streaming)} status={docGenStatus} />
