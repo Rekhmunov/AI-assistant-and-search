@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import uuid
 from collections.abc import AsyncIterator
 from datetime import datetime, timezone
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -36,6 +38,9 @@ STATUS_MESSAGES = (
     "Смешиваем краски…",
     "Почти готово…",
 )
+
+# Интервал между автоматическими статусами (сек)
+_STATUS_INTERVAL_SEC = 4.0
 
 
 async def stream_image_generation_turn(
@@ -145,52 +150,80 @@ async def stream_image_generation_turn(
     )
     yield sse_event("image_gen_start", {"status": STATUS_MESSAGES[0]})
 
+    # Запускаем реальную генерацию в фоновой задаче, чтобы параллельно
+    # отправлять клиенту плановые статус-сообщения каждые ~4 секунды.
+    gen_events: list[tuple[str, Any]] = []
+    gen_exception: list[BaseException] = []
+    gen_done = asyncio.Event()
+
+    async def _run_generation() -> None:
+        try:
+            async for event_type, payload in stream_image_generation(display_content, provider_id):
+                gen_events.append((event_type, payload))
+        except Exception as exc:  # noqa: BLE001
+            gen_exception.append(exc)
+        finally:
+            gen_done.set()
+
+    gen_task = asyncio.create_task(_run_generation())
+
+    # Отправляем STATUS_MESSAGES[1..] каждые _STATUS_INTERVAL_SEC пока идёт генерация
+    status_idx = 1
+    while not gen_done.is_set():
+        try:
+            await asyncio.wait_for(asyncio.shield(gen_done.wait()), timeout=_STATUS_INTERVAL_SEC)
+        except asyncio.TimeoutError:
+            if status_idx < len(STATUS_MESSAGES):
+                msg = STATUS_MESSAGES[status_idx]
+                status_idx += 1
+                await update_search_pending(redis_client, thread.id, custom_status=msg)
+                yield sse_event("image_gen_status", {"status": msg})
+
+    await gen_task  # гарантируем завершение
+
     image_bytes: bytes | None = None
     assistant_text = ""
 
     try:
-        try:
-            async for event_type, payload in stream_image_generation(display_content, provider_id):
-                if event_type == "status" and payload:
-                    await update_search_pending(
-                        redis_client, thread.id, custom_status=str(payload)
-                    )
-                    yield sse_event("image_gen_status", {"status": payload})
-                elif event_type == "image_bytes" and isinstance(payload, bytes):
-                    image_bytes = payload
-                elif event_type == "error":
-                    await record_service_incident(
-                        redis_client,
-                        service="image_gen",
-                        kind="generation_failed",
-                        message=str(payload),
-                    )
-                    await limiter.release_image_gen(user_id_str)
-                    yield sse_event(
-                        "error",
-                        {"code": "image_gen_failed", "message": payload},
-                    )
-                    return
-                elif event_type == "done":
-                    lines = payload.split("\n", 1)
-                    assistant_text = lines[1].strip() if len(lines) > 1 else ""
-        except Exception as exc:
-            logger.exception("image generation failed")
-            await record_service_incident(
-                redis_client,
-                service="image_gen",
-                kind="exception",
-                message=str(exc),
-            )
-            await limiter.release_image_gen(user_id_str)
-            yield sse_event(
-                "error",
-                {
-                    "code": "image_gen_failed",
-                    "message": "Не удалось сгенерировать изображение. Попробуйте ещё раз.",
-                },
-            )
-            return
+        if gen_exception:
+            raise gen_exception[0]
+
+        for event_type, payload in gen_events:
+            if event_type == "image_bytes" and isinstance(payload, bytes):
+                image_bytes = payload
+            elif event_type == "error":
+                await record_service_incident(
+                    redis_client,
+                    service="image_gen",
+                    kind="generation_failed",
+                    message=str(payload),
+                )
+                await limiter.release_image_gen(user_id_str)
+                yield sse_event(
+                    "error",
+                    {"code": "image_gen_failed", "message": payload},
+                )
+                return
+            elif event_type == "done":
+                lines = str(payload).split("\n", 1)
+                assistant_text = lines[1].strip() if len(lines) > 1 else ""
+    except Exception as exc:
+        logger.exception("image generation failed")
+        await record_service_incident(
+            redis_client,
+            service="image_gen",
+            kind="exception",
+            message=str(exc),
+        )
+        await limiter.release_image_gen(user_id_str)
+        yield sse_event(
+            "error",
+            {
+                "code": "image_gen_failed",
+                "message": "Не удалось сгенерировать изображение. Попробуйте ещё раз.",
+            },
+        )
+        return
 
         if not image_bytes or not is_valid_image_bytes(image_bytes):
             await record_service_incident(
