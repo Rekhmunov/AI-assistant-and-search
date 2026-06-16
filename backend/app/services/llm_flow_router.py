@@ -46,16 +46,17 @@ _ROUTER_SYSTEM = """Ты маршрутизатор запросов в Glosix (
 }
 
 Возможности сервиса:
-- search_rag — нужны свежие данные из интернета, новости, цены, факты с источниками.
-- chat — ответ текстом в чате: оферты, договоры, заявления, инструкции, объяснения. Длинные документы ассистент пишет в одном блоке ```markdown … ```. Файлы docx/pdf не создаёт — только текст в чате.
+- search_rag — вопросы о мире, фактах, событиях, людях, продуктах, технологиях, ценах, погоде. ВСЕГДА needs_search=true.
+- chat — создание нового текста: оферты, договоры, заявления, инструкции, объяснения, планы, код. Файлы docx/pdf не создаёт — только текст в чате.
 - image_generate — пользователь просит нарисовать/сгенерировать изображение, картинку, логотип.
 - export_chat_document — оформить УЖЕ написанный в переписке текст (ответ выше, текст выше, преобразуй в markdown). Не переписывать содержание.
 
-Правила:
-- «напиши оферту», «создай договор», «сделай заявление», «сгенерируй документ» → chat (needs_search true если нужны примеры с рынка). answer_model pro для длинных юридических текстов.
-- «сгенерируй текст выше в документ», «оформи ответ выше» → export_chat_document, needs_search false.
-- Запросы docx/word/pdf/скачать файл как НОВЫЙ документ → chat (markdown в чате), не отдельный файл на сервере.
-- При сомнении между chat и search_rag — search_rag если вопрос про актуальные факты.
+ВАЖНЫЕ ПРАВИЛА:
+- Вопросы «кто», «что», «где», «когда», «как работает», «чем отличается», «какой лучший» → search_rag, needs_search=true.
+- «напиши оферту», «создай договор», «сделай заявление» → chat, needs_search=true если нужны примеры.
+- «сгенерируй текст выше в документ», «оформи ответ выше» → export_chat_document, needs_search=false.
+- При ЛЮБОМ сомнении — выбирай search_rag с needs_search=true. Лишний поиск лучше чем пропущенные источники.
+- Если flow=search_rag — needs_search ВСЕГДА true.
 """
 
 
@@ -130,6 +131,10 @@ def _normalize_flow(
             reason="export_misroute_to_chat",
         )
 
+    # search_rag + needs_search=false логически противоречиво — поиск всегда нужен
+    if decision.flow == "search_rag" and not decision.needs_search:
+        decision.needs_search = True
+
     return decision
 
 
@@ -151,6 +156,9 @@ async def resolve_service_flow(
         )
 
     q = normalize_user_query(query)
+
+    # Правило по умолчанию: конкретные вопросы о фактах/мире → search_rag + needs_search true.
+    # Только явные задачи типа «напиши договор», «составь план» → chat.
     history = format_history_compact(ctx.history, max_turns=3, max_chars=400)
     user_block = f"Запрос пользователя:\n{q}"
     if history:
@@ -170,6 +178,12 @@ async def resolve_service_flow(
             temperature=0.0,
         )
         parsed = _parse_flow_response(raw)
+        logger.warning(
+            "FLOW_ROUTER raw=%s parsed_flow=%s parsed_needs_search=%s",
+            (raw or "")[:200],
+            parsed.flow if parsed else None,
+            parsed.needs_search if parsed else None,
+        )
         if parsed:
             parsed = _normalize_flow(
                 q,
