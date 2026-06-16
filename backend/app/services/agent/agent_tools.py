@@ -335,7 +335,9 @@ async def _tool_max_send_file(
     fmt = str(args.get("format") or "docx")
     try:
         if fmt == "image":
-            result = await build_image_delivery_content(instruction, bot=bot)
+            result = await build_image_delivery_content(
+                instruction, bot=bot, db=db, user=user, redis_client=redis_client
+            )
         else:
             result = await build_document_delivery_content(
                 db,
@@ -351,12 +353,17 @@ async def _tool_max_send_file(
                 "tool": "max_send_file",
                 "error": result.text or "Не удалось подготовить файл",
             }
+        # Изображение + кнопка «Скачать» (inline_keyboard после фото)
+        send_attachments = result.attachments[:]
+        if result.keyboard:
+            send_attachments.append(result.keyboard)
+
         if send_user_id is not None:
             # Личное сообщение
             send = await bot.send_message(
                 int(send_user_id),
                 result.text or "Файл",
-                attachments=result.attachments,
+                attachments=send_attachments,
                 notify=True,
             )
             dest: dict = {"user_id": send_user_id}
@@ -365,7 +372,7 @@ async def _tool_max_send_file(
             send = await bot.send_message(
                 None,
                 result.text or "Файл",
-                attachments=result.attachments,
+                attachments=send_attachments,
                 chat_id=int(send_chat_id),
                 notify=False,
             )

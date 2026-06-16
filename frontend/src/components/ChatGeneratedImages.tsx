@@ -26,6 +26,7 @@ export function ChatGeneratedImages({ images }: Props) {
             key={img.url}
             image={img}
             className="chat-generated-image-item"
+            showDownload
             onClick={() =>
               setLightbox({ url: img.url, title: img.title || "Сгенерированное изображение" })
             }

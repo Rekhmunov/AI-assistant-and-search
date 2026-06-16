@@ -108,7 +108,7 @@ async def build_news_post_attachments(
             attachments.append(att)
 
     if not attachments and prompts:
-        text, fallback = await build_image_attachments(prompts[0], bot=bot)
+        text, fallback, _ = await build_image_attachments(prompts[0], bot=bot)
         del text
         return fallback
     return attachments
