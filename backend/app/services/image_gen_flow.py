@@ -184,6 +184,7 @@ async def stream_image_generation_turn(
     image_bytes: bytes | None = None
     assistant_text = ""
 
+    # Разбираем накопленные события генерации
     try:
         if gen_exception:
             raise gen_exception[0]
@@ -207,6 +208,7 @@ async def stream_image_generation_turn(
             elif event_type == "done":
                 lines = str(payload).split("\n", 1)
                 assistant_text = lines[1].strip() if len(lines) > 1 else ""
+
     except Exception as exc:
         logger.exception("image generation failed")
         await record_service_incident(
@@ -216,6 +218,7 @@ async def stream_image_generation_turn(
             message=str(exc),
         )
         await limiter.release_image_gen(user_id_str)
+        await clear_search_pending(redis_client, thread.id)
         yield sse_event(
             "error",
             {
@@ -225,6 +228,9 @@ async def stream_image_generation_turn(
         )
         return
 
+    # --- Ниже: успешный путь; except выше уже вернулся при ошибке ---
+
+    try:
         if not image_bytes or not is_valid_image_bytes(image_bytes):
             await record_service_incident(
                 redis_client,
@@ -233,6 +239,7 @@ async def stream_image_generation_turn(
                 message="Пустое или повреждённое изображение от GigaChat",
             )
             await limiter.release_image_gen(user_id_str)
+            await clear_search_pending(redis_client, thread.id)
             yield sse_event(
                 "error",
                 {
