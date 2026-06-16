@@ -619,7 +619,17 @@ class SearchFlowService:
                         elif event_type == "done":
                             break
 
-                    # Сохранение и follow-ups обрабатывается в общем блоке ниже
+                    # Конвертируем sources_out в формат sources_json для сохранения в БД
+                    if sources_out:
+                        sources_json = [
+                            {
+                                "title": s["title"],
+                                "url": s["url"],
+                                "snippet": s.get("snippet", ""),
+                                "display_url": s["url"],
+                            }
+                            for s in sources_out
+                        ]
 
                 elif route.needs_search and llm_provider_id == PERPLEXITY_PROVIDER_ID:
                     rewrite_trace = {
@@ -875,7 +885,7 @@ class SearchFlowService:
                 except Exception:
                     logger.exception("GPT messages preview failed (non-fatal)")
 
-                if llm_provider_id != PERPLEXITY_PROVIDER_ID:
+                if llm_provider_id != PERPLEXITY_PROVIDER_ID and not _is_claude_search:
                     full_answer = ""
                 answer_hint = hint_clarify
                 if free_vision_blocked:
@@ -901,7 +911,7 @@ class SearchFlowService:
                         await limiter.release_search(user_id_str)
                         yield sse_event("error", {"code": "vision_unavailable", "message": str(e)})
                         return
-                elif route.needs_search and llm_provider_id != PERPLEXITY_PROVIDER_ID:
+                elif route.needs_search and llm_provider_id != PERPLEXITY_PROVIDER_ID and not _is_claude_search:
                     weak_retrieval = bool(retrieval_trace and not retrieval_trace.get("ok"))
                     grounding_mode = adjust_grounding_for_retrieval(
                         grounding_mode,  # type: ignore[arg-type]

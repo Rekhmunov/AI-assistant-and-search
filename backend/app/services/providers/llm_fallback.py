@@ -17,11 +17,16 @@ logger = logging.getLogger(__name__)
 
 
 async def _record_fallback_incident(primary_name: str, fallback_name: str, error: Exception) -> None:
-    """Записывает инцидент и отправляет email при автоматическом переключении провайдера."""
+    """Запускает запись инцидента в фоне — не блокирует fallback-ответ."""
+    import asyncio as _asyncio
+    _asyncio.create_task(_do_record_fallback(primary_name, fallback_name, error))
+
+
+async def _do_record_fallback(primary_name: str, fallback_name: str, error: Exception) -> None:
     try:
-        from app.services.service_incidents import record_service_incident
         import redis.asyncio as aioredis
         from app.core.config import get_settings
+        from app.services.service_incidents import record_service_incident
         settings = get_settings()
         redis_client = aioredis.from_url(settings.redis_url, decode_responses=True)
         try:
@@ -34,7 +39,7 @@ async def _record_fallback_incident(primary_name: str, fallback_name: str, error
         finally:
             await redis_client.aclose()
     except Exception:
-        logger.exception("_record_fallback_incident failed")
+        logger.exception("_do_record_fallback failed")
 
 
 class FreeLLMWithFallback:

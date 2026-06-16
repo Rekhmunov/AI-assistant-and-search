@@ -105,7 +105,20 @@ async def record_service_incident(
     except Exception:
         logger.exception("record_service_incident failed")
 
-    # Email-оповещение (с дебаунсом 5 мин, не блокирует основной поток)
+    # Email-оповещение в фоне — не блокирует запрос пользователя
+    import asyncio as _asyncio
+    _asyncio.create_task(
+        _safe_notify(redis_client, service, kind, message, status_code)
+    )
+
+
+async def _safe_notify(
+    redis_client: redis.Redis,
+    service: str,
+    kind: str,
+    message: str,
+    status_code: int | None,
+) -> None:
     try:
         await _notify_admins_incident(redis_client, service, kind, message, status_code)
     except Exception:

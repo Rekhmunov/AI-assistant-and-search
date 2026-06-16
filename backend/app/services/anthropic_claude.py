@@ -341,9 +341,14 @@ class AnthropicClaudeProvider(PromptedLLMMixin, LLMProvider):
         model: AnswerModel,
         max_tokens: int,
         temperature: float,
+        enable_tools: bool = False,
     ) -> AsyncIterator[str]:
+        """
+        enable_tools=True — добавляет _PRO_TOOLS (web_search, web_fetch, code_execution).
+        По умолчанию False: Yandex RAG не нуждается в инструментах Claude,
+        их добавление замедляет ответ (Claude делает лишние round-trips).
+        """
         system, msg_list = _to_anthropic_messages(messages)
-        is_pro = (model == "pro")
         payload: dict = {
             "model": self._model_name(model),
             "max_tokens": max_tokens,
@@ -360,8 +365,8 @@ class AnthropicClaudeProvider(PromptedLLMMixin, LLMProvider):
                     "cache_control": {"type": "ephemeral"},
                 }
             ]
-        # Pro: веб-поиск + загрузка URL + выполнение кода
-        if is_pro:
+        # Инструменты только когда явно запрошены (Claude Search, code_execution и т.п.)
+        if enable_tools and model == "pro":
             payload["tools"] = _PRO_TOOLS
 
         def _delta_text(event: dict) -> str | None:
