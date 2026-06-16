@@ -591,8 +591,10 @@ class SearchFlowService:
                     else:
                         _claude_provider = llm
 
+                    search_q_sent = llm_query[:400]  # показываем запрос в UI
                     sources_out: list[dict] = []
                     source_map: dict[int, dict] = {}
+                    _answer_phase_set = False
 
                     async for event_type, payload in _claude_provider.stream_search_with_claude_sources(
                         llm_query,
@@ -614,12 +616,15 @@ class SearchFlowService:
                                 for s in sources_out
                             ]})
                         elif event_type == "text":
+                            if not _answer_phase_set:
+                                await update_search_pending(redis_client, thread.id, phase="answering")
+                                _answer_phase_set = True
                             full_answer += payload
                             yield sse_event("token", {"text": payload})
                         elif event_type == "done":
                             break
 
-                    # Конвертируем sources_out в формат sources_json для сохранения в БД
+                    # Конвертируем sources_out в sources_json для сохранения в БД
                     if sources_out:
                         sources_json = [
                             {
