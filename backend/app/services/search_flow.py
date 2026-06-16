@@ -101,6 +101,19 @@ async def _buffer_llm_stream(stream: AsyncIterator[str]) -> str:
     return "".join(parts)
 
 
+import re as _re
+
+_SOURCES_BLOCK_RE = _re.compile(
+    r"\n{0,2}(?:источники|sources|список источников|references|ссылки)\s*:.*$",
+    _re.IGNORECASE | _re.DOTALL,
+)
+
+
+def _strip_sources_block(text: str) -> str:
+    """Убирает блок «Источники:» из ответа Claude — они показываются в отдельной панели."""
+    return _SOURCES_BLOCK_RE.sub("", text).rstrip()
+
+
 async def _generate_refined_search_answer(
     llm,
     *,
@@ -623,6 +636,9 @@ class SearchFlowService:
                             yield sse_event("token", {"text": payload})
                         elif event_type == "done":
                             break
+
+                    # Зачищаем блок «Источники:» из текста — они показываются в панели
+                    full_answer = _strip_sources_block(full_answer)
 
                     # Конвертируем sources_out в sources_json для сохранения в БД
                     if sources_out:
