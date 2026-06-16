@@ -31,43 +31,50 @@ function statusLabel(phase: SearchPhase, needsSearch?: boolean, customStatus?: s
   return t("searchingSolution");
 }
 
-/** Тикер доменов: показывает по одному с плавной анимацией */
-function DomainTicker({ domains }: { domains: string[] }) {
+/** Один домен за раз, плавная смена каждые 2 секунды */
+function DomainTicker({ domains, active }: { domains: string[]; active: boolean }) {
   const [idx, setIdx] = useState(0);
-  const [visible, setVisible] = useState(true);
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [show, setShow] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const clear = () => { if (timer.current) { clearTimeout(timer.current); timer.current = null; } };
 
   useEffect(() => {
-    if (!domains.length) return;
+    if (!active || !domains.length) {
+      setShow(false);
+      return;
+    }
+    // Показываем первый домен сразу
     setIdx(0);
-    setVisible(true);
+    setShow(true);
 
-    const cycle = (current: number) => {
-      const next = current + 1;
-      if (next >= domains.length) return; // все домены показаны — ждём конца поиска
+    const step = (i: number) => {
+      const next = i + 1;
+      if (next >= domains.length) return; // конец — ждём пока active станет false
 
-      // Плавно скрываем текущий
-      setVisible(false);
-      timerRef.current = setTimeout(() => {
-        setIdx(next);
-        setVisible(true);
-        timerRef.current = setTimeout(() => cycle(next), 2500);
-      }, 400); // 400мс на fade-out, потом следующий
+      // fade out → смена → fade in
+      timer.current = setTimeout(() => {
+        setShow(false); // начало fade-out
+        timer.current = setTimeout(() => {
+          setIdx(next);
+          setShow(true); // начало fade-in
+          step(next);
+        }, 400); // 400мс fade-out
+      }, 2000); // 2с на показ
     };
 
-    timerRef.current = setTimeout(() => cycle(0), 2500);
-    return () => {
-      if (timerRef.current) clearTimeout(timerRef.current);
-    };
-  }, [domains]);
+    step(0);
+    return () => clear();
+  }, [domains, active]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (!domains.length) return null;
+  if (!active || !domains.length) return null;
 
-  const domain = domains[idx] ?? domains[0];
+  const domain = domains[idx] ?? "";
+  if (!domain) return null;
 
   return (
     <span
-      className={`search-status-site-ticker${visible ? " search-status-site-ticker--visible" : ""}`}
+      className={`search-status-ticker${show ? " search-status-ticker--show" : ""}`}
       aria-hidden
     >
       <img
@@ -88,7 +95,7 @@ function DomainTicker({ domains }: { domains: string[] }) {
 export function SearchStatusLine({ phase, needsSearch, customStatus, searchSiteDomains }: Props) {
   const active = phase !== "idle";
   const label = statusLabel(phase, needsSearch, customStatus);
-  const showTicker = phase === "searching" && needsSearch && searchSiteDomains && searchSiteDomains.length > 0;
+  const showTicker = phase === "searching" && needsSearch && !!searchSiteDomains?.length;
 
   if (!active) return null;
 
@@ -99,7 +106,9 @@ export function SearchStatusLine({ phase, needsSearch, customStatus, searchSiteD
         <span className="search-status-text">
           {label}{showTicker ? ":" : ""}
         </span>
-        {showTicker && <DomainTicker domains={searchSiteDomains!} />}
+        {showTicker && (
+          <DomainTicker domains={searchSiteDomains!} active={showTicker} />
+        )}
       </span>
     </div>
   );

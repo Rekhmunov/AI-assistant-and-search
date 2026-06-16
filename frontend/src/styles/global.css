@@ -2974,8 +2974,8 @@ body:has(.page-thread) {
   min-width: 0;
 }
 
-/* Тикер доменов — один за раз с fade */
-.search-status-site-ticker {
+/* Тикер доменов — один домен за раз */
+.search-status-ticker {
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -2983,13 +2983,11 @@ body:has(.page-thread) {
   color: var(--muted, #5c6b73);
   white-space: nowrap;
   opacity: 0;
-  transform: translateY(3px);
-  transition: opacity 0.35s ease, transform 0.35s ease;
+  transition: opacity 0.35s ease;
 }
 
-.search-status-site-ticker--visible {
+.search-status-ticker--show {
   opacity: 1;
-  transform: translateY(0);
 }
 
 .search-status-favicon {
