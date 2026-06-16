@@ -600,9 +600,10 @@ class AnthropicClaudeProvider(PromptedLLMMixin, LLMProvider):
                             response.status_code,
                         )
 
-                    # Состояние текущего блока
+                    # Парсим стрим: собираем текст и источники из web_search
                     current_block_type: str = ""
-                    current_tool_result_content: list = []
+                    # Накапливаем JSON дельты для tool_result
+                    _tool_result_json_buf: str = ""
 
                     async for line in response.aiter_lines():
                         if not line.startswith("data:"):
@@ -621,15 +622,14 @@ class AnthropicClaudeProvider(PromptedLLMMixin, LLMProvider):
                             err = (event.get("error") or {}).get("message", "unknown")
                             raise YandexServiceError("gpt", f"Claude Search stream: {err}")
 
-                        # Начало нового блока контента
                         if et == "content_block_start":
                             block = event.get("content_block") or {}
                             btype = block.get("type", "")
                             current_block_type = btype
-                            current_tool_result_content = []
+                            _tool_result_json_buf = ""
 
-                            # Результаты поиска (server_tool_use завершился)
-                            if btype == "tool_result":
+                            # Вариант А: tool_result с inline content (старый формат)
+                            if btype in {"tool_result", "web_search_tool_result"}:
                                 content = block.get("content") or []
                                 for item in content:
                                     src = _extract_source_from_tool_result_item(item, source_index + 1)
@@ -637,8 +637,18 @@ class AnthropicClaudeProvider(PromptedLLMMixin, LLMProvider):
                                         source_index += 1
                                         sources.append(src)
                                         yield ("source", src)
+                            # Вариант Б: server_tool_use с inline результатами
+                            elif btype == "server_tool_use":
+                                inp = block.get("input") or {}
+                                results = inp.get("results") or inp.get("content") or []
+                                if isinstance(results, list):
+                                    for item in results:
+                                        src = _extract_source_from_tool_result_item(item, source_index + 1)
+                                        if src:
+                                            source_index += 1
+                                            sources.append(src)
+                                            yield ("source", src)
 
-                        # Дельта блока
                         elif et == "content_block_delta":
                             delta = event.get("delta") or {}
                             dtype = delta.get("type", "")
@@ -648,13 +658,42 @@ class AnthropicClaudeProvider(PromptedLLMMixin, LLMProvider):
                                 if text:
                                     yield ("text", text)
 
-                            elif dtype == "input_json_delta":
-                                # Часть search query — не показываем
-                                pass
+                            elif dtype in {"input_json_delta", "partial_json"}:
+                                # Накапливаем JSON дельты — может содержать search results
+                                _tool_result_json_buf += delta.get("partial_json", "") or delta.get("input_json", "")
 
-                        # Конец блока — если tool_result с накопленным контентом
                         elif et == "content_block_stop":
+                            # Пробуем распарсить накопленный JSON если это tool_result
+                            if _tool_result_json_buf and current_block_type in {
+                                "tool_result", "web_search_tool_result", "server_tool_use"
+                            }:
+                                try:
+                                    parsed = json.loads(_tool_result_json_buf)
+                                    results = parsed if isinstance(parsed, list) else (
+                                        parsed.get("results") or parsed.get("content") or []
+                                    )
+                                    for item in (results if isinstance(results, list) else []):
+                                        src = _extract_source_from_tool_result_item(item, source_index + 1)
+                                        if src:
+                                            source_index += 1
+                                            sources.append(src)
+                                            yield ("source", src)
+                                except (json.JSONDecodeError, Exception):
+                                    pass
+                            _tool_result_json_buf = ""
                             current_block_type = ""
+
+                        # Обработка специальных событий для server-side tools Anthropic
+                        elif et == "tool_use":
+                            # Некоторые версии API возвращают tool_use как top-level event
+                            inp = event.get("input") or {}
+                            results = inp.get("results") or []
+                            for item in (results if isinstance(results, list) else []):
+                                src = _extract_source_from_tool_result_item(item, source_index + 1)
+                                if src:
+                                    source_index += 1
+                                    sources.append(src)
+                                    yield ("source", src)
 
         except httpx.HTTPError as exc:
             raise YandexServiceError("gpt", f"Claude Search недоступен (сеть): {exc}") from exc
