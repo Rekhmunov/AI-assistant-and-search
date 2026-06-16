@@ -90,6 +90,14 @@ _PRO_TOOLS = [
     {"type": "web_fetch_20260209", "name": "web_fetch"},
     {"type": "code_execution_20260120", "name": "code_execution"},
 ]
+
+# Claude Search: max_uses=1 ограничивает один поисковый раунд — убирает 5-10с задержки
+# при повторных поисках. web_fetch без лимита чтобы прочитать нужные страницы.
+_CLAUDE_SEARCH_TOOLS = [
+    {"type": "web_search_20260209", "name": "web_search", "max_uses": 1},
+    {"type": "web_fetch_20260209", "name": "web_fetch", "max_uses": 3},
+    {"type": "code_execution_20260120", "name": "code_execution"},
+]
 # Beta-заголовки: динамическая фильтрация поиска + prompt caching
 _PRO_BETA_HEADERS = "code-execution-web-tools-2026-02-09,prompt-caching-2024-07-31"
 _LITE_BETA_HEADERS = "prompt-caching-2024-07-31"
@@ -576,7 +584,7 @@ class AnthropicClaudeProvider(PromptedLLMMixin, LLMProvider):
             "stream": True,
             "system": ANTHROPIC_CLAUDE_SEARCH_PROMPT,
             "messages": [{"role": "user", "content": user_content}],
-            "tools": _PRO_TOOLS,
+            "tools": _CLAUDE_SEARCH_TOOLS,
         }
 
         sources: list[dict] = []
