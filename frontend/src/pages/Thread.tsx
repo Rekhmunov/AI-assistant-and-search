@@ -1219,12 +1219,14 @@ export function Thread() {
                   ) : (
                     <>
                       <SearchStatusLine phase={searchPhase} needsSearch={needsSearch} />
-                      {searchPhase === "searching" && isLastTurn && streaming && (
-                        <ClaudeSearchTimeline
-                          query={claudeSearchQuery}
-                          step={claudeSearchStep}
-                          visible={true}
-                        />
+                      {searchPhase === "searching" && isLastTurn && streaming && claudeSearchQuery !== undefined && (
+                        <AnswerErrorBoundary>
+                          <ClaudeSearchTimeline
+                            query={claudeSearchQuery}
+                            step={claudeSearchStep}
+                            visible={true}
+                          />
+                        </AnswerErrorBoundary>
                       )}
                     </>
                   ))}

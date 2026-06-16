@@ -898,20 +898,21 @@ class SearchFlowService:
                         yield sse_event("sources", {"sources": sources_json})
 
                 gpt_preview: list[dict[str, str]] = []
-                try:
-                    gpt_preview = await build_gpt_messages_preview(
-                        llm,
-                        llm_query=llm_query,
-                        sources=sources,
-                        history=llm_history,
-                        prior_sources_block=prior_sources_block,
-                        needs_search=route.needs_search,
-                        model=route.answer_model,
-                        hint_clarify=hint_clarify,
-                        fact_pack=fact_pack,
-                    )
-                except Exception:
-                    logger.exception("GPT messages preview failed (non-fatal)")
+                if not _is_claude_search:  # Claude Search не использует preview
+                    try:
+                        gpt_preview = await build_gpt_messages_preview(
+                            llm,
+                            llm_query=llm_query,
+                            sources=sources,
+                            history=llm_history,
+                            prior_sources_block=prior_sources_block,
+                            needs_search=route.needs_search,
+                            model=route.answer_model,
+                            hint_clarify=hint_clarify,
+                            fact_pack=fact_pack,
+                        )
+                    except Exception:
+                        logger.exception("GPT messages preview failed (non-fatal)")
 
                 if llm_provider_id != PERPLEXITY_PROVIDER_ID and not _is_claude_search:
                     full_answer = ""
