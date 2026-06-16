@@ -1,4 +1,4 @@
-import { useTypewriterText } from "../hooks/useTypewriterText";
+import { useEffect, useRef, useState } from "react";
 import { t } from "../i18n";
 import { faviconUrl } from "../lib/sourceDomainLabel";
 
@@ -14,9 +14,7 @@ export type SearchPhase =
 type Props = {
   phase: SearchPhase;
   needsSearch?: boolean;
-  /** Статус из SSE (GigaChat text2image): «Делаем шедевр…» */
   customStatus?: string | null;
-  /** Домены из Yandex Search — показываем в статусе «Ищем в интернете» */
   searchSiteDomains?: string[];
 };
 
@@ -33,11 +31,64 @@ function statusLabel(phase: SearchPhase, needsSearch?: boolean, customStatus?: s
   return t("searchingSolution");
 }
 
+/** Тикер доменов: показывает по одному с плавной анимацией */
+function DomainTicker({ domains }: { domains: string[] }) {
+  const [idx, setIdx] = useState(0);
+  const [visible, setVisible] = useState(true);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (!domains.length) return;
+    setIdx(0);
+    setVisible(true);
+
+    const cycle = (current: number) => {
+      const next = current + 1;
+      if (next >= domains.length) return; // все домены показаны — ждём конца поиска
+
+      // Плавно скрываем текущий
+      setVisible(false);
+      timerRef.current = setTimeout(() => {
+        setIdx(next);
+        setVisible(true);
+        timerRef.current = setTimeout(() => cycle(next), 2500);
+      }, 400); // 400мс на fade-out, потом следующий
+    };
+
+    timerRef.current = setTimeout(() => cycle(0), 2500);
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+  }, [domains]);
+
+  if (!domains.length) return null;
+
+  const domain = domains[idx] ?? domains[0];
+
+  return (
+    <span
+      className={`search-status-site-ticker${visible ? " search-status-site-ticker--visible" : ""}`}
+      aria-hidden
+    >
+      <img
+        className="search-status-favicon"
+        src={faviconUrl(domain)}
+        alt=""
+        width={12}
+        height={12}
+        loading="lazy"
+        decoding="async"
+        onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+      />
+      <span className="search-status-domain">{domain}</span>
+    </span>
+  );
+}
+
 export function SearchStatusLine({ phase, needsSearch, customStatus, searchSiteDomains }: Props) {
   const active = phase !== "idle";
   const label = statusLabel(phase, needsSearch, customStatus);
-  const { text, isTyping } = useTypewriterText(label, active);
-  const showSites = phase === "searching" && needsSearch && searchSiteDomains && searchSiteDomains.length > 0;
+  const showTicker = phase === "searching" && needsSearch && searchSiteDomains && searchSiteDomains.length > 0;
 
   if (!active) return null;
 
@@ -45,31 +96,10 @@ export function SearchStatusLine({ phase, needsSearch, customStatus, searchSiteD
     <div className="search-status" role="status" aria-live="polite" aria-label={label}>
       <span className="search-status-dot" />
       <span className="search-status-body">
-        <span
-          className={`search-status-text${isTyping ? " search-status-text--typing" : ""}`}
-          aria-hidden={isTyping}
-        >
-          {text}{showSites ? ":" : ""}
+        <span className="search-status-text">
+          {label}{showTicker ? ":" : ""}
         </span>
-        {showSites && (
-          <span className="search-status-sites" aria-hidden>
-            {searchSiteDomains.slice(0, 5).map((domain) => (
-              <span key={domain} className="search-status-site">
-                <img
-                  className="search-status-favicon"
-                  src={faviconUrl(domain)}
-                  alt=""
-                  width={12}
-                  height={12}
-                  loading="lazy"
-                  decoding="async"
-                  onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
-                />
-                <span className="search-status-domain">{domain}</span>
-              </span>
-            ))}
-          </span>
-        )}
+        {showTicker && <DomainTicker domains={searchSiteDomains!} />}
       </span>
     </div>
   );
