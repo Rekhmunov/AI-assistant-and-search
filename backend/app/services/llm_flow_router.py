@@ -157,6 +157,16 @@ async def resolve_service_flow(
 
     q = normalize_user_query(query)
 
+    # Детектор генерации изображений — работает до LLM-вызова (регулярки, независимо от провайдера)
+    from app.services.image_gen_routing import wants_image_generation
+    if wants_image_generation(q):
+        return LlmFlowDecision(
+            flow="image_generate",
+            needs_search=False,
+            answer_model="lite",
+            reason="image_gen_detected",
+        )
+
     # Правило по умолчанию: конкретные вопросы о фактах/мире → search_rag + needs_search true.
     # Только явные задачи типа «напиши договор», «составь план» → chat.
     history = format_history_compact(ctx.history, max_turns=3, max_chars=400)
