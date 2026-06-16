@@ -858,6 +858,12 @@ class SearchFlowService:
                     image_ready_task: asyncio.Task | None = None
                     _sites_emitted = False
 
+                    # Задача-ожидатель: разблокируется как только Yandex Search положит домены
+                    async def _wait_sites() -> list[str]:
+                        return await asyncio.wait_for(sites_queue.get(), timeout=10.0)
+
+                    sites_task: asyncio.Task[list[str]] = asyncio.create_task(_wait_sites())
+
                     if image_task is not None:
 
                         async def _load_entity_images() -> list:
@@ -876,7 +882,7 @@ class SearchFlowService:
 
                         image_ready_task = asyncio.create_task(_load_entity_images())
 
-                    pending_tasks: set[asyncio.Task] = {pipeline_task}
+                    pending_tasks: set[asyncio.Task] = {pipeline_task, sites_task}
                     if image_ready_task is not None:
                         pending_tasks.add(image_ready_task)
 
@@ -884,21 +890,25 @@ class SearchFlowService:
                         done, pending_tasks = await asyncio.wait(
                             pending_tasks, return_when=asyncio.FIRST_COMPLETED
                         )
-                        # Проверяем очередь доменов и отправляем в UI
-                        if not _sites_emitted and not sites_queue.empty():
-                            try:
-                                domains = sites_queue.get_nowait()
-                                if domains:
-                                    yield sse_event("search_sites", {"domains": domains})
-                                    _sites_emitted = True
-                            except Exception:
-                                pass
                         for task in done:
-                            if task is image_ready_task and not images_emitted:
+                            if task is sites_task:
+                                # Yandex Search вернул домены — показываем в статусе
+                                if not _sites_emitted:
+                                    try:
+                                        domains = task.result()
+                                        if domains:
+                                            yield sse_event("search_sites", {"domains": domains})
+                                            _sites_emitted = True
+                                    except Exception:
+                                        pass
+                            elif task is image_ready_task and not images_emitted:
                                 images_emitted = True
                                 entity_images_json = entity_images_to_json(task.result())
                             elif task is pipeline_task:
                                 pipeline_result = task.result()
+                    # Отменяем sites_task если pipeline завершился раньше
+                    if not sites_task.done():
+                        sites_task.cancel()
 
                     if pipeline_result is None:
                         pipeline_result = await pipeline_task
