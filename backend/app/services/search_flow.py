@@ -933,7 +933,7 @@ class SearchFlowService:
                     )
                     if full_answer:
                         yield sse_event("token", {"text": full_answer})
-                else:
+                elif not _is_claude_search:
                     async for chunk in llm.stream_answer_direct(
                         llm_query,
                         llm_history,
