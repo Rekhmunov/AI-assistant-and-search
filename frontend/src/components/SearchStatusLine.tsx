@@ -35,6 +35,7 @@ function statusLabel(phase: SearchPhase, needsSearch?: boolean, customStatus?: s
 function DomainTicker({ domains, active }: { domains: string[]; active: boolean }) {
   const [idx, setIdx] = useState(0);
   const [show, setShow] = useState(false);
+  const [faviconReady, setFaviconReady] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const clear = () => { if (timer.current) { clearTimeout(timer.current); timer.current = null; } };
@@ -44,28 +45,41 @@ function DomainTicker({ domains, active }: { domains: string[]; active: boolean 
       setShow(false);
       return;
     }
-    // Показываем первый домен сразу
     setIdx(0);
-    setShow(true);
+    setFaviconReady(false);
+    setShow(false); // ждём загрузки фавикона перед показом
 
-    const step = (i: number) => {
-      const next = i + 1;
-      if (next >= domains.length) return; // конец — ждём пока active станет false
-
-      // fade out → смена → fade in
-      timer.current = setTimeout(() => {
-        setShow(false); // начало fade-out
-        timer.current = setTimeout(() => {
-          setIdx(next);
-          setShow(true); // начало fade-in
-          step(next);
-        }, 400); // 400мс fade-out
-      }, 2000); // 2с на показ
-    };
-
-    step(0);
     return () => clear();
   }, [domains, active]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Запускаем цикл только когда фавикон загружен
+  const startCycle = (i: number) => {
+    setShow(true);
+    clear();
+
+    const next = i + 1;
+    if (next >= domains.length) return;
+
+    timer.current = setTimeout(() => {
+      setShow(false);
+      timer.current = setTimeout(() => {
+        setIdx(next);
+        setFaviconReady(false); // ждём следующий фавикон
+      }, 400);
+    }, 2000);
+  };
+
+  const onFaviconLoad = () => {
+    setFaviconReady(true);
+    startCycle(idx);
+  };
+
+  const onFaviconError = (e: React.SyntheticEvent<HTMLImageElement>) => {
+    (e.target as HTMLImageElement).style.display = "none";
+    // Фавикон не загрузился — показываем домен без него
+    setFaviconReady(true);
+    startCycle(idx);
+  };
 
   if (!active || !domains.length) return null;
 
@@ -78,14 +92,15 @@ function DomainTicker({ domains, active }: { domains: string[]; active: boolean 
       aria-hidden
     >
       <img
+        key={domain}
         className="search-status-favicon"
         src={faviconUrl(domain)}
         alt=""
         width={12}
         height={12}
-        loading="lazy"
         decoding="async"
-        onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+        onLoad={onFaviconLoad}
+        onError={onFaviconError}
       />
       <span className="search-status-domain">{domain}</span>
     </span>
