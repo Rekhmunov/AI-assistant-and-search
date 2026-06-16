@@ -648,6 +648,15 @@ class SearchFlowService:
                     # Зачищаем блок «Источники:» из текста — они показываются в панели
                     full_answer = _strip_sources_block(full_answer)
 
+                    # Если Claude не расставил [n] в тексте, но источники есть —
+                    # добавляем все индексы в конец ответа чтобы чипы появились
+                    if sources_out and full_answer.strip():
+                        import re as _re2
+                        has_citations = bool(_re2.search(r'\[\d+\]', full_answer))
+                        if not has_citations:
+                            all_indices = " ".join(f"[{s['index']}]" for s in sources_out)
+                            full_answer = full_answer.rstrip() + " " + all_indices
+
                     # Конвертируем sources_out в sources_json для сохранения в БД
                     if sources_out:
                         sources_json = sources_out
