@@ -62,6 +62,22 @@ export function AnswerBody({
       if (!seg.content.trim() && !(seg.partial && revealActive)) {
         return;
       }
+      // Если блок txt/text содержит markdown-таблицу — рендерим как таблицу, не как код
+      const isTxtBlock = !seg.lang || seg.lang === "txt" || seg.lang === "text";
+      if (isTxtBlock && seg.content.includes("|")) {
+        const tableLines = seg.content.split("\n").filter(l => {
+          const t = l.trim();
+          return t.startsWith("|") && t.endsWith("|") && t.length > 2;
+        });
+        if (tableLines.length >= 2) {
+          children.push(
+            <div key={`tbl-${i}`} className="answer-text">
+              {renderAnswerTextSegment(seg.content, sources, `tbl-${i}`)}
+            </div>,
+          );
+          return;
+        }
+      }
       children.push(
         <CodeBlock
           key={`code-${i}`}

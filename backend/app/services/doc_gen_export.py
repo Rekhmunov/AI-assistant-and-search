@@ -104,9 +104,6 @@ async def _export_chat_text(
     if len(text) > MAX_EXPORT_CHARS:
         text = text[:MAX_EXPORT_CHARS]
 
-    if user.plan != Plan.PRO:
-        raise DocumentStructureError("doc_gen_pro_only")
-
     reused = await _try_reuse_export(db, user, fmt=fmt, content=text, title_hint=title_hint)
     if reused:
         return reused
