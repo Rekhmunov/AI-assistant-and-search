@@ -25,6 +25,7 @@ export function ImageGenStatusLine({ active, status }: Props) {
 
   const { text, isTyping, label } = useRotatingTypewriterStatus(messages, active, {
     holdMs: 4400,
+    stopAtLast: true,
   });
 
   if (!active) return null;

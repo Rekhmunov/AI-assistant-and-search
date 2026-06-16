@@ -2655,6 +2655,7 @@ body:has(.page-thread) {
 
 .chat-generated-image-item {
   display: block;
+  position: relative;
   width: 100%;
   max-width: 100%;
   padding: 0;
@@ -2664,6 +2665,43 @@ body:has(.page-thread) {
   border-radius: 12px;
   overflow: visible;
   line-height: 0;
+}
+
+.generated-image-download-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: none;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.48);
+  backdrop-filter: blur(4px);
+  color: #fff;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.18s ease, background 0.15s ease;
+  z-index: 2;
+}
+
+.chat-generated-image-item:hover .generated-image-download-btn,
+.chat-generated-image-item:focus-within .generated-image-download-btn {
+  opacity: 1;
+}
+
+.generated-image-download-btn:hover {
+  background: rgba(0, 0, 0, 0.7);
+}
+
+/* На мобильных — всегда видна */
+@media (pointer: coarse) {
+  .generated-image-download-btn {
+    opacity: 1;
+  }
 }
 
 .chat-generated-image-item img {

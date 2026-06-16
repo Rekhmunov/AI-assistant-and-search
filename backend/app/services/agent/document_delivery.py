@@ -46,6 +46,7 @@ _IMAGE_SEND_RE = re.compile(
 class FileDeliveryResult:
     text: str
     attachments: list[dict]
+    keyboard: dict | None = None  # inline_keyboard attachment для MAX
 
 
 def infer_output_format(text: str, explicit: str | None = None) -> str | None:
@@ -146,9 +147,21 @@ async def build_image_delivery_content(
     instruction: str,
     *,
     bot: MaxBotService | None = None,
+    db=None,
+    user=None,
+    redis_client=None,
 ) -> FileDeliveryResult:
-    text, attachments = await build_image_attachments(instruction, bot=bot)
-    return FileDeliveryResult(text=text, attachments=attachments or [])
+    text, attachments, share_url = await build_image_attachments(
+        instruction, bot=bot, db=db, user=user, redis_client=redis_client
+    )
+
+    keyboard: dict | None = None
+    if share_url:
+        keyboard = MaxBotService.make_keyboard_attachment(
+            [[{"type": "link", "text": "📥 Скачать", "url": share_url}]]
+        )
+
+    return FileDeliveryResult(text=text, attachments=attachments or [], keyboard=keyboard)
 
 
 async def try_build_file_reply(

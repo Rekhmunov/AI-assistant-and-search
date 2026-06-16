@@ -86,7 +86,7 @@ async def build_delivery_content(
 
     if profile.content_pipeline == "image_gen":
         prompt = str(cfg.get("image_prompt") or base_text or "").strip()
-        text, attachments = await build_image_attachments(prompt, bot=bot)
+        text, attachments, _ = await build_image_attachments(prompt, bot=bot)
         return DeliveryContent(text=text, attachments=attachments)
 
     if profile.content_pipeline == "document_gen":
@@ -154,7 +154,7 @@ async def build_dm_command_content(
 
     if profile.content_pipeline == "image_gen":
         prompt = str(cfg.get("image_prompt") or base_text or "").strip()
-        text, attachments = await build_image_attachments(prompt, bot=bot)
+        text, attachments, _ = await build_image_attachments(prompt, bot=bot)
         return DeliveryContent(text=text, attachments=attachments)
 
     if profile.content_pipeline == "document_gen":
