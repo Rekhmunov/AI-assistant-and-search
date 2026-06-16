@@ -21,9 +21,9 @@ class Settings(BaseSettings):
 
     # Обычный RAG: меньше HTTP, если сниппет уже богатый (см. page_depth.effective_page_fetch_limit)
     page_fetch_max_pages: int = 3
-    page_fetch_max_pages_deep: int = 8
+    page_fetch_max_pages_deep: int = 5   # было 8; снижено для ускорения Pro-запросов
     page_fetch_max_concurrent: int = 5
-    page_fetch_skip_rich_snippet_chars: int = 1400
+    page_fetch_skip_rich_snippet_chars: int = 2000  # было 1400; пропускаем больше при богатых сниппетах
     search_parallel_extra_queries: bool = True
     # Follow-ups параллельно с сохранением ответа; после done — короткий wait (см. search_flow)
     follow_ups_deferred: bool = True
