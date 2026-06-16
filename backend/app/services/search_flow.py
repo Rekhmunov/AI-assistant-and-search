@@ -243,11 +243,16 @@ class SearchFlowService:
         llm, search, _prompt_store, llm_provider_id, search_provider_id = await resolve_runtime_providers(
             db, redis_client, user=user
         )
+        # Lite-провайдер для вспомогательных задач (routing, rewrite, extract, follow-ups).
+        # Pro-провайдер используется только для финального ответа.
+        from app.services.providers.factory import resolve_lite_llm
+        llm_lite = await resolve_lite_llm(db, redis_client, prompt_store=_prompt_store)
+
         # Проверяем колонку debug_trace до долгого пайплайна — rollback здесь не ломает finalize.
         await _messages_have_debug_trace(db)
         await messages_have_images_column(db)
-        rewriter = QueryRewriter(llm)
-        fact_pipeline = FactPipeline(search, llm)
+        rewriter = QueryRewriter(llm_lite)
+        fact_pipeline = FactPipeline(search, llm_lite)
         user_text_preview = normalize_user_query(query)
 
         early_prior: list[Message] = []
@@ -263,7 +268,7 @@ class SearchFlowService:
 
         flow_ctx = build_thread_context(early_prior)
         flow = await resolve_service_flow(
-            llm,
+            llm_lite,
             user_text_preview,
             flow_ctx,
             has_attachments=bool(attachment_ids),
@@ -1100,11 +1105,11 @@ class SearchFlowService:
             if full_answer.strip():
                 if settings.follow_ups_deferred:
                     follow_up_task = asyncio.create_task(
-                        llm.generate_follow_ups(llm_query, full_answer)
+                        llm_lite.generate_follow_ups(llm_query, full_answer)
                     )
                 else:
                     try:
-                        follow_ups = (await llm.generate_follow_ups(llm_query, full_answer))[:3]
+                        follow_ups = (await llm_lite.generate_follow_ups(llm_query, full_answer))[:3]
                     except Exception:
                         logger.exception("Follow-up suggestions failed (sync)")
 

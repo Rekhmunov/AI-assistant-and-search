@@ -55,6 +55,26 @@ async def resolve_llm_provider_id_for_user(
     return await resolve_free_llm_provider_id(db, redis_client)
 
 
+async def resolve_lite_llm(
+    db: AsyncSession,
+    redis_client: redis.Redis,
+    settings: Settings | None = None,
+    prompt_store: PromptStore | None = None,
+) -> "ChatLLM":
+    """
+    Возвращает lite-провайдер из настройки free_llm_provider (DeepSeek/GigaChat).
+    Используется для вспомогательных задач: routing, rewriting, fact extraction, follow-ups.
+    Pro-провайдер зарезервирован только для финального ответа пользователю.
+    """
+    settings = settings or get_settings()
+    free_id = await resolve_free_llm_provider_id(db, redis_client)
+    if prompt_store is None:
+        from app.services.prompts.store import PromptStore as _PS
+        prompt_store = _PS(db, redis_client)
+    lite_llm = create_llm_provider(free_id, settings, prompt_store)
+    return _wrap_llm_fallback(free_id, lite_llm, settings, prompt_store)
+
+
 async def resolve_search_provider_id(db: AsyncSession, redis_client: redis.Redis) -> str:
     raw = await get_setting("search_provider", db, redis_client)
     pid = str(raw or DEFAULT_SEARCH_PROVIDER).strip()
