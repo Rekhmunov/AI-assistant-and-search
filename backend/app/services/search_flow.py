@@ -604,9 +604,27 @@ class SearchFlowService:
                     else:
                         _claude_provider = llm
 
-                    search_q_sent = llm_query[:400]  # показываем запрос в UI
+                    from urllib.parse import urlparse as _urlparse
+
+                    def _claude_domain(url: str) -> str:
+                        try:
+                            return _urlparse(url).netloc.replace("www.", "") or url[:40]
+                        except Exception:
+                            return url[:40]
+
+                    def _make_source_item(s: dict) -> dict:
+                        url = s["url"]
+                        return {
+                            "index": s["index"],
+                            "title": s["title"],
+                            "url": url,
+                            "snippet": s.get("snippet", ""),
+                            "display_url": url,
+                            "domain": _claude_domain(url),
+                        }
+
+                    search_q_sent = llm_query[:400]
                     sources_out: list[dict] = []
-                    source_map: dict[int, dict] = {}
                     _answer_phase_set = False
 
                     async for event_type, payload in _claude_provider.stream_search_with_claude_sources(
@@ -615,19 +633,9 @@ class SearchFlowService:
                         model="pro",
                     ):
                         if event_type == "source":
-                            src = payload
-                            idx = src["index"]
-                            source_map[idx] = src
-                            sources_out.append({
-                                "title": src["title"],
-                                "url": src["url"],
-                                "snippet": src.get("snippet", ""),
-                                "index": idx,
-                            })
-                            yield sse_event("sources", {"sources": [
-                                {"title": s["title"], "url": s["url"], "snippet": s.get("snippet", ""), "display_url": s["url"]}
-                                for s in sources_out
-                            ]})
+                            item = _make_source_item(payload)
+                            sources_out.append(item)
+                            yield sse_event("sources", {"sources": [_make_source_item(s) if "domain" not in s else s for s in sources_out]})
                         elif event_type == "text":
                             if not _answer_phase_set:
                                 await update_search_pending(redis_client, thread.id, phase="answering")
@@ -642,15 +650,7 @@ class SearchFlowService:
 
                     # Конвертируем sources_out в sources_json для сохранения в БД
                     if sources_out:
-                        sources_json = [
-                            {
-                                "title": s["title"],
-                                "url": s["url"],
-                                "snippet": s.get("snippet", ""),
-                                "display_url": s["url"],
-                            }
-                            for s in sources_out
-                        ]
+                        sources_json = sources_out
 
                 elif route.needs_search and llm_provider_id == PERPLEXITY_PROVIDER_ID:
                     rewrite_trace = {
