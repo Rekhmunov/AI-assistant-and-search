@@ -128,7 +128,10 @@ async def _generate_refined_search_answer(
     howto: bool,
     grounding_mode: str,
 ) -> str:
-    """Собрать ответ LLM в буфер, verify/regen до отдачи токенов клиенту."""
+    """
+    Буферизованная генерация — только для strict grounding (числовые факты, курсы).
+    Для остальных запросов используйте _stream_search_answer_direct.
+    """
     full_answer = await _buffer_llm_stream(
         llm.stream_answer(
             llm_query,
@@ -948,21 +951,69 @@ class SearchFlowService:
                         weak_retrieval=weak_retrieval,
                         fact_slots=fact_slots,
                     )
-                    full_answer = await _generate_refined_search_answer(
-                        llm,
-                        llm_query=llm_query,
-                        sources=sources,
-                        llm_history=llm_history,
-                        model=route.answer_model,
-                        prior_sources_block=prior_sources_block,
-                        answer_hint=answer_hint,
-                        fact_pack=fact_pack,
-                        fact_slots=fact_slots,
-                        howto=howto,
-                        grounding_mode=grounding_mode,
+                    needs_strict_verify = (
+                        grounding_mode == "strict"
+                        and fact_pack is not None
+                        and bool(getattr(fact_pack, "facts", None))
                     )
-                    if full_answer:
-                        yield sse_event("token", {"text": full_answer})
+                    if needs_strict_verify:
+                        # Строгая верификация числовых фактов — буфер необходим
+                        full_answer = await _generate_refined_search_answer(
+                            llm,
+                            llm_query=llm_query,
+                            sources=sources,
+                            llm_history=llm_history,
+                            model=route.answer_model,
+                            prior_sources_block=prior_sources_block,
+                            answer_hint=answer_hint,
+                            fact_pack=fact_pack,
+                            fact_slots=fact_slots,
+                            howto=howto,
+                            grounding_mode=grounding_mode,
+                        )
+                        if full_answer:
+                            yield sse_event("token", {"text": full_answer})
+                    else:
+                        # Non-strict: стримим токены сразу по мере поступления
+                        async for chunk in llm.stream_answer(
+                            llm_query,
+                            sources,
+                            llm_history,
+                            model=route.answer_model,
+                            prior_sources_block=prior_sources_block,
+                            hint_clarify=answer_hint,
+                            strict_facts=False,
+                            fact_pack=fact_pack,
+                            intent_howto=howto,
+                            grounding_mode=grounding_mode,
+                        ):
+                            full_answer += chunk
+                            yield sse_event("token", {"text": chunk})
+                        # Template evasion проверяем постфактум — уже отдали токены
+                        if full_answer and is_template_evasion(full_answer):
+                            logger.info("Answer template/refusal detected after streaming, regenerating")
+                            full_answer = ""
+                            regen_grounding = grounding_mode
+                            if not any(s in STRICT_NUMERIC_SLOTS for s in fact_slots):
+                                regen_grounding = "hybrid"
+                            regen_answer = await _buffer_llm_stream(
+                                llm.stream_answer(
+                                    llm_query,
+                                    sources,
+                                    llm_history,
+                                    model=route.answer_model,
+                                    prior_sources_block=prior_sources_block,
+                                    hint_clarify=answer_hint,
+                                    strict_facts=False,
+                                    fact_pack=fact_pack,
+                                    intent_howto=howto,
+                                    grounding_mode=regen_grounding,
+                                )
+                            )
+                            if regen_answer:
+                                full_answer = regen_answer
+                                yield sse_event("reset_answer", {})
+                                yield sse_event("token", {"text": regen_answer})
                 elif not _is_claude_search:
                     async for chunk in llm.stream_answer_direct(
                         llm_query,
