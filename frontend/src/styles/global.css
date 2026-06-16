@@ -2967,6 +2967,91 @@ body:has(.page-thread) {
   font-size: inherit;
 }
 
+/* ── Claude Search Timeline ────────────────────────────────── */
+.claude-search-timeline {
+  margin: 8px 0 16px;
+  padding: 12px 14px;
+  background: var(--surface, #fff);
+  border: 1px solid var(--border-subtle, #e8edf0);
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  animation: cs-fade-in 0.3s ease;
+}
+
+@keyframes cs-fade-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.claude-search-query {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 0.875rem;
+  color: var(--text, #1a2328);
+  line-height: 1.4;
+}
+
+.claude-search-query-icon {
+  flex-shrink: 0;
+  font-size: 0.9rem;
+  margin-top: 1px;
+}
+
+.claude-search-query-text {
+  font-style: italic;
+  color: var(--muted, #5c6b73);
+  word-break: break-word;
+}
+
+.claude-search-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.claude-search-step {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.82rem;
+  color: var(--border, #c8d0d4);
+  transition: color 0.2s;
+}
+
+.claude-search-step--done {
+  color: var(--accent, #20808d);
+}
+
+.claude-search-step--active {
+  color: var(--text, #1a2328);
+  font-weight: 500;
+}
+
+.claude-search-step-icon {
+  font-size: 0.75rem;
+  width: 14px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.claude-search-step--active .claude-search-step-icon {
+  animation: cs-spin 1.5s linear infinite;
+  display: inline-block;
+}
+
+@keyframes cs-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+.claude-search-step-dots {
+  color: var(--muted, #5c6b73);
+  font-weight: 400;
+}
+
 .search-status-dot {
   flex-shrink: 0;
   width: 7px;

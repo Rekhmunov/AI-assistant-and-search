@@ -29,6 +29,7 @@ import { CollapsibleMarkdownDocument } from "../components/CollapsibleMarkdownDo
 import { GeneratedDocumentCard } from "../components/GeneratedDocumentCard";
 import { SearchComposer, type ComposerAttachment } from "../components/SearchComposer";
 import { SearchStatusLine, type SearchPhase } from "../components/SearchStatusLine";
+import { ClaudeSearchTimeline } from "../components/ClaudeSearchTimeline";
 import { ThreadImagesTab } from "../components/ThreadImagesTab";
 import { ThreadMobileHeader } from "../components/ThreadMobileHeader";
 import { ThreadQuery } from "../components/ThreadQuery";
@@ -174,6 +175,8 @@ export function Thread() {
   const [streaming, setStreaming] = useState(false);
   const [needsSearch, setNeedsSearch] = useState(true);
   const [searchPhase, setSearchPhase] = useState<SearchPhase>("idle");
+  const [claudeSearchQuery, setClaudeSearchQuery] = useState<string | null>(null);
+  const [claudeSearchStep, setClaudeSearchStep] = useState<"searching" | "reading" | "composing">("searching");
   const [composerQuery, setComposerQuery] = useState("");
   const [agentError, setAgentError] = useState<string | null>(null);
   const [agentStarting, setAgentStarting] = useState(false);
@@ -582,6 +585,8 @@ export function Thread() {
       setStreaming(true);
       setNeedsSearch(!imageGenQuery);
       setSearchPhase(imageGenQuery ? "image_generating" : "routing");
+      setClaudeSearchQuery(null);
+      setClaudeSearchStep("searching");
       if (retryPending && resumeTurnKey) {
         setTurns((prev) =>
           prev.map((turn) =>
@@ -682,6 +687,16 @@ export function Thread() {
         onImageGenStatus: (status) => {
           setSearchPhase("image_generating");
           if (status?.trim()) setImageGenStatus(status.trim());
+        },
+        onClaudeSearchStep: (step, query) => {
+          if (step === "searching") {
+            setClaudeSearchStep("searching");
+            if (query) setClaudeSearchQuery(query);
+          } else if (step === "reading") {
+            setClaudeSearchStep("reading");
+          } else if (step === "composing") {
+            setClaudeSearchStep("composing");
+          }
         },
         onSources: (list) => {
           setSearchPhase("answering");
@@ -1202,7 +1217,16 @@ export function Thread() {
                       )}
                     </>
                   ) : (
-                    <SearchStatusLine phase={searchPhase} needsSearch={needsSearch} />
+                    <>
+                      <SearchStatusLine phase={searchPhase} needsSearch={needsSearch} />
+                      {searchPhase === "searching" && isLastTurn && streaming && (
+                        <ClaudeSearchTimeline
+                          query={claudeSearchQuery}
+                          step={claudeSearchStep}
+                          visible={true}
+                        />
+                      )}
+                    </>
                   ))}
 
                 {isAgentThread && (agentThinkingByKey[turn.key]?.length ?? 0) > 0 && !showAgentStatus && (

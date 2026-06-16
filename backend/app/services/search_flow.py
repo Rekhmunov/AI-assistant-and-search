@@ -632,10 +632,17 @@ class SearchFlowService:
                         llm_history,
                         model="pro",
                     ):
-                        if event_type == "source":
+                        if event_type == "search_query":
+                            # Показываем пользователю что именно Claude ищет
+                            yield sse_event("claude_search_step", {
+                                "step": "searching",
+                                "query": str(payload)[:200],
+                            })
+                        elif event_type == "source":
                             item = _make_source_item(payload)
                             sources_out.append(item)
                             yield sse_event("sources", {"sources": [_make_source_item(s) if "domain" not in s else s for s in sources_out]})
+                            yield sse_event("claude_search_step", {"step": "reading"})
                         elif event_type == "text":
                             if not _answer_phase_set:
                                 await update_search_pending(redis_client, thread.id, phase="answering")
@@ -647,15 +654,6 @@ class SearchFlowService:
 
                     # Зачищаем блок «Источники:» из текста — они показываются в панели
                     full_answer = _strip_sources_block(full_answer)
-
-                    # Если Claude не расставил [n] в тексте, но источники есть —
-                    # добавляем все индексы в конец ответа чтобы чипы появились
-                    if sources_out and full_answer.strip():
-                        import re as _re2
-                        has_citations = bool(_re2.search(r'\[\d+\]', full_answer))
-                        if not has_citations:
-                            all_indices = " ".join(f"[{s['index']}]" for s in sources_out)
-                            full_answer = full_answer.rstrip() + " " + all_indices
 
                     # Конвертируем sources_out в sources_json для сохранения в БД
                     if sources_out:

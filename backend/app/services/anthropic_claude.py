@@ -610,8 +610,8 @@ class AnthropicClaudeProvider(PromptedLLMMixin, LLMProvider):
 
                     # Парсим стрим: собираем текст и источники из web_search
                     current_block_type: str = ""
-                    # Накапливаем JSON дельты для tool_result
                     _tool_result_json_buf: str = ""
+                    _search_query_buf: str = ""   # накапливаем query из input_json_delta
 
                     async for line in response.aiter_lines():
                         if not line.startswith("data:"):
@@ -635,6 +635,7 @@ class AnthropicClaudeProvider(PromptedLLMMixin, LLMProvider):
                             btype = block.get("type", "")
                             current_block_type = btype
                             _tool_result_json_buf = ""
+                            _search_query_buf = ""
 
                             # Вариант А: tool_result с inline content (старый формат)
                             if btype in {"tool_result", "web_search_tool_result"}:
@@ -667,10 +668,24 @@ class AnthropicClaudeProvider(PromptedLLMMixin, LLMProvider):
                                     yield ("text", text)
 
                             elif dtype in {"input_json_delta", "partial_json"}:
-                                # Накапливаем JSON дельты — может содержать search results
-                                _tool_result_json_buf += delta.get("partial_json", "") or delta.get("input_json", "")
+                                chunk = delta.get("partial_json", "") or delta.get("input_json", "")
+                                _tool_result_json_buf += chunk
+                                # Для server_tool_use — накапливаем query для отображения пользователю
+                                if current_block_type in {"server_tool_use", "tool_use"}:
+                                    _search_query_buf += chunk
 
                         elif et == "content_block_stop":
+                            # Эмитим поисковый запрос когда Claude закончил его формировать
+                            if _search_query_buf and current_block_type in {"server_tool_use", "tool_use"}:
+                                try:
+                                    q_data = json.loads(_search_query_buf)
+                                    q_text = q_data.get("query") or q_data.get("q") or ""
+                                    if q_text:
+                                        yield ("search_query", q_text)
+                                except (json.JSONDecodeError, Exception):
+                                    pass
+                                _search_query_buf = ""
+
                             # Пробуем распарсить накопленный JSON если это tool_result
                             if _tool_result_json_buf and current_block_type in {
                                 "tool_result", "web_search_tool_result", "server_tool_use"
