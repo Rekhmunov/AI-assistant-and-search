@@ -43,6 +43,39 @@ async def create_agent_thread_endpoint(
     require_agent_eligible(user)
     template = (body.template if body else None) or None
 
+    # Защита от дубликата: если ассистент уже активен — редиректим на него
+    if template == "assistant":
+        from app.services.agent.flow import find_active_assistant_agent
+        from sqlalchemy import select as _select
+        from app.models.thread import Thread as _Thread
+        existing = await find_active_assistant_agent(db, user)
+        if existing:
+            thread_res = await db.execute(
+                _select(_Thread).where(_Thread.id == existing.thread_id)
+            )
+            existing_thread = thread_res.scalar_one_or_none()
+            if existing_thread:
+                from app.models.message import Message as _Message
+                from app.models.message import MessageRole as _MessageRole
+                redirect_msg = _Message(
+                    thread_id=existing_thread.id,
+                    role=_MessageRole.ASSISTANT,
+                    content=(
+                        "✅ Личный ассистент уже активирован.\n\n"
+                        "Чтобы пересоздать — деактивируйте текущего. "
+                        "Для деактивации напишите **деактивировать** или **отключить**."
+                    ),
+                )
+                db.add(redirect_msg)
+                await db.flush()
+                await db.commit()
+                await db.refresh(existing_thread)
+                await db.refresh(redirect_msg)
+                return AgentThreadCreateOut(
+                    thread=ThreadListItem.model_validate(existing_thread),
+                    welcome_message=MessageOut.model_validate(redirect_msg),
+                )
+
     thread, _agent, welcome = await create_agent_thread(db, user, template=template)
     await db.commit()
     await db.refresh(thread)

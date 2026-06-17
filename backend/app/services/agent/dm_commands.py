@@ -151,6 +151,20 @@ async def handle_dm_message(
         await bot.send_message(max_user_id, "\n\n".join(lines) if lines else "Агенты активны.")
         return True
 
+    # Личный ассистент обрабатывается до всех других агентов
+    from app.services.agent.assistant_bot_handler import handle_assistant_dm
+    assistant_handled = await handle_assistant_dm(
+        db,
+        redis_client,
+        max_user_id=max_user_id,
+        text=text,
+        payload=payload or {},
+        message_id_value=message_id_value,
+        bot=bot,
+    )
+    if assistant_handled:
+        return True
+
     if not await dm_command_allowed(max_user_id):
         return True
 

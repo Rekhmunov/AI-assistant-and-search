@@ -88,6 +88,64 @@ async def _user_message(db: AsyncSession, thread: Thread, content: str) -> Messa
     return msg
 
 
+async def _activate_assistant_agent(
+    db: AsyncSession,
+    user: User,
+    thread: Thread,
+    agent: AgentInstance,
+    user_msg,
+    redis_client,
+):
+    """Активирует агента «Личный ассистент» без стандартного checklist."""
+    from app.models.agent import AgentRole
+    from app.services.agent.templates.assistant import ASSISTANT_ACTIVATED_WEB, ASSISTANT_BOT_WELCOME
+    from app.services.bot import MaxBotService
+    from datetime import datetime, timezone
+
+    # Устанавливаем роль и статус
+    if user.max_user_id:
+        agent.max_user_id = int(user.max_user_id)
+    cfg = dict(agent.config or {})
+    cfg["template"] = "assistant"
+    agent.config = cfg
+    agent.role = AgentRole.DM_ASSISTANT.value
+    agent.status = AgentStatus.ACTIVE.value
+    await db.flush()
+
+    # Закрепляем тред ассистента в истории
+    thread.pinned_at = datetime.now(timezone.utc)
+    await db.flush()
+
+    # Ответ в веб-треде
+    web_reply = await _assistant_reply(db, thread, ASSISTANT_ACTIVATED_WEB)
+    await db.commit()
+
+    # Приветствие в MAX боте
+    if user.max_user_id:
+        try:
+            bot = MaxBotService()
+            await bot.send_message(int(user.max_user_id), ASSISTANT_BOT_WELCOME)
+        except Exception as exc:
+            logger.warning("assistant activate: bot welcome failed: %s", exc)
+
+    return user_msg, web_reply, agent
+
+
+async def find_active_assistant_agent(
+    db: AsyncSession,
+    user: User,
+) -> AgentInstance | None:
+    """Ищет активного ассистента (template=assistant) для пользователя."""
+    result = await db.execute(
+        select(AgentInstance).where(
+            AgentInstance.user_id == user.id,
+            AgentInstance.status == AgentStatus.ACTIVE.value,
+            AgentInstance.config["template"].astext == "assistant",
+        )
+    )
+    return result.scalars().first()
+
+
 async def create_agent_thread(
     db: AsyncSession,
     user: User,
@@ -373,6 +431,13 @@ async def _handle_agent_message_body(
         llm_result.checklist.role, llm_result.checklist.max_chat_id,
         llm_result.checklist.bot_is_group_admin,
     )
+
+    # ── Личный ассистент: упрощённая активация без checklist ──
+    _agent_template = str((agent.config or {}).get("template") or "")
+    if should_activate and _agent_template == "assistant":
+        return await _activate_assistant_agent(
+            db, user, thread, agent, user_msg, redis_client
+        )
 
     if should_activate and not missing:
         try:

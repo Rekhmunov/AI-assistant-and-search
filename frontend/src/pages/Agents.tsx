@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
-import { Bell, ChevronRight, ClipboardList } from "lucide-react";
+import { Bell, ChevronRight, ClipboardList, MessageCircle } from "lucide-react";
 import { createAgentThreadWithTemplate } from "../api/client";
 import { MobilePageHeader } from "../components/MobilePageHeader";
 import { MobileNewThreadButton } from "../components/MobileNewThreadButton";
@@ -32,12 +32,19 @@ const TEMPLATE_META: Record<string, Omit<AgentTemplate, "id" | "title">> = {
     icon: <ClipboardList size={26} strokeWidth={1.8} />,
     color: "#7c3aed",
   },
+  assistant: {
+    description: "Полный поиск Glosix прямо в боте MAX — без открытия приложения",
+    badges: ["Поиск", "Картинки", "Фото и документы", "Голос"],
+    icon: <MessageCircle size={26} strokeWidth={1.8} />,
+    color: "#2563eb",
+  },
 };
 
 // Фоллбэк если API недоступен — все шаблоны видны
 const FALLBACK_TEMPLATES: AgentTemplate[] = [
   { id: "reminder", title: "Напоминания", ...TEMPLATE_META.reminder },
   { id: "secretary", title: "Учет затрат", ...TEMPLATE_META.secretary },
+  { id: "assistant", title: "Личный ассистент", ...TEMPLATE_META.assistant },
 ];
 
 export function AgentsPage() {
