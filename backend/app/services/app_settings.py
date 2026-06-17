@@ -16,6 +16,7 @@ from app.services.prompts.defaults import (
 from app.services.llm_runtime import fetch_llm_runtime_status
 from app.services.providers.registry import (
     DEFAULT_IMAGE_GEN_PROVIDER,
+    list_agent_llm_providers,
     list_free_llm_providers,
     list_image_gen_providers,
     list_llm_providers,
@@ -39,6 +40,7 @@ BASE_SETTING_KEYS: dict[str, type] = {
     "support_notify_max_user_ids": str,
     "llm_provider": str,
     "free_llm_provider": str,
+    "agent_llm_provider": str,
     "search_provider": str,
     "vision_provider": str,
     "image_gen_provider": str,
@@ -120,6 +122,8 @@ def default_for_key(key: str, settings: Settings | None = None) -> Any:
         return DEFAULT_LLM_PROVIDER
     if key == "free_llm_provider":
         return DEFAULT_FREE_LLM_PROVIDER
+    if key == "agent_llm_provider":
+        return ""  # пусто → автовыбор в factory.py
     if key == "search_provider":
         return DEFAULT_SEARCH_PROVIDER
     if key == "vision_provider":
@@ -263,6 +267,10 @@ async def list_settings_bundle(db: AsyncSession, redis_client: redis.Redis) -> d
         "image_gen_providers": [
             {"id": x.id, "label": x.label, "configured": x.configured, "hint": x.hint}
             for x in list_image_gen_providers(settings)
+        ],
+        "agent_llm_providers": [
+            {"id": x.id, "label": x.label, "configured": x.configured, "hint": x.hint}
+            for x in list_agent_llm_providers(settings)
         ],
         "prompts": prompts,
     }

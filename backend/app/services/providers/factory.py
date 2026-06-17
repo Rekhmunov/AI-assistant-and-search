@@ -17,7 +17,12 @@ from app.services.perplexity import PerplexityProvider
 from app.services.prompts.defaults import DEFAULT_FREE_LLM_PROVIDER, DEFAULT_LLM_PROVIDER, DEFAULT_SEARCH_PROVIDER
 from app.services.prompts.store import PromptStore
 from app.services.providers.llm_fallback import ClaudeWithYandexFallback, DeepSeekWithYandexFallback, FreeLLMWithFallback
-from app.services.providers.registry import VALID_FREE_LLM_IDS, VALID_LLM_IDS, VALID_SEARCH_IDS
+from app.services.providers.registry import (
+    VALID_AGENT_LLM_IDS,
+    VALID_FREE_LLM_IDS,
+    VALID_LLM_IDS,
+    VALID_SEARCH_IDS,
+)
 from app.services.yandex_gpt import YandexGPTProvider
 from app.services.yandex_search import YandexSearchService
 
@@ -53,6 +58,45 @@ async def resolve_llm_provider_id_for_user(
     if user is not None and user.plan == Plan.PRO:
         return await resolve_llm_provider_id(db, redis_client)
     return await resolve_free_llm_provider_id(db, redis_client)
+
+
+# Порядок авто-выбора агентского провайдера когда agent_llm_provider не задан
+_AGENT_FALLBACK_ORDER = [
+    ("deepseek", lambda s: s.deepseek_configured),
+    ("anthropic_claude", lambda s: s.anthropic_configured),
+    ("gigachat", lambda s: s.gigachat_configured),
+    ("yandex_gpt", lambda s: s.yandex_configured),
+]
+
+
+async def resolve_agent_llm_provider_id(
+    db: AsyncSession,
+    redis_client: redis.Redis,
+    settings: Settings | None = None,
+) -> str:
+    """
+    Выбирает LLM-провайдер для агентов.
+    Приоритет:
+      1. Явная настройка agent_llm_provider в админке (если из VALID_AGENT_LLM_IDS).
+      2. Текущий llm_provider — если он поддерживает агентов (не Perplexity).
+      3. Авто-фоллбэк: DeepSeek → Claude → GigaChat → Yandex (первый сконфигурированный).
+    """
+    settings = settings or get_settings()
+
+    raw = await get_setting("agent_llm_provider", db, redis_client)
+    pid = str(raw or "").strip()
+    if pid in VALID_AGENT_LLM_IDS:
+        return pid
+
+    pro_pid = await resolve_llm_provider_id(db, redis_client)
+    if pro_pid in VALID_AGENT_LLM_IDS:
+        return pro_pid
+
+    for fallback_id, check in _AGENT_FALLBACK_ORDER:
+        if check(settings):
+            return fallback_id
+
+    return "deepseek"
 
 
 async def resolve_lite_llm(
@@ -162,6 +206,32 @@ async def resolve_runtime_providers(
     settings = settings or get_settings()
     prompt_store = PromptStore(db, redis_client)
     llm_id = await resolve_llm_provider_id_for_user(db, redis_client, user)
+    search_id = await resolve_search_provider_id(db, redis_client)
+    llm = create_llm_provider(llm_id, settings, prompt_store)
+    llm = _wrap_llm_fallback(llm_id, llm, settings, prompt_store)
+    search = create_search_provider(search_id, settings)
+    return llm, search, prompt_store, llm_id, search_id
+
+
+async def resolve_agent_providers(
+    db: AsyncSession,
+    redis_client: redis.Redis,
+    settings: Settings | None = None,
+    user: User | None = None,
+) -> tuple[ChatLLM, YandexSearchService, PromptStore, str, str]:
+    """
+    Как resolve_runtime_providers, но LLM выбирается из agent_llm_provider —
+    отдельной настройки, независимой от поискового провайдера.
+    Free-пользователи всегда получают free_llm_provider.
+    """
+    settings = settings or get_settings()
+    prompt_store = PromptStore(db, redis_client)
+
+    if user is not None and user.plan == Plan.PRO:
+        llm_id = await resolve_agent_llm_provider_id(db, redis_client, settings)
+    else:
+        llm_id = await resolve_free_llm_provider_id(db, redis_client)
+
     search_id = await resolve_search_provider_id(db, redis_client)
     llm = create_llm_provider(llm_id, settings, prompt_store)
     llm = _wrap_llm_fallback(llm_id, llm, settings, prompt_store)

@@ -100,6 +100,8 @@ def list_search_providers(settings: Settings) -> list[ProviderInfo]:
 
 VALID_LLM_IDS = frozenset({"yandex_gpt", "anthropic_claude", "deepseek", "gigachat", "perplexity"})
 VALID_FREE_LLM_IDS = frozenset({"deepseek", "gigachat"})
+# Агентам нужен complete_text — Perplexity его не поддерживает
+VALID_AGENT_LLM_IDS = frozenset({"yandex_gpt", "anthropic_claude", "deepseek", "gigachat"})
 VALID_SEARCH_IDS = frozenset({"yandex_search", "claude_search"})
 VALID_VISION_IDS = frozenset({"alice_vlm", "anthropic_claude", "gigachat"})
 VALID_IMAGE_GEN_IDS = frozenset({"gigachat"})
@@ -117,6 +119,25 @@ def list_image_gen_providers(settings: Settings) -> list[ProviderInfo]:
             hint=None if giga_ok else "Нужен GIGACHAT_CREDENTIALS в .env",
         ),
     ]
+
+
+def list_agent_llm_providers(settings: Settings) -> list[ProviderInfo]:
+    """Провайдеры для агентов: все LLM с complete_text (без Perplexity)."""
+    all_llm = {p.id: p for p in list_llm_providers(settings)}
+    out: list[ProviderInfo] = []
+    for pid in ("deepseek", "anthropic_claude", "gigachat", "yandex_gpt"):
+        p = all_llm.get(pid)
+        if p:
+            out.append(
+                ProviderInfo(
+                    id=p.id,
+                    label=p.label,
+                    kind="llm",
+                    configured=p.configured,
+                    hint="Используется для оркестрации агентов (complete_text). Perplexity недоступен.",
+                )
+            )
+    return out
 
 
 def list_free_llm_providers(settings: Settings) -> list[ProviderInfo]:

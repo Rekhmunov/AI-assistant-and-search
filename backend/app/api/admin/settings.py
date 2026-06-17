@@ -16,6 +16,7 @@ from app.services.deepseek_probe import probe_deepseek
 from app.services.gigachat_probe import probe_gigachat
 from app.services.perplexity_probe import probe_perplexity
 from app.services.providers.registry import (
+    VALID_AGENT_LLM_IDS,
     VALID_FREE_LLM_IDS,
     VALID_IMAGE_GEN_IDS,
     VALID_LLM_IDS,
@@ -95,6 +96,26 @@ async def update_settings(
                         "Добавьте ключ в /opt/aisearch/.env и выполните: "
                         "docker compose -f docker-compose.prod.yml up -d --force-recreate backend worker"
                     ),
+                )
+        if key == "agent_llm_provider" and str(value) not in VALID_AGENT_LLM_IDS and str(value) != "":
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Неизвестный LLM-провайдер для агентов")
+        if key == "agent_llm_provider" and str(value) == "anthropic_claude":
+            if not env.anthropic_configured:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="ANTHROPIC_API_KEY не загружен — Claude для агентов недоступен.",
+                )
+        if key == "agent_llm_provider" and str(value) == "deepseek":
+            if not env.deepseek_configured:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="DEEPSEEK_API_KEY не загружен — DeepSeek для агентов недоступен.",
+                )
+        if key == "agent_llm_provider" and str(value) == "gigachat":
+            if not env.gigachat_configured:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="GIGACHAT_CREDENTIALS не загружен — GigaChat для агентов недоступен.",
                 )
         if key == "search_provider" and str(value) not in VALID_SEARCH_IDS:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Неизвестный провайдер поиска")

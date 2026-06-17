@@ -51,7 +51,7 @@ from app.services.agent.search_reply import prefer_web_search_answer
 from app.services.agent.source_display import prepare_agent_reply_for_ui
 from app.services.agent.agent_tool_feedback import ensure_action_feedback
 from app.services.agent.thread_memory import update_thread_memory_after_turn
-from app.services.providers.factory import resolve_runtime_providers
+from app.services.providers.factory import resolve_agent_providers
 
 logger = logging.getLogger(__name__)
 
@@ -140,7 +140,7 @@ async def run_onboarding_loop(
     elif last_user and not diagnostic_mode:
         # Нет шаблона — классифицируем задачу
         await emit_status(on_status, "Определяю задачу…")
-        llm_for_classify, _, _, _, _ = await resolve_runtime_providers(db, redis_client, user=user)
+        llm_for_classify, _, _, _, _ = await resolve_agent_providers(db, redis_client, user=user)
         clf = await classify_user_intent(llm_for_classify, last_user, history[:-1])
         category = clf.category
         classification_plan = clf.plan
@@ -161,7 +161,7 @@ async def run_onboarding_loop(
 
     # Оптимизация #3: для шаблонных агентов с коротким диалогом провайдер
     # уже разрешён в _tool_loop — переиспользуем результат вместо второго вызова.
-    # resolve_runtime_providers лениво кешируется внутри сессии.
+    # resolve_agent_providers использует agent_llm_provider независимо от поиска.
     is_template = bool(specialized_prompt)
 
     effective_user_text = last_user + file_hint if file_hint else last_user
@@ -194,7 +194,7 @@ async def run_onboarding_loop(
                 sources=sources,
             )
         spec = load_agent_spec(agent)
-        llm, _, answer_model, _, _ = await resolve_runtime_providers(db, redis_client, user=user)
+        llm, _, answer_model, _, _ = await resolve_agent_providers(db, redis_client, user=user)
         if should_reflect(user_text=last_user, draft_reply=draft, runtime=False, tool_trace=tool_trace):
             await emit_status(on_status, STATUS_REFLECTING)
             reflection = await critique_agent_reply(
@@ -289,7 +289,7 @@ async def run_runtime_loop(
                 attachments=result.attachments,
                 tool_trace=result.tool_trace,
             )
-        llm, _, answer_model, _, _ = await resolve_runtime_providers(db, redis_client, user=user)
+        llm, _, answer_model, _, _ = await resolve_agent_providers(db, redis_client, user=user)
         if result.outbound_sent:
             return result
         if should_reflect(user_text=user_text, draft_reply=result.text, runtime=True, tool_trace=result.tool_trace):
@@ -346,7 +346,7 @@ async def _tool_loop(
 ) -> tuple[LlmTurnResult | RuntimeLoopResult, list[dict]]:
     from app.services.agent.agent_tools import agent_runtime_diagnostics
 
-    llm, _, answer_model, _, _ = await resolve_runtime_providers(db, redis_client, user=user)
+    llm, _, answer_model, _, _ = await resolve_agent_providers(db, redis_client, user=user)
 
     if allow_test_send is not None:
         allow_test = allow_test_send

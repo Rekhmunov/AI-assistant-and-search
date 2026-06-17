@@ -39,6 +39,7 @@ type SettingsBundle = {
   llm_runtime?: LlmRuntime | null;
   llm_providers: ProviderOption[];
   free_llm_providers?: ProviderOption[];
+  agent_llm_providers?: ProviderOption[];
   search_providers: ProviderOption[];
   vision_providers?: ProviderOption[];
   image_gen_providers?: ProviderOption[];
@@ -50,6 +51,7 @@ export function SettingsPage() {
   const [settings, setSettings] = useState<Record<string, unknown>>({});
   const [llmProviders, setLlmProviders] = useState<ProviderOption[]>([]);
   const [freeLlmProviders, setFreeLlmProviders] = useState<ProviderOption[]>([]);
+  const [agentLlmProviders, setAgentLlmProviders] = useState<ProviderOption[]>([]);
   const [searchProviders, setSearchProviders] = useState<ProviderOption[]>([]);
   const [visionProviders, setVisionProviders] = useState<ProviderOption[]>([]);
   const [imageGenProviders, setImageGenProviders] = useState<ProviderOption[]>([]);
@@ -67,6 +69,7 @@ export function SettingsPage() {
       setLlmRuntime(r.llm_runtime ?? null);
       setLlmProviders(r.llm_providers);
       setFreeLlmProviders(r.free_llm_providers ?? []);
+      setAgentLlmProviders(r.agent_llm_providers ?? []);
       setSearchProviders(r.search_providers);
       setVisionProviders(r.vision_providers ?? []);
       setImageGenProviders(r.image_gen_providers ?? []);
@@ -76,6 +79,7 @@ export function SettingsPage() {
 
   const llmProvider = String(settings.llm_provider ?? "yandex_gpt");
   const freeLlmProvider = String(settings.free_llm_provider ?? "deepseek");
+  const agentLlmProvider = String(settings.agent_llm_provider ?? "");
 
   useEffect(() => {
     setPromptsOpen(false);
@@ -123,6 +127,7 @@ export function SettingsPage() {
       pro_purchase_disabled: Boolean(settings.pro_purchase_disabled),
       llm_provider: llmProvider,
       free_llm_provider: freeLlmProvider,
+      agent_llm_provider: agentLlmProvider,
       search_provider: searchProvider,
       vision_provider: visionProvider,
       image_gen_provider: imageGenProvider,
@@ -145,6 +150,7 @@ export function SettingsPage() {
       if (updated.llm_runtime) setLlmRuntime(updated.llm_runtime);
       if (updated.llm_providers?.length) setLlmProviders(updated.llm_providers);
       if (updated.free_llm_providers?.length) setFreeLlmProviders(updated.free_llm_providers);
+      if (updated.agent_llm_providers?.length) setAgentLlmProviders(updated.agent_llm_providers);
       if (updated.search_providers?.length) setSearchProviders(updated.search_providers);
       if (updated.vision_providers?.length) setVisionProviders(updated.vision_providers);
       if (updated.image_gen_providers?.length) setImageGenProviders(updated.image_gen_providers);
@@ -216,6 +222,27 @@ export function SettingsPage() {
                 </select>
                 <span className="hint-inline">
                   Free: лимит free_searches_per_day, только lite-модель, без vision по фото
+                </span>
+              </label>
+
+              <label>
+                LLM для агентов (Pro)
+                <select
+                  value={agentLlmProvider}
+                  onChange={(e) => setSettings({ ...settings, agent_llm_provider: e.target.value })}
+                  disabled={!can("settings:write")}
+                >
+                  <option value="">Авто (DeepSeek → Claude → GigaChat → Yandex)</option>
+                  {(agentLlmProviders.length ? agentLlmProviders : llmProviders.filter((p) => p.id !== "perplexity")).map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.label}
+                      {!p.configured ? " (не настроен)" : ""}
+                    </option>
+                  ))}
+                </select>
+                <span className="hint-inline">
+                  Отдельный провайдер для оркестрации агентов. Perplexity недоступен (нет complete_text).
+                  Авто = первый настроенный в порядке DeepSeek → Claude → GigaChat → Yandex.
                 </span>
               </label>
 
