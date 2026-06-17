@@ -9,14 +9,12 @@ from __future__ import annotations
 import json
 import logging
 import uuid
-from datetime import datetime, timezone
 from typing import Any
 
-from sqlalchemy import select, and_
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.agent import AgentInstance, AgentStatus
-from app.models.message import Message, MessageRole
 from app.models.thread import Thread, ThreadType
 from app.models.user import Plan, User
 from app.services.agent.session_thread import (
@@ -88,22 +86,6 @@ def _truncate(text: str, max_len: int = _MAX_TEXT_LEN) -> str:
         return text
     return text[:max_len - 3].rstrip() + "…"
 
-
-async def _save_messages(
-    db: AsyncSession,
-    thread: Thread,
-    user_text: str,
-    assistant_text: str,
-) -> None:
-    """Сохраняет сообщения пользователя и ассистента в тред."""
-    now = datetime.now(timezone.utc)
-    user_msg = Message(thread_id=thread.id, role=MessageRole.USER, content=user_text)
-    asst_msg = Message(thread_id=thread.id, role=MessageRole.ASSISTANT, content=assistant_text)
-    db.add(user_msg)
-    db.add(asst_msg)
-    thread.message_count = (thread.message_count or 0) + 2
-    thread.last_message_at = now
-    await db.flush()
 
 
 async def _collect_search_result(
@@ -401,74 +383,70 @@ async def handle_assistant_dm(
     if not effective_text and not _has_images(payload):
         return False
 
-    # ── Отправляем статус «Думаю…» и редактируем по мере прогресса ──
+    # ── Немедленный отбойник «Думаю…» ──
     sent = await bot.send_message(max_user_id, _STATUS_ROUTING)
     progress_mid = sent.message_id if sent.ok else None
 
     async def _update_progress(status: str) -> None:
         if progress_mid:
-            await bot.edit_message(progress_mid, status)
+            try:
+                await bot.edit_message(progress_mid, status)
+            except Exception:
+                pass
 
-    await _update_progress(_STATUS_SEARCH)
+    try:
+        # ── Предварительная обработка изображений (vision) ──
+        query = (effective_text or "").strip()
+        if _has_images(payload):
+            await _update_progress("🖼️ Анализирую изображение…")
+            vision_text = await _handle_vision(payload, query, bot, max_user_id)
+            if vision_text:
+                query = vision_text
 
-    # ── Обработка изображений из MAX (vision) ──
-    query = (effective_text or "").strip()
-    if _has_images(payload):
-        vision_text = await _handle_vision(payload, query, bot, max_user_id)
-        if vision_text:
-            query = vision_text
-            # Для vision отвечаем прямо из vision, без search_flow
-            answer = vision_text
-            thread = await get_or_create_session_thread(
-                db, redis_client, user=user, agent_id=agent.id
-            )
-            await _save_messages(db, thread, effective_text or "[фото]", answer)
-            await touch_session(redis_client, user_id=user.id, agent_id=agent.id, thread_id=thread.id)
-            await db.commit()
-            answer_truncated = _truncate(answer)
-            if progress_mid:
-                await bot.edit_message(progress_mid, answer_truncated,)
-            else:
-                await bot.send_message(max_user_id, answer_truncated)
+        if not query:
+            await _update_progress("Пожалуйста, добавьте текст к сообщению.")
             return True
 
-    if not query:
+        await _update_progress(_STATUS_SEARCH)
+
+        # ── Сессионный тред (stream_search сохраняет в него сообщения и делает commit) ──
+        thread = await get_or_create_session_thread(
+            db, redis_client, user=user, agent_id=agent.id
+        )
+
+        await _update_progress(_STATUS_ANSWER)
+
+        # ── Запуск поиска; stream_search сам сохраняет сообщения и делает commit ──
+        answer, images = await _collect_search_result(
+            db, user, redis_client, query, thread.id
+        )
+
+        # ── Обновляем TTL сессии в Redis ──
+        await touch_session(
+            redis_client, user_id=user.id, agent_id=agent.id, thread_id=thread.id
+        )
+
+        # ── Отправляем ответ ──
+        answer_truncated = _truncate(answer)
+        open_btn = _open_button(thread.id, settings)
+
         if progress_mid:
-            await bot.edit_message(progress_mid, "Пожалуйста, добавьте текст к сообщению.")
-        return True
+            await bot.edit_message(progress_mid, answer_truncated)
+            if len(answer) > 50:
+                await bot.send_message(max_user_id, "", attachments=[open_btn])
+        else:
+            await bot.send_message(max_user_id, answer_truncated, attachments=[open_btn])
 
-    # ── Сессионный тред ──
-    thread = await get_or_create_session_thread(
-        db, redis_client, user=user, agent_id=agent.id
-    )
+        if images:
+            await _send_images_to_bot(bot, max_user_id, images, settings)
 
-    await _update_progress(_STATUS_ANSWER)
-
-    # ── Запуск поиска ──
-    answer, images = await _collect_search_result(
-        db, user, redis_client, query, thread.id
-    )
-
-    # ── Сохраняем в историю ──
-    await _save_messages(db, thread, query, answer)
-    await touch_session(redis_client, user_id=user.id, agent_id=agent.id, thread_id=thread.id)
-    await db.commit()
-
-    # ── Отправляем ответ ──
-    answer_truncated = _truncate(answer)
-    open_btn = _open_button(thread.id, settings)
-
-    if progress_mid:
-        await bot.edit_message(progress_mid, answer_truncated)
-        # Кнопку добавляем отдельным сообщением (edit_message не поддерживает attachments)
-        if len(answer) > 100:
-            await bot.send_message(max_user_id, "", attachments=[open_btn])
-    else:
-        await bot.send_message(max_user_id, answer_truncated, attachments=[open_btn])
-
-    # ── Отправляем изображения если есть ──
-    if images:
-        await _send_images_to_bot(bot, max_user_id, images, settings)
+    except Exception as exc:
+        logger.exception("assistant_bot: handle error: %s", exc)
+        err_text = "❌ Произошла ошибка. Попробуйте ещё раз."
+        if progress_mid:
+            await bot.edit_message(progress_mid, err_text)
+        else:
+            await bot.send_message(max_user_id, err_text)
 
     return True
 
