@@ -2,6 +2,7 @@ import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { AuthProvider, useAuth } from "./AuthContext";
 import { Layout } from "./components/Layout";
 import { AdminsPage } from "./pages/Admins";
+import { AgentTemplatesPage } from "./pages/AgentTemplates";
 import { AuditPage } from "./pages/Audit";
 import { BroadcastsPage } from "./pages/Broadcasts";
 import { DashboardPage } from "./pages/Dashboard";
@@ -37,6 +38,7 @@ function ProtectedApp() {
         <Route path="support" element={<SupportPage />} />
         <Route path="audit" element={<AuditPage />} />
         <Route path="admins" element={<AdminsPage />} />
+        <Route path="agents" element={<AgentTemplatesPage />} />
       </Route>
     </Routes>
   );

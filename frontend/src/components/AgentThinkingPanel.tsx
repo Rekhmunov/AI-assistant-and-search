@@ -33,9 +33,27 @@ function formatArguments(args: Record<string, unknown>): string {
 }
 
 export function AgentThinkingPanel({ events, isActive }: Props) {
-  // Раскрыт по умолчанию — пользователь может свернуть вручную
+  // Раскрыт пока агент активен; сворачивается автоматически после завершения
   const [expanded, setExpanded] = useState(true);
+  const [manualOverride, setManualOverride] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  // Сворачиваем когда агент завершил ответ (если пользователь не открыл вручную)
+  useEffect(() => {
+    if (!isActive && !manualOverride) {
+      setExpanded(false);
+    }
+    if (isActive) {
+      // Новый запрос — снимаем ручной оверрайд и раскрываем
+      setManualOverride(false);
+      setExpanded(true);
+    }
+  }, [isActive]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleToggle = () => {
+    setManualOverride(true);
+    setExpanded((v) => !v);
+  };
 
   // Автоскролл вниз при новых событиях
   useEffect(() => {
@@ -50,7 +68,7 @@ export function AgentThinkingPanel({ events, isActive }: Props) {
     <div className="agent-thinking-panel">
       <button
         className="agent-thinking-toggle"
-        onClick={() => setExpanded((v) => !v)}
+        onClick={handleToggle}
         aria-expanded={expanded}
       >
         <span className="agent-thinking-icon">

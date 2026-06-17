@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { Bell, ChevronRight, ClipboardList } from "lucide-react";
@@ -17,23 +18,26 @@ interface AgentTemplate {
   color: string;
 }
 
-const AGENT_TEMPLATES: AgentTemplate[] = [
-  {
-    id: "reminder",
-    title: "Напоминания",
+// Статические метаданные: иконки, цвета, описания — всегда в коде
+const TEMPLATE_META: Record<string, Omit<AgentTemplate, "id" | "title">> = {
+  reminder: {
     description: "Отправляй себе или в группу в нужное время",
     badges: ["Разовые", "По расписанию", "Личка и группы"],
     icon: <Bell size={26} strokeWidth={1.8} />,
     color: "#20808d",
   },
-  {
-    id: "secretary",
-    title: "Учет затрат",
+  secretary: {
     description: "Записывает расходы из чата группы и формирует отчёты в Excel",
     badges: ["Сумма + примечание", "Категории", "Отчёт в Excel"],
     icon: <ClipboardList size={26} strokeWidth={1.8} />,
     color: "#7c3aed",
   },
+};
+
+// Фоллбэк если API недоступен — все шаблоны видны
+const FALLBACK_TEMPLATES: AgentTemplate[] = [
+  { id: "reminder", title: "Напоминания", ...TEMPLATE_META.reminder },
+  { id: "secretary", title: "Учет затрат", ...TEMPLATE_META.secretary },
 ];
 
 export function AgentsPage() {
@@ -42,8 +46,29 @@ export function AgentsPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const isDesktop = useDesktopLayout();
+  const [visibleTemplates, setVisibleTemplates] = useState<AgentTemplate[]>(FALLBACK_TEMPLATES);
 
   const isPro = user?.plan === "pro";
+
+  // Загружаем видимые шаблоны из API
+  useEffect(() => {
+    if (!isPro || !token) return;
+    fetch("/api/agent/templates", {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      })
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then((list: { id: string; title: string }[]) => {
+        const templates = list
+          .map(({ id, title }) => {
+            const meta = TEMPLATE_META[id];
+            if (!meta) return null;
+            return { id, title, ...meta };
+          })
+          .filter(Boolean) as AgentTemplate[];
+        if (templates.length) setVisibleTemplates(templates);
+      })
+      .catch(() => {}); // при ошибке — оставляем фоллбэк
+  }, [isPro, token]);
 
   const createAgent = useMutation({
     mutationFn: (templateId: string) => createAgentThreadWithTemplate(token, templateId),
@@ -84,7 +109,7 @@ export function AgentsPage() {
             </div>
           ) : (
             <div className="agents-catalog">
-              {AGENT_TEMPLATES.map((tmpl) => (
+              {visibleTemplates.map((tmpl) => (
                 <AgentTemplateCard
                   key={tmpl.id}
                   template={tmpl}
@@ -107,7 +132,7 @@ export function AgentsPage() {
               </div>
             ) : (
               <div className="agents-catalog">
-                {AGENT_TEMPLATES.map((tmpl) => (
+                {visibleTemplates.map((tmpl) => (
                   <AgentTemplateCard
                     key={tmpl.id}
                     template={tmpl}

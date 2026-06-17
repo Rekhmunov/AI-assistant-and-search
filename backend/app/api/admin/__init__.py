@@ -3,7 +3,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.admin import admins, audit, auth, blog, broadcasts, dashboard, legal, payments, settings, support, system, users
+from app.api.admin import admins, agent_templates, audit, auth, blog, broadcasts, dashboard, legal, payments, settings, support, system, users
 from app.api.admin.dashboard import dashboard as dashboard_metrics
 from app.api.deps import get_db
 from app.core.admin_permissions import require_permission
@@ -22,6 +22,7 @@ router.include_router(blog.router)
 router.include_router(support.router)
 router.include_router(audit.router)
 router.include_router(admins.router)
+router.include_router(agent_templates.router)
 
 
 @router.get("/metrics")

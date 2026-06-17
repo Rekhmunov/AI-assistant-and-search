@@ -54,6 +54,7 @@ BASE_SETTING_KEYS: dict[str, type] = {
     "generated_image_ttl_hours": int,
     "yandex_metrica_counter_id": str,
     "yandex_webmaster_verification": str,
+    "agent_template_visibility": str,
 }
 
 SETTING_KEYS: dict[str, type] = {

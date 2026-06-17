@@ -22,6 +22,8 @@ from app.services.agent.activity_log import list_agent_activity_logs
 from app.services.agent.flow import create_agent_thread
 from app.services.agent.stream_flow import stream_agent_message
 from app.services.agent.lifecycle import get_agent_for_thread
+from app.services.agent.template_visibility import get_template_visibility, is_template_visible_for_user
+from app.services.agent.templates import TEMPLATE_TITLES
 from app.models.thread import Thread, ThreadType
 import redis.asyncio as redis
 from sqlalchemy import select
@@ -108,6 +110,22 @@ async def post_agent_message(
         media_type="text/event-stream",
         headers=stream_headers,
     )
+
+
+@router.get("/templates")
+async def list_agent_templates(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+    redis_client=Depends(get_redis),
+):
+    """Шаблоны агентов, доступные текущему пользователю."""
+    require_agent_eligible(user)
+    visibility = await get_template_visibility(db, redis_client)
+    result = []
+    for tid, title in TEMPLATE_TITLES.items():
+        if is_template_visible_for_user(visibility, tid, user.id):
+            result.append({"id": tid, "title": title})
+    return result
 
 
 @router.get("/list")
