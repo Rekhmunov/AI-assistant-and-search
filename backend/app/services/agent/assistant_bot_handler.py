@@ -30,6 +30,18 @@ logger = logging.getLogger(__name__)
 
 _MAX_TEXT_LEN = 3800  # MAX лимит 4000, оставляем запас на кнопку/ссылку
 
+# Набор команд ассистента
+_ASSISTANT_CMDS = frozenset({"new", "history", "status", "help", "помощь", "команды"})
+
+
+def _parse_cmd(low: str) -> str | None:
+    """Извлекает имя команды из текста вида '/new', 'new', '/new arg'. None если не команда."""
+    raw = low.strip()
+    if raw.startswith("/"):
+        raw = raw[1:]
+    word = raw.split()[0] if raw.split() else ""
+    return word if word in _ASSISTANT_CMDS else None
+
 # Статусные сообщения-прогресс
 _STATUS_ROUTING = "⏳ Обрабатываю запрос…"
 _STATUS_SEARCH = "🔍 Ищу информацию…"
@@ -360,20 +372,22 @@ async def handle_assistant_dm(
     low = (effective_text or "").strip().lower()
 
     # ── Slash-команды ──
-    if low in {"/new", "new"}:
+    cmd = _parse_cmd(low)
+
+    if cmd == "new":
         await _cmd_new(db, redis_client, max_user_id=max_user_id, agent=agent, user=user, bot=bot)
         await db.commit()
         return True
 
-    if low in {"/history", "history"}:
+    if cmd == "history":
         await _cmd_history(db, max_user_id=max_user_id, user=user, bot=bot)
         return True
 
-    if low in {"/status", "status"}:
+    if cmd == "status":
         await _cmd_status(max_user_id=max_user_id, user=user, redis_client=redis_client, bot=bot)
         return True
 
-    if low in {"/help", "help", "помощь"}:
+    if cmd in {"help", "помощь", "команды"}:
         help_text = (
             "Команды:\n"
             "/new — начать новый диалог\n"

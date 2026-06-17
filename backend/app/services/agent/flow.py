@@ -120,13 +120,20 @@ async def _activate_assistant_agent(
     web_reply = await _assistant_reply(db, thread, ASSISTANT_ACTIVATED_WEB)
     await db.commit()
 
-    # Приветствие в MAX боте
+    # Регистрируем slash-команды + приветствие в MAX боте
     if user.max_user_id:
         try:
             bot = MaxBotService()
+            # Регистрируем команды чтобы появились в меню «/»
+            await bot.set_commands([
+                {"name": "new", "description": "Начать новый диалог"},
+                {"name": "history", "description": "Последние беседы"},
+                {"name": "status", "description": "Остаток запросов"},
+                {"name": "help", "description": "Помощь"},
+            ])
             await bot.send_message(int(user.max_user_id), ASSISTANT_BOT_WELCOME)
         except Exception as exc:
-            logger.warning("assistant activate: bot welcome failed: %s", exc)
+            logger.warning("assistant activate: bot setup failed: %s", exc)
 
     return user_msg, web_reply, agent
 

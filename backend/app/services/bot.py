@@ -683,3 +683,31 @@ class MaxBotService:
             return []
         subs = data.get("subscriptions") if isinstance(data, dict) else None
         return subs if isinstance(subs, list) else []
+
+    async def set_commands(self, commands: list[dict[str, str]]) -> bool:
+        """
+        Регистрирует slash-команды бота через PATCH /me.
+        commands: [{"name": "new", "description": "..."}, ...]
+        После регистрации команды появляются в меню «/» у пользователей.
+        """
+        if not self.settings.bot_token.strip():
+            return False
+        body = {"commands": commands}
+        try:
+            async def _patch():
+                async with httpx.AsyncClient(timeout=15.0) as client:
+                    return await client.patch(
+                        f"{BOT_API_BASE}/me",
+                        headers=self._auth_headers(),
+                        json=body,
+                    )
+
+            response = await self._request_with_rate_limit(_patch)
+            if response.is_success:
+                logger.info("Bot commands registered: %s", [c["name"] for c in commands])
+                return True
+            logger.warning("set_commands failed: HTTP %s %s", response.status_code, response.text[:200])
+            return False
+        except Exception as exc:
+            logger.warning("set_commands error: %s", exc)
+            return False
