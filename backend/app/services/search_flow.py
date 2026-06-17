@@ -49,6 +49,7 @@ from app.services.document_answer_enforce import (
     ensure_markdown_document_answer,
 )
 from app.services.llm_flow_router import resolve_service_flow
+from app.services.history_summarizer import summarize_history_if_needed
 from app.services.yandex_image_search import YandexImageSearchService
 from app.services.perplexity import PERPLEXITY_PROVIDER_ID, PerplexityProvider
 from app.services.providers.factory import resolve_runtime_providers
@@ -559,6 +560,11 @@ class SearchFlowService:
             nonlocal llm_query, search_completed
             history = thread_ctx.history
             llm_history = llm_history_for_turn(history, has_attachments=has_attachments)
+            # Суммаризуем длинную историю через Lite LLM (порог: 8 сообщений)
+            if llm_history:
+                llm_history = await summarize_history_if_needed(
+                    llm_history, llm_lite, redis_client, thread.id
+                )
             prior_sources_block = format_sources_for_prompt(thread_ctx.last_assistant_sources)
 
             sources: list[SearchSource] = []
