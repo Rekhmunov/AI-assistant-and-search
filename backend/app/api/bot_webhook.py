@@ -93,6 +93,17 @@ def _extract_max_user_id(payload: dict[str, Any]) -> int | None:
         if uid is not None:
             return uid
 
+    # message.sender.user_id — основной источник для message_created событий.
+    # В DM-сообщениях user_id НЕ выносится на верхний уровень payload:
+    # он находится только в message.sender.user_id.
+    msg = payload.get("message")
+    if isinstance(msg, dict):
+        sender = msg.get("sender") or msg.get("from")
+        if isinstance(sender, dict):
+            uid = _parse_user_id(sender.get("user_id") or sender.get("id"))
+            if uid is not None:
+                return uid
+
     for key in ("id",):
         uid = _parse_user_id(payload.get(key))
         if uid is not None:
