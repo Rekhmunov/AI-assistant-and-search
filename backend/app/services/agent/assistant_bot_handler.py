@@ -40,15 +40,17 @@ _STATUS_IMAGE = "🎨 Генерирую изображение…"
 async def _find_active_assistant(
     db: AsyncSession, *, max_user_id: int
 ) -> AgentInstance | None:
-    """Ищет активного ассистента для пользователя."""
+    """Ищет активного ассистента для пользователя (шаблон фильтруем в Python)."""
     result = await db.execute(
         select(AgentInstance).where(
             AgentInstance.max_user_id == max_user_id,
-            AgentInstance.status == AgentStatus.ACTIVE.value,  # в боте работает только активированный
-            AgentInstance.config["template"].astext == "assistant",
+            AgentInstance.status == AgentStatus.ACTIVE.value,
         )
     )
-    return result.scalars().first()
+    for agent in result.scalars().all():
+        if str((agent.config or {}).get("template") or "") == "assistant":
+            return agent
+    return None
 
 
 async def _get_user_by_id(db: AsyncSession, user_id: uuid.UUID) -> User | None:
@@ -306,7 +308,7 @@ async def _cmd_status(
     from app.core.config import get_settings
     settings = get_settings()
     limiter = RateLimiter(redis_client, settings)
-    used, limit = await limiter.get_search_usage(str(user.id), user.plan)
+    used, limit = await limiter.usage_and_limit(user)
     plan_label = "Pro" if user.plan == Plan.PRO else "Free"
     remaining = max(0, limit - used)
     text = (

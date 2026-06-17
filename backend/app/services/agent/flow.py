@@ -140,10 +140,12 @@ async def find_active_assistant_agent(
         select(AgentInstance).where(
             AgentInstance.user_id == user.id,
             AgentInstance.status != AgentStatus.CANCELLED.value,
-            AgentInstance.config["template"].astext == "assistant",
         )
     )
-    return result.scalars().first()
+    for agent in result.scalars().all():
+        if str((agent.config or {}).get("template") or "") == "assistant":
+            return agent
+    return None
 
 
 async def create_agent_thread(
