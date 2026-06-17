@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 _MAX_TEXT_LEN = 3800  # MAX лимит 4000, оставляем запас на кнопку/ссылку
 
 # Набор команд ассистента
-_ASSISTANT_CMDS = frozenset({"new", "history", "status", "help", "помощь", "команды"})
+_ASSISTANT_CMDS = frozenset({"new", "history"})
 
 
 def _parse_cmd(low: str) -> str | None:
@@ -365,20 +365,6 @@ async def handle_assistant_dm(
         await _cmd_history(db, max_user_id=max_user_id, user=user, bot=bot)
         return True
 
-    if cmd == "status":
-        await _cmd_status(max_user_id=max_user_id, user=user, redis_client=redis_client, bot=bot)
-        return True
-
-    if cmd in {"help", "помощь", "команды"}:
-        help_text = (
-            "Команды:\n"
-            "/new — начать новый диалог\n"
-            "/history — последние беседы\n"
-            "/status — остаток запросов\n\n"
-            "Просто пишите вопрос — отвечу как Glosix."
-        )
-        await bot.send_message(max_user_id, help_text)
-        return True
 
     if not effective_text and not _has_images(payload):
         return False

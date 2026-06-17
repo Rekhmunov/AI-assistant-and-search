@@ -128,8 +128,6 @@ async def _activate_assistant_agent(
             await bot.set_commands([
                 {"name": "new", "description": "Начать новый диалог"},
                 {"name": "history", "description": "Последние беседы"},
-                {"name": "status", "description": "Остаток запросов"},
-                {"name": "help", "description": "Помощь"},
             ])
             await bot.send_message(int(user.max_user_id), ASSISTANT_BOT_WELCOME)
         except Exception as exc:
