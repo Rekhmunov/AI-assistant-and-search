@@ -45,23 +45,30 @@ _STATUS_ROUTING = "⏳ Обрабатываю запрос…"
 
 async def _find_active_assistant(
     db: AsyncSession, *, max_user_id: int
-) -> AgentInstance | None:
-    """Ищет активного ассистента для пользователя (шаблон фильтруем в Python)."""
+) -> tuple[AgentInstance, "User"] | None:
+    """
+    Ищет активного ассистента через пользователя.
+    Возвращает (agent, user) или None.
+    Надёжнее чем поиск по AgentInstance.max_user_id (может быть 0 при создании).
+    """
+    user_result = await db.execute(
+        select(User).where(User.max_user_id == max_user_id).limit(1)
+    )
+    user = user_result.scalar_one_or_none()
+    if not user:
+        return None
+
     result = await db.execute(
         select(AgentInstance).where(
-            AgentInstance.max_user_id == max_user_id,
+            AgentInstance.user_id == user.id,
             AgentInstance.status == AgentStatus.ACTIVE.value,
         )
     )
     for agent in result.scalars().all():
         if str((agent.config or {}).get("template") or "") == "assistant":
-            return agent
+            return agent, user
     return None
 
-
-async def _get_user_by_id(db: AsyncSession, user_id: uuid.UUID) -> User | None:
-    result = await db.execute(select(User).where(User.id == user_id))
-    return result.scalar_one_or_none()
 
 
 def _web_thread_url(thread_id: uuid.UUID, settings) -> str:
@@ -326,14 +333,10 @@ async def handle_assistant_dm(
     """
     bot = bot or MaxBotService()
 
-    agent = await _find_active_assistant(db, max_user_id=max_user_id)
-    if not agent:
+    found = await _find_active_assistant(db, max_user_id=max_user_id)
+    if not found:
         return False
-
-    user = await _get_user_by_id(db, agent.user_id)
-    if not user:
-        logger.warning("assistant_bot: user not found for agent %s", agent.id)
-        return False
+    agent, user = found
 
     from app.core.config import get_settings
     settings = get_settings()
