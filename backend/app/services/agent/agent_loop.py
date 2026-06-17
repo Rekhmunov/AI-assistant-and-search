@@ -580,7 +580,8 @@ async def _tool_loop(
             ), tool_trace
 
         assert checklist is not None
-        result = _result_from_data(data, checklist, user_text, history, user)
+        _is_assistant = str((agent.config or {}).get("template") or "") == "assistant"
+        result = _result_from_data(data, checklist, user_text, history, user, is_assistant_template=_is_assistant)
         final_reply = ensure_action_feedback(result.reply, tool_trace, user_text)
         if final_reply != result.reply:
             result = LlmTurnResult(

@@ -135,11 +135,11 @@ async def find_active_assistant_agent(
     db: AsyncSession,
     user: User,
 ) -> AgentInstance | None:
-    """Ищет активного ассистента (template=assistant) для пользователя."""
+    """Ищет существующего ассистента (template=assistant) — любой статус кроме cancelled."""
     result = await db.execute(
         select(AgentInstance).where(
             AgentInstance.user_id == user.id,
-            AgentInstance.status == AgentStatus.ACTIVE.value,
+            AgentInstance.status != AgentStatus.CANCELLED.value,
             AgentInstance.config["template"].astext == "assistant",
         )
     )

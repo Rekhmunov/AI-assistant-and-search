@@ -74,6 +74,8 @@ def _result_from_data(
     last_user: str,
     history: list[dict[str, str]],
     user: User,
+    *,
+    is_assistant_template: bool = False,
 ) -> LlmTurnResult:
     merged = _merge_checklist_from_data(data, checklist, last_user, history)
     reply = _str_or_none(data.get("reply")) or build_parse_fallback_reply(merged.to_dict(), last_user)
@@ -81,6 +83,16 @@ def _result_from_data(
     ready = bool(data.get("ready_for_confirmation"))
     summary = _str_or_none(data.get("confirmation_summary"))
     activate = bool(data.get("activate"))
+
+    # Личный ассистент активируется без MAX и без checklist-полей
+    if is_assistant_template:
+        return LlmTurnResult(
+            reply=reply,
+            checklist=merged,
+            ready_for_confirmation=ready,
+            confirmation_summary=summary,
+            activate=activate,
+        )
 
     if not user.max_user_id:
         activate = False

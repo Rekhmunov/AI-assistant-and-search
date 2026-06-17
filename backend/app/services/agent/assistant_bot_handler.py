@@ -44,7 +44,7 @@ async def _find_active_assistant(
     result = await db.execute(
         select(AgentInstance).where(
             AgentInstance.max_user_id == max_user_id,
-            AgentInstance.status == AgentStatus.ACTIVE.value,
+            AgentInstance.status == AgentStatus.ACTIVE.value,  # в боте работает только активированный
             AgentInstance.config["template"].astext == "assistant",
         )
     )
