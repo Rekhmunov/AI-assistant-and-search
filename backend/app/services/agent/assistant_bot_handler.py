@@ -40,11 +40,7 @@ def _parse_cmd(low: str) -> str | None:
     word = raw.split()[0] if raw.split() else ""
     return word if word in _ASSISTANT_CMDS else None
 
-# Статусные сообщения-прогресс
 _STATUS_ROUTING = "⏳ Обрабатываю запрос…"
-_STATUS_SEARCH = "🔍 Ищу информацию…"
-_STATUS_ANSWER = "✍️ Составляю ответ…"
-_STATUS_IMAGE = "🎨 Генерирую изображение…"
 
 
 async def _find_active_assistant(
@@ -369,40 +365,27 @@ async def handle_assistant_dm(
     if not effective_text and not _has_images(payload):
         return False
 
-    # ── Немедленный отбойник «Думаю…» ──
-    sent = await bot.send_message(max_user_id, _STATUS_ROUTING)
-    progress_mid = sent.message_id if sent.ok else None
-
-    async def _update_progress(status: str) -> None:
-        if progress_mid:
-            try:
-                await bot.edit_message(progress_mid, status)
-            except Exception:
-                pass
+    # ── Немедленный отбойник ──
+    await bot.send_message(max_user_id, _STATUS_ROUTING)
 
     try:
         # ── Предварительная обработка изображений (vision) ──
         query = (effective_text or "").strip()
         if _has_images(payload):
-            await _update_progress("🖼️ Анализирую изображение…")
             vision_text = await _handle_vision(payload, query, bot, max_user_id)
             if vision_text:
                 query = vision_text
 
         if not query:
-            await _update_progress("Пожалуйста, добавьте текст к сообщению.")
+            await bot.send_message(max_user_id, "Пожалуйста, добавьте текст к сообщению.")
             return True
 
-        await _update_progress(_STATUS_SEARCH)
-
-        # ── Сессионный тред (stream_search сохраняет в него сообщения и делает commit) ──
+        # ── Сессионный тред ──
         thread = await get_or_create_session_thread(
             db, redis_client, user=user, agent_id=agent.id
         )
 
-        await _update_progress(_STATUS_ANSWER)
-
-        # ── Запуск поиска; stream_search сам сохраняет сообщения и делает commit ──
+        # ── Запуск поиска ──
         answer, images = await _collect_search_result(
             db, user, redis_client, query, thread.id
         )
@@ -415,24 +398,14 @@ async def handle_assistant_dm(
         # ── Отправляем ответ ──
         answer_truncated = _truncate(answer)
         open_btn = _open_button(thread.id, settings)
-
-        if progress_mid:
-            await bot.edit_message(progress_mid, answer_truncated)
-            if len(answer) > 50:
-                await bot.send_message(max_user_id, "", attachments=[open_btn])
-        else:
-            await bot.send_message(max_user_id, answer_truncated, attachments=[open_btn])
+        await bot.send_message(max_user_id, answer_truncated, attachments=[open_btn])
 
         if images:
             await _send_images_to_bot(bot, max_user_id, images, settings)
 
     except Exception as exc:
         logger.exception("assistant_bot: handle error: %s", exc)
-        err_text = "❌ Произошла ошибка. Попробуйте ещё раз."
-        if progress_mid:
-            await bot.edit_message(progress_mid, err_text)
-        else:
-            await bot.send_message(max_user_id, err_text)
+        await bot.send_message(max_user_id, "❌ Произошла ошибка. Попробуйте ещё раз.")
 
     return True
 
