@@ -83,13 +83,13 @@ async def _yield_text_paced(text: str) -> AsyncIterator[str]:
                 await asyncio.sleep(0.014)
 
 
-def _format_history(history: list[tuple[str, str]], max_turns: int = 6) -> str:
+def _format_history(history: list[tuple[str, str]], max_turns: int = 12) -> str:
     if not history:
         return ""
     parts = []
     for role, text in history[-max_turns:]:
         label = "Пользователь" if role == "user" else "Ассистент"
-        parts.append(f"{label}: {text[:1500]}")
+        parts.append(f"{label}: {text[:2500]}")
     return "\n\nПредыдущий диалог:\n" + "\n".join(parts)
 
 
