@@ -40,10 +40,24 @@ async def purge_agent_for_thread(db: AsyncSession, thread_id: UUID) -> bool:
     agent = await get_agent_for_thread(db, thread_id)
     if not agent:
         return False
+    is_assistant = str((agent.config or {}).get("template") or "") == "assistant"
     await cancel_reminders_for_agent(db, agent.id)
     await db.delete(agent)
     await db.flush()
+    if is_assistant:
+        await _clear_assistant_bot_commands()
     return True
+
+
+async def _clear_assistant_bot_commands() -> None:
+    """Снимает регистрацию slash-команд ассистента в MAX при деактивации."""
+    try:
+        from app.services.bot import MaxBotService
+        bot = MaxBotService()
+        await bot.set_commands([])
+    except Exception as exc:
+        import logging
+        logging.getLogger(__name__).warning("_clear_assistant_bot_commands failed: %s", exc)
 
 
 async def on_thread_soft_deleted(db: AsyncSession, thread: Thread) -> None:
