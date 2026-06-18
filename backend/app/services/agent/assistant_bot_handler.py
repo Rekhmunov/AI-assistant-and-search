@@ -137,6 +137,10 @@ async def _collect_search_result(
                 text = data.get("text") or ""
                 if text:
                     answer_parts.append(text)
+            elif event_type == "reset_answer":
+                # search_flow сбрасывает ответ (markdown wrap / template evasion)
+                # — очищаем буфер чтобы не задваивать текст
+                answer_parts.clear()
             elif event_type == "images":
                 imgs = data.get("images")
                 if isinstance(imgs, list):
