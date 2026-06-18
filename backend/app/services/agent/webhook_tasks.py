@@ -111,6 +111,25 @@ async def process_callback_background(
                 )
                 if handled:
                     await db.commit()
+        elif callback_payload.startswith("assistant_thread:"):
+            settings = get_settings()
+            redis_client = aioredis.from_url(settings.redis_url, decode_responses=True)
+            try:
+                async with async_session_factory() as db:
+                    from app.services.agent.assistant_callbacks import handle_assistant_callback
+                    handled = await handle_assistant_callback(
+                        db,
+                        redis_client,
+                        callback_id=callback_id,
+                        payload=callback_payload,
+                        clicker_user_id=clicker_user_id,
+                    )
+                    if handled:
+                        await db.commit()
+                    else:
+                        await bot.answer_callback(callback_id)
+            finally:
+                await redis_client.aclose()
         else:
             # Неизвестный payload — всё равно отвечаем чтобы снять spinner с кнопки
             await bot.answer_callback(callback_id)

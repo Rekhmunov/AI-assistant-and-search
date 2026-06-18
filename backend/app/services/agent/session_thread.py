@@ -64,12 +64,13 @@ async def get_or_create_session_thread(
     return thread
 
 
-async def _create_session_thread(db: AsyncSession, *, user: User) -> Thread:
+async def _create_session_thread(
+    db: AsyncSession, *, user: User, title: str = ""
+) -> Thread:
     now = datetime.now(timezone.utc)
-    title = f"Личный ассистент · {now.strftime('%d %b %H:%M')}"
     thread = Thread(
         user_id=user.id,
-        title=title,
+        title=title or "Новый диалог",
         thread_type=ThreadType.SEARCH,
         message_count=0,
         last_message_at=now,

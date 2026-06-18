@@ -283,11 +283,17 @@ async def _cmd_history(
 
     buttons = []
     for t in threads:
-        title = (t.title or "Диалог")[:40]
+        title = (t.title or "Диалог")[:38]
         ts = t.last_message_at
         label = f"{title} · {ts.strftime('%d.%m %H:%M')}" if ts else title
-        buttons.append([{"type": "link", "text": label, "url": _thread_btn_url(t.id)}])
+        # callback: переключает сессию в боте без открытия приложения
+        buttons.append([{
+            "type": "callback",
+            "text": label,
+            "payload": f"assistant_thread:{t.id}",
+        }])
 
+    # «Вся история» → открывает приложение
     buttons.append([{"type": "link", "text": "📚 Вся история", "url": _history_url()}])
 
     keyboard = MaxBotService.make_keyboard_attachment(buttons)
@@ -392,6 +398,12 @@ async def handle_assistant_dm(
         thread = await get_or_create_session_thread(
             db, redis_client, user=user, agent_id=agent.id
         )
+
+        # Обновляем заголовок если тред новый (placeholder)
+        if thread.title in ("Новый диалог", "", None):
+            words = query.split()
+            thread.title = " ".join(words[:8])[:120] or query[:120]
+            await db.flush()
 
         # ── Запуск поиска ──
         answer, images, follow_ups = await _collect_search_result(
