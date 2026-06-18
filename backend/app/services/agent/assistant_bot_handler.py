@@ -373,11 +373,11 @@ async def handle_assistant_dm(
     if not effective_text and not _has_images(payload):
         return False
 
-    # ── Немедленный отбойник ──
-    await bot.send_message(max_user_id, _STATUS_ROUTING)
+    # ── Немедленный отбойник — сохраняем message_id для редактирования ──
+    sent_status = await bot.send_message(max_user_id, _STATUS_ROUTING)
+    status_mid = sent_status.message_id if sent_status.ok else None
 
     try:
-        # ── Предварительная обработка изображений (vision) ──
         query = (effective_text or "").strip()
         if _has_images(payload):
             vision_text = await _handle_vision(payload, query, bot, max_user_id)
@@ -403,18 +403,27 @@ async def handle_assistant_dm(
             redis_client, user_id=user.id, agent_id=agent.id, thread_id=thread.id
         )
 
-        # ── Отправляем ответ с кнопкой «Открыть в мини-приложении» ──
+        # ── Клавиатура: follow-up кнопки сверху, «Открыть» снизу ──
         answer_truncated = _truncate(answer)
-        open_btn = _open_button(thread.id, settings)
-        await bot.send_message(max_user_id, answer_truncated, attachments=[open_btn])
+        open_row = [{"type": "link", "text": "🔗 Открыть в Glosix",
+                     "url": _thread_url(thread.id, settings)}]
+        rows = [[{"type": "message", "text": q[:40], "payload": q}] for q in follow_ups]
+        rows.append(open_row)
+        keyboard = MaxBotService.make_keyboard_attachment(rows)
 
-        # ── Follow-up вопросы как кнопки (отправляют вопрос в чат при нажатии) ──
-        if follow_ups:
-            buttons = [[{"type": "message", "text": q[:40], "payload": q}]
-                       for q in follow_ups]
-            keyboard = MaxBotService.make_keyboard_attachment(buttons)
-            await bot.send_message(max_user_id, "Уточнить:", attachments=[keyboard])
+        # ── Если сохранён message_id «Обрабатываю…» — редактируем его ──
+        # (PUT /messages поддерживает text + attachments)
+        if status_mid:
+            edited = await bot.edit_message(
+                status_mid, answer_truncated, attachments=[keyboard]
+            )
+            if edited:
+                if images:
+                    await _send_images_to_bot(bot, max_user_id, images, settings)
+                return True
 
+        # Fallback: новое сообщение с ответом и клавиатурой
+        await bot.send_message(max_user_id, answer_truncated, attachments=[keyboard])
         if images:
             await _send_images_to_bot(bot, max_user_id, images, settings)
 

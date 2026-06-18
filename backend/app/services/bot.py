@@ -98,11 +98,18 @@ class MaxBotService:
                     if isinstance(payload, dict):
                         message = payload.get("message")
                         if isinstance(message, dict):
-                            mid = (
-                                message.get("mid")
-                                or message.get("message_id")
-                                or message.get("id")
-                            )
+                            # message.body.mid — для DM-сообщений MAX
+                            body_obj = message.get("body")
+                            if isinstance(body_obj, dict):
+                                mid = (body_obj.get("mid")
+                                       or body_obj.get("message_id")
+                                       or body_obj.get("id"))
+                            else:
+                                mid = None
+                            if not mid:
+                                mid = (message.get("mid")
+                                       or message.get("message_id")
+                                       or message.get("id"))
                             if mid is not None:
                                 message_id = str(mid)
                         elif payload.get("message_id") is not None:
@@ -151,12 +158,13 @@ class MaxBotService:
         message_id: str,
         text: str,
         *,
+        attachments: list[dict] | None = None,
         remove_keyboard: bool = False,
     ) -> bool:
         """
         Редактирует сообщение бота (PUT /messages?message_id=...).
-        remove_keyboard=True — убирает inline_keyboard передав attachments=[].
-        Сообщения с inline_keyboard редактируются без ограничения по давности.
+        attachments — новые вложения (inline_keyboard и пр.).
+        remove_keyboard=True — очищает все вложения (attachments=[]).
         """
         if not self.settings.bot_token.strip():
             return False
@@ -165,7 +173,9 @@ class MaxBotService:
             return False
 
         body: dict = {"text": text}
-        if remove_keyboard:
+        if attachments is not None:
+            body["attachments"] = attachments
+        elif remove_keyboard:
             body["attachments"] = []
 
         try:
