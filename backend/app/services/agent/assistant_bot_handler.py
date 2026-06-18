@@ -71,16 +71,22 @@ async def _find_active_assistant(
 
 
 
-def _web_thread_url(thread_id: uuid.UUID, settings) -> str:
-    base = (settings.public_web_url or "https://glosix.ru").rstrip("/")
-    return f"{base}/thread/{thread_id}"
+def _miniapp_thread_url(thread_id: uuid.UUID, settings) -> str:
+    """URL для открытия конкретного треда в мини-приложении MAX."""
+    base = (settings.max_bot_url or "").strip().rstrip("/").split("?")[0]
+    if not base:
+        # Fallback на веб если мини-апп не настроен
+        web = (settings.public_web_url or "https://glosix.ru").rstrip("/")
+        return f"{web}/thread/{thread_id}"
+    return f"{base}?startapp=thread_{thread_id}"
 
 
 def _open_button(thread_id: uuid.UUID, settings) -> dict:
+    """Кнопка «Открыть в Glosix» → открывает мини-приложение MAX."""
     return MaxBotService.make_keyboard_attachment([[{
-        "type": "link",
+        "type": "open_app",
         "text": "🔗 Открыть в Glosix",
-        "url": _web_thread_url(thread_id, settings),
+        "url": _miniapp_thread_url(thread_id, settings),
     }]])
 
 
@@ -98,10 +104,10 @@ async def _collect_search_result(
     query: str,
     thread_id: uuid.UUID,
     attachment_file_ids: list[uuid.UUID] | None = None,
-) -> tuple[str, list[dict]]:
+) -> tuple[str, list[dict], list[str]]:
     """
-    Запускает SearchFlowService и собирает финальный ответ + изображения.
-    Возвращает (answer_text, images_list).
+    Запускает SearchFlowService и собирает ответ + изображения + follow-up вопросы.
+    Возвращает (answer_text, images_list, follow_ups_list).
     """
     from app.services.search_flow import SearchFlowService
     from app.core.limiter import RateLimiter
@@ -112,6 +118,7 @@ async def _collect_search_result(
 
     answer_parts: list[str] = []
     images: list[dict] = []
+    follow_ups: list[str] = []
     error_msg: str | None = None
 
     flow = SearchFlowService()
@@ -126,7 +133,6 @@ async def _collect_search_result(
             redis_client=redis_client,
             client_ip=None,
         ):
-            # SSE event формат: "event: TYPE\ndata: JSON\n\n"
             event_type, data = _parse_sse(raw_event)
             if event_type == "token":
                 text = data.get("text") or ""
@@ -136,6 +142,10 @@ async def _collect_search_result(
                 imgs = data.get("images")
                 if isinstance(imgs, list):
                     images.extend(imgs)
+            elif event_type == "follow_ups":
+                qs = data.get("questions")
+                if isinstance(qs, list):
+                    follow_ups = [str(q) for q in qs if q][:3]
             elif event_type == "error":
                 code = data.get("code", "")
                 if code in ("rate_limit", "free_rate_limit", "guest_rate_limit"):
@@ -153,13 +163,13 @@ async def _collect_search_result(
         error_msg = "❌ Произошла ошибка при обработке запроса. Попробуйте ещё раз."
 
     if error_msg:
-        return error_msg, []
+        return error_msg, [], []
 
     answer = "".join(answer_parts).strip()
     if not answer:
         answer = "Не удалось получить ответ. Попробуйте переформулировать вопрос."
 
-    return answer, images
+    return answer, images, follow_ups
 
 
 def _parse_sse(raw: str) -> tuple[str, dict]:
@@ -263,26 +273,35 @@ async def _cmd_history(
         await bot.send_message(max_user_id, "История пуста. Начните новый диалог!")
         return
 
-    base = (settings.public_web_url or "https://glosix.ru").rstrip("/")
+    bot_base = (settings.max_bot_url or "").strip().rstrip("/").split("?")[0]
+    web_base = (settings.public_web_url or "https://glosix.ru").rstrip("/")
+
+    def _thread_btn_url(thread_id) -> str:
+        if bot_base:
+            return f"{bot_base}?startapp=thread_{thread_id}"
+        return f"{web_base}/thread/{thread_id}"
+
+    def _history_url() -> str:
+        if bot_base:
+            return f"{bot_base}?startapp=history"
+        return f"{web_base}/history"
+
     buttons = []
     for t in threads:
         title = (t.title or "Диалог")[:40]
         ts = t.last_message_at
-        if ts:
-            label = f"{title} · {ts.strftime('%d.%m %H:%M')}"
-        else:
-            label = title
+        label = f"{title} · {ts.strftime('%d.%m %H:%M')}" if ts else title
         buttons.append([{
-            "type": "link",
+            "type": "open_app",
             "text": label,
-            "url": f"{base}/thread/{t.id}",
+            "url": _thread_btn_url(t.id),
         }])
 
     # Кнопка «Вся история»
     buttons.append([{
-        "type": "link",
+        "type": "open_app",
         "text": "📚 Вся история",
-        "url": f"{base}/history",
+        "url": _history_url(),
     }])
 
     keyboard = MaxBotService.make_keyboard_attachment(buttons)
@@ -389,7 +408,7 @@ async def handle_assistant_dm(
         )
 
         # ── Запуск поиска ──
-        answer, images = await _collect_search_result(
+        answer, images, follow_ups = await _collect_search_result(
             db, user, redis_client, query, thread.id
         )
 
@@ -398,10 +417,17 @@ async def handle_assistant_dm(
             redis_client, user_id=user.id, agent_id=agent.id, thread_id=thread.id
         )
 
-        # ── Отправляем ответ ──
+        # ── Отправляем ответ с кнопкой «Открыть в мини-приложении» ──
         answer_truncated = _truncate(answer)
         open_btn = _open_button(thread.id, settings)
         await bot.send_message(max_user_id, answer_truncated, attachments=[open_btn])
+
+        # ── Follow-up вопросы как кнопки (отправляют вопрос в чат при нажатии) ──
+        if follow_ups:
+            buttons = [[{"type": "message", "text": q[:40], "payload": q}]
+                       for q in follow_ups]
+            keyboard = MaxBotService.make_keyboard_attachment(buttons)
+            await bot.send_message(max_user_id, "Уточнить:", attachments=[keyboard])
 
         if images:
             await _send_images_to_bot(bot, max_user_id, images, settings)

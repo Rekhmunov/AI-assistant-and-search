@@ -3,6 +3,7 @@ import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { AppErrorBoundary } from "./components/AppErrorBoundary";
 import { AppNavigation } from "./components/AppNavigation";
 import { useAuthBootstrap } from "./hooks/useAuth";
+import { useMaxDeepLink } from "./hooks/useMaxDeepLink";
 import { usePageRobots } from "./hooks/usePageRobots";
 import { t } from "./i18n";
 import { History } from "./pages/History";
@@ -24,6 +25,7 @@ const queryClient = new QueryClient();
 function AppRoutes() {
   const { ready, error } = useAuthBootstrap();
   const booting = !ready && !error;
+  useMaxDeepLink();
 
   return (
     <div className={`app-shell${booting ? " app-shell--booting" : ""}`}>
