@@ -2154,6 +2154,9 @@ body:has(.page-thread) {
   overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
+  /* Отключаем scroll-anchoring: браузер не должен смещать позицию
+     при появлении новых токенов ниже текущей области видимости */
+  overflow-anchor: none;
   padding-right: 2px;
   margin-bottom: 0;
   direction: ltr;

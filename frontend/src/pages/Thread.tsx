@@ -446,7 +446,8 @@ export function Thread() {
     if (!active || scrollTurnKeyRef.current === active.key) return;
     scrollTurnKeyRef.current = active.key;
     const el = document.getElementById(`turn-${active.key}`);
-    el?.scrollIntoView({ block: "start", behavior: "smooth" });
+    // instant — не анимируем, иначе стриминг токенов уносит страницу вниз
+    el?.scrollIntoView({ block: "start", behavior: "instant" });
   }, [turns.length, activeTab, turns]);
 
   const runAgentMessage = useCallback(
