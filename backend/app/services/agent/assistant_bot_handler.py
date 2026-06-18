@@ -71,22 +71,21 @@ async def _find_active_assistant(
 
 
 
-def _miniapp_thread_url(thread_id: uuid.UUID, settings) -> str:
-    """URL для открытия конкретного треда в мини-приложении MAX."""
-    base = (settings.max_bot_url or "").strip().rstrip("/").split("?")[0]
-    if not base:
-        # Fallback на веб если мини-апп не настроен
-        web = (settings.public_web_url or "https://glosix.ru").rstrip("/")
-        return f"{web}/thread/{thread_id}"
-    return f"{base}?startapp=thread_{thread_id}"
+def _thread_url(thread_id: uuid.UUID, settings) -> str:
+    """URL треда: мини-апп если MAX_BOT_URL задан, иначе веб-сайт."""
+    bot_base = (settings.max_bot_url or "").strip().rstrip("/").split("?")[0]
+    if bot_base:
+        return f"{bot_base}?startapp=thread_{thread_id}"
+    web = (settings.public_web_url or "https://glosix.ru").rstrip("/")
+    return f"{web}/thread/{thread_id}"
 
 
 def _open_button(thread_id: uuid.UUID, settings) -> dict:
-    """Кнопка «Открыть в Glosix» → открывает мини-приложение MAX."""
+    """Кнопка «Открыть в Glosix» → link (open_app не работает в DM)."""
     return MaxBotService.make_keyboard_attachment([[{
-        "type": "open_app",
+        "type": "link",
         "text": "🔗 Открыть в Glosix",
-        "url": _miniapp_thread_url(thread_id, settings),
+        "url": _thread_url(thread_id, settings),
     }]])
 
 
@@ -276,33 +275,20 @@ async def _cmd_history(
     bot_base = (settings.max_bot_url or "").strip().rstrip("/").split("?")[0]
     web_base = (settings.public_web_url or "https://glosix.ru").rstrip("/")
 
-    def _thread_btn_url(thread_id) -> str:
-        if bot_base:
-            return f"{bot_base}?startapp=thread_{thread_id}"
-        return f"{web_base}/thread/{thread_id}"
+    def _thread_btn_url(tid) -> str:
+        return f"{bot_base}?startapp=thread_{tid}" if bot_base else f"{web_base}/thread/{tid}"
 
     def _history_url() -> str:
-        if bot_base:
-            return f"{bot_base}?startapp=history"
-        return f"{web_base}/history"
+        return f"{bot_base}?startapp=history" if bot_base else f"{web_base}/history"
 
     buttons = []
     for t in threads:
         title = (t.title or "Диалог")[:40]
         ts = t.last_message_at
         label = f"{title} · {ts.strftime('%d.%m %H:%M')}" if ts else title
-        buttons.append([{
-            "type": "open_app",
-            "text": label,
-            "url": _thread_btn_url(t.id),
-        }])
+        buttons.append([{"type": "link", "text": label, "url": _thread_btn_url(t.id)}])
 
-    # Кнопка «Вся история»
-    buttons.append([{
-        "type": "open_app",
-        "text": "📚 Вся история",
-        "url": _history_url(),
-    }])
+    buttons.append([{"type": "link", "text": "📚 Вся история", "url": _history_url()}])
 
     keyboard = MaxBotService.make_keyboard_attachment(buttons)
     await bot.send_message(
