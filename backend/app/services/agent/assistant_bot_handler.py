@@ -196,27 +196,63 @@ async def _send_images_to_bot(
     max_user_id: int,
     images: list[dict],
     settings,
+    db=None,
 ) -> None:
-    """Скачивает сгенерированные изображения и отправляет в MAX."""
-    import httpx
+    """
+    Загружает сгенерированные изображения из хранилища и отправляет в MAX.
+    Изображения защищены Bearer-токеном — читаем байты напрямую из хранилища
+    по file_id, минуя HTTP-запрос к API.
+    """
+    import asyncio
+    import re
+    from app.services.upload_storage import load_upload_bytes
 
-    for img in images[:3]:  # не более 3 картинок
+    _FILE_ID_RE = re.compile(
+        r"/files/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/",
+        re.I,
+    )
+
+    for img in images[:3]:
         url = (img.get("url") or "").strip()
         if not url:
             continue
         try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                resp = await client.get(url)
-            if resp.status_code == 200:
-                token = await bot.upload_media(resp.content, "image.jpg", "image")
-                if token:
-                    import asyncio
-                    await asyncio.sleep(1.0)
-                    await bot.send_message(
-                        max_user_id,
-                        "",
-                        attachments=[{"type": "image", "payload": {"token": token}}],
+            # Извлекаем file_id из URL вида .../api/files/{uuid}/content
+            m = _FILE_ID_RE.search(url)
+            image_bytes: bytes | None = None
+            if m and db is not None:
+                from sqlalchemy import select as _select
+                from app.models.uploaded_file import UploadedFile
+                file_id_val = m.group(1)
+                import uuid as _uuid
+                result = await db.execute(
+                    _select(UploadedFile).where(
+                        UploadedFile.id == _uuid.UUID(file_id_val)
                     )
+                )
+                row = result.scalar_one_or_none()
+                if row and row.storage_key:
+                    image_bytes = load_upload_bytes(row.storage_key)
+
+            if not image_bytes:
+                # Fallback: попытка скачать по URL (только для внешних изображений)
+                import httpx
+                async with httpx.AsyncClient(timeout=30.0) as client:
+                    resp = await client.get(url)
+                if resp.status_code == 200:
+                    image_bytes = resp.content
+
+            if not image_bytes:
+                continue
+
+            token = await bot.upload_media(image_bytes, "image.jpg", "image")
+            if token:
+                await asyncio.sleep(1.0)
+                await bot.send_message(
+                    max_user_id,
+                    "",
+                    attachments=[{"type": "image", "payload": {"token": token}}],
+                )
         except Exception as exc:
             logger.warning("assistant_bot: image send failed: %s", exc)
 
@@ -441,7 +477,7 @@ async def handle_assistant_dm(
         # Fallback: новое сообщение с ответом и клавиатурой
         await bot.send_message(max_user_id, answer_truncated, attachments=[keyboard])
         if images:
-            await _send_images_to_bot(bot, max_user_id, images, settings)
+            await _send_images_to_bot(bot, max_user_id, images, settings, db=db)
 
     except Exception as exc:
         logger.exception("assistant_bot: handle error: %s", exc)
