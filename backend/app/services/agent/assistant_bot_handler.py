@@ -500,12 +500,18 @@ async def handle_assistant_dm(
             image_attachments = await _upload_images_to_max(bot, images, settings, db=db)
 
         # ── Отправляем ответ ──
+        # Заменяем статусное сообщение ответом — оно «исчезает», становясь ответом.
+        # Если edit не сработал — шлём новым сообщением и очищаем статус символом ✅.
         all_attachments = image_attachments + [keyboard]
-        await bot.send_message(max_user_id, answer_truncated, attachments=all_attachments)
-
-        # ── Убираем статусное сообщение (MAX не поддерживает delete) ──
         if status_mid:
-            await bot.edit_message(status_mid, "✅")
+            edited = await bot.edit_message(
+                status_mid, answer_truncated, attachments=all_attachments
+            )
+            if not edited:
+                await bot.send_message(max_user_id, answer_truncated, attachments=all_attachments)
+                await bot.edit_message(status_mid, "✅")
+        else:
+            await bot.send_message(max_user_id, answer_truncated, attachments=all_attachments)
 
     except Exception as exc:
         logger.exception("assistant_bot: handle error: %s", exc)
