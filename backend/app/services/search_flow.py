@@ -300,6 +300,8 @@ class SearchFlowService:
             llm_provider_id = _override_llm_id
             search = create_search_provider("yandex_search", _settings)
             search_provider_id = "yandex_search"
+            # fact_pipeline создан до переопределения search — пересоздаём
+            fact_pipeline = FactPipeline(search, llm_lite)
             _force_yandex_override = True
             logger.info(
                 "force_yandex: switched from Perplexity to llm=%s search=yandex query=%r",
