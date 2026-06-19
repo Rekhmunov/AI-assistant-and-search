@@ -71,9 +71,13 @@ _ROUTER_SYSTEM = """Ты маршрутизатор запросов в Glosix (
 - «напиши оферту», «создай договор», «сделай заявление».
 
 Экспорт → export_chat_document, needs_search=false:
-- «сгенерируй текст выше в документ», «оформи ответ выше».
+- «сгенерируй текст выше в документ», «оформи ответ выше», «экспортируй ответ».
+- Только если в контексте треда есть предыдущий ответ для экспорта.
 
-- При сомнении между code/config и фактическим вопросом — выбирай chat, needs_search=false.
+Вложения → search_rag, needs_search=true:
+- Если в запросе есть [К сообщению прикреплены файлы/фото] — всегда search_rag.
+
+- При сомнении между code/config и фактом — chat, needs_search=false.
 - Если flow=search_rag — needs_search ВСЕГДА true.
 """
 
@@ -120,39 +124,10 @@ def _normalize_flow(
     *,
     has_thread_history: bool,
 ) -> LlmFlowDecision:
-    q = normalize_user_query(query)
-
-    if wants_document_generation(q) and not refers_to_prior_answer(q):
-        needs_search = decision.needs_search
-        if decision.flow == "export_chat_document":
-            needs_search = True
-        return LlmFlowDecision(
-            flow="chat",
-            needs_search=needs_search,
-            answer_model="pro" if user_plan == Plan.PRO else "lite",
-            reason="document_markdown_chat",
-        )
-
-    if refers_to_prior_answer(q) and has_thread_history:
-        return LlmFlowDecision(
-            flow="export_chat_document",
-            needs_search=False,
-            answer_model="lite",
-            reason="export_prior_markdown",
-        )
-
-    if decision.flow == "export_chat_document":
-        return LlmFlowDecision(
-            flow="chat",
-            needs_search=decision.needs_search if decision.needs_search else refers_to_prior_answer(q),
-            answer_model=decision.answer_model,
-            reason="export_misroute_to_chat",
-        )
-
-    # search_rag + needs_search=false логически противоречиво — поиск всегда нужен
+    # Единственная техническая корректировка:
+    # search_rag + needs_search=false логически противоречиво.
     if decision.flow == "search_rag" and not decision.needs_search:
         decision.needs_search = True
-
     return decision
 
 
@@ -165,20 +140,12 @@ async def resolve_service_flow(
     user_plan: Plan,
 ) -> LlmFlowDecision:
     """LLM выбирает поток; при ошибке — безопасный search_rag."""
-    if has_attachments:
-        return LlmFlowDecision(
-            flow="search_rag",
-            needs_search=True,
-            answer_model="pro" if user_plan == Plan.PRO else "lite",
-            reason="attachments",
-        )
-
     q = normalize_user_query(query)
 
-    # Правило по умолчанию: конкретные вопросы о фактах/мире → search_rag + needs_search true.
-    # Только явные задачи типа «напиши договор», «составь план» → chat.
     history = format_history_compact(ctx.history, max_turns=3, max_chars=400)
     user_block = f"Запрос пользователя:\n{q}"
+    if has_attachments:
+        user_block += "\n[К сообщению прикреплены файлы/фото]"
     if history:
         user_block += f"\n\nКонтекст треда:\n{history}"
     if ctx.is_continuation:
