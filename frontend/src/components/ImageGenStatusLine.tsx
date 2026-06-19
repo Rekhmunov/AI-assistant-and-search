@@ -1,5 +1,4 @@
-import { useMemo } from "react";
-import { useRotatingTypewriterStatus } from "../hooks/useRotatingTypewriterStatus";
+import { useEffect, useRef, useState, useMemo } from "react";
 import { t } from "../i18n";
 
 type Props = {
@@ -7,6 +6,8 @@ type Props = {
   /** Статус из SSE (GigaChat text2image). */
   status?: string;
 };
+
+const HOLD_MS = 4000;
 
 export function ImageGenStatusLine({ active, status }: Props) {
   const messages = useMemo(() => {
@@ -23,22 +24,39 @@ export function ImageGenStatusLine({ active, status }: Props) {
     return [fromServer, ...base];
   }, [status]);
 
-  const { text, isTyping, label } = useRotatingTypewriterStatus(messages, active, {
-    holdMs: 4400,
-    stopAtLast: true,
-  });
+  const [index, setIndex] = useState(0);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (!active) {
+      setIndex(0);
+      return;
+    }
+    // Показываем первый статус немедленно, потом меняем каждые HOLD_MS
+    const schedule = () => {
+      timer.current = setTimeout(() => {
+        setIndex((i) => {
+          const next = i + 1;
+          if (next >= messages.length) return i; // stopAtLast
+          schedule();
+          return next;
+        });
+      }, HOLD_MS);
+    };
+    schedule();
+    return () => {
+      if (timer.current) clearTimeout(timer.current);
+    };
+  }, [active, messages.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!active) return null;
 
+  const text = messages[Math.min(index, messages.length - 1)] ?? "";
+
   return (
-    <div className="search-status" role="status" aria-live="polite" aria-label={label}>
+    <div className="search-status" role="status" aria-live="polite" aria-label={text}>
       <span className="search-status-dot" />
-      <span
-        className={`search-status-text${isTyping ? " search-status-text--typing" : ""}`}
-        aria-hidden={isTyping}
-      >
-        {text}
-      </span>
+      <span className="search-status-text">{text}</span>
     </div>
   );
 }
