@@ -735,12 +735,17 @@ export function Thread() {
             const current = prev[idx];
             const next = [...prev];
             if (answerResetPendingRef.current > 0) {
-              // Декрементируем — один reset потребляется одним токеном.
-              // Так два последовательных reset+token корректно заменяют оба раза.
               answerResetPendingRef.current -= 1;
               next[idx] = { ...current, answer: chunk };
             } else {
-              next[idx] = { ...current, answer: current.answer + chunk };
+              const newAnswer = current.answer + chunk;
+              // DEBUG: поймать дублирование
+              if (newAnswer.length > chunk.length * 2 && newAnswer.includes(chunk + chunk.slice(0, 5))) {
+                console.warn("[TOKEN_DEBUG] Possible duplication detected", {
+                  chunkLen: chunk.length, answerLen: current.answer.length, resetPending: answerResetPendingRef.current,
+                });
+              }
+              next[idx] = { ...current, answer: newAnswer };
             }
             return next;
           });
