@@ -40,7 +40,9 @@ def _parse_cmd(low: str) -> str | None:
     word = raw.split()[0] if raw.split() else ""
     return word if word in _ASSISTANT_CMDS else None
 
-_STATUS_ROUTING = "⏳ Обрабатываю запрос…"
+_STATUS_ROUTING = "⏳ Обрабатываем запрос…"
+_STATUS_SEARCH  = "🔍 Ищем в интернете…"
+_STATUS_ANSWER  = "✍️ Формируем ответ…"
 
 
 async def _find_active_assistant(
@@ -103,10 +105,12 @@ async def _collect_search_result(
     query: str,
     thread_id: uuid.UUID,
     attachment_file_ids: list[uuid.UUID] | None = None,
+    on_status=None,  # async callable(str) для обновления статуса в боте
 ) -> tuple[str, list[dict], list[str]]:
     """
     Запускает SearchFlowService и собирает ответ + изображения + follow-up вопросы.
     Возвращает (answer_text, images_list, follow_ups_list).
+    on_status — async callback(text) для обновления статусного сообщения в боте.
     """
     from app.services.search_flow import SearchFlowService
     from app.core.limiter import RateLimiter
@@ -119,6 +123,14 @@ async def _collect_search_result(
     images: list[dict] = []
     follow_ups: list[str] = []
     error_msg: str | None = None
+    _answer_started = False
+
+    async def _update_status(text: str) -> None:
+        if on_status:
+            try:
+                await on_status(text)
+            except Exception:
+                pass
 
     flow = SearchFlowService()
     try:
@@ -133,9 +145,18 @@ async def _collect_search_result(
             client_ip=None,
         ):
             event_type, data = _parse_sse(raw_event)
-            if event_type == "token":
+            if event_type == "route":
+                # Обновляем статус в зависимости от того, нужен ли поиск
+                if data.get("needs_search"):
+                    await _update_status(_STATUS_SEARCH)
+                else:
+                    await _update_status(_STATUS_ANSWER)
+            elif event_type == "token":
                 text = data.get("text") or ""
                 if text:
+                    if not _answer_started:
+                        _answer_started = True
+                        await _update_status(_STATUS_ANSWER)
                     answer_parts.append(text)
             elif event_type == "reset_answer":
                 # search_flow сбрасывает ответ (markdown wrap / template evasion)
@@ -445,9 +466,14 @@ async def handle_assistant_dm(
             thread.title = " ".join(words[:8])[:120] or query[:120]
             await db.flush()
 
-        # ── Запуск поиска ──
+        # ── Запуск поиска с обновлением статусов ──
+        async def _on_status(text: str) -> None:
+            if status_mid:
+                await bot.edit_message(status_mid, text)
+
         answer, images, follow_ups = await _collect_search_result(
-            db, user, redis_client, query, thread.id
+            db, user, redis_client, query, thread.id,
+            on_status=_on_status,
         )
 
         # ── Обновляем TTL сессии в Redis ──
