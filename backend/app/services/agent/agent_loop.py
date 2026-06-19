@@ -134,9 +134,31 @@ async def run_onboarding_loop(
     classification_plan: str | None = None
 
     if template_prompt:
-        # Шаблонный агент — используем специализированный промпт без классификатора
-        specialized_prompt = template_prompt
-        logger.info("Agent using template=%s prompt", template)
+        # Шаблонный агент — используем специализированный промпт без классификатора.
+        # Для АКТИВНОГО секретаря используем runtime-промт (запись расходов),
+        # для настройки (DRAFT/COLLECTING) — setup-промт (сбор категорий + группы).
+        from app.models.agent import AgentStatus as _AgentStatus
+        if template == "secretary" and agent.status == _AgentStatus.ACTIVE.value:
+            from app.services.agent.templates.secretary import SECRETARY_RUNTIME_PROMPT
+            from datetime import datetime, timezone as _tz
+            _cfg = dict(agent.config or {})
+            _tz_name = str(_cfg.get("timezone") or "Europe/Moscow")
+            try:
+                import zoneinfo as _zi
+                _now = datetime.now(_zi.ZoneInfo(_tz_name))
+            except Exception:
+                _now = datetime.now(_tz.utc)
+            _date = _now.strftime("%d.%m.%Y (%A)")
+            _instructions = str(_cfg.get("support_instructions") or "")
+            specialized_prompt = (
+                SECRETARY_RUNTIME_PROMPT
+                .replace("{support_instructions}", _instructions or "(список категорий не задан)")
+                .replace("{current_date}", _date)
+            )
+            logger.info("Agent using template=%s RUNTIME prompt (agent is active)", template)
+        else:
+            specialized_prompt = template_prompt
+            logger.info("Agent using template=%s prompt", template)
     elif last_user and not diagnostic_mode:
         # Нет шаблона — классифицируем задачу
         await emit_status(on_status, "Определяю задачу…")
