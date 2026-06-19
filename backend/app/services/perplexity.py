@@ -135,8 +135,10 @@ class PerplexityProvider(PromptedLLMMixin, LLMProvider):
         choices = event.get("choices") or []
         if choices:
             delta = choices[0].get("delta") or {}
-            msg = choices[0].get("message") or {}
-            chunk = delta.get("content") or msg.get("content")
+            # Используем только delta.content — не msg.content.
+            # msg.content в streaming-чанках содержит весь накопленный текст,
+            # что приводит к дублированию ответа.
+            chunk = delta.get("content")
             if chunk:
                 text = str(chunk)
 
@@ -217,6 +219,7 @@ class PerplexityProvider(PromptedLLMMixin, LLMProvider):
                             f"Perplexity недоступен (HTTP {response.status_code}): {body}",
                             response.status_code,
                         )
+                    _search_accumulated = ""
                     async for line in response.aiter_lines():
                         if not line.startswith("data:"):
                             continue
@@ -244,6 +247,9 @@ class PerplexityProvider(PromptedLLMMixin, LLMProvider):
                             yield PerplexitySearchEvent(sources=sources, model=model_id)
 
                         if text:
+                            if text == _search_accumulated:
+                                continue
+                            _search_accumulated += text
                             yield PerplexitySearchEvent(text=text, model=model_id)
 
         except httpx.HTTPError as e:
@@ -331,6 +337,7 @@ class PerplexityProvider(PromptedLLMMixin, LLMProvider):
                             f"Perplexity direct HTTP {response.status_code}: {body}",
                             response.status_code,
                         )
+                    _accumulated = ""
                     async for line in response.aiter_lines():
                         if not line.startswith("data:"):
                             continue
@@ -343,6 +350,11 @@ class PerplexityProvider(PromptedLLMMixin, LLMProvider):
                             continue
                         text, _, _ = self._parse_stream_event(event)
                         if text:
+                            if text == _accumulated:
+                                # Perplexity дублирует весь ответ в финальном чанке
+                                # (message.content = весь накопленный текст).
+                                continue
+                            _accumulated += text
                             yield text
         except httpx.HTTPError as e:
             raise YandexServiceError("perplexity", "Perplexity недоступен (сеть)") from e

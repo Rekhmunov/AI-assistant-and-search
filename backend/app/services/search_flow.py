@@ -1054,20 +1054,12 @@ class SearchFlowService:
                                 yield sse_event("reset_answer", {})
                                 yield sse_event("token", {"text": regen_answer})
                 elif not _is_claude_search:
-                    _chunk_count = 0
-                    logger.warning("SSE_DIRECT llm_type=%s query=%r", type(llm).__name__, user_text[:30])
                     async for chunk in llm.stream_answer_direct(
                         llm_query,
                         llm_history,
                         model=route.answer_model,
                         prior_sources_block=prior_sources_block,
                     ):
-                        _chunk_count += 1
-                        logger.warning(
-                            "SSE_CHUNK #%d len=%d total_len=%d query=%r chunk=%r",
-                            _chunk_count, len(chunk), len(full_answer) + len(chunk),
-                            user_text[:30], chunk[:50],
-                        )
                         full_answer += chunk
                         yield sse_event("token", {"text": chunk})
             except YandexServiceError as e:
@@ -1107,10 +1099,6 @@ class SearchFlowService:
 
             wrapped_answer, answer_wrapped = ensure_markdown_document_answer(
                 full_answer, user_text
-            )
-            logger.warning(
-                "SSE_DEBUG answer_wrapped=%s answer_len=%s query=%r",
-                answer_wrapped, len(full_answer), user_text[:60],
             )
             if answer_wrapped:
                 yield sse_event("reset_answer", {})
