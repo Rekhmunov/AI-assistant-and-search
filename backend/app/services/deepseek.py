@@ -306,6 +306,7 @@ class DeepSeekProvider(PromptedLLMMixin, LLMProvider):
                         )
                     yielded = False
                     _accumulated = ""
+                    logger.warning("DEEPSEEK_FIX_V2 streaming started model=%s", model_id)
                     async for line in response.aiter_lines():
                         if not line.startswith("data:"):
                             continue
@@ -323,9 +324,7 @@ class DeepSeekProvider(PromptedLLMMixin, LLMProvider):
                         text = delta.get("content")
                         if text:
                             if text == _accumulated:
-                                # DeepSeek дублирует весь ответ в финальном чанке:
-                                # delta.content = всё что уже было стримлено.
-                                # Пропускаем чтобы не задваивать.
+                                logger.warning("DEEPSEEK_FIX_V2 skipped duplicate chunk len=%d", len(text))
                                 continue
                             _accumulated += text
                             yielded = True
