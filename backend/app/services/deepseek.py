@@ -389,6 +389,7 @@ class DeepSeekProvider(PromptedLLMMixin, LLMProvider):
         model: AnswerModel = "lite",
         prior_sources_block: str = "",
     ) -> AsyncIterator[str]:
+        logger.warning("DEEPSEEK_DIRECT_ENTRY model=%s query=%r configured=%s", model, (query or "")[:30], self.configured)
         if not self.configured:
             async for part in _yield_text_paced("Ответ по контексту (mock DeepSeek)."):
                 yield part

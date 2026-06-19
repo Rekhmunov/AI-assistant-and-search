@@ -1055,7 +1055,7 @@ class SearchFlowService:
                                 yield sse_event("token", {"text": regen_answer})
                 elif not _is_claude_search:
                     _chunk_count = 0
-                    logger.warning("SSE_PROVIDER llm_type=%s query=%r", type(llm).__name__, user_text[:30])
+                    logger.warning("SSE_DIRECT llm_type=%s query=%r", type(llm).__name__, user_text[:30])
                     async for chunk in llm.stream_answer_direct(
                         llm_query,
                         llm_history,
