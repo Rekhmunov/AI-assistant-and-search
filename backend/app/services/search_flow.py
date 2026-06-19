@@ -276,6 +276,31 @@ class SearchFlowService:
             user_plan=user.plan,
         )
 
+        # Perplexity + свежий/новостной запрос → переключаем на Yandex Search + agent LLM.
+        # Активно только когда Pro LLM = Perplexity и Yandex настроен.
+        if (
+            flow.force_yandex
+            and llm_provider_id == PERPLEXITY_PROVIDER_ID
+            and get_settings().yandex_configured
+        ):
+            from app.services.providers.factory import (
+                resolve_agent_llm_provider_id,
+                create_llm_provider,
+                _wrap_llm_fallback,
+            )
+            _settings = get_settings()
+            _override_llm_id = await resolve_agent_llm_provider_id(db, redis_client, _settings)
+            _override_llm = create_llm_provider(_override_llm_id, _settings, _prompt_store)
+            _override_llm = _wrap_llm_fallback(_override_llm_id, _override_llm, _settings, _prompt_store)
+            llm = _override_llm
+            llm_provider_id = _override_llm_id
+            search = create_search_provider("yandex_search", _settings)
+            search_provider_id = "yandex_search"
+            logger.info(
+                "force_yandex: switched from Perplexity to llm=%s search=yandex query=%r",
+                _override_llm_id, user_text_preview[:60],
+            )
+
         if not attachment_ids and flow.flow == "export_chat_document" and thread_id:
             async for event in stream_export_chat_document_turn(
                 db,

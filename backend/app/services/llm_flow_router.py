@@ -33,6 +33,7 @@ class LlmFlowDecision:
     needs_search: bool
     answer_model: Literal["lite", "pro"]
     reason: str
+    force_yandex: bool = False
 
 
 _ROUTER_SYSTEM = """Ты маршрутизатор запросов в Glosix (умный ассистент с веб-поиском и файлами).
@@ -42,8 +43,24 @@ _ROUTER_SYSTEM = """Ты маршрутизатор запросов в Glosix (
   "flow": "search_rag" | "chat" | "image_generate" | "export_chat_document",
   "needs_search": true/false,
   "answer_model": "lite" | "pro",
-  "reason": "кратко по-русски"
+  "reason": "кратко по-русски",
+  "force_yandex": true/false
 }
+
+force_yandex = true когда пользователь ПОДРАЗУМЕВАЕТ актуальную/недавнюю информацию,
+даже без слов «новости», «сегодня», «свежие»:
+- Конкретные происшествия и события: «пожар Садовод», «авария на МКАД», «взрыв в метро» —
+  пользователь хочет знать про недавнее событие, не историческое
+- Текущее состояние: «что с Газпромом», «Навальный сейчас», «ситуация на границе»
+- Действия живых людей и организаций: «что сказал Путин», «Греф объявил», «ЦБ поднял ставку»
+- Запросы о ценах, курсах, погоде, расписании — всё что меняется
+- ЯВНЫЕ слова: новости, сегодня, вчера, сейчас, только что, последние, свежие, актуально
+
+force_yandex = false:
+- Исторические события с указанием года или периода: «пожар 1812», «блокада Ленинграда»
+- Вечные знания: физика, математика, рецепты, объяснения понятий
+- Создание текста, кода, документов
+- Любые запросы где не нужна свежесть данных
 
 Возможности сервиса:
 - search_rag — вопросы о мире, фактах, событиях, людях, продуктах, технологиях, ценах, погоде, новостях. ВСЕГДА needs_search=true.
@@ -109,11 +126,13 @@ def _parse_flow_response(raw: str) -> LlmFlowDecision | None:
     if model not in ("lite", "pro"):
         model = "lite"
     reason = str(data.get("reason") or "llm_router")[:200]
+    force_yandex = bool(data.get("force_yandex", False))
     return LlmFlowDecision(
         flow=flow,  # type: ignore[arg-type]
         needs_search=needs_search,
         answer_model=model,  # type: ignore[arg-type]
         reason=reason,
+        force_yandex=force_yandex,
     )
 
 
