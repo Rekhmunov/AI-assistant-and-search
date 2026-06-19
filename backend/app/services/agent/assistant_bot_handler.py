@@ -503,6 +503,10 @@ async def handle_assistant_dm(
         all_attachments = image_attachments + [keyboard]
         await bot.send_message(max_user_id, answer_truncated, attachments=all_attachments)
 
+        # ── Убираем статусное сообщение (MAX не поддерживает delete) ──
+        if status_mid:
+            await bot.edit_message(status_mid, "✅")
+
     except Exception as exc:
         logger.exception("assistant_bot: handle error: %s", exc)
         await bot.send_message(max_user_id, "❌ Произошла ошибка. Попробуйте ещё раз.")
