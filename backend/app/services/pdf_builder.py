@@ -49,38 +49,45 @@ def build_pdf_bytes(
     pdf.add_font("DejaVu", "", font)
     pdf.add_font("DejaVu", "B", font)
 
+    w = pdf.epw  # эффективная ширина страницы
     pdf.set_font("DejaVu", "B", 16)
-    pdf.multi_cell(0, 9, structure.title)
+    pdf.multi_cell(w, 9, structure.title)
     pdf.ln(4)
 
     for section in structure.sections:
         if section.heading:
             pdf.set_font("DejaVu", "B", 13)
             pdf.ln(3)
-            pdf.multi_cell(0, 7, section.heading)
+            pdf.set_x(pdf.l_margin)
+            pdf.multi_cell(w, 7, section.heading)
             pdf.ln(1)
         pdf.set_font("DejaVu", "", 11)
         for para in section.paragraphs:
-            pdf.multi_cell(0, 6, para)
+            pdf.set_x(pdf.l_margin)
+            pdf.multi_cell(w, 6, para)
             pdf.ln(2)
 
     for table_def in structure.tables:
         if table_def.caption:
             pdf.set_font("DejaVu", "B", 11)
             pdf.ln(2)
-            pdf.multi_cell(0, 6, table_def.caption)
+            pdf.set_x(pdf.l_margin)
+            pdf.multi_cell(w, 6, table_def.caption)
         if table_def.headers:
             pdf.set_font("DejaVu", "B", 10)
-            pdf.multi_cell(0, 6, " | ".join(table_def.headers))
+            pdf.set_x(pdf.l_margin)
+            pdf.multi_cell(w, 6, " | ".join(table_def.headers))
         pdf.set_font("DejaVu", "", 10)
         for row in table_def.rows:
-            pdf.multi_cell(0, 6, " | ".join(row))
-        pdf.ln(2)
+            pdf.set_x(pdf.l_margin)
+            pdf.multi_cell(w, 6, " | ".join(row))
+            pdf.ln(2)
 
     pdf.ln(4)
     pdf.set_font("DejaVu", "", 9)
     pdf.set_text_color(80, 80, 80)
-    pdf.multi_cell(0, 5, LEGAL_DISCLAIMER)
+    pdf.set_x(pdf.l_margin)
+    pdf.multi_cell(w, 5, LEGAL_DISCLAIMER)
     if show_glosix_footer:
         pdf.ln(2)
         pdf.set_font("DejaVu", "", 9)
