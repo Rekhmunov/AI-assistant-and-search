@@ -631,7 +631,12 @@ export function Thread() {
         onThread: (tid) => {
           activeThreadIdRef.current = tid;
           setThreadId(tid);
-          if (!id) navigate(`/thread/${tid}`, { replace: true });
+          if (!id) {
+            // Обновляем URL без перемонтирования компонента.
+            // navigate() переходит между разными роутами (/thread → /thread/:id),
+            // что размонтирует компонент и теряет streaming-состояние.
+            window.history.replaceState(null, "", `/thread/${tid}`);
+          }
         },
         onRoute: (route) => {
           const isDocGen = route.intent === "generate_document";
