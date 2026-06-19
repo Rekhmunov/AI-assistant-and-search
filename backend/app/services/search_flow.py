@@ -298,10 +298,13 @@ class SearchFlowService:
             _override_llm = _wrap_llm_fallback(_override_llm_id, _override_llm, _settings, _prompt_store)
             llm = _override_llm
             llm_provider_id = _override_llm_id
-            search = create_search_provider("yandex_search", _settings)
-            search_provider_id = "yandex_search"
-            # fact_pipeline создан до переопределения search — пересоздаём
-            fact_pipeline = FactPipeline(search, llm_lite)
+            # Меняем только LLM-провайдер; search и fact_pipeline оставляем как есть.
+            # Если search_provider уже Yandex — всё работает.
+            # Если нет — переключаем search и пересоздаём fact_pipeline с ним.
+            if search_provider_id != "yandex_search":
+                search = create_search_provider("yandex_search", _settings)
+                search_provider_id = "yandex_search"
+                fact_pipeline = FactPipeline(search, llm_lite)
             _force_yandex_override = True
             logger.info(
                 "force_yandex: switched from Perplexity to llm=%s search=yandex query=%r",
