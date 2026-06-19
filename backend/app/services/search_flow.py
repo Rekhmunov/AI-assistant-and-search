@@ -278,6 +278,9 @@ class SearchFlowService:
 
         # Perplexity + свежий/новостной запрос → переключаем на Yandex Search + agent LLM.
         # Активно только когда Pro LLM = Perplexity и Yandex настроен.
+        # При ошибке Yandex — автоматически откатываемся на Perplexity (_perplexity_llm_backup).
+        _force_yandex_override = False
+        _perplexity_llm_backup = None  # сохраняем на случай фоллбэка
         if (
             flow.force_yandex
             and llm_provider_id == PERPLEXITY_PROVIDER_ID
@@ -289,6 +292,7 @@ class SearchFlowService:
                 _wrap_llm_fallback,
             )
             _settings = get_settings()
+            _perplexity_llm_backup = llm  # сохраняем Perplexity для фоллбэка
             _override_llm_id = await resolve_agent_llm_provider_id(db, redis_client, _settings)
             _override_llm = create_llm_provider(_override_llm_id, _settings, _prompt_store)
             _override_llm = _wrap_llm_fallback(_override_llm_id, _override_llm, _settings, _prompt_store)
@@ -296,6 +300,7 @@ class SearchFlowService:
             llm_provider_id = _override_llm_id
             search = create_search_provider("yandex_search", _settings)
             search_provider_id = "yandex_search"
+            _force_yandex_override = True
             logger.info(
                 "force_yandex: switched from Perplexity to llm=%s search=yandex query=%r",
                 _override_llm_id, user_text_preview[:60],
@@ -1100,7 +1105,19 @@ class SearchFlowService:
                     message=str(e),
                     status_code=e.status_code,
                 )
-                if e.service in DEGRADABLE_SEARCH_SERVICES and not full_answer.strip():
+                if _force_yandex_override and not full_answer.strip() and _perplexity_llm_backup is not None:
+                    # Yandex упал при force_yandex — откатываемся на Perplexity
+                    logger.warning("force_yandex: Yandex failed, falling back to Perplexity: %s", e)
+                    async for event in _perplexity_llm_backup.stream_search_answer(
+                        llm_query,
+                        llm_history,
+                        model=route.answer_model,
+                        prior_sources_block=prior_sources_block,
+                    ):
+                        if event.text:
+                            full_answer += event.text
+                            yield sse_event("token", {"text": event.text})
+                elif e.service in DEGRADABLE_SEARCH_SERVICES and not full_answer.strip():
                     logger.warning("Search service error, falling back to direct LLM: %s", e)
                     async for chunk in llm.stream_answer_direct(
                         llm_query,
