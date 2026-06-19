@@ -463,18 +463,12 @@ async def handle_assistant_dm(
         rows.append(open_row)
         keyboard = MaxBotService.make_keyboard_attachment(rows)
 
-        # ── Если сохранён message_id «Обрабатываю…» — редактируем его ──
-        # (PUT /messages поддерживает text + attachments)
-        if status_mid:
-            edited = await bot.edit_message(
-                status_mid, answer_truncated, attachments=[keyboard]
-            )
-            if edited:
-                if images:
-                    await _send_images_to_bot(bot, max_user_id, images, settings)
-                return True
-
-        # Fallback: новое сообщение с ответом и клавиатурой
+        # Отправляем ответ.
+        # НЕ используем edit_message как «основной путь с fallback на send_message» —
+        # это создаёт дублирование: edit может частично сработать на стороне MAX,
+        # но вернуть ответ который мы парсим как failure → fallback отправляет второй раз.
+        # Вместо этого: всегда send_message (новое сообщение).
+        # «⏳ Обрабатываю…» остаётся в чате — это приемлемо.
         await bot.send_message(max_user_id, answer_truncated, attachments=[keyboard])
         if images:
             await _send_images_to_bot(bot, max_user_id, images, settings, db=db)
