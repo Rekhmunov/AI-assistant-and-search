@@ -1025,10 +1025,6 @@ class SearchFlowService:
                             full_answer += chunk
                             yield sse_event("token", {"text": chunk})
                         # Template evasion проверяем постфактум — уже отдали токены
-                        logger.warning(
-                            "SSE_DEBUG template_evasion_check answer_len=%s evasion=%s query=%r",
-                            len(full_answer), is_template_evasion(full_answer), user_text[:60],
-                        )
                         if full_answer and is_template_evasion(full_answer):
                             logger.info("Answer template/refusal detected after streaming, regenerating")
                             full_answer = ""
@@ -1099,10 +1095,6 @@ class SearchFlowService:
 
             wrapped_answer, answer_wrapped = ensure_markdown_document_answer(
                 full_answer, user_text
-            )
-            logger.warning(
-                "SSE_DEBUG answer_wrapped=%s answer_len=%s query=%r",
-                answer_wrapped, len(full_answer), user_text[:60],
             )
             if answer_wrapped:
                 yield sse_event("reset_answer", {})

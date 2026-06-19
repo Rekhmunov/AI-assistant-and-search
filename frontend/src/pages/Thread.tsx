@@ -195,10 +195,6 @@ export function Thread() {
   const conversationRef = useRef<HTMLDivElement>(null);
   const answerPanelRef = useRef<HTMLDivElement>(null);
   const imagesPanelRef = useRef<HTMLDivElement>(null);
-  // Счётчик сбросов ответа: декрементируется при каждом обработанном токене.
-  // Boolean-флаг не работал когда два reset_answer приходили в одном React-батче —
-  // второй перезаписывал флаг до того как первый токен заменял ответ.
-  const answerResetPendingRef = useRef(0);
   const imageGenActiveRef = useRef(false);
   const docGenActiveRef = useRef(false);
   const [docGenStatus, setDocGenStatus] = useState<string | undefined>();
@@ -732,26 +728,25 @@ export function Thread() {
           setTurns((prev) => {
             const idx = findLastIndex(prev, (turn) => turn.streaming);
             if (idx < 0) return prev;
-            const current = prev[idx];
             const next = [...prev];
-            if (answerResetPendingRef.current > 0) {
-              answerResetPendingRef.current -= 1;
-              next[idx] = { ...current, answer: chunk };
-            } else {
-              const newAnswer = current.answer + chunk;
-              // DEBUG: поймать дублирование
-              if (newAnswer.length > chunk.length * 2 && newAnswer.includes(chunk + chunk.slice(0, 5))) {
-                console.warn("[TOKEN_DEBUG] Possible duplication detected", {
-                  chunkLen: chunk.length, answerLen: current.answer.length, resetPending: answerResetPendingRef.current,
-                });
-              }
-              next[idx] = { ...current, answer: newAnswer };
-            }
+            next[idx] = { ...prev[idx], answer: prev[idx].answer + chunk };
             return next;
           });
         },
         onResetAnswer: () => {
-          answerResetPendingRef.current += 1;
+          // Сброс ответа через setTurns гарантирует правильный порядок:
+          // React применяет updater-функции последовательно, поэтому
+          // очистка answer="" произойдёт строго перед следующим onToken(fullText).
+          // Ref-счётчик (answerResetPendingRef) не работал: счётчик инкрементировался
+          // синхронно, а batched setTurns-функции из предыдущих onToken читали его
+          // значение уже изменённым — первый токен потреблял reset вместо последнего.
+          setTurns((prev) => {
+            const idx = findLastIndex(prev, (turn) => turn.streaming);
+            if (idx < 0) return prev;
+            const next = [...prev];
+            next[idx] = { ...prev[idx], answer: "" };
+            return next;
+          });
         },
         onFollowUps: (questions) => {
           setTurns((prev) =>
@@ -766,7 +761,6 @@ export function Thread() {
           setImageGenStatus(undefined);
           setStreaming(false);
           setSearchPhase("idle");
-          answerResetPendingRef.current = 0;
           const messageId = done?.message_id;
           const validMessageId =
             messageId && /^[0-9a-f-]{36}$/i.test(messageId) ? messageId : undefined;
