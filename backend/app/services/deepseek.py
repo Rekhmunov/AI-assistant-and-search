@@ -305,6 +305,7 @@ class DeepSeekProvider(PromptedLLMMixin, LLMProvider):
                             response.status_code,
                         )
                     yielded = False
+                    _accumulated = ""
                     async for line in response.aiter_lines():
                         if not line.startswith("data:"):
                             continue
@@ -318,13 +319,15 @@ class DeepSeekProvider(PromptedLLMMixin, LLMProvider):
                         choices = event.get("choices") or []
                         if not choices:
                             continue
-                        finish_reason = choices[0].get("finish_reason")
                         delta = choices[0].get("delta") or {}
                         text = delta.get("content")
-                        if text and not finish_reason:
-                            # Пропускаем финальный чанк с finish_reason:
-                            # DeepSeek нестандартно дублирует весь накопленный
-                            # ответ в последнем чанке вместе с finish_reason="stop".
+                        if text:
+                            if text == _accumulated:
+                                # DeepSeek дублирует весь ответ в финальном чанке:
+                                # delta.content = всё что уже было стримлено.
+                                # Пропускаем чтобы не задваивать.
+                                continue
+                            _accumulated += text
                             yielded = True
                             yield str(text)
                     if not yielded:
