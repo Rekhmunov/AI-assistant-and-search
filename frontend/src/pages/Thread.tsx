@@ -195,7 +195,10 @@ export function Thread() {
   const conversationRef = useRef<HTMLDivElement>(null);
   const answerPanelRef = useRef<HTMLDivElement>(null);
   const imagesPanelRef = useRef<HTMLDivElement>(null);
-  const answerResetPendingRef = useRef(false);
+  // Счётчик сбросов ответа: декрементируется при каждом обработанном токене.
+  // Boolean-флаг не работал когда два reset_answer приходили в одном React-батче —
+  // второй перезаписывал флаг до того как первый токен заменял ответ.
+  const answerResetPendingRef = useRef(0);
   const imageGenActiveRef = useRef(false);
   const docGenActiveRef = useRef(false);
   const [docGenStatus, setDocGenStatus] = useState<string | undefined>();
@@ -731,8 +734,10 @@ export function Thread() {
             if (idx < 0) return prev;
             const current = prev[idx];
             const next = [...prev];
-            if (answerResetPendingRef.current) {
-              answerResetPendingRef.current = false;
+            if (answerResetPendingRef.current > 0) {
+              // Декрементируем — один reset потребляется одним токеном.
+              // Так два последовательных reset+token корректно заменяют оба раза.
+              answerResetPendingRef.current -= 1;
               next[idx] = { ...current, answer: chunk };
             } else {
               next[idx] = { ...current, answer: current.answer + chunk };
@@ -741,7 +746,7 @@ export function Thread() {
           });
         },
         onResetAnswer: () => {
-          answerResetPendingRef.current = true;
+          answerResetPendingRef.current += 1;
         },
         onFollowUps: (questions) => {
           setTurns((prev) =>
@@ -756,7 +761,7 @@ export function Thread() {
           setImageGenStatus(undefined);
           setStreaming(false);
           setSearchPhase("idle");
-          answerResetPendingRef.current = false;
+          answerResetPendingRef.current = 0;
           const messageId = done?.message_id;
           const validMessageId =
             messageId && /^[0-9a-f-]{36}$/i.test(messageId) ? messageId : undefined;
