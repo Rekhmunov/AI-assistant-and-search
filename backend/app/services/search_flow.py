@@ -1054,12 +1054,19 @@ class SearchFlowService:
                                 yield sse_event("reset_answer", {})
                                 yield sse_event("token", {"text": regen_answer})
                 elif not _is_claude_search:
+                    _chunk_count = 0
                     async for chunk in llm.stream_answer_direct(
                         llm_query,
                         llm_history,
                         model=route.answer_model,
                         prior_sources_block=prior_sources_block,
                     ):
+                        _chunk_count += 1
+                        logger.warning(
+                            "SSE_CHUNK #%d len=%d total_len=%d query=%r chunk=%r",
+                            _chunk_count, len(chunk), len(full_answer) + len(chunk),
+                            user_text[:30], chunk[:50],
+                        )
                         full_answer += chunk
                         yield sse_event("token", {"text": chunk})
             except YandexServiceError as e:
