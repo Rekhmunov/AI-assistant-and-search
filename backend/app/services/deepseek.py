@@ -318,9 +318,13 @@ class DeepSeekProvider(PromptedLLMMixin, LLMProvider):
                         choices = event.get("choices") or []
                         if not choices:
                             continue
+                        finish_reason = choices[0].get("finish_reason")
                         delta = choices[0].get("delta") or {}
                         text = delta.get("content")
-                        if text:
+                        if text and not finish_reason:
+                            # Пропускаем финальный чанк с finish_reason:
+                            # DeepSeek нестандартно дублирует весь накопленный
+                            # ответ в последнем чанке вместе с finish_reason="stop".
                             yielded = True
                             yield str(text)
                     if not yielded:
