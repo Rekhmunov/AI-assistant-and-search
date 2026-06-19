@@ -212,17 +212,16 @@ def _parse_sse(raw: str) -> tuple[str, dict]:
     return event_type, data
 
 
-async def _send_images_to_bot(
+async def _upload_images_to_max(
     bot: MaxBotService,
-    max_user_id: int,
     images: list[dict],
     settings,
     db=None,
-) -> None:
+) -> list[dict]:
     """
-    Загружает сгенерированные изображения из хранилища и отправляет в MAX.
-    Изображения защищены Bearer-токеном — читаем байты напрямую из хранилища
-    по file_id, минуя HTTP-запрос к API.
+    Загружает сгенерированные изображения из хранилища в MAX и возвращает
+    список attachment-объектов для включения в send_message.
+    Изображения защищены Bearer-токеном — читаем байты напрямую из хранилища.
     """
     import asyncio
     import re
@@ -232,50 +231,55 @@ async def _send_images_to_bot(
         r"/files/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/",
         re.I,
     )
+    result_attachments: list[dict] = []
 
     for img in images[:3]:
         url = (img.get("url") or "").strip()
         if not url:
             continue
         try:
-            # Извлекаем file_id из URL вида .../api/files/{uuid}/content
             m = _FILE_ID_RE.search(url)
             image_bytes: bytes | None = None
             if m and db is not None:
                 from sqlalchemy import select as _select
                 from app.models.uploaded_file import UploadedFile
-                file_id_val = m.group(1)
                 import uuid as _uuid
-                result = await db.execute(
+                db_result = await db.execute(
                     _select(UploadedFile).where(
-                        UploadedFile.id == _uuid.UUID(file_id_val)
+                        UploadedFile.id == _uuid.UUID(m.group(1))
                     )
                 )
-                row = result.scalar_one_or_none()
+                row = db_result.scalar_one_or_none()
                 if row and row.storage_key:
                     image_bytes = load_upload_bytes(row.storage_key)
+                    logger.info("assistant_bot: loaded image from storage len=%d", len(image_bytes) if image_bytes else 0)
 
             if not image_bytes:
-                # Fallback: попытка скачать по URL (только для внешних изображений)
                 import httpx
                 async with httpx.AsyncClient(timeout=30.0) as client:
                     resp = await client.get(url)
                 if resp.status_code == 200:
                     image_bytes = resp.content
+                    logger.info("assistant_bot: loaded image via http len=%d", len(image_bytes))
+                else:
+                    logger.warning("assistant_bot: http image fetch failed status=%d url=%s", resp.status_code, url[:80])
 
             if not image_bytes:
+                logger.warning("assistant_bot: no image bytes for url=%s", url[:80])
                 continue
 
+            await asyncio.sleep(0.5)
             token = await bot.upload_media(image_bytes, "image.jpg", "image")
+            logger.info("assistant_bot: upload_media token=%s", token[:20] if token else None)
             if token:
                 await asyncio.sleep(1.0)
-                await bot.send_message(
-                    max_user_id,
-                    "",
-                    attachments=[{"type": "image", "payload": {"token": token}}],
-                )
+                result_attachments.append({"type": "image", "payload": {"token": token}})
+            else:
+                logger.warning("assistant_bot: upload_media returned no token for url=%s", url[:80])
         except Exception as exc:
-            logger.warning("assistant_bot: image send failed: %s", exc)
+            logger.warning("assistant_bot: image upload failed: %s", exc)
+
+    return result_attachments
 
 
 async def _cmd_new(
@@ -489,15 +493,15 @@ async def handle_assistant_dm(
         rows.append(open_row)
         keyboard = MaxBotService.make_keyboard_attachment(rows)
 
-        # Отправляем ответ.
-        # НЕ используем edit_message как «основной путь с fallback на send_message» —
-        # это создаёт дублирование: edit может частично сработать на стороне MAX,
-        # но вернуть ответ который мы парсим как failure → fallback отправляет второй раз.
-        # Вместо этого: всегда send_message (новое сообщение).
-        # «⏳ Обрабатываю…» остаётся в чате — это приемлемо.
-        await bot.send_message(max_user_id, answer_truncated, attachments=[keyboard])
+        # ── Загружаем изображения в MAX ДО отправки ответа ──
+        # Это позволяет включить изображение в то же сообщение что и ответ.
+        image_attachments: list[dict] = []
         if images:
-            await _send_images_to_bot(bot, max_user_id, images, settings, db=db)
+            image_attachments = await _upload_images_to_max(bot, images, settings, db=db)
+
+        # ── Отправляем ответ ──
+        all_attachments = image_attachments + [keyboard]
+        await bot.send_message(max_user_id, answer_truncated, attachments=all_attachments)
 
     except Exception as exc:
         logger.exception("assistant_bot: handle error: %s", exc)
