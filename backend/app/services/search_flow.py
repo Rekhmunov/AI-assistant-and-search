@@ -541,6 +541,7 @@ class SearchFlowService:
             llm_query = f"{llm_query}{doc_prompt_addon}"
         if llm_hint:
             llm_query = f"{llm_query}\n\n{llm_hint}"
+            logger.warning("LLMHINT_DEBUG: hint appended to llm_query, total_len=%d hint=%r", len(llm_query), llm_hint[:60])
 
         attachments_payload = None
         if has_attachments and bundle.uploaded_files:
