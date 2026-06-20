@@ -232,6 +232,41 @@ body:has(.page-thread) {
   padding-top: 0;
 }
 
+/* Drag-and-drop overlay */
+.composer-wrap {
+  position: relative;
+}
+
+.composer-wrap--dragover .search-composer,
+.composer-wrap--dragover .composer-outer-row {
+  outline: 2px dashed var(--accent, #4f6ef7);
+  outline-offset: 2px;
+  border-radius: 14px;
+}
+
+.composer-drop-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 14px;
+  background: rgba(79, 110, 247, 0.08);
+  pointer-events: none;
+}
+
+.composer-drop-label {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--accent, #4f6ef7);
+  padding: 8px 18px;
+  background: var(--bg-card, #fff);
+  border-radius: 8px;
+  border: 1.5px dashed var(--accent, #4f6ef7);
+  pointer-events: none;
+}
+
 @media (max-width: 899px) {
   .app-shell:has(.page-home) {
     padding-bottom: 0;

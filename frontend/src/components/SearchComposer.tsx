@@ -112,6 +112,8 @@ export function SearchComposer({
   const [mobileComposerOpen, setMobileComposerOpen] = useState(false);
   const [attachMenuOpen, setAttachMenuOpen] = useState(false);
   const [modelMenuOpen, setModelMenuOpen] = useState(false);
+  const [isDragOver, setIsDragOver] = useState(false);
+  const dragCounterRef = useRef(0);
   const [proUpgradeModalOpen, setProUpgradeModalOpen] = useState(false);
   const [agentProModalOpen, setAgentProModalOpen] = useState(false);
   const blurTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -375,6 +377,51 @@ export function SearchComposer({
     [atLimit, canAttachFiles, clearUploadFailure, onFilesPicked, setUploadFailure],
   );
 
+  const handleDragEnter = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      dragCounterRef.current += 1;
+      if (e.dataTransfer.types.includes("Files")) setIsDragOver(true);
+    },
+    [],
+  );
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = "copy";
+  }, []);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounterRef.current -= 1;
+    if (dragCounterRef.current <= 0) {
+      dragCounterRef.current = 0;
+      setIsDragOver(false);
+    }
+  }, []);
+
+  const handleDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      dragCounterRef.current = 0;
+      setIsDragOver(false);
+      if (disabled) return;
+      const files = e.dataTransfer.files;
+      if (!files?.length) return;
+      if (!canAttachFiles) {
+        setUploadFailure(t("loginForFiles"));
+        return;
+      }
+      clearUploadFailure();
+      void onFilesPicked(files);
+    },
+    [disabled, canAttachFiles, clearUploadFailure, onFilesPicked, setUploadFailure],
+  );
+
   const handleAttachMenuOpenChange = useCallback(
     (open: boolean) => {
       attachMenuOpenRef.current = open;
@@ -578,8 +625,17 @@ export function SearchComposer({
   return (
     <div
       ref={composerWrapRef}
-      className={`composer-wrap${docked ? " composer-wrap--docked" : " composer-wrap--inline"}${isMobileFocusLayout ? " composer-wrap--thread-mobile" : ""}${composerExpanded && isMobileFocusLayout ? " composer-wrap--focused" : ""}`}
+      className={`composer-wrap${docked ? " composer-wrap--docked" : " composer-wrap--inline"}${isMobileFocusLayout ? " composer-wrap--thread-mobile" : ""}${composerExpanded && isMobileFocusLayout ? " composer-wrap--focused" : ""}${isDragOver ? " composer-wrap--dragover" : ""}`}
+      onDragEnter={handleDragEnter}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
     >
+      {isDragOver && (
+        <div className="composer-drop-overlay" aria-hidden>
+          <span className="composer-drop-label">Перетащите файл сюда</span>
+        </div>
+      )}
       {(uploadError || voice.error || agentError) && (
         <div className="composer-error-wrap">
           <p className="composer-error">{agentError || uploadError || voice.error}</p>
