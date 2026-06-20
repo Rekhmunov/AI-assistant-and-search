@@ -88,9 +88,9 @@ class PerplexityProvider(PromptedLLMMixin, LLMProvider):
         return self.settings.perplexity_configured
 
     def _model_name(self, model: AnswerModel) -> str:
-        # Пока оцениваем качество только на sonar; sonar-pro не используем (answer_model игнорируется).
-        _ = model
-        return self.settings.perplexity_model_lite
+        if model == "pro":
+            return self.settings.perplexity_model_pro  # sonar-pro для аналитических запросов
+        return self.settings.perplexity_model_lite  # sonar для простых фактов и новостей
 
     def _chat_url(self) -> str:
         return f"{self.settings.perplexity_base_url.rstrip('/')}/v1/sonar"
