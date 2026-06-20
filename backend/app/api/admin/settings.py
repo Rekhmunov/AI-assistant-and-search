@@ -157,6 +157,20 @@ async def update_settings(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="GIGACHAT_CREDENTIALS не загружен — генерация изображений недоступна.",
                 )
+        if key == "max_upload_mb_free":
+            try:
+                v = int(value)
+                if v < 1 or v > 100:
+                    raise ValueError
+            except (ValueError, TypeError):
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Лимит Free: от 1 до 100 МБ")
+        if key == "max_upload_mb_pro":
+            try:
+                v = int(value)
+                if v < 1 or v > 500:
+                    raise ValueError
+            except (ValueError, TypeError):
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Лимит Pro: от 1 до 500 МБ")
         if key == "yandex_metrica_counter_id":
             val = str(value).strip()
             if val and not val.isdigit():

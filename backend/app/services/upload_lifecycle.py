@@ -57,6 +57,26 @@ async def resolve_generated_image_ttl_hours(
     return max(1, min(raw, 24 * 30))
 
 
+async def resolve_max_upload_mb_free(
+    db: AsyncSession,
+    redis_client: redis.Redis,
+    settings: Settings | None = None,
+) -> int:
+    settings = settings or get_settings()
+    raw = int(await get_setting("max_upload_mb_free", db, redis_client, settings))
+    return max(1, min(raw, 100))
+
+
+async def resolve_max_upload_mb_pro(
+    db: AsyncSession,
+    redis_client: redis.Redis,
+    settings: Settings | None = None,
+) -> int:
+    settings = settings or get_settings()
+    raw = int(await get_setting("max_upload_mb_pro", db, redis_client, settings))
+    return max(1, min(raw, 500))
+
+
 def default_upload_ttl_hours(settings: Settings | None = None) -> int:
     settings = settings or get_settings()
     return max(1, getattr(settings, "upload_ttl_hours", UPLOAD_TTL_HOURS))

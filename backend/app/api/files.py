@@ -18,7 +18,8 @@ from app.api.deps import (
     set_guest_cookie,
 )
 from app.core.limiter import RateLimiter
-from app.constants.attachments import max_upload_bytes, max_upload_mb
+from app.constants.attachments import MAX_UPLOAD_BYTES_FREE, MAX_UPLOAD_BYTES_PRO
+from app.services.upload_lifecycle import resolve_max_upload_mb_free, resolve_max_upload_mb_pro
 from app.models.uploaded_file import UploadedFile
 from app.models.user import Plan, User
 from app.services.file_format import (
@@ -46,25 +47,26 @@ from app.services.upload_storage import load_upload_bytes, mime_for_ext, save_up
 router = APIRouter(prefix="/files", tags=["files"])
 
 
-def _file_too_large_detail(filename: str, size: int, user: User) -> dict[str, Any]:
-    limit = max_upload_bytes(user.plan)
-    limit_mb = max_upload_mb(user.plan)
+def _file_too_large_detail(filename: str, size: int, user: User, *, limit_mb_free: int, limit_mb_pro: int) -> dict[str, Any]:
     file_mb = round(size / (1024 * 1024), 1)
-    pro_mb = max_upload_mb(Plan.PRO)
-    if user.plan == Plan.FREE:
-        message = (
-            f"«{filename}» ({file_mb} МБ) превышает лимит Free ({limit_mb} МБ). "
-            f"Перейдите на Pro — до {pro_mb} МБ на файл."
-        )
-        suggest_pro = True
-    else:
+    if user.plan == Plan.PRO:
+        limit_mb = limit_mb_pro
+        limit_bytes = limit_mb * 1024 * 1024
         message = f"«{filename}» ({file_mb} МБ) превышает лимит ({limit_mb} МБ)."
         suggest_pro = False
+    else:
+        limit_mb = limit_mb_free
+        limit_bytes = limit_mb * 1024 * 1024
+        message = (
+            f"«{filename}» ({file_mb} МБ) превышает лимит Free ({limit_mb} МБ). "
+            f"Перейдите на Pro — до {limit_mb_pro} МБ на файл."
+        )
+        suggest_pro = True
     return {
         "code": "file_too_large",
         "message": message,
         "suggest_pro": suggest_pro,
-        "max_bytes": limit,
+        "max_bytes": limit_bytes,
         "size_bytes": size,
     }
 
@@ -363,10 +365,12 @@ async def upload_file(
         response.headers[GUEST_HEADER] = actor.new_guest_key
 
     user = actor.user
-    max_bytes = max_upload_bytes(user.plan)
     now = datetime.now(timezone.utc)
     redis_client = await get_redis()
     upload_ttl_hours = await resolve_upload_ttl_hours(db, redis_client)
+    limit_mb_free = await resolve_max_upload_mb_free(db, redis_client)
+    limit_mb_pro = await resolve_max_upload_mb_pro(db, redis_client)
+    max_bytes = (limit_mb_pro if user.plan == Plan.PRO else limit_mb_free) * 1024 * 1024
 
     await cleanup_expired_uploads(db, user_id=user.id)
 
@@ -385,7 +389,7 @@ async def upload_file(
     if len(data) > max_bytes:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=_file_too_large_detail(filename, len(data), user),
+            detail=_file_too_large_detail(filename, len(data), user, limit_mb_free=limit_mb_free, limit_mb_pro=limit_mb_pro),
         )
 
     file_id = uuid4()

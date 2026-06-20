@@ -465,6 +465,28 @@ export function SettingsPage() {
                 />
               </label>
               <label>
+                Макс. размер файла Free (МБ)
+                <input
+                  type="number"
+                  min={1}
+                  max={100}
+                  value={String(settings.max_upload_mb_free ?? "")}
+                  onChange={(e) => setSettings({ ...settings, max_upload_mb_free: e.target.value })}
+                  disabled={!can("settings:write")}
+                />
+              </label>
+              <label>
+                Макс. размер файла Pro (МБ)
+                <input
+                  type="number"
+                  min={1}
+                  max={500}
+                  value={String(settings.max_upload_mb_pro ?? "")}
+                  onChange={(e) => setSettings({ ...settings, max_upload_mb_pro: e.target.value })}
+                  disabled={!can("settings:write")}
+                />
+              </label>
+              <label>
                 Хранение вложений поиска (часов)
                 <input
                   type="number"
