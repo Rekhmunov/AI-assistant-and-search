@@ -531,7 +531,7 @@ async def handle_assistant_dm(
         # ── Клавиатура: до 2 follow-up кнопок + «Открыть» ──
         open_row = [{"type": "link", "text": "🔗 Открыть в Glosix",
                      "url": _thread_url(thread.id, settings)}]
-        rows = [[{"type": "message", "text": q[:35], "payload": q}] for q in follow_ups[:2]]
+        rows = [[{"type": "message", "text": q[:40], "payload": q}] for q in follow_ups[:2]]
         rows.append(open_row)
         keyboard = MaxBotService.make_keyboard_attachment(rows)
 

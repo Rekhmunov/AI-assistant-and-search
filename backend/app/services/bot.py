@@ -172,7 +172,10 @@ class MaxBotService:
         if not mid:
             return False
 
+        text, text_format = prepare_max_message(text)
         body: dict = {"text": text}
+        if text_format in {"markdown", "html"}:
+            body["format"] = text_format
         if attachments is not None:
             body["attachments"] = attachments
         elif remove_keyboard:
