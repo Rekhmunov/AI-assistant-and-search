@@ -20,8 +20,7 @@ export function BlogTrySearch() {
         Попробуйте Glosix прямо сейчас
       </h2>
       <p className="blog-try-search-lead">
-        Умный поиск с источниками и готовым ответом. Введите вопрос — откроется чат. Без регистрации
-        можно искать как гость.
+        Умный поиск с источниками и готовым ответом. Без регистрации.
       </p>
       <form className="blog-try-search-form" onSubmit={submit}>
         <label className="blog-try-search-field">
