@@ -63,8 +63,11 @@ async def resolve_max_upload_mb_free(
     settings: Settings | None = None,
 ) -> int:
     settings = settings or get_settings()
-    raw = int(await get_setting("max_upload_mb_free", db, redis_client, settings))
-    return max(1, min(raw, 100))
+    try:
+        raw = int(await get_setting("max_upload_mb_free", db, redis_client, settings))
+        return max(1, min(raw, 100))
+    except (TypeError, ValueError):
+        return 8
 
 
 async def resolve_max_upload_mb_pro(
@@ -73,8 +76,11 @@ async def resolve_max_upload_mb_pro(
     settings: Settings | None = None,
 ) -> int:
     settings = settings or get_settings()
-    raw = int(await get_setting("max_upload_mb_pro", db, redis_client, settings))
-    return max(1, min(raw, 500))
+    try:
+        raw = int(await get_setting("max_upload_mb_pro", db, redis_client, settings))
+        return max(1, min(raw, 500))
+    except (TypeError, ValueError):
+        return 15
 
 
 def default_upload_ttl_hours(settings: Settings | None = None) -> int:

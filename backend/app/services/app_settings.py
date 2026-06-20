@@ -76,8 +76,6 @@ ENV_DEFAULTS: dict[str, str] = {
     "generated_doc_ttl_hours": "generated_doc_ttl_hours",
     "upload_ttl_hours": "upload_ttl_hours",
     "generated_image_ttl_hours": "generated_image_ttl_hours",
-    "max_upload_mb_free": "8",
-    "max_upload_mb_pro": "15",
     "pro_price_rub": "pro_price_rub",
     "global_yandex_requests_per_day": "global_yandex_requests_per_day",
     "maintenance_mode": "false",
@@ -138,6 +136,10 @@ def default_for_key(key: str, settings: Settings | None = None) -> Any:
     env_attr = ENV_DEFAULTS.get(key)
     if env_attr and hasattr(settings, env_attr):
         return getattr(settings, env_attr)
+    if key == "max_upload_mb_free":
+        return 8
+    if key == "max_upload_mb_pro":
+        return 15
     if key == "maintenance_mode":
         return False
     if key == "pro_purchase_disabled":
