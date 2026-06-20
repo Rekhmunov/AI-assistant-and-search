@@ -74,7 +74,7 @@ _LEGAL_ATTRS = {
     "a": ["href", "title", "target", "rel"],
 }
 
-_ALLOWED_PROTOCOLS = ("http", "https", "mailto")
+_ALLOWED_PROTOCOLS = ("http", "https", "mailto", "")  # "" = relative URLs (/api/blog/media/...)
 
 
 def _clean(html: str, *, tags: frozenset[str], attrs: dict, empty_default: str) -> str:

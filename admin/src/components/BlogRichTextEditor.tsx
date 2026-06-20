@@ -44,7 +44,11 @@ export const BlogRichTextEditor = forwardRef<BlogRichTextEditorHandle, Props>(fu
         "/api/admin/blog/media?purpose=inline",
         form,
       );
-      const src = media.url.startsWith("http") ? media.url : `${API}${media.url}`;
+      // Всегда формируем абсолютный URL, чтобы bleach на бэкенде не удалил src
+      // из-за отсутствия схемы у относительного пути /api/blog/media/...
+      const src = media.url.startsWith("http")
+        ? media.url
+        : `${API || window.location.origin}${media.url}`;
       const alt = (media.alt_text || "").replace(/"/g, "&quot;");
       const imgHtml = `<p><img src="${src}" alt="${alt}" loading="lazy" style="max-width:100%;height:auto;border-radius:8px;display:block;margin-left:auto;margin-right:auto;" /></p>`;
       if (!insertImageHtml(imgHtml)) {
