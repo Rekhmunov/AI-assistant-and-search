@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import uuid
 from typing import Any
 
@@ -91,10 +92,48 @@ def _open_button(thread_id: uuid.UUID, settings) -> dict:
     }]])
 
 
+_HEADER_RE = re.compile(r"^#{1,6}\s+(.+)$", re.MULTILINE)
+_CODE_BLOCK_RE = re.compile(r"```[^\n]*\n?", re.MULTILINE)
+_CITATION_RE = re.compile(r"\[\d+\]")
+_MULTI_NL_RE = re.compile(r"\n{3,}")
+
+
+def _format_for_max_chat(text: str) -> str:
+    """
+    Адаптирует LLM-ответ для красивого отображения в MAX-чате.
+    Применяется ТОЛЬКО к ответам бота-ассистента, не к веб-приложению.
+
+    - ## Заголовки → **Заголовки** (жирный без увеличения шрифта)
+    - ``` блоки кода ``` → убираются (не рендерятся в мессенджере)
+    - [1], [2] цитаты → убираются (нет списка источников в боте)
+    - Лишние переносы строк нормализуются
+    """
+    text = _HEADER_RE.sub(r"**\1**", text)
+    text = _CODE_BLOCK_RE.sub("", text)
+    text = _CITATION_RE.sub("", text)
+    text = _MULTI_NL_RE.sub("\n\n", text)
+    return text.strip()
+
+
 def _truncate(text: str, max_len: int = _MAX_TEXT_LEN) -> str:
+    """Умная обрезка: ищет конец абзаца или предложения, не режет посередине."""
     if len(text) <= max_len:
         return text
-    return text[:max_len - 3].rstrip() + "…"
+    chunk = text[:max_len]
+    # Ищем конец абзаца (\n\n) в последних 30% диапазона
+    idx = chunk.rfind("\n\n")
+    if idx > int(max_len * 0.7):
+        return chunk[:idx].rstrip() + "\n\n…"
+    # Ищем конец предложения
+    for sep in (". ", ".\n", "! ", "! \n", "? ", "? \n"):
+        idx = chunk.rfind(sep)
+        if idx > int(max_len * 0.7):
+            return chunk[: idx + 1].rstrip() + " …"
+    # Ищем конец слова
+    idx = chunk.rfind(" ")
+    if idx > int(max_len * 0.8):
+        return chunk[:idx].rstrip() + "…"
+    return chunk + "…"
 
 
 
@@ -485,11 +524,14 @@ async def handle_assistant_dm(
             redis_client, user_id=user.id, agent_id=agent.id, thread_id=thread.id
         )
 
-        # ── Клавиатура: follow-up кнопки сверху, «Открыть» снизу ──
-        answer_truncated = _truncate(answer)
+        # ── Форматируем ответ для MAX-чата и обрезаем ──
+        answer_formatted = _format_for_max_chat(answer)
+        answer_truncated = _truncate(answer_formatted)
+
+        # ── Клавиатура: до 2 follow-up кнопок + «Открыть» ──
         open_row = [{"type": "link", "text": "🔗 Открыть в Glosix",
                      "url": _thread_url(thread.id, settings)}]
-        rows = [[{"type": "message", "text": q[:40], "payload": q}] for q in follow_ups]
+        rows = [[{"type": "message", "text": q[:35], "payload": q}] for q in follow_ups[:2]]
         rows.append(open_row)
         keyboard = MaxBotService.make_keyboard_attachment(rows)
 
