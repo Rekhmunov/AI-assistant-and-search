@@ -126,6 +126,14 @@ async def load_message_vision_images(
     images: list[VisionImage] = []
     seen: set[str] = set()
 
+    all_atts = message_attachments(payload)
+    logger.warning("VISION_DEBUG load_message_vision_images: total_attachments=%d", len(all_atts))
+    for att in all_atts:
+        att_type = str(att.get("type") or "").lower()
+        urls = _attachment_urls(att)
+        logger.warning("VISION_DEBUG att: type=%r urls=%s payload_keys=%s",
+                       att_type, urls[:3], list((att.get("payload") or {}).keys()))
+
     for att in message_attachments(payload):
         att_type = str(att.get("type") or "").lower()
         if att_type not in _IMAGE_TYPES:
@@ -135,6 +143,7 @@ async def load_message_vision_images(
                 continue
             seen.add(url)
             data = await bot.download_url(url)
+            logger.warning("VISION_DEBUG download url=%s data_len=%s", url[:80], len(data) if data else None)
             if not data:
                 continue
             ext = "jpg"

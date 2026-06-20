@@ -545,8 +545,11 @@ async def handle_assistant_dm(
 
     try:
         query = (effective_text or "").strip()
-        if _has_images(payload):
+        has_imgs = _has_images(payload)
+        logger.warning("VISION_DEBUG handle_assistant_dm: has_images=%s text=%r", has_imgs, query[:60])
+        if has_imgs:
             vision_text = await _handle_vision(payload, query, bot, max_user_id)
+            logger.warning("VISION_DEBUG _handle_vision returned: %r", (vision_text or "")[:100])
             if vision_text:
                 query = vision_text
 
