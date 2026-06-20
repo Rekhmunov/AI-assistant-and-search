@@ -96,44 +96,92 @@ _HEADER_RE = re.compile(r"^#{1,6}\s+(.+)$", re.MULTILINE)
 _CODE_BLOCK_RE = re.compile(r"```[^\n]*\n?", re.MULTILINE)
 _CITATION_RE = re.compile(r"\[\d+\]")
 _MULTI_NL_RE = re.compile(r"\n{3,}")
+_TABLE_SEP_RE = re.compile(r"^\|[\s\-:|\s]+\|$")
+
+
+def _convert_tables(text: str) -> str:
+    """
+    Конвертирует markdown-таблицы в читаемый формат для MAX-чата.
+    | Параметр | A | B | → **Параметр:** A — val_a / B — val_b
+    """
+    lines = text.split("\n")
+    result: list[str] = []
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        stripped = line.strip()
+        # Определяем таблицу: строка с | ... | и следующая строка — разделитель |---|
+        if (
+            stripped.startswith("|")
+            and stripped.endswith("|")
+            and i + 1 < len(lines)
+            and _TABLE_SEP_RE.match(lines[i + 1].strip())
+        ):
+            headers = [h.strip() for h in stripped[1:-1].split("|")]
+            i += 2  # пропускаем заголовок и разделитель
+            while i < len(lines):
+                row = lines[i].strip()
+                if not (row.startswith("|") and row.endswith("|")):
+                    break
+                cells = [c.strip() for c in row[1:-1].split("|")]
+                param = cells[0] if cells else ""
+                if param and not re.match(r"^[-: ]+$", param):
+                    if len(headers) >= 3 and len(cells) >= 3:
+                        parts = [
+                            f"{headers[j]} — {cells[j]}"
+                            for j in range(1, min(len(headers), len(cells)))
+                            if j < len(cells) and cells[j]
+                        ]
+                        result.append(f"**{param}:** " + " / ".join(parts))
+                    elif len(cells) >= 2 and cells[1]:
+                        result.append(f"**{param}:** {cells[1]}")
+                i += 1
+        else:
+            result.append(line)
+            i += 1
+    return "\n".join(result)
 
 
 def _format_for_max_chat(text: str) -> str:
     """
     Адаптирует LLM-ответ для красивого отображения в MAX-чате.
     Применяется ТОЛЬКО к ответам бота-ассистента, не к веб-приложению.
-
-    - ## Заголовки → **Заголовки** (жирный без увеличения шрифта)
-    - ``` блоки кода ``` → убираются (не рендерятся в мессенджере)
-    - [1], [2] цитаты → убираются (нет списка источников в боте)
-    - Лишние переносы строк нормализуются
     """
     text = _HEADER_RE.sub(r"**\1**", text)
     text = _CODE_BLOCK_RE.sub("", text)
     text = _CITATION_RE.sub("", text)
+    text = _convert_tables(text)
     text = _MULTI_NL_RE.sub("\n\n", text)
     return text.strip()
 
 
-def _truncate(text: str, max_len: int = _MAX_TEXT_LEN) -> str:
-    """Умная обрезка: ищет конец абзаца или предложения, не режет посередине."""
+def _split_for_max(text: str, max_len: int = _MAX_TEXT_LEN) -> list[str]:
+    """
+    Разбивает текст на части по MAX-лимиту.
+    Делит по абзацам → строкам → предложениям, чтобы не резать посередине.
+    """
     if len(text) <= max_len:
-        return text
-    chunk = text[:max_len]
-    # Ищем конец абзаца (\n\n) в последних 30% диапазона
-    idx = chunk.rfind("\n\n")
-    if idx > int(max_len * 0.7):
-        return chunk[:idx].rstrip() + "\n\n…"
-    # Ищем конец предложения
-    for sep in (". ", ".\n", "! ", "! \n", "? ", "? \n"):
-        idx = chunk.rfind(sep)
-        if idx > int(max_len * 0.7):
-            return chunk[: idx + 1].rstrip() + " …"
-    # Ищем конец слова
-    idx = chunk.rfind(" ")
-    if idx > int(max_len * 0.8):
-        return chunk[:idx].rstrip() + "…"
-    return chunk + "…"
+        return [text]
+    parts: list[str] = []
+    while text:
+        if len(text) <= max_len:
+            parts.append(text)
+            break
+        chunk = text[:max_len]
+        # Ищем лучшее место для разрыва
+        cut = -1
+        for sep in ("\n\n", "\n", ". ", "! ", "? "):
+            idx = chunk.rfind(sep)
+            if idx > int(max_len * 0.6):
+                cut = idx + len(sep)
+                break
+        if cut <= 0:
+            cut = chunk.rfind(" ")
+            if cut <= 0:
+                cut = max_len
+        parts.append(text[:cut].rstrip())
+        text = text[cut:].lstrip()
+    return [p for p in parts if p]
 
 
 
@@ -524,11 +572,11 @@ async def handle_assistant_dm(
             redis_client, user_id=user.id, agent_id=agent.id, thread_id=thread.id
         )
 
-        # ── Форматируем ответ для MAX-чата и обрезаем ──
+        # ── Форматируем и разбиваем на части (без обрезки) ──
         answer_formatted = _format_for_max_chat(answer)
-        answer_truncated = _truncate(answer_formatted)
+        parts = _split_for_max(answer_formatted)
 
-        # ── Клавиатура: до 2 follow-up кнопок + «Открыть» ──
+        # ── Клавиатура: до 2 follow-up кнопок + «Открыть» (только в последней части) ──
         open_row = [{"type": "link", "text": "🔗 Открыть в Glosix",
                      "url": _thread_url(thread.id, settings)}]
         rows = [[{"type": "message", "text": q[:40], "payload": q}] for q in follow_ups[:2]]
@@ -536,32 +584,33 @@ async def handle_assistant_dm(
         keyboard = MaxBotService.make_keyboard_attachment(rows)
 
         # ── Загружаем изображения в MAX ДО отправки ответа ──
-        # Это позволяет включить изображение в то же сообщение что и ответ.
         image_attachments: list[dict] = []
         if images:
             image_attachments = await _upload_images_to_max(bot, images, settings, db=db)
 
         # ── Отправляем ответ ──
-        # MAX edit_message поддерживает только inline_keyboard; image-вложения в PUT /messages
-        # молча игнорируются (API возвращает 200 OK, но картинка не появляется).
-        # Поэтому: если есть изображения — всегда send_message + отдельно убираем статус.
-        # Если изображений нет — пробуем edit_message (статус «становится» ответом),
-        # при неудаче — send_message + edit статуса в ✅.
-        all_attachments = image_attachments + [keyboard]
-        if image_attachments:
-            # Картинки не поддерживаются в edit_message → шлём новым сообщением
-            await bot.send_message(max_user_id, answer_truncated, attachments=all_attachments)
+        # Если несколько частей — всегда send_message для каждой, статус убираем в ✅.
+        # Если одна часть — пробуем edit_message (статус становится ответом),
+        #   при картинках — всегда send_message (edit не поддерживает image-вложения).
+        last_attachments = image_attachments + [keyboard]
+
+        if len(parts) > 1 or image_attachments:
+            # Многочастный или с картинкой: статус → ✅, части идут новыми сообщениями
             if status_mid:
                 await bot.edit_message(status_mid, "✅")
+            for part in parts[:-1]:
+                await bot.send_message(max_user_id, part)
+            await bot.send_message(max_user_id, parts[-1], attachments=last_attachments)
         elif status_mid:
+            # Одна часть без картинок: заменяем статус ответом
             edited = await bot.edit_message(
-                status_mid, answer_truncated, attachments=[keyboard]
+                status_mid, parts[0], attachments=[keyboard]
             )
             if not edited:
-                await bot.send_message(max_user_id, answer_truncated, attachments=[keyboard])
+                await bot.send_message(max_user_id, parts[0], attachments=[keyboard])
                 await bot.edit_message(status_mid, "✅")
         else:
-            await bot.send_message(max_user_id, answer_truncated, attachments=[keyboard])
+            await bot.send_message(max_user_id, parts[0], attachments=[keyboard])
 
     except Exception as exc:
         logger.exception("assistant_bot: handle error: %s", exc)
