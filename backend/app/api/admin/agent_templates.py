@@ -23,14 +23,14 @@ router = APIRouter(prefix="/agent-templates", tags=["admin-agent-templates"])
 
 class TemplateVisibilityUpdate(BaseModel):
     mode: str  # "all" | "users"
-    user_ids: list[int] = []
+    user_ids: list[str] = []  # UUID-строки пользователей
 
 
 class TemplateInfo(BaseModel):
     id: str
     title: str
     mode: str
-    user_ids: list[int]
+    user_ids: list[str]  # UUID-строки пользователей
 
 
 @router.get("", response_model=list[TemplateInfo])
@@ -70,7 +70,7 @@ async def update_template_visibility(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="mode: 'all' или 'users'")
 
     updated = await set_template_visibility(
-        db, redis_client, template_id, body.mode, body.user_ids, admin.id
+        db, redis_client, template_id, body.mode, [str(uid) for uid in body.user_ids], admin.id
     )
     await db.commit()
 

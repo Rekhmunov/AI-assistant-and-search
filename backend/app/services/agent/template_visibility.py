@@ -46,7 +46,8 @@ async def get_template_visibility(
             mode = str(cfg.get("mode") or "all")
             if mode not in ("all", "users"):
                 mode = "all"
-            user_ids = [int(x) for x in (cfg.get("user_ids") or []) if str(x).isdigit()]
+            # Поддерживаем как UUID-строки (новый формат), так и int (legacy)
+            user_ids = [str(x) for x in (cfg.get("user_ids") or []) if x]
             result[tid] = {"mode": mode, "user_ids": user_ids}
     return result
 
@@ -56,7 +57,7 @@ async def set_template_visibility(
     redis_client: redis.Redis,
     template_id: str,
     mode: str,
-    user_ids: list[int],
+    user_ids: list[str],
     admin_id,
 ) -> dict[str, dict]:
     """Обновляет настройки видимости одного шаблона."""
@@ -73,10 +74,10 @@ async def set_template_visibility(
 
 
 def is_template_visible_for_user(
-    visibility: dict[str, dict], template_id: str, user_id: int
+    visibility: dict[str, dict], template_id: str, user_id
 ) -> bool:
-    """Проверяет, виден ли шаблон конкретному пользователю."""
+    """Проверяет, виден ли шаблон конкретному пользователю (user_id — UUID или str)."""
     cfg = visibility.get(template_id, {"mode": "all", "user_ids": []})
     if cfg.get("mode") == "all":
         return True
-    return user_id in (cfg.get("user_ids") or [])
+    return str(user_id) in [str(uid) for uid in (cfg.get("user_ids") or [])]
