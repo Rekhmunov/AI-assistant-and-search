@@ -3,6 +3,25 @@
 from __future__ import annotations
 
 import bleach
+from bleach.css_sanitizer import CSSSanitizer
+
+# CSS-свойства, разрешённые в inline-стилях блога
+_ALLOWED_CSS_PROPERTIES = [
+    # Размеры и отображение
+    "width", "min-width", "max-width",
+    "height", "min-height", "max-height",
+    "display", "float", "clear",
+    "vertical-align", "object-fit",
+    # Отступы
+    "margin", "margin-top", "margin-right", "margin-bottom", "margin-left",
+    "padding", "padding-top", "padding-right", "padding-bottom", "padding-left",
+    # Оформление
+    "text-align", "line-height", "font-size", "font-weight",
+    "color", "background-color",
+    "border-radius", "border",
+]
+
+_CSS_SANITIZER = CSSSanitizer(allowed_css_properties=_ALLOWED_CSS_PROPERTIES)
 
 _BLOG_TAGS = frozenset(
     {
@@ -39,9 +58,9 @@ _BLOG_TAGS = frozenset(
 )
 
 _BLOG_ATTRS = {
-    "*": ["class"],
+    "*": ["class", "style"],  # style разрешён везде — CSS фильтрует CSSSanitizer
     "a": ["href", "title", "target", "rel"],
-    "img": ["src", "alt", "title", "width", "height", "loading", "style"],
+    "img": ["src", "alt", "title", "width", "height", "loading"],
     "th": ["colspan", "rowspan"],
     "td": ["colspan", "rowspan"],
 }
@@ -77,7 +96,7 @@ _LEGAL_ATTRS = {
 _ALLOWED_PROTOCOLS = ("http", "https", "mailto", "")  # "" = relative URLs (/api/blog/media/...)
 
 
-def _clean(html: str, *, tags: frozenset[str], attrs: dict, empty_default: str) -> str:
+def _clean(html: str, *, tags: frozenset[str], attrs: dict, empty_default: str, css_sanitizer=None) -> str:
     text = (html or "").strip()
     if not text:
         return empty_default
@@ -87,12 +106,13 @@ def _clean(html: str, *, tags: frozenset[str], attrs: dict, empty_default: str) 
         attributes=attrs,
         protocols=_ALLOWED_PROTOCOLS,
         strip=True,
+        css_sanitizer=css_sanitizer,
     )
     return cleaned.strip() or empty_default
 
 
 def sanitize_rich_html(html: str, *, empty_default: str = "<p></p>") -> str:
-    return _clean(html, tags=_BLOG_TAGS, attrs=_BLOG_ATTRS, empty_default=empty_default)
+    return _clean(html, tags=_BLOG_TAGS, attrs=_BLOG_ATTRS, empty_default=empty_default, css_sanitizer=_CSS_SANITIZER)
 
 
 def sanitize_legal_rich_html(html: str, *, empty_default: str = "<p></p>") -> str:
