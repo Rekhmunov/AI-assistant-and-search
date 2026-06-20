@@ -213,6 +213,8 @@ async def _collect_search_result(
     settings = get_settings()
     limiter = RateLimiter(redis_client, settings)
 
+    logger.warning("LLMHINT_DEBUG _collect_search_result called: query=%r hint=%r", query[:50], bool(llm_hint))
+
     answer_parts: list[str] = []
     images: list[dict] = []
     follow_ups: list[str] = []
