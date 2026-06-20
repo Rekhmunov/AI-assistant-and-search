@@ -51,11 +51,6 @@ export function AgentTemplatesPage() {
   return (
     <div className="page-content">
       <h1>Агенты</h1>
-      <p className="hint-inline" style={{ marginBottom: 20 }}>
-        Управляйте видимостью агентов. «Все» — агент доступен каждому.
-        «Конкретные пользователи» — только выбранным аккаунтам.
-      </p>
-
       {msg && (
         <p className={msg === "Сохранено" ? "success" : "error"} role="alert">
           {msg}
