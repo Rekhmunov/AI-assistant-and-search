@@ -7588,6 +7588,12 @@ a.blog-sidebar-title:hover {
   opacity: 0.4;
 }
 
+.blog-meta-views {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
 /* Обложка */
 .blog-article-cover {
   width: 100%;

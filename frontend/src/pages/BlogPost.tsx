@@ -139,10 +139,14 @@ export function BlogPostPage() {
                 {post.author_name && <span>{post.author_name}</span>}
                 {post.reading_time_min > 0 && <span className="blog-meta-sep">·</span>}
                 {post.reading_time_min > 0 && <span>{post.reading_time_min} мин чтения</span>}
-                {post.view_count > 0 && <span className="blog-meta-sep">·</span>}
-                {post.view_count > 0 && (
-                  <span>👁 {post.view_count.toLocaleString("ru-RU")}</span>
-                )}
+                <span className="blog-meta-sep">·</span>
+                <span className="blog-meta-views">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                    <circle cx="12" cy="12" r="3"/>
+                  </svg>
+                  {post.view_count.toLocaleString("ru-RU")}
+                </span>
               </div>
             </header>
 
