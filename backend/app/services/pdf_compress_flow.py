@@ -43,7 +43,13 @@ _COMPRESSED_TTL_HOURS = 24
 async def _find_pdf_in_thread(
     db: AsyncSession, thread_id: uuid.UUID, user_id: uuid.UUID
 ) -> UploadedFile | None:
-    """Ищет последний PDF-файл пользователя в истории треда."""
+    """
+    Ищет последний PDF пользователя в треде.
+    Стратегия 1: ищем file_id в attachments пользовательских сообщений треда.
+    Стратегия 2: ищем последний PDF в UploadedFile пользователя (fallback).
+    """
+    import json as _json
+
     msgs = await db.execute(
         select(Message)
         .where(
@@ -56,9 +62,8 @@ async def _find_pdf_in_thread(
     for msg in msgs.scalars().all():
         attachments = msg.attachments or []
         if isinstance(attachments, str):
-            import json
             try:
-                attachments = json.loads(attachments)
+                attachments = _json.loads(attachments)
             except Exception:
                 attachments = []
         for att in (attachments if isinstance(attachments, list) else []):
@@ -80,7 +85,21 @@ async def _find_pdf_in_thread(
             uf = result.scalar_one_or_none()
             if uf and (uf.mime_type or "").lower() == "application/pdf":
                 return uf
-    return None
+
+    # Fallback: последний PDF этого пользователя, загруженный не более 24 часов назад
+    from datetime import timedelta, timezone as _tz
+    cutoff = datetime.now(_tz.utc) - timedelta(hours=24)
+    result = await db.execute(
+        select(UploadedFile)
+        .where(
+            UploadedFile.user_id == user_id,
+            UploadedFile.mime_type == "application/pdf",
+            UploadedFile.created_at >= cutoff,
+        )
+        .order_by(UploadedFile.created_at.desc())
+        .limit(1)
+    )
+    return result.scalar_one_or_none()
 
 
 async def stream_pdf_compress_turn(
@@ -130,10 +149,16 @@ async def stream_pdf_compress_turn(
         db.add(thread)
         await db.flush()
 
+    # Сохраняем вложения в user_msg чтобы _find_pdf_in_thread нашёл PDF на шаге 2
+    attachments_payload = None
+    if attachment_ids:
+        attachments_payload = [{"id": str(fid), "kind": "document"} for fid in attachment_ids]
+
     user_msg = Message(
         thread_id=thread.id,
         role=MessageRole.USER,
         content=(query or "").strip() or "Сжать PDF",
+        attachments=attachments_payload,
     )
     db.add(user_msg)
     await db.flush()
@@ -190,6 +215,7 @@ async def stream_pdf_compress_turn(
             thread_id=thread.id,
             role=MessageRole.ASSISTANT,
             content=answer_text,
+            follow_up_questions=follow_ups,  # сохраняем чтобы кнопки не исчезали после sync
         )
         db.add(assistant_msg)
         thread.message_count = (thread.message_count or 0) + 2
