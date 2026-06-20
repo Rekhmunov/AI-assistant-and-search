@@ -22,6 +22,7 @@ ServiceFlow = Literal[
     "chat",
     "image_generate",
     "export_chat_document",
+    "compress_pdf",
 ]
 
 _FLOW_JSON_RE = re.compile(r"\{[\s\S]*\}")
@@ -90,6 +91,7 @@ force_yandex = false:
 - chat — создание нового текста: оферты, договоры, заявления, инструкции, объяснения, планы, код. Также: программирование, настройка ПО/конфигов, отладка кода, архитектура, алгоритмы, IT-задачи. needs_search=false.
 - image_generate — пользователь просит нарисовать/сгенерировать изображение, картинку, логотип.
 - export_chat_document — оформить УЖЕ написанный в переписке текст (ответ выше, текст выше, преобразуй в markdown). Не переписывать содержание.
+- compress_pdf — пользователь просит сжать, уменьшить, оптимизировать PDF-файл. Также: пользователь выбирает уровень сжатия в ответ на вопрос о сжатии PDF (слова: максимальное, оптимальное, минимальное, первый/второй/третий вариант).
 
 ПРАВИЛА МАРШРУТИЗАЦИИ:
 
@@ -142,6 +144,7 @@ def _parse_flow_response(raw: str) -> LlmFlowDecision | None:
         "chat",
         "image_generate",
         "export_chat_document",
+        "compress_pdf",
     ):
         return None
     needs_search = bool(data.get("needs_search"))

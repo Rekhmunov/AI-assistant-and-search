@@ -335,6 +335,20 @@ class SearchFlowService:
                 yield event
             return
 
+        if flow.flow == "compress_pdf":
+            from app.services.pdf_compress_flow import stream_pdf_compress_turn
+            async for event in stream_pdf_compress_turn(
+                db,
+                user,
+                limiter,
+                query,
+                thread_id,
+                redis_client,
+                attachment_ids=attachment_ids,
+            ):
+                yield event
+            return
+
         allowed, used, limit = await limiter.check_search_limit(
             user_id_str, user.plan, user, client_ip=client_ip
         )
