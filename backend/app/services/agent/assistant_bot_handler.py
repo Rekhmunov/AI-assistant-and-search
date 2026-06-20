@@ -87,7 +87,7 @@ def _open_button(thread_id: uuid.UUID, settings) -> dict:
     """Кнопка «Открыть в Glosix» → link (open_app не работает в DM)."""
     return MaxBotService.make_keyboard_attachment([[{
         "type": "link",
-        "text": "🔗 Открыть в Glosix",
+        "text": "🔍 Открыть в Glosix",
         "url": _thread_url(thread_id, settings),
     }]])
 
@@ -581,7 +581,7 @@ async def handle_assistant_dm(
         parts = _split_for_max(answer_formatted)
 
         # ── Клавиатура: до 2 follow-up кнопок + «Открыть» (только в последней части) ──
-        open_row = [{"type": "link", "text": "🔗 Открыть в Glosix",
+        open_row = [{"type": "link", "text": "🔍 Открыть в Glosix",
                      "url": _thread_url(thread.id, settings)}]
         rows = [[{"type": "message", "text": q, "payload": q}] for q in follow_ups[:2]]
         rows.append(open_row)
