@@ -500,18 +500,26 @@ async def handle_assistant_dm(
             image_attachments = await _upload_images_to_max(bot, images, settings, db=db)
 
         # ── Отправляем ответ ──
-        # Заменяем статусное сообщение ответом — оно «исчезает», становясь ответом.
-        # Если edit не сработал — шлём новым сообщением и очищаем статус символом ✅.
+        # MAX edit_message поддерживает только inline_keyboard; image-вложения в PUT /messages
+        # молча игнорируются (API возвращает 200 OK, но картинка не появляется).
+        # Поэтому: если есть изображения — всегда send_message + отдельно убираем статус.
+        # Если изображений нет — пробуем edit_message (статус «становится» ответом),
+        # при неудаче — send_message + edit статуса в ✅.
         all_attachments = image_attachments + [keyboard]
-        if status_mid:
+        if image_attachments:
+            # Картинки не поддерживаются в edit_message → шлём новым сообщением
+            await bot.send_message(max_user_id, answer_truncated, attachments=all_attachments)
+            if status_mid:
+                await bot.edit_message(status_mid, "✅")
+        elif status_mid:
             edited = await bot.edit_message(
-                status_mid, answer_truncated, attachments=all_attachments
+                status_mid, answer_truncated, attachments=[keyboard]
             )
             if not edited:
-                await bot.send_message(max_user_id, answer_truncated, attachments=all_attachments)
+                await bot.send_message(max_user_id, answer_truncated, attachments=[keyboard])
                 await bot.edit_message(status_mid, "✅")
         else:
-            await bot.send_message(max_user_id, answer_truncated, attachments=all_attachments)
+            await bot.send_message(max_user_id, answer_truncated, attachments=[keyboard])
 
     except Exception as exc:
         logger.exception("assistant_bot: handle error: %s", exc)
