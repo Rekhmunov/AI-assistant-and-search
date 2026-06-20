@@ -232,7 +232,6 @@ class SearchFlowService:
         redis_client: redis.Redis | None = None,
         client_ip: str | None = None,
         retry_pending: bool = False,
-        llm_hint: str | None = None,
     ) -> AsyncIterator[str]:
         if redis_client is None:
             from app.api.deps import get_redis
@@ -539,10 +538,6 @@ class SearchFlowService:
             doc_prompt_addon += edit_document_prompt_addon(user_text)
         if doc_prompt_addon:
             llm_query = f"{llm_query}{doc_prompt_addon}"
-        logger.warning("LLMHINT_DEBUG stream_search reached line542: llm_hint=%r", bool(llm_hint))
-        if llm_hint:
-            llm_query = f"{llm_query}\n\n{llm_hint}"
-            logger.warning("LLMHINT_DEBUG: hint appended total_len=%d", len(llm_query))
 
         attachments_payload = None
         if has_attachments and bundle.uploaded_files:

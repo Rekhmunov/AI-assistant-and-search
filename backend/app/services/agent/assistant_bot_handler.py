@@ -199,7 +199,6 @@ async def _collect_search_result(
     thread_id: uuid.UUID,
     attachment_file_ids: list[uuid.UUID] | None = None,
     on_status=None,  # async callable(str) для обновления статуса в боте
-    llm_hint: str | None = None,
 ) -> tuple[str, list[dict], list[str]]:
     """
     Запускает SearchFlowService и собирает ответ + изображения + follow-up вопросы.
@@ -213,7 +212,6 @@ async def _collect_search_result(
     settings = get_settings()
     limiter = RateLimiter(redis_client, settings)
 
-    logger.warning("LLMHINT_DEBUG _collect_search_result called: query=%r hint=%r", query[:50], bool(llm_hint))
 
     answer_parts: list[str] = []
     images: list[dict] = []
@@ -239,7 +237,6 @@ async def _collect_search_result(
             attachment_ids=attachment_file_ids or [],
             redis_client=redis_client,
             client_ip=None,
-            llm_hint=llm_hint,
         ):
             event_type, data = _parse_sse(raw_event)
             if event_type == "route":
@@ -506,9 +503,7 @@ async def handle_assistant_dm(
     """
     bot = bot or MaxBotService()
 
-    logger.warning("LLMHINT_DEBUG handle_assistant_dm called: max_user_id=%s text=%r", max_user_id, (text or "")[:40])
     found = await _find_active_assistant(db, max_user_id=max_user_id)
-    logger.warning("LLMHINT_DEBUG _find_active_assistant result: found=%s", found is not None)
     if not found:
         return False
     agent, user = found
@@ -550,10 +545,8 @@ async def handle_assistant_dm(
     try:
         query = (effective_text or "").strip()
         has_imgs = _has_images(payload)
-        logger.warning("VISION_DEBUG handle_assistant_dm: has_images=%s text=%r", has_imgs, query[:60])
         if has_imgs:
             vision_text = await _handle_vision(payload, query, bot, max_user_id)
-            logger.warning("VISION_DEBUG _handle_vision returned: %r", (vision_text or "")[:100])
             if vision_text:
                 query = vision_text
 
@@ -577,10 +570,10 @@ async def handle_assistant_dm(
             if status_mid:
                 await bot.edit_message(status_mid, text)
 
+        bot_query = query + "\n\n" + _BOT_LLM_HINT
         answer, images, follow_ups = await _collect_search_result(
-            db, user, redis_client, query, thread.id,
+            db, user, redis_client, bot_query, thread.id,
             on_status=_on_status,
-            llm_hint=_BOT_LLM_HINT,
         )
 
         # ── Обновляем TTL сессии в Redis ──
@@ -588,7 +581,7 @@ async def handle_assistant_dm(
             redis_client, user_id=user.id, agent_id=agent.id, thread_id=thread.id
         )
 
-        # ── Форматируем и разбиваем на части (без обрезки) ──
+        # ── Форматируем ──
         answer_formatted = _format_for_max_chat(answer)
         parts = _split_for_max(answer_formatted)
 
