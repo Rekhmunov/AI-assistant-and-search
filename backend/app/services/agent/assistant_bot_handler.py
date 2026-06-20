@@ -506,7 +506,9 @@ async def handle_assistant_dm(
     """
     bot = bot or MaxBotService()
 
+    logger.warning("LLMHINT_DEBUG handle_assistant_dm called: max_user_id=%s text=%r", max_user_id, (text or "")[:40])
     found = await _find_active_assistant(db, max_user_id=max_user_id)
+    logger.warning("LLMHINT_DEBUG _find_active_assistant result: found=%s", found is not None)
     if not found:
         return False
     agent, user = found
