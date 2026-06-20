@@ -646,6 +646,7 @@ export function Thread() {
           const isExportMd = route.intent === "export_chat_document";
           const isImageGen =
             route.intent === "image_generate" || route.reason === "image_generation";
+          console.warn("[IMGGEN] onRoute intent=%s reason=%s isImageGen=%s ts=%d", route.intent, route.reason, isImageGen, Date.now());
           docGenActiveRef.current = isDocGen;
           imageGenActiveRef.current = isImageGen;
           if (isDocGen || isExportMd) {
@@ -694,10 +695,12 @@ export function Thread() {
           );
         },
         onImageGenStart: (status) => {
+          console.warn("[IMGGEN] onImageGenStart received status=%s ts=%d", status, Date.now());
           setSearchPhase("image_generating");
           if (status?.trim()) setImageGenStatus(status.trim());
         },
         onImageGenStatus: (status) => {
+          console.warn("[IMGGEN] onImageGenStatus received status=%s ts=%d", status, Date.now());
           setSearchPhase("image_generating");
           if (status?.trim()) setImageGenStatus(status.trim());
         },

@@ -137,7 +137,9 @@ async def stream_image_generation_turn(
         custom_status=STATUS_MESSAGES[0],
     )
 
+    logger.warning("IMGGEN_FLOW: yielding thread=%s user=%s", thread.id, user.id)
     yield sse_event("thread", {"thread_id": str(thread.id)})
+    logger.warning("IMGGEN_FLOW: yielding route intent=image_generate thread=%s", thread.id)
     yield sse_event(
         "route",
         {
@@ -148,6 +150,7 @@ async def stream_image_generation_turn(
             "policy_version": "v1",
         },
     )
+    logger.warning("IMGGEN_FLOW: yielding image_gen_start status=%r thread=%s", STATUS_MESSAGES[0], thread.id)
     yield sse_event("image_gen_start", {"status": STATUS_MESSAGES[0]})
 
     # Запускаем реальную генерацию в фоновой задаче, чтобы параллельно
@@ -177,6 +180,7 @@ async def stream_image_generation_turn(
                 msg = STATUS_MESSAGES[status_idx]
                 status_idx += 1
                 await update_search_pending(redis_client, thread.id, custom_status=msg)
+                logger.warning("IMGGEN_FLOW: yielding image_gen_status status=%r thread=%s", msg, thread.id)
                 yield sse_event("image_gen_status", {"status": msg})
 
     await gen_task  # гарантируем завершение
@@ -284,6 +288,7 @@ async def stream_image_generation_turn(
             thread.title = display_content[:200]
         await db.commit()
 
+        logger.warning("IMGGEN_FLOW: yielding done thread=%s msg=%s", thread.id, assistant_msg.id)
         yield sse_event(
             "done",
             {
