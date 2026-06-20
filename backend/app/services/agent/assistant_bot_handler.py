@@ -589,28 +589,42 @@ async def handle_assistant_dm(
             image_attachments = await _upload_images_to_max(bot, images, settings, db=db)
 
         # ── Отправляем ответ ──
-        # Если несколько частей — всегда send_message для каждой, статус убираем в ✅.
-        # Если одна часть — пробуем edit_message (статус становится ответом),
-        #   при картинках — всегда send_message (edit не поддерживает image-вложения).
+        # Правило: ✅ не показываем. Статусное сообщение всегда становится первой
+        # (или единственной) частью ответа через edit_message.
+        # Исключение — картинки: edit_message их не поддерживает, там статус меняется
+        # на ✅ (это технически неизбежно).
         last_attachments = image_attachments + [keyboard]
 
-        if len(parts) > 1 or image_attachments:
-            # Многочастный или с картинкой: статус → ✅, части идут новыми сообщениями
+        if image_attachments:
+            # Картинки только через send_message → статус убираем в ✅ (неизбежно)
             if status_mid:
                 await bot.edit_message(status_mid, "✅")
             for part in parts[:-1]:
                 await bot.send_message(max_user_id, part)
             await bot.send_message(max_user_id, parts[-1], attachments=last_attachments)
-        elif status_mid:
-            # Одна часть без картинок: заменяем статус ответом
-            edited = await bot.edit_message(
-                status_mid, parts[0], attachments=[keyboard]
-            )
-            if not edited:
+
+        elif len(parts) == 1:
+            # Одна часть: статус становится ответом
+            if status_mid:
+                edited = await bot.edit_message(status_mid, parts[0], attachments=[keyboard])
+                if not edited:
+                    await bot.send_message(max_user_id, parts[0], attachments=[keyboard])
+            else:
                 await bot.send_message(max_user_id, parts[0], attachments=[keyboard])
-                await bot.edit_message(status_mid, "✅")
+
         else:
-            await bot.send_message(max_user_id, parts[0], attachments=[keyboard])
+            # Несколько частей: статус становится первой частью (без клавиатуры)
+            if status_mid:
+                edited = await bot.edit_message(status_mid, parts[0])
+                if not edited:
+                    await bot.send_message(max_user_id, parts[0])
+            else:
+                await bot.send_message(max_user_id, parts[0])
+            # Средние части
+            for part in parts[1:-1]:
+                await bot.send_message(max_user_id, part)
+            # Последняя часть с клавиатурой
+            await bot.send_message(max_user_id, parts[-1], attachments=[keyboard])
 
     except Exception as exc:
         logger.exception("assistant_bot: handle error: %s", exc)
