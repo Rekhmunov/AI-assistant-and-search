@@ -232,6 +232,7 @@ class SearchFlowService:
         redis_client: redis.Redis | None = None,
         client_ip: str | None = None,
         retry_pending: bool = False,
+        llm_hint: str | None = None,
     ) -> AsyncIterator[str]:
         if redis_client is None:
             from app.api.deps import get_redis
@@ -538,6 +539,8 @@ class SearchFlowService:
             doc_prompt_addon += edit_document_prompt_addon(user_text)
         if doc_prompt_addon:
             llm_query = f"{llm_query}{doc_prompt_addon}"
+        if llm_hint:
+            llm_query = f"{llm_query}\n\n{llm_hint}"
 
         attachments_payload = None
         if has_attachments and bundle.uploaded_files:

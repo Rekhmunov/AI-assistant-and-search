@@ -185,6 +185,12 @@ def _split_for_max(text: str, max_len: int = _MAX_TEXT_LEN) -> list[str]:
 
 
 
+_BOT_LLM_HINT = (
+    "[Ответ не длиннее 3500 знаков включая пробелы и знаки препинания. "
+    "Если ответ короче — оставь как есть.]"
+)
+
+
 async def _collect_search_result(
     db: AsyncSession,
     user: User,
@@ -193,6 +199,7 @@ async def _collect_search_result(
     thread_id: uuid.UUID,
     attachment_file_ids: list[uuid.UUID] | None = None,
     on_status=None,  # async callable(str) для обновления статуса в боте
+    llm_hint: str | None = None,
 ) -> tuple[str, list[dict], list[str]]:
     """
     Запускает SearchFlowService и собирает ответ + изображения + follow-up вопросы.
@@ -230,6 +237,7 @@ async def _collect_search_result(
             attachment_ids=attachment_file_ids or [],
             redis_client=redis_client,
             client_ip=None,
+            llm_hint=llm_hint,
         ):
             event_type, data = _parse_sse(raw_event)
             if event_type == "route":
@@ -546,10 +554,6 @@ async def handle_assistant_dm(
             await bot.send_message(max_user_id, "Пожалуйста, добавьте текст к сообщению.")
             return True
 
-        # ── Добавляем ограничение длины для бот-контекста ──
-        # Только верхний предел: короткие ответы остаются короткими.
-        llm_query = query + "\n\n[Ответ не длиннее 3500 знаков включая пробелы и знаки препинания. Если ответ короче — оставь как есть.]"
-
         # ── Сессионный тред ──
         thread = await get_or_create_session_thread(
             db, redis_client, user=user, agent_id=agent.id
@@ -567,8 +571,9 @@ async def handle_assistant_dm(
                 await bot.edit_message(status_mid, text)
 
         answer, images, follow_ups = await _collect_search_result(
-            db, user, redis_client, llm_query, thread.id,
+            db, user, redis_client, query, thread.id,
             on_status=_on_status,
+            llm_hint=_BOT_LLM_HINT,
         )
 
         # ── Обновляем TTL сессии в Redis ──
