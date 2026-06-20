@@ -185,12 +185,6 @@ def _split_for_max(text: str, max_len: int = _MAX_TEXT_LEN) -> list[str]:
 
 
 
-_BOT_LLM_HINT = (
-    "[Ответ не длиннее 3500 знаков включая пробелы и знаки препинания. "
-    "Если ответ короче — оставь как есть.]"
-)
-
-
 async def _collect_search_result(
     db: AsyncSession,
     user: User,
@@ -211,7 +205,6 @@ async def _collect_search_result(
 
     settings = get_settings()
     limiter = RateLimiter(redis_client, settings)
-
 
     answer_parts: list[str] = []
     images: list[dict] = []
@@ -544,8 +537,7 @@ async def handle_assistant_dm(
 
     try:
         query = (effective_text or "").strip()
-        has_imgs = _has_images(payload)
-        if has_imgs:
+        if _has_images(payload):
             vision_text = await _handle_vision(payload, query, bot, max_user_id)
             if vision_text:
                 query = vision_text
@@ -553,6 +545,10 @@ async def handle_assistant_dm(
         if not query:
             await bot.send_message(max_user_id, "Пожалуйста, добавьте текст к сообщению.")
             return True
+
+        # ── Добавляем ограничение длины для бот-контекста ──
+        # Только верхний предел: короткие ответы остаются короткими.
+        llm_query = query + "\n\n[Ответ не длиннее 3500 знаков включая пробелы и знаки препинания. Если ответ короче — оставь как есть.]"
 
         # ── Сессионный тред ──
         thread = await get_or_create_session_thread(
@@ -570,9 +566,8 @@ async def handle_assistant_dm(
             if status_mid:
                 await bot.edit_message(status_mid, text)
 
-        bot_query = query + "\n\n" + _BOT_LLM_HINT
         answer, images, follow_ups = await _collect_search_result(
-            db, user, redis_client, bot_query, thread.id,
+            db, user, redis_client, llm_query, thread.id,
             on_status=_on_status,
         )
 
@@ -581,7 +576,7 @@ async def handle_assistant_dm(
             redis_client, user_id=user.id, agent_id=agent.id, thread_id=thread.id
         )
 
-        # ── Форматируем ──
+        # ── Форматируем и разбиваем на части (без обрезки) ──
         answer_formatted = _format_for_max_chat(answer)
         parts = _split_for_max(answer_formatted)
 
