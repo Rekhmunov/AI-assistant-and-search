@@ -546,6 +546,15 @@ async def handle_assistant_dm(
             await bot.send_message(max_user_id, "Пожалуйста, добавьте текст к сообщению.")
             return True
 
+        # ── Добавляем ограничение длины для бот-контекста ──
+        # Только верхний предел: короткие ответы остаются короткими.
+        llm_query = (
+            query
+            + "\n\n[Системное: ответ отображается в мессенджере. "
+            "Если ответ получается длинным — сократи до 3500 символов. "
+            "Короткие вопросы — отвечай кратко.]"
+        )
+
         # ── Сессионный тред ──
         thread = await get_or_create_session_thread(
             db, redis_client, user=user, agent_id=agent.id
@@ -563,7 +572,7 @@ async def handle_assistant_dm(
                 await bot.edit_message(status_mid, text)
 
         answer, images, follow_ups = await _collect_search_result(
-            db, user, redis_client, query, thread.id,
+            db, user, redis_client, llm_query, thread.id,
             on_status=_on_status,
         )
 
