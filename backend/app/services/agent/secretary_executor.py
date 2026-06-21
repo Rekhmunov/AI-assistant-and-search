@@ -403,6 +403,7 @@ async def execute_secretary_message(
 
     # ─── 5. Запись данных ─────────────────────────────────────────────────────
     lines = _extract_lines(text)
+    logger.warning("SECRETARY_DEBUG: extracted lines=%s from text=%r", lines, text[:80])
     if not lines:
         return None
 
@@ -454,8 +455,11 @@ async def execute_secretary_message(
         confirm = responses.get("on_success", "✅ Записано в категорию: {category}")
         amt_str = str(int(amount)) if amount == int(amount) else str(amount)
         msg = confirm.format(amount=amt_str, category=entity["name"])
-        # Каждая запись — отдельное сообщение в чат
-        await bot.send_message(None, msg, chat_id=chat_id)
+        # Отправляем подтверждение — ошибка отправки не должна отменять запись
+        try:
+            await bot.send_message(None, msg, chat_id=chat_id)
+        except Exception as send_exc:
+            logger.warning("secretary: failed to send confirmation for %s: %s", entity["name"], send_exc)
         recorded_count += 1
 
     # Если есть записи требующие уточнения — сохраняем очередь и спрашиваем первую
