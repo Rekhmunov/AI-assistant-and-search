@@ -198,7 +198,7 @@ async def stream_pdf_convert_turn(
 
     # ── Параметры конвертации ──
     dpi = detect_dpi(query)
-    dpi_label = {300: "высокое", 72: "низкое"}.get(dpi, "стандартное")
+    dpi_label = {300: "высокое", 72: "низкое"}.get(dpi, "оптимальное")
 
     # ── Лимит ZIP ──
     max_zip_mb = await resolve_max_zip_mb_pro(db, redis_client) if user.plan == Plan.PRO else \
@@ -206,7 +206,7 @@ async def stream_pdf_convert_turn(
     max_zip_bytes = max_zip_mb * 1024 * 1024
 
     # ── Конвертация ──
-    status_text = f"Конвертируем PDF в JPG ({dpi_label} качество)…"
+    status_text = f"Конвертируем PDF в JPG (качество {dpi_label})"
     for chunk in _chunks(status_text, 40):
         yield sse_event("token", {"text": chunk})
 
