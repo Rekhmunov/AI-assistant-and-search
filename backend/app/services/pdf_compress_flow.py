@@ -262,124 +262,125 @@ async def stream_pdf_compress_turn(
             return
 
     # ── ШАГ 2: сжимаем ──
-    # Попадаем сюда если:
-    # а) нет вложений — пользователь ответил уровнем на вопрос
-    # б) вложение есть И уровень уже указан в исходном запросе
     level = detect_compression_level(query)
 
     # pdf_file уже найден если пришёл с вложением; иначе ищем в истории треда
     if not pdf_file:
         pdf_file = await _find_pdf_in_thread(db, thread.id, user.id)
-        if not pdf_file:
-            answer_text = (
-                "Не нашёл PDF-файл в этом диалоге. "
-                "Загрузите PDF-файл и попросите сжать."
-            )
-            assistant_msg = Message(
-                thread_id=thread.id,
-                role=MessageRole.ASSISTANT,
-                content=answer_text,
-            )
-            db.add(assistant_msg)
-            thread.message_count = (thread.message_count or 0) + 2
-            thread.last_message_at = datetime.now(timezone.utc)
-            await db.commit()
-            for chunk in _chunks(answer_text, 30):
-                yield sse_event("token", {"text": chunk})
-            yield sse_event(
-                "done",
-                {"message_id": str(assistant_msg.id), "needs_search": False, "answer_model": "lite"},
-            )
-            return
 
-        original_bytes = load_upload_bytes(pdf_file.storage_key)
-        if not original_bytes:
-            yield sse_event(
-                "error",
-                {"code": "compress_failed", "message": "Не удалось прочитать PDF-файл."},
-            )
-            return
-
-        # Сжимаем
-        status_text = f"Сжимаем PDF ({_LEVEL_LABELS.get(level, level)})…"
-        for chunk in _chunks(status_text, 30):
-            yield sse_event("token", {"text": chunk})
-
-        try:
-            compressed_bytes = compress_pdf_bytes(original_bytes, level)
-        except Exception as exc:
-            logger.warning("pdf compress failed: %s", exc)
-            yield sse_event(
-                "error",
-                {"code": "compress_failed", "message": "Не удалось сжать PDF. Попробуйте позже."},
-            )
-            return
-
-        orig_size = len(original_bytes)
-        comp_size = len(compressed_bytes)
-        reduction = int((1 - comp_size / max(orig_size, 1)) * 100)
-
-        # Сохраняем сжатый файл
-        new_file_id = uuid.uuid4()
-        original_name = pdf_file.filename or "document.pdf"
-        stem = original_name.rsplit(".", 1)[0] if "." in original_name else original_name
-        compressed_name = f"{stem}_compressed.pdf"
-
-        storage_key = save_upload_bytes(user.id, new_file_id, compressed_bytes, "pdf")
-        now = datetime.now(timezone.utc)
-        compressed_file = UploadedFile(
-            id=new_file_id,
-            user_id=user.id,
-            filename=compressed_name,
-            mime_type="application/pdf",
-            size_bytes=comp_size,
-            media_kind="compressed",
-            storage_key=storage_key,
-            extracted_text="",
-            expires_at=now + timedelta(hours=_COMPRESSED_TTL_HOURS),
+    if not pdf_file:
+        answer_text = (
+            "Не нашёл PDF-файл в этом диалоге. "
+            "Загрузите PDF-файл и попросите сжать."
         )
-        db.add(compressed_file)
-        await db.flush()
-
-        download_url = f"{(settings.public_web_url or 'https://glosix.ru').rstrip('/')}/api/files/{new_file_id}/content"
-
-        result_text = (
-            f"\n\n✅ Готово!\n"
-            f"Исходный размер: {format_size(orig_size)}\n"
-            f"После сжатия: {format_size(comp_size)}\n"
-            f"Уменьшение: {reduction}%"
-        )
-        for chunk in _chunks(result_text, 40):
-            yield sse_event("token", {"text": chunk})
-
-        answer_full = status_text + result_text
         assistant_msg = Message(
             thread_id=thread.id,
             role=MessageRole.ASSISTANT,
-            content=answer_full,
+            content=answer_text,
         )
         db.add(assistant_msg)
         thread.message_count = (thread.message_count or 0) + 2
         thread.last_message_at = datetime.now(timezone.utc)
         await db.commit()
-
-        yield sse_event(
-            "document_ready",
-            {
-                "file_id": str(new_file_id),
-                "filename": compressed_name,
-                "download_url": download_url,
-                "ttl_hours": _COMPRESSED_TTL_HOURS,
-            },
-        )
+        for chunk in _chunks(answer_text, 30):
+            yield sse_event("token", {"text": chunk})
         yield sse_event(
             "done",
-            {
-                "message_id": str(assistant_msg.id),
-                "needs_search": False,
-                "answer_model": "lite",
-            },
+            {"message_id": str(assistant_msg.id), "needs_search": False, "answer_model": "lite"},
         )
+        await clear_search_pending(redis_client, thread.id)
+        return
+
+    original_bytes = load_upload_bytes(pdf_file.storage_key)
+    if not original_bytes:
+        yield sse_event(
+            "error",
+            {"code": "compress_failed", "message": "Не удалось прочитать PDF-файл."},
+        )
+        await clear_search_pending(redis_client, thread.id)
+        return
+
+    # Сжимаем
+    status_text = f"Сжимаем PDF ({_LEVEL_LABELS.get(level, level)})…"
+    for chunk in _chunks(status_text, 30):
+        yield sse_event("token", {"text": chunk})
+
+    try:
+        compressed_bytes = compress_pdf_bytes(original_bytes, level)
+    except Exception as exc:
+        logger.warning("pdf compress failed: %s", exc)
+        yield sse_event(
+            "error",
+            {"code": "compress_failed", "message": "Не удалось сжать PDF. Попробуйте позже."},
+        )
+        await clear_search_pending(redis_client, thread.id)
+        return
+
+    orig_size = len(original_bytes)
+    comp_size = len(compressed_bytes)
+    reduction = int((1 - comp_size / max(orig_size, 1)) * 100)
+
+    # Сохраняем сжатый файл
+    new_file_id = uuid.uuid4()
+    original_name = pdf_file.filename or "document.pdf"
+    stem = original_name.rsplit(".", 1)[0] if "." in original_name else original_name
+    compressed_name = f"{stem}_compressed.pdf"
+
+    storage_key = save_upload_bytes(user.id, new_file_id, compressed_bytes, "pdf")
+    now = datetime.now(timezone.utc)
+    compressed_file = UploadedFile(
+        id=new_file_id,
+        user_id=user.id,
+        filename=compressed_name,
+        mime_type="application/pdf",
+        size_bytes=comp_size,
+        media_kind="compressed",
+        storage_key=storage_key,
+        extracted_text="",
+        expires_at=now + timedelta(hours=_COMPRESSED_TTL_HOURS),
+    )
+    db.add(compressed_file)
+    await db.flush()
+
+    download_url = f"{(settings.public_web_url or 'https://glosix.ru').rstrip('/')}/api/files/{new_file_id}/content"
+
+    result_text = (
+        f"\n\n✅ Готово!\n"
+        f"Исходный размер: {format_size(orig_size)}\n"
+        f"После сжатия: {format_size(comp_size)}\n"
+        f"Уменьшение: {reduction}%"
+    )
+    for chunk in _chunks(result_text, 40):
+        yield sse_event("token", {"text": chunk})
+
+    answer_full = status_text + result_text
+    assistant_msg = Message(
+        thread_id=thread.id,
+        role=MessageRole.ASSISTANT,
+        content=answer_full,
+    )
+    db.add(assistant_msg)
+    thread.message_count = (thread.message_count or 0) + 2
+    thread.last_message_at = datetime.now(timezone.utc)
+    await db.commit()
+
+    yield sse_event(
+        "document_ready",
+        {
+            "file_id": str(new_file_id),
+            "filename": compressed_name,
+            "download_url": download_url,
+            "ttl_hours": _COMPRESSED_TTL_HOURS,
+        },
+    )
+    yield sse_event(
+        "done",
+        {
+            "message_id": str(assistant_msg.id),
+            "needs_search": False,
+            "answer_model": "lite",
+        },
+    )
 
     await clear_search_pending(redis_client, thread.id)
 
