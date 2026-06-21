@@ -218,48 +218,9 @@ async def stream_pdf_compress_turn(
     )
 
     if has_pdf_attachment and pdf_file:
-        file_size_str = format_size(pdf_file.size_bytes or 0)
-
-        # Если уровень уже указан в запросе — сразу сжимаем без переспроса
-        if has_explicit_compression_level(query):
-            level = detect_compression_level(query)
-            # Передаём управление шагу сжатия (ниже)
-            pass
-        else:
-            # ── ШАГ 1: спрашиваем уровень — список вариантов прямо в тексте ──
-            answer_text = (
-                f"PDF загружен ({file_size_str}). Выберите уровень сжатия:\n"
-                "Максимальное (меньший размер файла)\n"
-                "Оптимальное (рекомендуется)\n"
-                "Минимальное (лучшее качество)"
-            )
-
-            assistant_msg = Message(
-                thread_id=thread.id,
-                role=MessageRole.ASSISTANT,
-                content=answer_text,
-                # follow_up_questions намеренно не задаём → не показывается блок «Продолжить тему»
-            )
-            db.add(assistant_msg)
-            thread.message_count = (thread.message_count or 0) + 2
-            thread.last_message_at = datetime.now(timezone.utc)
-            if not thread_id:
-                thread.title = f"Сжатие PDF · {pdf_file.filename or 'файл'}"
-            await db.commit()
-
-            for chunk in _chunks(answer_text, 40):
-                yield sse_event("token", {"text": chunk})
-
-            yield sse_event(
-                "done",
-                {
-                    "message_id": str(assistant_msg.id),
-                    "needs_search": False,
-                    "answer_model": "lite",
-                },
-            )
-            await clear_search_pending(redis_client, thread.id)
-            return
+        # PDF загружен — сжимаем сразу.
+        # Уровень берём из запроса если явно указан, иначе — оптимальный по умолчанию.
+        pass  # управление переходит к шагу сжатия ниже
 
     # ── ШАГ 2: сжимаем ──
     level = detect_compression_level(query)
