@@ -83,6 +83,32 @@ async def resolve_max_upload_mb_pro(
         return 15
 
 
+async def resolve_max_zip_mb_free(
+    db: AsyncSession,
+    redis_client: redis.Redis,
+    settings: Settings | None = None,
+) -> int:
+    settings = settings or get_settings()
+    try:
+        raw = int(await get_setting("max_zip_mb_free", db, redis_client, settings))
+        return max(1, min(raw, 500))
+    except (TypeError, ValueError):
+        return 25
+
+
+async def resolve_max_zip_mb_pro(
+    db: AsyncSession,
+    redis_client: redis.Redis,
+    settings: Settings | None = None,
+) -> int:
+    settings = settings or get_settings()
+    try:
+        raw = int(await get_setting("max_zip_mb_pro", db, redis_client, settings))
+        return max(1, min(raw, 2000))
+    except (TypeError, ValueError):
+        return 150
+
+
 def default_upload_ttl_hours(settings: Settings | None = None) -> int:
     settings = settings or get_settings()
     return max(1, getattr(settings, "upload_ttl_hours", UPLOAD_TTL_HOURS))

@@ -300,7 +300,12 @@ export function SearchComposer({
       }
       const err = validateFile(file, maxBytes, plan, agentMode ? "document" : expected, kind);
       if (err) {
-        setUploadFailure(err.message, err.suggestPro);
+        if (err.suggestPro) {
+          // Free пользователь превысил лимит → показываем Pro-модал
+          setProUpgradeModalOpen(true);
+        } else {
+          setUploadFailure(err.message, false);
+        }
         continue;
       }
       const localKey = `up-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;

@@ -338,12 +338,16 @@ class SearchFlowService:
         if flow.flow == "compress_pdf":
             from app.services.pdf_compress_flow import stream_pdf_compress_turn
             async for event in stream_pdf_compress_turn(
-                db,
-                user,
-                limiter,
-                query,
-                thread_id,
-                redis_client,
+                db, user, limiter, query, thread_id, redis_client,
+                attachment_ids=attachment_ids,
+            ):
+                yield event
+            return
+
+        if flow.flow == "convert_pdf":
+            from app.services.pdf_convert_flow import stream_pdf_convert_turn
+            async for event in stream_pdf_convert_turn(
+                db, user, limiter, query, thread_id, redis_client,
                 attachment_ids=attachment_ids,
             ):
                 yield event

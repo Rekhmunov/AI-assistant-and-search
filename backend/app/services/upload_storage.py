@@ -61,4 +61,8 @@ def mime_for_ext(ext: str) -> str:
         return "image/webp"
     if ext == "docx":
         return "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    if ext == "zip":
+        return "application/zip"
+    if ext in ("jpg", "jpeg"):
+        return "image/jpeg"
     return "application/octet-stream"

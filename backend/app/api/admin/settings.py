@@ -163,14 +163,28 @@ async def update_settings(
                 if v < 1 or v > 100:
                     raise ValueError
             except (ValueError, TypeError):
-                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Лимит Free: от 1 до 100 МБ")
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Лимит загрузки Free: от 1 до 100 МБ")
         if key == "max_upload_mb_pro":
             try:
                 v = int(value)
                 if v < 1 or v > 500:
                     raise ValueError
             except (ValueError, TypeError):
-                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Лимит Pro: от 1 до 500 МБ")
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Лимит загрузки Pro: от 1 до 500 МБ")
+        if key == "max_zip_mb_free":
+            try:
+                v = int(value)
+                if v < 1 or v > 500:
+                    raise ValueError
+            except (ValueError, TypeError):
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Лимит ZIP Free: от 1 до 500 МБ")
+        if key == "max_zip_mb_pro":
+            try:
+                v = int(value)
+                if v < 1 or v > 2000:
+                    raise ValueError
+            except (ValueError, TypeError):
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Лимит ZIP Pro: от 1 до 2000 МБ")
         if key == "yandex_metrica_counter_id":
             val = str(value).strip()
             if val and not val.isdigit():

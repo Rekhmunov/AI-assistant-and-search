@@ -27,6 +27,7 @@ import { AgentThinkingPanel } from "../components/AgentThinkingPanel";
 import type { AgentThinkingEvent } from "../api/client";
 import { CollapsibleMarkdownDocument } from "../components/CollapsibleMarkdownDocument";
 import { GeneratedDocumentCard } from "../components/GeneratedDocumentCard";
+import { ProUpgradeModal } from "../components/ProUpgradeModal";
 import { SearchComposer, type ComposerAttachment } from "../components/SearchComposer";
 import { SearchStatusLine, type SearchPhase } from "../components/SearchStatusLine";
 import { ClaudeSearchTimeline } from "../components/ClaudeSearchTimeline";
@@ -173,6 +174,7 @@ export function Thread() {
   const [turns, setTurns] = useState<ThreadTurn[]>([]);
   const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
   const [streaming, setStreaming] = useState(false);
+  const [proUpgradeModal, setProUpgradeModal] = useState<{ title: string; description?: string } | null>(null);
   const [needsSearch, setNeedsSearch] = useState(true);
   const [searchPhase, setSearchPhase] = useState<SearchPhase>("idle");
   const [claudeSearchQuery, setClaudeSearchQuery] = useState<string | null>(null);
@@ -808,6 +810,12 @@ export function Thread() {
           setImageGenStatus(undefined);
           setStreaming(false);
           setSearchPhase("idle");
+          if (code === "zip_size_limit") {
+            setProUpgradeModal({
+              title: "Увеличенный лимит экспорта доступен на Pro",
+              description: msg || "Для конвертации файлов большего размера перейдите на Pro.",
+            });
+          }
           const threadMissing =
             code === "not_found" || msg.includes("Тред не найден");
           if (threadMissing) {
@@ -1437,6 +1445,12 @@ export function Thread() {
       />
       </div>
     </div>
+    <ProUpgradeModal
+      open={!!proUpgradeModal}
+      onClose={() => setProUpgradeModal(null)}
+      title={proUpgradeModal?.title}
+      description={proUpgradeModal?.description}
+    />
   );
 }
 

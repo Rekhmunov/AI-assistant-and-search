@@ -135,6 +135,8 @@ export function SettingsPage() {
       pro_image_gens_per_day: Number(settings.pro_image_gens_per_day),
       max_upload_mb_free: Number(settings.max_upload_mb_free) || 8,
       max_upload_mb_pro: Number(settings.max_upload_mb_pro) || 15,
+      max_zip_mb_free: Number(settings.max_zip_mb_free) || 25,
+      max_zip_mb_pro: Number(settings.max_zip_mb_pro) || 150,
       yandex_metrica_counter_id: String(settings.yandex_metrica_counter_id ?? "").trim(),
       yandex_webmaster_verification: String(settings.yandex_webmaster_verification ?? "")
         .trim()
@@ -375,197 +377,135 @@ export function SettingsPage() {
           </button>
           {limitsOpen && (
             <div id="settings-limits-panel" className="settings-section-panel">
+
+              {/* ── Лимиты поиска ── */}
+              <p className="settings-subgroup-title">Поиск (запросов / день)</p>
               <label>
                 Гостевых поисков всего
-                <input
-                  type="number"
-                  value={String(settings.guest_searches_per_day ?? "")}
+                <input type="number" value={String(settings.guest_searches_per_day ?? "")}
                   onChange={(e) => setSettings({ ...settings, guest_searches_per_day: e.target.value })}
-                  disabled={!can("settings:write")}
-                />
-                <span className="hint-inline">Анонимные пользователи без регистрации (за всё время гостевой сессии)</span>
+                  disabled={!can("settings:write")} />
+                <span className="hint-inline">Анонимные пользователи без регистрации</span>
               </label>
               <label>
                 Free поисков / день
-                <input
-                  type="number"
-                  value={String(settings.free_searches_per_day ?? "")}
+                <input type="number" value={String(settings.free_searches_per_day ?? "")}
                   onChange={(e) => setSettings({ ...settings, free_searches_per_day: e.target.value })}
-                  disabled={!can("settings:write")}
-                />
+                  disabled={!can("settings:write")} />
               </label>
               <label>
                 Pro поисков / день
-                <input
-                  type="number"
-                  value={String(settings.pro_searches_per_day ?? "")}
+                <input type="number" value={String(settings.pro_searches_per_day ?? "")}
                   onChange={(e) => setSettings({ ...settings, pro_searches_per_day: e.target.value })}
-                  disabled={!can("settings:write")}
-                />
-              </label>
-              <label>
-                Free генераций картинок / день
-                <input
-                  type="number"
-                  min={0}
-                  value={String(settings.free_image_gens_per_day ?? "")}
-                  onChange={(e) =>
-                    setSettings({ ...settings, free_image_gens_per_day: e.target.value })
-                  }
-                  disabled={!can("settings:write")}
-                />
-                <span className="hint-inline">
-                  0 — генерация только на Pro (рекомендуется)
-                </span>
-              </label>
-              <label>
-                Гостевых генераций документов (за жизнь)
-                <input
-                  type="number"
-                  min={0}
-                  value={String(settings.guest_doc_gens_lifetime ?? "")}
-                  onChange={(e) =>
-                    setSettings({ ...settings, guest_doc_gens_lifetime: e.target.value })
-                  }
-                  disabled={!can("settings:write")}
-                />
-              </label>
-              <label>
-                Free генераций документов / день
-                <input
-                  type="number"
-                  min={0}
-                  value={String(settings.free_doc_gens_per_day ?? "")}
-                  onChange={(e) =>
-                    setSettings({ ...settings, free_doc_gens_per_day: e.target.value })
-                  }
-                  disabled={!can("settings:write")}
-                />
-              </label>
-              <label>
-                Pro генераций документов / день
-                <input
-                  type="number"
-                  min={0}
-                  value={String(settings.pro_doc_gens_per_day ?? "")}
-                  onChange={(e) =>
-                    setSettings({ ...settings, pro_doc_gens_per_day: e.target.value })
-                  }
-                  disabled={!can("settings:write")}
-                />
-              </label>
-              <label>
-                Хранение сгенерированных документов (часов)
-                <input
-                  type="number"
-                  min={1}
-                  value={String(settings.generated_doc_ttl_hours ?? "")}
-                  onChange={(e) =>
-                    setSettings({ ...settings, generated_doc_ttl_hours: e.target.value })
-                  }
-                  disabled={!can("settings:write")}
-                />
-              </label>
-              <label>
-                Макс. размер файла Free (МБ)
-                <input
-                  type="number"
-                  min={1}
-                  max={100}
-                  value={String(settings.max_upload_mb_free ?? "")}
-                  onChange={(e) => setSettings({ ...settings, max_upload_mb_free: e.target.value })}
-                  disabled={!can("settings:write")}
-                />
-              </label>
-              <label>
-                Макс. размер файла Pro (МБ)
-                <input
-                  type="number"
-                  min={1}
-                  max={500}
-                  value={String(settings.max_upload_mb_pro ?? "")}
-                  onChange={(e) => setSettings({ ...settings, max_upload_mb_pro: e.target.value })}
-                  disabled={!can("settings:write")}
-                />
-              </label>
-              <label>
-                Хранение вложений поиска (часов)
-                <input
-                  type="number"
-                  min={1}
-                  value={String(settings.upload_ttl_hours ?? "")}
-                  onChange={(e) => setSettings({ ...settings, upload_ttl_hours: e.target.value })}
-                  disabled={!can("settings:write")}
-                />
-              </label>
-              <label>
-                Хранение сгенерированных картинок (часов)
-                <input
-                  type="number"
-                  min={1}
-                  value={String(settings.generated_image_ttl_hours ?? "")}
-                  onChange={(e) =>
-                    setSettings({ ...settings, generated_image_ttl_hours: e.target.value })
-                  }
-                  disabled={!can("settings:write")}
-                />
-              </label>
-              <label>
-                Pro генераций картинок / день
-                <input
-                  type="number"
-                  min={0}
-                  value={String(settings.pro_image_gens_per_day ?? "")}
-                  onChange={(e) =>
-                    setSettings({ ...settings, pro_image_gens_per_day: e.target.value })
-                  }
-                  disabled={!can("settings:write")}
-                />
-              </label>
-              <label>
-                Цена Pro, ₽ / месяц
-                <input
-                  type="number"
-                  min={1}
-                  value={String(settings.pro_price_rub ?? "")}
-                  onChange={(e) => setSettings({ ...settings, pro_price_rub: e.target.value })}
-                  disabled={!can("settings:write")}
-                />
-                <span className="hint-inline">Сумма списания в ЮKassa и на странице профиля</span>
+                  disabled={!can("settings:write")} />
               </label>
               <label>
                 Yandex запросов / день (глобально)
-                <input
-                  type="number"
-                  value={String(settings.global_yandex_requests_per_day ?? "")}
-                  onChange={(e) =>
-                    setSettings({ ...settings, global_yandex_requests_per_day: e.target.value })
-                  }
-                  disabled={!can("settings:write")}
-                />
+                <input type="number" value={String(settings.global_yandex_requests_per_day ?? "")}
+                  onChange={(e) => setSettings({ ...settings, global_yandex_requests_per_day: e.target.value })}
+                  disabled={!can("settings:write")} />
+              </label>
+
+              {/* ── Лимиты файлов ── */}
+              <p className="settings-subgroup-title">Файлы</p>
+              <label>
+                Макс. размер загружаемого файла Free (МБ)
+                <input type="number" min={1} max={100} value={String(settings.max_upload_mb_free ?? "")}
+                  onChange={(e) => setSettings({ ...settings, max_upload_mb_free: e.target.value })}
+                  disabled={!can("settings:write")} />
+              </label>
+              <label>
+                Макс. размер загружаемого файла Pro (МБ)
+                <input type="number" min={1} max={500} value={String(settings.max_upload_mb_pro ?? "")}
+                  onChange={(e) => setSettings({ ...settings, max_upload_mb_pro: e.target.value })}
+                  disabled={!can("settings:write")} />
+              </label>
+              <label>
+                Макс. ZIP при экспорте (конвертация PDF) Free (МБ)
+                <input type="number" min={1} max={500} value={String(settings.max_zip_mb_free ?? "")}
+                  onChange={(e) => setSettings({ ...settings, max_zip_mb_free: e.target.value })}
+                  disabled={!can("settings:write")} />
+              </label>
+              <label>
+                Макс. ZIP при экспорте (конвертация PDF) Pro (МБ)
+                <input type="number" min={1} max={2000} value={String(settings.max_zip_mb_pro ?? "")}
+                  onChange={(e) => setSettings({ ...settings, max_zip_mb_pro: e.target.value })}
+                  disabled={!can("settings:write")} />
+              </label>
+              <label>
+                Хранение вложений поиска (часов)
+                <input type="number" min={1} value={String(settings.upload_ttl_hours ?? "")}
+                  onChange={(e) => setSettings({ ...settings, upload_ttl_hours: e.target.value })}
+                  disabled={!can("settings:write")} />
+              </label>
+
+              {/* ── Генерации ── */}
+              <p className="settings-subgroup-title">Генерации</p>
+              <label>
+                Free генераций картинок / день
+                <input type="number" min={0} value={String(settings.free_image_gens_per_day ?? "")}
+                  onChange={(e) => setSettings({ ...settings, free_image_gens_per_day: e.target.value })}
+                  disabled={!can("settings:write")} />
+                <span className="hint-inline">0 — только на Pro</span>
+              </label>
+              <label>
+                Pro генераций картинок / день
+                <input type="number" min={0} value={String(settings.pro_image_gens_per_day ?? "")}
+                  onChange={(e) => setSettings({ ...settings, pro_image_gens_per_day: e.target.value })}
+                  disabled={!can("settings:write")} />
+              </label>
+              <label>
+                Гостевых генераций документов (за жизнь)
+                <input type="number" min={0} value={String(settings.guest_doc_gens_lifetime ?? "")}
+                  onChange={(e) => setSettings({ ...settings, guest_doc_gens_lifetime: e.target.value })}
+                  disabled={!can("settings:write")} />
+              </label>
+              <label>
+                Free генераций документов / день
+                <input type="number" min={0} value={String(settings.free_doc_gens_per_day ?? "")}
+                  onChange={(e) => setSettings({ ...settings, free_doc_gens_per_day: e.target.value })}
+                  disabled={!can("settings:write")} />
+              </label>
+              <label>
+                Pro генераций документов / день
+                <input type="number" min={0} value={String(settings.pro_doc_gens_per_day ?? "")}
+                  onChange={(e) => setSettings({ ...settings, pro_doc_gens_per_day: e.target.value })}
+                  disabled={!can("settings:write")} />
+              </label>
+              <label>
+                Хранение сгенерированных документов (часов)
+                <input type="number" min={1} value={String(settings.generated_doc_ttl_hours ?? "")}
+                  onChange={(e) => setSettings({ ...settings, generated_doc_ttl_hours: e.target.value })}
+                  disabled={!can("settings:write")} />
+              </label>
+              <label>
+                Хранение сгенерированных картинок (часов)
+                <input type="number" min={1} value={String(settings.generated_image_ttl_hours ?? "")}
+                  onChange={(e) => setSettings({ ...settings, generated_image_ttl_hours: e.target.value })}
+                  disabled={!can("settings:write")} />
+              </label>
+
+              {/* ── Подписка и доступ ── */}
+              <p className="settings-subgroup-title">Подписка</p>
+              <label>
+                Цена Pro, ₽ / месяц
+                <input type="number" min={1} value={String(settings.pro_price_rub ?? "")}
+                  onChange={(e) => setSettings({ ...settings, pro_price_rub: e.target.value })}
+                  disabled={!can("settings:write")} />
+                <span className="hint-inline">Сумма списания в ЮKassa и на странице профиля</span>
               </label>
               <label className="checkbox">
-                <input
-                  type="checkbox"
-                  checked={Boolean(settings.maintenance_mode)}
+                <input type="checkbox" checked={Boolean(settings.maintenance_mode)}
                   onChange={(e) => setSettings({ ...settings, maintenance_mode: e.target.checked })}
-                  disabled={!can("settings:write")}
-                />
+                  disabled={!can("settings:write")} />
                 Режим обслуживания (блокирует поиск)
               </label>
               <label className="checkbox">
-                <input
-                  type="checkbox"
-                  checked={Boolean(settings.pro_purchase_disabled)}
-                  onChange={(e) =>
-                    setSettings({ ...settings, pro_purchase_disabled: e.target.checked })
-                  }
-                  disabled={!can("settings:write")}
-                />
+                <input type="checkbox" checked={Boolean(settings.pro_purchase_disabled)}
+                  onChange={(e) => setSettings({ ...settings, pro_purchase_disabled: e.target.checked })}
+                  disabled={!can("settings:write")} />
                 Запрет покупки подписки Pro
-                <span className="hint-inline">
-                  Кнопка «Перейти на Pro» покажет сообщение; оплата через ЮKassa заблокирована
-                </span>
+                <span className="hint-inline">Кнопка «Перейти на Pro» покажет сообщение; оплата через ЮKassa заблокирована</span>
               </label>
             </div>
           )}

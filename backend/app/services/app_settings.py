@@ -54,6 +54,8 @@ BASE_SETTING_KEYS: dict[str, type] = {
     "generated_image_ttl_hours": int,
     "max_upload_mb_free": int,
     "max_upload_mb_pro": int,
+    "max_zip_mb_free": int,
+    "max_zip_mb_pro": int,
     "yandex_metrica_counter_id": str,
     "yandex_webmaster_verification": str,
     "agent_template_visibility": str,
@@ -140,6 +142,10 @@ def default_for_key(key: str, settings: Settings | None = None) -> Any:
         return 8
     if key == "max_upload_mb_pro":
         return 15
+    if key == "max_zip_mb_free":
+        return 25
+    if key == "max_zip_mb_pro":
+        return 150
     if key == "maintenance_mode":
         return False
     if key == "pro_purchase_disabled":

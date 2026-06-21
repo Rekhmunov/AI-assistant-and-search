@@ -226,6 +226,21 @@ a:hover {
   transform: rotate(90deg);
 }
 
+.settings-subgroup-title {
+  margin: 20px 0 8px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 6px;
+}
+
+.settings-subgroup-title:first-child {
+  margin-top: 4px;
+}
+
 .settings-section-panel {
   margin-top: 16px;
 }

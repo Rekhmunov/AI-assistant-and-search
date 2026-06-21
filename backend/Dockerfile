@@ -10,6 +10,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     fonts-dejavu-core ghostscript \
     && rm -rf /var/lib/apt/lists/*
 
+# PyMuPDF для конвертации PDF → JPG (не требует системных зависимостей)
+RUN pip install --no-cache-dir pymupdf
+
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
