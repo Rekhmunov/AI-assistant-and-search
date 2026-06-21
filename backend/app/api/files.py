@@ -451,7 +451,7 @@ async def upload_file(
             has_text=bool(ocr_text.strip()),
         )
 
-    # Документы: только текст, без бинарника на диске
+    # Документы: извлекаем текст; PDF дополнительно сохраняем бинарник для сжатия
     try:
         text = extract_text(filename, data)
     except ValueError as e:
@@ -465,6 +465,11 @@ async def upload_file(
     if not text.strip():
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Файл пустой или без текста")
 
+    # PDF сохраняем на диск чтобы позволить сжатие через Ghostscript
+    doc_storage_key: str | None = None
+    if ext == "pdf":
+        doc_storage_key = save_upload_bytes(user.id, file_id, data, ext)
+
     row = UploadedFile(
         id=file_id,
         user_id=user.id,
@@ -472,7 +477,7 @@ async def upload_file(
         mime_type=file.content_type,
         size_bytes=len(data),
         media_kind="document",
-        storage_key=None,
+        storage_key=doc_storage_key,
         extracted_text=text,
         expires_at=now + timedelta(hours=upload_ttl_hours),
     )
