@@ -1102,6 +1102,7 @@ export function Thread() {
   }, [activeTab, isDesktop, imageGroups.length, imagesLoading]);
 
   return (
+    <>
     <div className={`page page-thread${isDesktop ? "" : " page-thread--mobile"}`}>
       {!isDesktop && (
         <ThreadMobileHeader
@@ -1451,6 +1452,7 @@ export function Thread() {
       title={proUpgradeModal?.title}
       description={proUpgradeModal?.description}
     />
+    </>
   );
 }
 
