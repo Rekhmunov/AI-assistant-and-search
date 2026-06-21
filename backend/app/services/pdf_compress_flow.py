@@ -262,7 +262,7 @@ async def stream_pdf_compress_turn(
         return
 
     # Сжимаем
-    status_text = f"Сжимаем PDF (качество - {_LEVEL_LABELS.get(level, level)})…"
+    status_text = f"Сжимаем PDF (качество - {_LEVEL_LABELS.get(level, level)})"
     for chunk in _chunks(status_text, 30):
         yield sse_event("token", {"text": chunk})
 
