@@ -317,9 +317,12 @@ async def execute_secretary_message(
                 next_amt = next_item.get("amount")
                 next_token = next_item.get("token", "")
                 next_amt_str = str(int(next_amt)) if next_amt == int(next_amt) else str(next_amt)
-                unknown_msg = responses.get("on_unknown_entity", "❓ Не распознана категория '{token}'. Уточните:")
-                clarify_text = unknown_msg.format(token=next_token[:50])
-                return ExecutorResult(text=f"{result_text}\n{clarify_text} (сумма: {next_amt_str})")
+                if "question" in remaining[0]:
+                    clarify_text = remaining[0]["question"] + f" (сумма: {next_amt_str})"
+                else:
+                    unknown_msg = responses.get("on_unknown_entity", "❓ Не распознана категория '{token}'. Уточните:")
+                    clarify_text = unknown_msg.format(token=next_token[:50]) + f" (сумма: {next_amt_str})"
+                return ExecutorResult(text=f"{result_text}\n{clarify_text}")
             else:
                 _set_pending(agent, None)
                 return ExecutorResult(text=result_text)
@@ -411,7 +414,7 @@ async def execute_secretary_message(
 
         if amount is None:
             # Строка без суммы — пропускаем если есть другие, иначе сообщаем
-            if not results and not clarify_queue:
+            if recorded_count == 0 and not clarify_queue:
                 no_amount_msg = responses.get(
                     "on_missing_amount",
                     "Для корректной записи нужно указать сумму и категорию затраты",
@@ -434,7 +437,11 @@ async def execute_secretary_message(
         if entity.get("require_clarification") and entity.get("clarification_options"):
             options = "/".join(entity["clarification_options"])
             q = entity.get("clarification_question") or f"Уточните вариант для «{entity['name']}»:"
-            clarify_queue.append({"amount": amount, "token": rest})
+            clarify_queue.append({
+                "amount": amount,
+                "token": rest,
+                "question": f"❓ {q} ({options})",
+            })
             continue
 
         store_record(agent, "records", {
@@ -458,8 +465,11 @@ async def execute_secretary_message(
         amt = first["amount"]
         token = first["token"]
         amt_str = str(int(amt)) if amt == int(amt) else str(amt)
-        unknown_msg = responses.get("on_unknown_entity", "❓ Не распознана категория '{token}'. Уточните:")
-        clarify_text = unknown_msg.format(token=token[:50]) + f" (сумма: {amt_str})"
+        if "question" in first:
+            clarify_text = first["question"] + f" (сумма: {amt_str})"
+        else:
+            unknown_msg = responses.get("on_unknown_entity", "❓ Не распознана категория '{token}'. Уточните:")
+            clarify_text = unknown_msg.format(token=token[:50]) + f" (сумма: {amt_str})"
         # Подтверждения уже отправлены через send_message — возвращаем только уточнение
         return ExecutorResult(text=clarify_text)
 
