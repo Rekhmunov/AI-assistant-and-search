@@ -322,7 +322,20 @@ async def stream_pdf_convert_turn(
         yield sse_event("token", {"text": chunk})
 
     answer_full = status_text + result_text
-    assistant_msg = Message(thread_id=thread.id, role=MessageRole.ASSISTANT, content=answer_full)
+    assistant_msg = Message(
+        thread_id=thread.id,
+        role=MessageRole.ASSISTANT,
+        content=answer_full,
+        # Сохраняем вложение чтобы кнопка «Скачать» была видна при повторном открытии треда
+        attachments=[{
+            "id": str(new_file_id),
+            "filename": out_filename,
+            "kind": "document",
+            "url": download_url,
+            "ttl_hours": _CONVERTED_TTL_HOURS,
+            "expires_at": expires_at.isoformat(),
+        }],
+    )
     db.add(assistant_msg)
     thread.message_count = (thread.message_count or 0) + 2
     thread.last_message_at = now

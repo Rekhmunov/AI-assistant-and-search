@@ -319,6 +319,15 @@ async def stream_pdf_compress_turn(
         thread_id=thread.id,
         role=MessageRole.ASSISTANT,
         content=answer_full,
+        # Сохраняем вложение чтобы кнопка «Скачать» была видна при повторном открытии треда
+        attachments=[{
+            "id": str(new_file_id),
+            "filename": compressed_name,
+            "kind": "document",
+            "url": download_url,
+            "ttl_hours": _COMPRESSED_TTL_HOURS,
+            "expires_at": expires_at.isoformat(),
+        }],
     )
     db.add(assistant_msg)
     thread.message_count = (thread.message_count or 0) + 2
@@ -332,6 +341,7 @@ async def stream_pdf_compress_turn(
             "filename": compressed_name,
             "download_url": download_url,
             "ttl_hours": _COMPRESSED_TTL_HOURS,
+            "expires_at": expires_at.isoformat(),
         },
     )
     yield sse_event(
