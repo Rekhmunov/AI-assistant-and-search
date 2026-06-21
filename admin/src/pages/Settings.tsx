@@ -133,6 +133,8 @@ export function SettingsPage() {
       image_gen_provider: imageGenProvider,
       free_image_gens_per_day: Number(settings.free_image_gens_per_day),
       pro_image_gens_per_day: Number(settings.pro_image_gens_per_day),
+      max_upload_mb_free: Number(settings.max_upload_mb_free) || 8,
+      max_upload_mb_pro: Number(settings.max_upload_mb_pro) || 15,
       yandex_metrica_counter_id: String(settings.yandex_metrica_counter_id ?? "").trim(),
       yandex_webmaster_verification: String(settings.yandex_webmaster_verification ?? "")
         .trim()
