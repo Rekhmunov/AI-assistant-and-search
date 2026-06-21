@@ -377,6 +377,13 @@ async def upload_file(
     filename = file.filename or "upload"
     data = await file.read()
 
+    # Если данные пустые — скорее всего nginx обрезал тело по client_max_body_size
+    if not data:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail="Файл не получен — возможно превышен лимит размера на сервере. Обратитесь к администратору.",
+        )
+
     ext = resolve_upload_extension(filename, file.content_type, data)
     if ext not in ALLOWED_EXT:
         raise HTTPException(
