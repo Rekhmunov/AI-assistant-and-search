@@ -150,10 +150,41 @@ async def stream_pdf_compress_turn(
         db.add(thread)
         await db.flush()
 
-    # Сохраняем вложения в user_msg чтобы _find_pdf_in_thread нашёл PDF на шаге 2
+    # ── Определяем шаг ДО создания user_msg чтобы получить filename ──
+    has_pdf_attachment = False
+    pdf_file: UploadedFile | None = None
+
+    if attachment_ids:
+        for fid in attachment_ids:
+            res = await db.execute(
+                select(UploadedFile).where(
+                    UploadedFile.id == fid,
+                    UploadedFile.user_id == user.id,
+                )
+            )
+            uf = res.scalar_one_or_none()
+            if uf and (uf.mime_type or "").lower() == "application/pdf":
+                has_pdf_attachment = True
+                pdf_file = uf
+                break
+
+    # Сохраняем вложения с filename — обязательное поле MessageAttachmentOut
     attachments_payload = None
     if attachment_ids:
-        attachments_payload = [{"id": str(fid), "kind": "document"} for fid in attachment_ids]
+        attachments_payload = []
+        for fid in attachment_ids:
+            res = await db.execute(
+                select(UploadedFile).where(
+                    UploadedFile.id == fid,
+                    UploadedFile.user_id == user.id,
+                )
+            )
+            uf_any = res.scalar_one_or_none()
+            attachments_payload.append({
+                "id": str(fid),
+                "filename": (uf_any.filename if uf_any else None) or "document.pdf",
+                "kind": "document",
+            })
 
     user_msg = Message(
         thread_id=thread.id,
@@ -185,24 +216,6 @@ async def stream_pdf_compress_turn(
             "policy_version": "v1",
         },
     )
-
-    # ── Определяем шаг ──
-    has_pdf_attachment = False
-    pdf_file: UploadedFile | None = None
-
-    if attachment_ids:
-        for fid in attachment_ids:
-            res = await db.execute(
-                select(UploadedFile).where(
-                    UploadedFile.id == fid,
-                    UploadedFile.user_id == user.id,
-                )
-            )
-            uf = res.scalar_one_or_none()
-            if uf and (uf.mime_type or "").lower() == "application/pdf":
-                has_pdf_attachment = True
-                pdf_file = uf
-                break
 
     if has_pdf_attachment and pdf_file:
         file_size_str = format_size(pdf_file.size_bytes or 0)
