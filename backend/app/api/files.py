@@ -131,7 +131,7 @@ async def download_file_content(
     if await purge_expired_file_if_needed(db, row):
         await db.commit()
         raise HTTPException(status_code=status.HTTP_410_GONE, detail="File expired")
-    if row.media_kind not in ("image", "generated", "generated_doc"):
+    if row.media_kind not in ("image", "generated", "generated_doc", "compressed"):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="File not found")
     data = load_upload_bytes(row.storage_key)
     if not data:
@@ -139,7 +139,7 @@ async def download_file_content(
     mime = row.mime_type or mime_for_ext(row.storage_key.rsplit(".", 1)[-1])
     disposition = (
         attachment_content_disposition(row.filename)
-        if row.media_kind == "generated_doc"
+        if row.media_kind in ("generated_doc", "compressed")
         else "attachment"
     )
     return Response(
@@ -168,7 +168,7 @@ async def download_file_shared(
     if await purge_expired_file_if_needed(db, row):
         await db.commit()
         raise HTTPException(status_code=status.HTTP_410_GONE, detail="File expired")
-    if row.media_kind not in ("generated_doc", "generated", "image"):
+    if row.media_kind not in ("generated_doc", "generated", "image", "compressed"):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="File not found")
     data = load_upload_bytes(row.storage_key)
     if not data:
