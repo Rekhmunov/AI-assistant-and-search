@@ -469,13 +469,21 @@ async def upload_file(
             detail="Не удалось прочитать файл",
         ) from None
 
-    if not text.strip():
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Файл пустой или без текста")
-
-    # PDF сохраняем на диск чтобы позволить сжатие через Ghostscript
+    # PDF сохраняем на диск чтобы позволить сжатие/конвертацию через Ghostscript/PyMuPDF
     doc_storage_key: str | None = None
     if ext == "pdf":
         doc_storage_key = save_upload_bytes(user.id, file_id, data, ext)
+
+    # Для PDF без текстового слоя (сканированный документ) разрешаем загрузку
+    # чтобы пользователь мог сжать или конвертировать файл
+    if not text.strip():
+        if ext != "pdf":
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Файл пустой или без текста",
+            )
+        # Сканированный PDF — принимаем с пометкой
+        text = ""
 
     row = UploadedFile(
         id=file_id,
@@ -491,12 +499,12 @@ async def upload_file(
     db.add(row)
     await db.flush()
 
-    excerpt = text[:500] + ("…" if len(text) > 500 else "")
+    excerpt = text[:500] + ("…" if len(text) > 500 else "") if text else "📄 Сканированный PDF (текст не извлечён)"
     return UploadedFileOut(
         id=row.id,
         filename=filename,
         size_bytes=len(data),
         excerpt=excerpt,
         media_kind="document",
-        has_text=True,
+        has_text=bool(text.strip()),
     )
