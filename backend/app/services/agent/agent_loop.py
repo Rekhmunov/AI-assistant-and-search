@@ -497,7 +497,7 @@ async def _tool_loop(
                     LlmTurnResult(reply=msg, checklist=checklist or ChecklistState()),
                     tool_trace,
                 )
-            for call in tool_calls[:8]:
+            for _call_idx, call in enumerate(tool_calls[:8]):
                 if not isinstance(call, dict):
                     continue
                 tool_name = str(call.get("tool") or "")
@@ -531,9 +531,16 @@ async def _tool_loop(
                     outbound_sent = True
                     attachments = []
                 # Как только одно исходящее сообщение отправлено — прерываем обработку
-                # оставшихся tool_calls чтобы не отправить второе сообщение
+                # оставшихся tool_calls чтобы не отправить второе сообщение.
+                # Исключение: для секретаря с несколькими store_agent_record — продолжаем
+                # обрабатывать оставшиеся записи в том же батче, чтобы все подтверждения были отправлены.
                 if outbound_sent and mode == "runtime":
-                    break
+                    _remaining_stores = [
+                        c for c in tool_calls[_call_idx + 1:8]
+                        if isinstance(c, dict) and str(c.get("tool") or "") == "store_agent_record"
+                    ]
+                    if not _remaining_stores:
+                        break
                 elif tool_name == "max_send_file" and result.get("ok") and isinstance(result.get("result"), dict):
                     att = result["result"].get("attachments")
                     if isinstance(att, list):
