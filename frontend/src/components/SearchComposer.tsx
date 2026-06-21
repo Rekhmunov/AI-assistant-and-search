@@ -228,7 +228,9 @@ export function SearchComposer({
   const isBusy = uploading.length > 0 || agentStarting;
   const atLimit = totalCount >= MAX_ATTACHMENTS;
 
-  const handleSubmit = (e: FormEvent) => {
+  const LONG_PROMPT_THRESHOLD = 2000;
+
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     const q = value.trim();
     if (!q && attachments.length === 0) return;
@@ -237,6 +239,45 @@ export function SearchComposer({
       return;
     }
     if (disabled || isBusy) return;
+
+    // Pro: если промпт > 2000 символов — конвертируем в .txt и отправляем как вложение
+    if (plan === "pro" && q.length > LONG_PROMPT_THRESHOLD && canAttachFiles && !agentMode) {
+      const canAdd = MAX_ATTACHMENTS - attachments.length - uploading.length > 0;
+      if (canAdd) {
+        const now = new Date();
+        const dd = now.getDate().toString().padStart(2, "0");
+        const mm = (now.getMonth() + 1).toString().padStart(2, "0");
+        const filename = `prompt_${dd}.${mm}.${now.getFullYear()}.txt`;
+        const file = new File([q], filename, { type: "text/plain" });
+        const shortQuery =
+          q.slice(0, 200).trimEnd() + "… [продолжение запроса в прикреплённом файле]";
+
+        clearUploadFailure();
+        try {
+          const uploaded = await uploadFile(token ?? null, file, "document");
+          const allAttachments = [
+            ...attachments,
+            { id: uploaded.id, filename: uploaded.filename, kind: "document" as const },
+          ];
+          onChange("");
+          onAttachmentsChange([]);
+          if (layoutMode === "threadMobile") {
+            setMobileComposerOpen(false);
+            setInputFocused(false);
+            textareaRef.current?.blur();
+          }
+          onSubmit({
+            query: shortQuery,
+            attachmentIds: allAttachments.map((a) => a.id),
+            attachments: allAttachments,
+          });
+        } catch {
+          setUploadFailure("Не удалось прикрепить файл. Попробуйте ещё раз.");
+        }
+        return;
+      }
+    }
+
     if (layoutMode === "threadMobile") {
       setMobileComposerOpen(false);
       setInputFocused(false);
