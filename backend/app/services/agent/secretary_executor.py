@@ -80,9 +80,41 @@ def _match_entity(token: str, entities: list[dict]) -> dict | None:
     return best
 
 
+def _split_inline_entries(line: str) -> list[str]:
+    """
+    Разбивает строку вида '1000 ПЗР 2000 упаковка' на отдельные записи.
+    Ищет границы: каждый новый числовой токен после текста начинает новую запись.
+    """
+    matches = list(_AMOUNT_RE.finditer(line))
+    if len(matches) <= 1:
+        return [line]
+
+    parts: list[str] = []
+    # Текст до первого числа (если есть) — прикрепляем к первой части
+    pre = line[: matches[0].start()].strip()
+
+    for i, m in enumerate(matches):
+        chunk_start = m.start()
+        chunk_end = matches[i + 1].start() if i + 1 < len(matches) else len(line)
+        chunk = line[chunk_start:chunk_end].strip()
+        if i == 0 and pre:
+            chunk = f"{pre} {chunk}"
+        if chunk:
+            parts.append(chunk)
+
+    return parts if len(parts) > 1 else [line]
+
+
 def _extract_lines(text: str) -> list[str]:
-    """Разбивает текст на строки, убирает пустые."""
-    return [ln.strip() for ln in text.replace(";", "\n").split("\n") if ln.strip()]
+    """
+    Разбивает текст на строки-записи.
+    Поддерживает: \n, ;, а также несколько записей в одной строке ('1000 ПЗР 2000 упаковка').
+    """
+    raw_lines = [ln.strip() for ln in text.replace(";", "\n").split("\n") if ln.strip()]
+    result: list[str] = []
+    for line in raw_lines:
+        result.extend(_split_inline_entries(line))
+    return result
 
 
 _AMOUNT_RE = re.compile(r"(\d[\d\s]*(?:[.,]\d+)?)")
