@@ -274,21 +274,20 @@ async def execute_secretary_message(
         # Не подтверждение и не отмена — очищаем pending, обрабатываем как новое сообщение
         _set_pending(agent, None)
 
-    # ─── 2. Обработка pending: уточнение категории ───────────────────────────
+    # ─── 2. Обработка pending: уточнение категории (поддержка очереди) ─────────
     if pending and pending.get("type") == "clarify_entity":
-        amount = pending.get("amount")
-        raw_token = pending.get("token", "")
-        # Ищем сущность в ответе пользователя
+        # Поддерживаем и старый формат (amount/token) и новый (queue)
+        queue: list[dict] = pending.get("queue", [])
+        if not queue:
+            queue = [{"amount": pending.get("amount"), "token": pending.get("token", "")}]
+
+        current = queue[0]
+        amount = current.get("amount")
+        raw_token = current.get("token", "")
+
         entity = _match_entity(text, entities)
         if entity:
-            record = store_record(agent, "records", {
-                "category": entity["name"],
-                "amount": amount,
-                "note": raw_token,
-                "author": author,
-                "chat_id": chat_id,
-            })
-            # Добавляем новый триггер в правила (learning)
+            # Обучение: запоминаем новый триггер
             for e in entities:
                 if e["name"] == entity["name"]:
                     t = _normalize(text.strip())
@@ -298,14 +297,33 @@ async def execute_secretary_message(
                         cfg["compiled_rules"] = rules
                         agent.config = cfg
                     break
-            _set_pending(agent, None)
+
+            store_record(agent, "records", {
+                "category": entity["name"],
+                "amount": amount,
+                "note": raw_token,
+                "author": author,
+                "chat_id": chat_id,
+            })
             confirm = responses.get("on_success", "✅ Записано в категорию: {category}")
-            return ExecutorResult(text=confirm.format(
-                amount=int(amount) if amount == int(amount) else amount,
-                category=entity["name"],
-            ))
+            amt_str = str(int(amount)) if amount == int(amount) else str(amount)
+            result_text = confirm.format(amount=amt_str, category=entity["name"])
+
+            # Остаток очереди
+            remaining = queue[1:]
+            if remaining:
+                _set_pending(agent, {"type": "clarify_entity", "queue": remaining})
+                next_item = remaining[0]
+                next_amt = next_item.get("amount")
+                next_token = next_item.get("token", "")
+                next_amt_str = str(int(next_amt)) if next_amt == int(next_amt) else str(next_amt)
+                unknown_msg = responses.get("on_unknown_entity", "❓ Не распознана категория '{token}'. Уточните:")
+                clarify_text = unknown_msg.format(token=next_token[:50])
+                return ExecutorResult(text=f"{result_text}\n{clarify_text} (сумма: {next_amt_str})")
+            else:
+                _set_pending(agent, None)
+                return ExecutorResult(text=result_text)
         else:
-            # Всё ещё не понятно
             return ExecutorResult(
                 text=f"❓ Не нашёл подходящую категорию для «{text.strip()}». "
                      f"Пожалуйста, уточните категорию из списка."
@@ -386,39 +404,38 @@ async def execute_secretary_message(
         return None
 
     results: list[str] = []
-    pending_clarify: dict | None = None
+    clarify_queue: list[dict] = []  # Записи с непонятной категорией — очередь уточнения
 
     for line in lines:
         amount, rest = _parse_line(line)
 
         if amount is None:
-            no_amount_msg = responses.get(
-                "on_missing_amount",
-                "Для корректной записи нужно указать сумму и категорию затраты",
-            )
-            return ExecutorResult(text=no_amount_msg)
+            # Строка без суммы — пропускаем если есть другие, иначе сообщаем
+            if not results and not clarify_queue:
+                no_amount_msg = responses.get(
+                    "on_missing_amount",
+                    "Для корректной записи нужно указать сумму и категорию затраты",
+                )
+                return ExecutorResult(text=no_amount_msg)
+            continue
 
         entity = _match_entity(rest, entities) if rest else None
 
         if entity is None and rest:
-            # Не распознана категория — уточняем
-            unknown_msg = responses.get("on_unknown_entity", "❓ Не распознана категория '{token}'. Уточните:")
-            _set_pending(agent, {"type": "clarify_entity", "amount": amount, "token": rest})
-            return ExecutorResult(text=unknown_msg.format(token=rest[:50]))
+            # Категория не распознана — добавляем в очередь уточнения
+            clarify_queue.append({"amount": amount, "token": rest})
+            continue
 
         if entity is None:
-            no_amount_msg = responses.get(
-                "on_missing_amount",
-                "Для корректной записи нужно указать сумму и категорию затраты",
-            )
-            return ExecutorResult(text=no_amount_msg)
+            clarify_queue.append({"amount": amount, "token": rest or "?"})
+            continue
 
         # Нужно уточнение варианта (например белая/серая стежка)
         if entity.get("require_clarification") and entity.get("clarification_options"):
             options = "/".join(entity["clarification_options"])
             q = entity.get("clarification_question") or f"Уточните вариант для «{entity['name']}»:"
-            _set_pending(agent, {"type": "clarify_entity", "amount": amount, "token": rest})
-            return ExecutorResult(text=f"❓ {q} ({options})")
+            clarify_queue.append({"amount": amount, "token": rest})
+            continue
 
         store_record(agent, "records", {
             "category": entity["name"],
@@ -430,6 +447,23 @@ async def execute_secretary_message(
         confirm = responses.get("on_success", "✅ Записано в категорию: {category}")
         amt_str = str(int(amount)) if amount == int(amount) else str(amount)
         results.append(confirm.format(amount=amt_str, category=entity["name"]))
+
+    # Если есть записи требующие уточнения — сохраняем очередь и спрашиваем первую
+    if clarify_queue:
+        _set_pending(agent, {"type": "clarify_entity", "queue": clarify_queue})
+        first = clarify_queue[0]
+        amt = first["amount"]
+        token = first["token"]
+        amt_str = str(int(amt)) if amt == int(amt) else str(amt)
+        unknown_msg = responses.get("on_unknown_entity", "❓ Не распознана категория '{token}'. Уточните:")
+        clarify_text = unknown_msg.format(token=token[:50]) + f" (сумма: {amt_str})"
+
+        if results:
+            # Часть записана, часть требует уточнения
+            confirmed = "\n".join(results)
+            return ExecutorResult(text=f"{confirmed}\n{clarify_text}")
+        else:
+            return ExecutorResult(text=clarify_text)
 
     if not results:
         return None
