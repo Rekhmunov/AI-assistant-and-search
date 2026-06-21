@@ -33,6 +33,9 @@ def should_run_max_loop_background(user_text: str) -> bool:
     low = (user_text or "").lower()
     if len(low) > 600:
         return True
+    # Отчёт всегда в фоне — LLM может делать много шагов
+    if any(m in low for m in ("отчет", "отчёт", "excel", "xlsx")):
+        return True
     return sum(1 for m in _BACKGROUND_MARKERS if m in low) >= 2
 
 
