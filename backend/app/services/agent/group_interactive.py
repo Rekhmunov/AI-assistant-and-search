@@ -79,6 +79,29 @@ async def handle_group_interactive(
             except Exception as exc:
                 logger.exception("Secretary pending date report failed agent=%s: %s", _agent.id, exc)
 
+        # ── Прямой запрос отчёта с датой: «Отчет с 17.06 по 21.06» ──────────────
+        # Если сообщение содержит слово «отчёт/excel» И в тексте есть диапазон дат —
+        # обрабатываем детерминированно, без LLM (надёжнее и быстрее).
+        if _cfg.get("template") == "secretary":
+            _text_low = (text or "").lower()
+            _has_report_keyword = any(w in _text_low for w in ("отчет", "отчёт", "excel", "xlsx"))
+            if _has_report_keyword:
+                from datetime import datetime, timezone as _tz
+                from app.services.agent.secretary_executor import _parse_period
+                _period = _parse_period(text, datetime.now(_tz.utc))
+                if _period:
+                    # Дата распознана — сохраняем флаг и вызываем детерминированный обработчик
+                    _cfg_tmp = dict(_agent.config or {})
+                    _cfg_tmp["secretary_pending_report"] = True
+                    _agent.config = _cfg_tmp
+                    try:
+                        handled = await _handle_pending_date_report(db, _agent, bot, chat_id, text)
+                        if handled:
+                            await db.commit()
+                            return True
+                    except Exception as exc:
+                        logger.exception("Secretary direct report failed agent=%s: %s", _agent.id, exc)
+
         if _cfg.get("template") == "secretary" and isinstance(_cfg.get("compiled_rules"), dict):
             # Секретарь с compiled_rules работает ТОЛЬКО по коду — LLM не вызывается
             try:
