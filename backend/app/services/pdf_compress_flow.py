@@ -24,6 +24,7 @@ from app.services.pdf_compress import (
     detect_compression_level,
     format_size,
     ghostscript_available,
+    has_explicit_compression_level,
 )
 from app.services.search_pending import clear_search_pending, set_search_pending
 from app.services.sse import sse_event
@@ -204,43 +205,57 @@ async def stream_pdf_compress_turn(
                 break
 
     if has_pdf_attachment and pdf_file:
-        # ── ШАГ 1: PDF только что загружен → спрашиваем уровень ──
         file_size_str = format_size(pdf_file.size_bytes or 0)
-        answer_text = (
-            f"PDF загружен ({file_size_str}). Выберите уровень сжатия:"
-        )
-        follow_ups = list(_LEVEL_LABELS.values())
 
-        assistant_msg = Message(
-            thread_id=thread.id,
-            role=MessageRole.ASSISTANT,
-            content=answer_text,
-            follow_up_questions=follow_ups,  # сохраняем чтобы кнопки не исчезали после sync
-        )
-        db.add(assistant_msg)
-        thread.message_count = (thread.message_count or 0) + 2
-        thread.last_message_at = datetime.now(timezone.utc)
-        if not thread_id:
-            thread.title = f"Сжатие PDF · {pdf_file.filename or 'файл'}"
-        await db.commit()
+        # Если уровень уже указан в запросе — сразу сжимаем без переспроса
+        if has_explicit_compression_level(query):
+            level = detect_compression_level(query)
+            # Передаём управление шагу сжатия (ниже)
+            pass
+        else:
+            # ── ШАГ 1: спрашиваем уровень — список вариантов прямо в тексте ──
+            answer_text = (
+                f"PDF загружен ({file_size_str}). Выберите уровень сжатия:\n"
+                "Максимальное (меньший размер файла)\n"
+                "Оптимальное (рекомендуется)\n"
+                "Минимальное (лучшее качество)"
+            )
 
-        for chunk in _chunks(answer_text, 30):
-            yield sse_event("token", {"text": chunk})
+            assistant_msg = Message(
+                thread_id=thread.id,
+                role=MessageRole.ASSISTANT,
+                content=answer_text,
+                # follow_up_questions намеренно не задаём → не показывается блок «Продолжить тему»
+            )
+            db.add(assistant_msg)
+            thread.message_count = (thread.message_count or 0) + 2
+            thread.last_message_at = datetime.now(timezone.utc)
+            if not thread_id:
+                thread.title = f"Сжатие PDF · {pdf_file.filename or 'файл'}"
+            await db.commit()
 
-        yield sse_event("follow_ups", {"questions": follow_ups})
-        yield sse_event(
-            "done",
-            {
-                "message_id": str(assistant_msg.id),
-                "needs_search": False,
-                "answer_model": "lite",
-            },
-        )
+            for chunk in _chunks(answer_text, 40):
+                yield sse_event("token", {"text": chunk})
 
-    else:
-        # ── ШАГ 2: нет вложений → ищем PDF из истории, сжимаем ──
-        level = detect_compression_level(query)
+            yield sse_event(
+                "done",
+                {
+                    "message_id": str(assistant_msg.id),
+                    "needs_search": False,
+                    "answer_model": "lite",
+                },
+            )
+            await clear_search_pending(redis_client, thread.id)
+            return
 
+    # ── ШАГ 2: сжимаем ──
+    # Попадаем сюда если:
+    # а) нет вложений — пользователь ответил уровнем на вопрос
+    # б) вложение есть И уровень уже указан в исходном запросе
+    level = detect_compression_level(query)
+
+    # pdf_file уже найден если пришёл с вложением; иначе ищем в истории треда
+    if not pdf_file:
         pdf_file = await _find_pdf_in_thread(db, thread.id, user.id)
         if not pdf_file:
             answer_text = (

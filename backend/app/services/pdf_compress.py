@@ -25,14 +25,22 @@ _LEVEL_MAP: dict[str, str] = {
 def detect_compression_level(text: str) -> str:
     """Определяет уровень сжатия из произвольного текста пользователя."""
     t = (text or "").lower()
-    # Максимальное
-    if any(w in t for w in ("максимальн", "максимум", "сильн", "мин", "screen", "первый", "1")):
+    if any(w in t for w in ("максимальн", "максимум", "сильн", "screen", "первый", "1")):
         return "screen"
-    # Минимальное (лучшее качество)
     if any(w in t for w in ("минимальн", "качеств", "лучш", "printer", "печат", "третий", "3")):
         return "printer"
-    # По умолчанию — оптимальное
     return "ebook"
+
+
+def has_explicit_compression_level(text: str) -> bool:
+    """Проверяет, указал ли пользователь уровень сжатия явно."""
+    t = (text or "").lower()
+    return any(w in t for w in (
+        "максимальн", "максимум", "сильн", "screen",
+        "минимальн", "качеств", "лучш", "printer", "печат",
+        "оптимальн", "рекоменд", "оптим", "ebook",
+        "первый", "второй", "третий", "1", "2", "3",
+    ))
 
 
 def compress_pdf_bytes(data: bytes, level: str = "ebook") -> bytes:
