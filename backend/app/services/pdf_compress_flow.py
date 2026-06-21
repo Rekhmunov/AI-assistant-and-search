@@ -33,9 +33,9 @@ from app.services.upload_storage import load_upload_bytes, save_upload_bytes
 logger = logging.getLogger(__name__)
 
 _LEVEL_LABELS = {
-    "screen": "Максимальное (меньший размер файла)",
-    "ebook": "Оптимальное (рекомендуется)",
-    "printer": "Минимальное (лучшее качество)",
+    "screen": "максимальное",
+    "ebook": "оптимальное",
+    "printer": "минимальное",
 }
 
 _COMPRESSED_TTL_HOURS = 24
@@ -262,7 +262,7 @@ async def stream_pdf_compress_turn(
         return
 
     # Сжимаем
-    status_text = f"Сжимаем PDF ({_LEVEL_LABELS.get(level, level)})…"
+    status_text = f"Сжимаем PDF (качество - {_LEVEL_LABELS.get(level, level)})…"
     for chunk in _chunks(status_text, 30):
         yield sse_event("token", {"text": chunk})
 
