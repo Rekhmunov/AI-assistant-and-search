@@ -403,7 +403,7 @@ async def execute_secretary_message(
     if not lines:
         return None
 
-    results: list[str] = []
+    recorded_count: int = 0
     clarify_queue: list[dict] = []  # Записи с непонятной категорией — очередь уточнения
 
     for line in lines:
@@ -446,7 +446,10 @@ async def execute_secretary_message(
         })
         confirm = responses.get("on_success", "✅ Записано в категорию: {category}")
         amt_str = str(int(amount)) if amount == int(amount) else str(amount)
-        results.append(confirm.format(amount=amt_str, category=entity["name"]))
+        msg = confirm.format(amount=amt_str, category=entity["name"])
+        # Каждая запись — отдельное сообщение в чат
+        await bot.send_message(None, msg, chat_id=chat_id)
+        recorded_count += 1
 
     # Если есть записи требующие уточнения — сохраняем очередь и спрашиваем первую
     if clarify_queue:
@@ -457,20 +460,11 @@ async def execute_secretary_message(
         amt_str = str(int(amt)) if amt == int(amt) else str(amt)
         unknown_msg = responses.get("on_unknown_entity", "❓ Не распознана категория '{token}'. Уточните:")
         clarify_text = unknown_msg.format(token=token[:50]) + f" (сумма: {amt_str})"
+        # Подтверждения уже отправлены через send_message — возвращаем только уточнение
+        return ExecutorResult(text=clarify_text)
 
-        if results:
-            # Часть записана, часть требует уточнения
-            confirmed = "\n".join(results)
-            return ExecutorResult(text=f"{confirmed}\n{clarify_text}")
-        else:
-            return ExecutorResult(text=clarify_text)
-
-    if not results:
+    if recorded_count == 0 and not clarify_queue:
         return None
 
-    if len(results) == 1:
-        return ExecutorResult(text=results[0])
-
-    multi_msg = responses.get("on_multi_record", "✅ Записано {count} позиций")
-    summary = multi_msg.format(count=len(results)) + ":\n" + "\n".join(results)
-    return ExecutorResult(text=summary)
+    # Все подтверждения отправлены отдельными сообщениями — ничего не добавляем
+    return ExecutorResult(text="", handled=True)
