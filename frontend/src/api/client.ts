@@ -38,6 +38,8 @@ export interface AppPublicConfig {
   pro_purchase_disabled?: boolean;
   yandex_metrica_counter_id?: string | null;
   yandex_webmaster_verification?: string | null;
+  max_upload_mb_free?: number;
+  max_upload_mb_pro?: number;
 }
 
 export type ThreadType = "search" | "agent";

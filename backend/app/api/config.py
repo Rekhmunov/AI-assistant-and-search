@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_db, get_redis
 from app.core.config import get_settings
 from app.services.app_settings import get_setting
+from app.services.upload_lifecycle import resolve_max_upload_mb_free, resolve_max_upload_mb_pro
 
 import redis.asyncio as redis
 
@@ -25,9 +26,13 @@ async def public_config(
     pro_purchase_disabled = bool(await get_setting("pro_purchase_disabled", db, redis_client, settings))
     metrica_id = str(await get_setting("yandex_metrica_counter_id", db, redis_client, settings)).strip()
     webmaster_code = str(await get_setting("yandex_webmaster_verification", db, redis_client, settings)).strip().lower()
+    max_upload_mb_free = await resolve_max_upload_mb_free(db, redis_client, settings)
+    max_upload_mb_pro = await resolve_max_upload_mb_pro(db, redis_client, settings)
     return {
         "pro_price_rub": pro_price_rub,
         "pro_purchase_disabled": pro_purchase_disabled,
         "yandex_metrica_counter_id": metrica_id or None,
         "yandex_webmaster_verification": webmaster_code or None,
+        "max_upload_mb_free": max_upload_mb_free,
+        "max_upload_mb_pro": max_upload_mb_pro,
     }

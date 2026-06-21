@@ -107,10 +107,11 @@ export function fileSizeError(
   file: File,
   maxBytes: number,
   plan: "free" | "pro" | undefined,
+  proMaxBytes?: number,
 ): FileValidationResult {
   const limitMb = Math.round(maxBytes / 1024 / 1024);
   const fileMb = (file.size / (1024 * 1024)).toFixed(1);
-  const proMb = Math.round(MAX_FILE_BYTES_PRO / 1024 / 1024);
+  const proMb = Math.round((proMaxBytes ?? MAX_FILE_BYTES_PRO) / 1024 / 1024);
   if (plan === "free") {
     return {
       message: `«${file.name}» (${fileMb} МБ) — лимит Free ${limitMb} МБ. Перейдите на Pro (до ${proMb} МБ на файл).`,

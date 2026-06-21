@@ -12,7 +12,7 @@ import {
 import { Bot, Mic, ArrowUp, FileText, X } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
-import { FileUploadError, uploadFile, fetchMe, fetchSession } from "../api/client";
+import { FileUploadError, uploadFile, fetchMe, fetchSession, fetchAppConfig } from "../api/client";
 import { ComposerModelSelector } from "./ComposerModelSelector";
 import { ComposerAttachMenu } from "./ComposerAttachMenu";
 import { ProUpgradeModal } from "./ProUpgradeModal";
@@ -173,12 +173,20 @@ export function SearchComposer({
     queryFn: () => fetchMe(token!),
     enabled: !!token,
   });
+  const { data: appConfig } = useQuery({
+    queryKey: ["app-config"],
+    queryFn: fetchAppConfig,
+    staleTime: 5 * 60_000,
+  });
   const plan =
     me?.plan === "pro" || session?.user?.plan === "pro" || authPlan === "pro" ? "pro" : "free";
   const isGuest = session?.is_guest === true;
   const canAttachFiles = Boolean(token) || isGuest;
   const voiceBlockedForNonPro = plan !== "pro";
-  const maxBytes = plan === "pro" ? MAX_FILE_BYTES_PRO : MAX_FILE_BYTES_FREE;
+  // Лимиты из настроек админки (fallback на константы если конфиг не загружен)
+  const maxBytesFree = ((appConfig?.max_upload_mb_free ?? 8)) * 1024 * 1024;
+  const maxBytesPro = ((appConfig?.max_upload_mb_pro ?? 15)) * 1024 * 1024;
+  const maxBytes = plan === "pro" ? maxBytesPro : maxBytesFree;
 
   const setUploadFailure = (message: string, suggestPro = false) => {
     setUploadError(message);
