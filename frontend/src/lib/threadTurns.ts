@@ -58,6 +58,7 @@ function normalizeMessageAttachments(
     previewUrl: a.previewUrl,
     share_url: a.share_url ?? undefined,
     ttl_hours: a.ttl_hours ?? undefined,
+    expires_at: a.expires_at ?? undefined,
     title: a.title ?? undefined,
     content: a.content ?? undefined,
   }));

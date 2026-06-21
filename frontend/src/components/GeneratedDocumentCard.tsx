@@ -8,12 +8,18 @@ type Props = {
   document: GeneratedDocumentInfo;
 };
 
+function isExpired(doc: GeneratedDocumentInfo): boolean {
+  if (!doc.expires_at) return false;
+  return new Date(doc.expires_at) < new Date();
+}
+
 export function GeneratedDocumentCard({ document: doc }: Props) {
   const openUrl = resolveGeneratedDocumentOpenUrl(doc);
   const filename = doc.filename || "document.docx";
+  const expired = isExpired(doc);
 
   return (
-    <div className="generated-document-card">
+    <div className={`generated-document-card${expired ? " generated-document-card--expired" : ""}`}>
       <div className="generated-document-card-icon" aria-hidden>
         <DocxIcon />
       </div>
@@ -21,13 +27,19 @@ export function GeneratedDocumentCard({ document: doc }: Props) {
         <span className="generated-document-card-name" title={doc.filename}>
           {doc.filename}
         </span>
-        <button
-          type="button"
-          className="btn btn-secondary generated-document-card-download"
-          onClick={() => void downloadRemoteFile(openUrl, filename)}
-        >
-          {t("downloadDocument")}
-        </button>
+        {expired ? (
+          <span className="generated-document-card-expired-label">
+            Файл удалён (срок хранения истёк)
+          </span>
+        ) : (
+          <button
+            type="button"
+            className="btn btn-secondary generated-document-card-download"
+            onClick={() => void downloadRemoteFile(openUrl, filename)}
+          >
+            {t("downloadDocument")}
+          </button>
+        )}
       </div>
     </div>
   );

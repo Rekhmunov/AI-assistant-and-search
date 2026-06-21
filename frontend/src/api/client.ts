@@ -70,6 +70,7 @@ export interface MessageAttachment {
   url?: string | null;
   share_url?: string | null;
   ttl_hours?: number | null;
+  expires_at?: string | null;
   previewUrl?: string;
   title?: string | null;
   content?: string | null;
@@ -87,6 +88,7 @@ export interface GeneratedDocumentInfo {
   url?: string | null;
   share_url?: string | null;
   ttl_hours?: number;
+  expires_at?: string | null;
 }
 
 export interface EntityImage {

@@ -2311,6 +2311,16 @@ body:has(.page-thread) {
   box-shadow: var(--shadow-sm);
 }
 
+.generated-document-card--expired {
+  opacity: 0.55;
+}
+
+.generated-document-card-expired-label {
+  font-size: 0.82rem;
+  color: var(--muted);
+  font-style: italic;
+}
+
 .generated-document-card-icon {
   flex-shrink: 0;
   display: flex;

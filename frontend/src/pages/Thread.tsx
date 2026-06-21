@@ -681,6 +681,8 @@ export function Thread() {
           setDocGenStatus(status);
         },
         onDocumentReady: (doc: GeneratedDocumentInfo) => {
+          const expiresAt = doc.expires_at
+            ?? (doc.ttl_hours ? new Date(Date.now() + doc.ttl_hours * 3600 * 1000).toISOString() : null);
           setTurns((prev) =>
             updateLastStreamingTurn(prev, {
               generatedDocument: {
@@ -690,6 +692,7 @@ export function Thread() {
                 url: doc.url,
                 share_url: doc.share_url,
                 ttl_hours: doc.ttl_hours,
+                expires_at: expiresAt,
               },
             }),
           );
