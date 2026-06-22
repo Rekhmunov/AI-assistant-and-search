@@ -168,3 +168,146 @@ async def _run_max_agent_loop_background_async(
     finally:
         await redis_client.aclose()
         await engine.dispose()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Плановый постинг (агент «Постинг»)
+# ─────────────────────────────────────────────────────────────────────────────
+
+@celery.task(name="dispatch_poster_scheduled")
+def dispatch_poster_scheduled_task() -> None:
+    asyncio.run(_dispatch_poster_scheduled_async())
+
+
+async def _dispatch_poster_scheduled_async() -> None:
+    """Проверяет расписание всех активных poster-агентов и генерирует посты по времени."""
+    import re
+    from datetime import datetime, timezone as _tz
+
+    settings = get_settings()
+    engine = create_async_engine(settings.database_url)
+    session_factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    redis_client = aioredis.from_url(settings.redis_url, decode_responses=True)
+
+    try:
+        from sqlalchemy import select
+        from app.models.agent import AgentStatus
+
+        async with session_factory() as db:
+            result = await db.execute(
+                select(AgentInstance).where(AgentInstance.status == AgentStatus.ACTIVE.value)
+            )
+            agents = result.scalars().all()
+
+            now = datetime.now(_tz.utc)
+            now_local = now.astimezone()
+            current_day_ru = ["пн", "вт", "ср", "чт", "пт", "сб", "вс"][now_local.weekday()]
+            current_time = now_local.strftime("%H:%M")
+
+            bot = MaxBotService()
+
+            for agent in agents:
+                cfg = dict(agent.config or {})
+                if cfg.get("task_mode") != "poster" and cfg.get("template") != "poster":
+                    continue
+
+                instr = str(cfg.get("support_instructions") or "").lower()
+
+                # Парсим расписание: «пн,ср,пт в 10:00»
+                sched_m = re.search(r"расписание:\s*([^\n.]+)", instr)
+                if not sched_m:
+                    continue
+                sched_str = sched_m.group(1).strip()
+
+                # Проверяем день
+                if current_day_ru not in sched_str:
+                    continue
+
+                # Проверяем время (с точностью до 5 минут)
+                time_m = re.search(r"(\d{1,2}:\d{2})", sched_str)
+                if not time_m:
+                    continue
+                sched_time = time_m.group(1)
+
+                # Проверяем что текущее время совпадает с расписанием (±5 мин)
+                from datetime import timedelta
+                sched_h, sched_min = map(int, sched_time.split(":"))
+                target = now_local.replace(hour=sched_h, minute=sched_min, second=0, microsecond=0)
+                diff_min = abs((now_local - target).total_seconds() / 60)
+                if diff_min > 5:
+                    continue
+
+                # Проверяем что не публиковали уже сегодня в это время (дедупликация)
+                last_dispatch = cfg.get("poster_last_dispatch")
+                today_str = now_local.strftime("%Y-%m-%d")
+                if last_dispatch and last_dispatch.startswith(today_str + "T" + sched_time[:2]):
+                    continue
+
+                # Всё ок — генерируем пост
+                try:
+                    from app.services.agent.poster_executor import (
+                        generate_post,
+                        get_approval_mode,
+                        get_poster_channel_id,
+                        publish_to_channel,
+                        save_pending_draft,
+                        save_post_to_history,
+                        send_draft_for_approval,
+                        send_dm_notification,
+                        _pick_next_topic,
+                    )
+                    from app.services.providers.factory import resolve_agent_providers
+                    import uuid as _uuid
+
+                    topic = _pick_next_topic(agent)
+                    llm, _, _, _, _ = await resolve_agent_providers(db, redis_client)
+                    post_text = await generate_post(agent, topic, llm)
+                    post_id = str(_uuid.uuid4())
+
+                    save_post_to_history(agent, post_id=post_id, topic=topic, text=post_text, status="draft")
+
+                    approval_mode = get_approval_mode(agent)
+                    channel_id = get_poster_channel_id(agent)
+                    approval_chat_id = agent.max_chat_id
+
+                    if approval_mode == "auto" and channel_id:
+                        ok = await publish_to_channel(bot, channel_id=channel_id, text=post_text)
+                        if ok:
+                            from app.services.agent.poster_executor import update_post_status
+                            update_post_status(agent, post_id, "published")
+                    elif approval_chat_id:
+                        save_pending_draft(agent, post_id=post_id, topic=topic, text=post_text)
+                        msg_id = await send_draft_for_approval(
+                            agent, db, bot,
+                            approval_chat_id=approval_chat_id,
+                            post_id=post_id,
+                            topic=topic,
+                            text=post_text,
+                        )
+                        save_pending_draft(agent, post_id=post_id, topic=topic,
+                                           text=post_text, draft_message_id=msg_id)
+                        # DM уведомление
+                        owner_uid = cfg.get("owner_max_user_id")
+                        if owner_uid:
+                            try:
+                                await send_dm_notification(
+                                    agent, bot,
+                                    owner_max_user_id=int(owner_uid),
+                                    approval_chat_id=approval_chat_id,
+                                )
+                            except Exception:
+                                pass
+
+                    # Записываем время последнего запуска
+                    cfg["poster_last_dispatch"] = now_local.isoformat()
+                    agent.config = cfg
+                    await db.commit()
+
+                    logger.info("Poster scheduled: agent=%s topic=%s mode=%s", agent.id, topic, approval_mode)
+
+                except Exception as exc:
+                    logger.exception("Poster scheduled failed agent=%s: %s", agent.id, exc)
+
+    finally:
+        await redis_client.aclose()
+        await engine.dispose()

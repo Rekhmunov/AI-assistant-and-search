@@ -100,7 +100,27 @@ async def process_callback_background(
     from app.services.bot import MaxBotService
     bot = MaxBotService()
     try:
-        if callback_payload.startswith("secretary:"):
+        if callback_payload.startswith("poster:"):
+            settings = get_settings()
+            redis_client = aioredis.from_url(settings.redis_url, decode_responses=True)
+            try:
+                async with async_session_factory() as db:
+                    from app.services.agent.poster_callbacks import handle_poster_callback
+                    handled = await handle_poster_callback(
+                        db,
+                        redis_client,
+                        callback_id=callback_id,
+                        payload=callback_payload,
+                        clicker_user_id=clicker_user_id,
+                        bot=bot,
+                    )
+                    if handled:
+                        await db.commit()
+                    else:
+                        await bot.answer_callback(callback_id)
+            finally:
+                await redis_client.aclose()
+        elif callback_payload.startswith("secretary:"):
             async with async_session_factory() as db:
                 from app.services.agent.secretary_callbacks import handle_secretary_callback
                 handled = await handle_secretary_callback(

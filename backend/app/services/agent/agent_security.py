@@ -37,6 +37,8 @@ ALLOWED_TOOLS = frozenset(
         "delete_agent_record",
         "max_confirm_record",
         "max_send_date_picker",
+        "generate_post_draft",
+        "query_post_history",
     }
 )
 

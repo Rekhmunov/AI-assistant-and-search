@@ -94,6 +94,10 @@ async def execute_agent_tool(
             return await _tool_max_send_date_picker(bot, agent, safe_args)
         if name == "search_thread_history":
             return await _tool_search_thread_history(db, thread_id=thread_id, args=safe_args)
+        if name == "generate_post_draft":
+            return await _tool_generate_post_draft(db, redis_client, agent, bot, safe_args, runtime_chat_id)
+        if name == "query_post_history":
+            return _tool_query_post_history(agent)
         if name == "store_agent_record":
             result = _tool_store_record(agent, safe_args, author=author, chat_id=runtime_chat_id)
             # Для агента «Учет затрат»: автоматически отправляем подтверждение с кнопкой удаления.
@@ -730,3 +734,92 @@ def format_tool_results_for_llm(results: list[dict]) -> str:
         else:
             ordered.append(r)
     return json.dumps(ordered, ensure_ascii=False, indent=0)[:12000]
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Инструменты агента «Постинг»
+# ─────────────────────────────────────────────────────────────────────────────
+
+async def _tool_generate_post_draft(
+    db,
+    redis_client,
+    agent: Any,
+    bot: Any,
+    args: dict,
+    approval_chat_id: int | None,
+) -> dict:
+    """Генерирует черновик поста и отправляет его на согласование."""
+    import uuid as _uuid
+    from app.services.agent.poster_executor import (
+        generate_post,
+        get_approval_mode,
+        get_poster_channel_id,
+        publish_to_channel,
+        save_pending_draft,
+        save_post_to_history,
+        send_draft_for_approval,
+        send_dm_notification,
+        _pick_next_topic,
+    )
+    from app.services.providers.factory import resolve_agent_providers
+
+    topic = str(args.get("topic") or _pick_next_topic(agent))
+
+    try:
+        llm, _, _, _, _ = await resolve_agent_providers(db, redis_client)
+        post_text = await generate_post(agent, topic, llm)
+    except Exception as exc:
+        return {"ok": False, "tool": "generate_post_draft", "error": str(exc)}
+
+    post_id = str(_uuid.uuid4())
+    save_post_to_history(agent, post_id=post_id, topic=topic, text=post_text, status="draft")
+
+    approval_mode = get_approval_mode(agent)
+    channel_id = get_poster_channel_id(agent)
+
+    if approval_mode == "auto" and channel_id:
+        ok = await publish_to_channel(bot, channel_id=channel_id, text=post_text)
+        if ok:
+            from app.services.agent.poster_executor import update_post_status
+            update_post_status(agent, post_id, "published")
+            return {"ok": True, "tool": "generate_post_draft", "result": "Пост опубликован автоматически.", "outbound_sent": True}
+        return {"ok": False, "tool": "generate_post_draft", "error": "Не удалось опубликовать пост в канал."}
+
+    # С согласованием
+    save_pending_draft(agent, post_id=post_id, topic=topic, text=post_text)
+    if approval_chat_id:
+        msg_id = await send_draft_for_approval(
+            agent, db, bot,
+            approval_chat_id=approval_chat_id,
+            post_id=post_id,
+            topic=topic,
+            text=post_text,
+        )
+        save_pending_draft(agent, post_id=post_id, topic=topic, text=post_text, draft_message_id=msg_id)
+
+        # DM уведомление владельцу
+        cfg = dict(agent.config or {})
+        owner_uid = cfg.get("owner_max_user_id")
+        if owner_uid and owner_uid != approval_chat_id:
+            try:
+                await send_dm_notification(agent, bot, owner_max_user_id=int(owner_uid), approval_chat_id=approval_chat_id)
+            except Exception:
+                pass
+
+    return {
+        "ok": True,
+        "tool": "generate_post_draft",
+        "result": f"Черновик поста «{topic}» отправлен на согласование.",
+        "outbound_sent": True,
+    }
+
+
+def _tool_query_post_history(agent: Any) -> dict:
+    """Возвращает историю постов."""
+    from app.services.agent.poster_executor import get_post_history, format_post_history
+    history = get_post_history(agent)
+    return {
+        "ok": True,
+        "tool": "query_post_history",
+        "result": format_post_history(history),
+    }

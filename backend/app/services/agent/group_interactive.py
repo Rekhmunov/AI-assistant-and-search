@@ -57,6 +57,19 @@ async def handle_group_interactive(
     for _agent in _quick_agents:
         _cfg = _agent.config or {}
 
+        # ── Агент «Постинг»: обработка ожидания ввода правки ─────────────────
+        if _cfg.get("template") == "poster":
+            try:
+                from app.services.agent.poster_callbacks import handle_poster_edit_input
+                handled = await handle_poster_edit_input(
+                    db, _agent, bot, text=text, approval_chat_id=chat_id,
+                )
+                if handled:
+                    await db.commit()
+                    return True
+            except Exception as exc:
+                logger.exception("Poster edit input failed agent=%s: %s", _agent.id, exc)
+
         # ── Отмена ожидающей записи ───────────────────────────────────────────
         if _cfg.get("template") == "secretary" and text.strip().lower() in {"отмена", "отменить", "cancel"}:
             from app.services.agent.agent_spec import load_agent_spec, save_agent_spec
