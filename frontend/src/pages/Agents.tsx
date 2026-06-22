@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
-import { Bell, ChevronRight, ClipboardList, MessageCircle } from "lucide-react";
+import { Bell, ChevronRight, ClipboardList, MessageCircle, Megaphone } from "lucide-react";
 import { createAgentThreadWithTemplate } from "../api/client";
 import { MobilePageHeader } from "../components/MobilePageHeader";
 import { MobileNewThreadButton } from "../components/MobileNewThreadButton";
@@ -38,6 +38,12 @@ const TEMPLATE_META: Record<string, Omit<AgentTemplate, "id" | "title">> = {
     icon: <MessageCircle size={26} strokeWidth={1.8} />,
     color: "#2563eb",
   },
+  poster: {
+    description: "Автоматически генерирует и публикует посты в MAX-канал по расписанию",
+    badges: ["Генерация постов", "Расписание", "Согласование", "ИИ-рефлексия"],
+    icon: <Megaphone size={26} strokeWidth={1.8} />,
+    color: "#ea580c",
+  },
 };
 
 // Фоллбэк если API недоступен — все шаблоны видны
@@ -45,6 +51,7 @@ const FALLBACK_TEMPLATES: AgentTemplate[] = [
   { id: "reminder", title: "Напоминания", ...TEMPLATE_META.reminder },
   { id: "secretary", title: "Учет затрат", ...TEMPLATE_META.secretary },
   { id: "assistant", title: "Личный ассистент", ...TEMPLATE_META.assistant },
+  { id: "poster", title: "Постинг", ...TEMPLATE_META.poster },
 ];
 
 export function AgentsPage() {
