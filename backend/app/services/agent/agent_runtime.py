@@ -47,6 +47,7 @@ async def run_max_interactive_loop(
     author: str = "",
     vision_context: str = "",
     bot: MaxBotService | None = None,
+    override_runtime_prompt: str | None = None,
 ) -> RuntimeLoopResult:
     """Unified MAX runtime: tools + reflection + thread memory."""
     _ = bot
@@ -55,28 +56,27 @@ async def run_max_interactive_loop(
     if vision_context:
         enriched = f"{enriched}\n\n[Анализ изображения]\n{vision_context[:3500]}"
 
-    # Для шаблонных агентов подставляем support_instructions в runtime промпт
+    # Если передан override_runtime_prompt извне — используем его.
+    # Иначе вычисляем по шаблону агента (secretary и др.)
     cfg = dict(agent.config or {})
     template = str(cfg.get("template") or "")
-    override_runtime_prompt: str | None = None
-    if template:
+    if override_runtime_prompt is None and template == "secretary":
         from app.services.agent.templates.secretary import SECRETARY_RUNTIME_PROMPT
-        if template == "secretary":
-            from datetime import datetime, timezone
-            tz_name = str(cfg.get("timezone") or "Europe/Moscow")
-            try:
-                import zoneinfo
-                tz = zoneinfo.ZoneInfo(tz_name)
-                now_local = datetime.now(tz)
-            except Exception:
-                now_local = datetime.now(timezone.utc)
-            current_date = now_local.strftime("%d.%m.%Y (%A)")
-            instructions = str(cfg.get("support_instructions") or "")
-            override_runtime_prompt = (
-                SECRETARY_RUNTIME_PROMPT
-                .replace("{support_instructions}", instructions or "(инструкция не задана)")
-                .replace("{current_date}", current_date)
-            )
+        from datetime import datetime, timezone
+        tz_name = str(cfg.get("timezone") or "Europe/Moscow")
+        try:
+            import zoneinfo
+            tz = zoneinfo.ZoneInfo(tz_name)
+            now_local = datetime.now(tz)
+        except Exception:
+            now_local = datetime.now(timezone.utc)
+        current_date = now_local.strftime("%d.%m.%Y (%A)")
+        instructions = str(cfg.get("support_instructions") or "")
+        override_runtime_prompt = (
+            SECRETARY_RUNTIME_PROMPT
+            .replace("{support_instructions}", instructions or "(инструкция не задана)")
+            .replace("{current_date}", current_date)
+        )
 
     result = await run_runtime_loop(
         db,
