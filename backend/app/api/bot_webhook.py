@@ -118,6 +118,14 @@ def _is_bot_started(payload: dict[str, Any]) -> bool:
     return payload.get("event") == "bot_started"
 
 
+def _is_bot_stopped(payload: dict[str, Any]) -> bool:
+    """Пользователь остановил/удалил бота из личного диалога."""
+    update_type = str(payload.get("update_type") or payload.get("type") or "").lower()
+    if update_type in {"bot_stopped", "bot.stopped"}:
+        return True
+    return payload.get("event") == "bot_stopped"
+
+
 def _verify_webhook_secret(
     x_max_bot_api_secret: str | None,
     x_webhook_secret: str | None,
@@ -183,10 +191,20 @@ async def max_webhook(
 
     max_user_id = _extract_max_user_id(payload)
 
+    if _is_bot_stopped(payload):
+        if max_user_id is not None:
+            await _pause_user_agents(db, max_user_id)
+            await db.commit()
+            logger.info("MAX bot_stopped: paused all agents for max_user_id=%s", max_user_id)
+        return {"ok": True}
+
     if _is_bot_started(payload):
         if max_user_id is None:
             logger.warning("MAX webhook bot_started without user id: %s", payload)
             return {"ok": True}
+        # Возобновляем агентов если были на паузе после bot_stopped
+        await _resume_user_agents(db, max_user_id)
+        await db.commit()
         sent = await send_bot_welcome(db, max_user_id)
         if not sent:
             logger.warning("Welcome not delivered to MAX user %s (check BOT_TOKEN / logs)", max_user_id)
@@ -273,3 +291,56 @@ async def max_webhook(
         return {"ok": True}
 
     return {"ok": True}
+
+
+async def _pause_user_agents(db: AsyncSession, max_user_id: int) -> None:
+    """Приостанавливает всех активных агентов пользователя (bot_stopped)."""
+    from sqlalchemy import select
+    from app.models.user import User
+    from app.models.agent import AgentInstance, AgentStatus
+
+    user_result = await db.execute(
+        select(User).where(User.max_user_id == max_user_id).limit(1)
+    )
+    user = user_result.scalar_one_or_none()
+    if not user:
+        return
+
+    result = await db.execute(
+        select(AgentInstance).where(
+            AgentInstance.user_id == user.id,
+            AgentInstance.status == AgentStatus.ACTIVE.value,
+        )
+    )
+    for agent in result.scalars().all():
+        cfg = dict(agent.config or {})
+        cfg["bot_stopped_by_user"] = True
+        agent.config = cfg
+        agent.status = AgentStatus.COLLECTING.value  # пауза, не удаление
+
+
+async def _resume_user_agents(db: AsyncSession, max_user_id: int) -> None:
+    """Возобновляет агентов приостановленных через bot_stopped."""
+    from sqlalchemy import select
+    from app.models.user import User
+    from app.models.agent import AgentInstance, AgentStatus
+
+    user_result = await db.execute(
+        select(User).where(User.max_user_id == max_user_id).limit(1)
+    )
+    user = user_result.scalar_one_or_none()
+    if not user:
+        return
+
+    result = await db.execute(
+        select(AgentInstance).where(
+            AgentInstance.user_id == user.id,
+            AgentInstance.status == AgentStatus.COLLECTING.value,
+        )
+    )
+    for agent in result.scalars().all():
+        cfg = dict(agent.config or {})
+        if cfg.get("bot_stopped_by_user"):
+            cfg.pop("bot_stopped_by_user", None)
+            agent.config = cfg
+            agent.status = AgentStatus.ACTIVE.value
