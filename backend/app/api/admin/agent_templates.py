@@ -41,8 +41,12 @@ async def list_agent_templates(
 ):
     """Список шаблонов агентов с настройками видимости."""
     visibility = await get_template_visibility(db, redis_client)
+    # "assistant" создаётся автоматически — управлять его видимостью не нужно
+    _HIDDEN = {"assistant"}
     result = []
     for tid in ALL_TEMPLATES:
+        if tid in _HIDDEN:
+            continue
         cfg = visibility.get(tid, {"mode": "all", "user_ids": []})
         result.append(
             TemplateInfo(
