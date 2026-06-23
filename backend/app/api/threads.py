@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.api.deps import SearchUserResult, get_current_user, get_db, get_existing_search_user, get_redis
+from app.models.agent import AgentInstance
 from app.models.message import Message, MessageRole
 from app.models.message_feedback import MessageFeedback
 from app.models.thread import Thread, ThreadType
@@ -58,12 +59,18 @@ async def list_threads(
 ):
     cutoff = _history_cutoff(user)
     from sqlalchemy import case, nulls_last
+    # Скрываем только треды агента «Личный ассистент» (template=assistant).
+    # Треды Напоминаний, Затрат, Постинга — полезны для настройки, оставляем.
+    assistant_thread_ids = select(AgentInstance.thread_id).where(
+        AgentInstance.user_id == user.id,
+        AgentInstance.config["template"].astext == "assistant",
+    )
     q = (
         select(Thread)
         .where(
             Thread.user_id == user.id,
             Thread.deleted_at.is_(None),
-            Thread.thread_type != ThreadType.AGENT,  # agent-треды скрыты из истории
+            Thread.id.not_in(assistant_thread_ids),
         )
         .order_by(
             # Закреплённые — всегда первые, сортируются по pinned_at DESC
@@ -98,12 +105,16 @@ async def search_threads(
         )
     )
 
+    assistant_thread_ids_search = select(AgentInstance.thread_id).where(
+        AgentInstance.user_id == user.id,
+        AgentInstance.config["template"].astext == "assistant",
+    )
     query = (
         select(Thread)
         .where(
             Thread.user_id == user.id,
             Thread.deleted_at.is_(None),
-            Thread.thread_type != ThreadType.AGENT,  # agent-треды скрыты
+            Thread.id.not_in(assistant_thread_ids_search),
             or_(Thread.title.ilike(pattern), message_match),
         )
         .order_by(Thread.last_message_at.desc())
