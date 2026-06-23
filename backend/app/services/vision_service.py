@@ -23,8 +23,8 @@ from app.services.yandex_errors import YandexServiceError
 logger = logging.getLogger(__name__)
 
 VISION_UNAVAILABLE_MSG = (
-    "На данный момент обработка фотографий невозможна. "
-    "Проверьте ключи vision-провайдера в .env на сервере или выберите другой провайдер в админке."
+    "На данный момент обработка фотографий временно недоступна. "
+    "Попробуйте повторить запрос чуть позже."
 )
 
 # Приоритет Vision: Claude → GigaChat (Alice VLM как последний резерв).

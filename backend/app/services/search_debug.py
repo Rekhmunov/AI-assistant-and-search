@@ -29,6 +29,12 @@ async def build_gpt_messages_preview(
     hint_clarify: str | None = None,
     fact_pack: FactPack | None = None,
 ) -> list[dict[str, str]]:
+    # Некоторые провайдеры (Perplexity) не имеют методов _build_messages_*
+    if needs_search and not hasattr(llm, "_build_messages_search"):
+        return [{"role": "system", "text": f"[{type(llm).__name__} — preview недоступен]"}]
+    if not needs_search and not hasattr(llm, "_build_messages_direct"):
+        return [{"role": "system", "text": f"[{type(llm).__name__} — preview недоступен]"}]
+
     if needs_search:
         raw = await llm._build_messages_search(
             llm_query,

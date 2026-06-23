@@ -266,6 +266,11 @@ async def _collect_search_result(
                     )
                 elif code == "free_image_gen_pro":
                     error_msg = "❌ Генерация картинок доступна только в тарифе Pro."
+                elif code == "vision_unavailable":
+                    error_msg = (
+                        "❌ Сейчас не удалось обработать фото — сервис распознавания временно недоступен. "
+                        "Попробуйте повторить через минуту."
+                    )
                 else:
                     error_msg = data.get("message") or "❌ Не удалось обработать запрос."
                 break
