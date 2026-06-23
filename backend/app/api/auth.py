@@ -344,6 +344,15 @@ async def login(
     await _merge_guest_session(db, guest_session, user)
     clear_guest_cookie(response)
     access = await _set_auth_cookies(response, str(user.id), redis_client, request)
+
+    # Автосоздание «Личного ассистента» при первой авторизации через MAX
+    try:
+        from app.services.bot_welcome import _ensure_assistant_agent
+        from app.services.bot import MaxBotService
+        await _ensure_assistant_agent(db, redis_client, MaxBotService(), max_user_id)
+    except Exception:
+        pass  # не блокируем вход при любой ошибке
+
     used, limit = await _limits_for_user(user, limiter)
     return AuthResponse(access_token=access, user=_user_profile(user, used, limit))
 
