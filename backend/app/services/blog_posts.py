@@ -145,6 +145,8 @@ def post_to_admin(post: BlogPost, *, author_email: str | None = None) -> dict:
         "view_count": post.view_count or 0,
         "tags": post.tags or [],
         "publish_at": post.publish_at,
+        "helpful_yes": post.helpful_yes or 0,
+        "helpful_no": post.helpful_no or 0,
     }
 
 
