@@ -142,13 +142,19 @@ a{color:#20808d;text-decoration:none}a:hover{text-decoration:underline}
 .art-back{color:#5c6b73;font-size:.9rem;transition:color .12s}.art-back:hover{color:#20808d;text-decoration:none}
 /* CTA */
 .cta{margin-top:40px;padding:24px 20px;border-radius:12px;border:1px solid #d8e0e3;background:linear-gradient(180deg,#f7fafb 0%,#fff 100%)}
-.cta h2{margin:0 0 8px;font-size:1.2rem;font-weight:600}
-.cta-lead{margin:0 0 16px;color:#5c6b73;font-size:.95rem}
+.cta h2{margin:0 0 16px;font-size:1.2rem;font-weight:600}
 .cta-form{display:flex;flex-wrap:wrap;gap:10px}
 .cta-form input{flex:1 1 220px;min-width:0;padding:12px 14px;border:1px solid #d8e0e3;border-radius:10px;font:inherit}
 .cta-form input:focus{outline:none;border-color:#20808d;box-shadow:0 0 0 3px rgba(32,128,141,.12)}
 .cta-form button{padding:12px 20px;border-radius:10px;background:#20808d;color:#fff;font:inherit;font-weight:600;cursor:pointer;border:none}
 .cta-form button:hover{background:#1a6b76}
+/* Встроенный блок поиска в теле статьи */
+.glosix-search{margin:24px 0;padding:18px 20px;border-radius:12px;border:1px solid rgba(32,128,141,.25);background:linear-gradient(135deg,rgba(32,128,141,.04) 0%,rgba(32,128,141,.08) 100%)}
+.glosix-search-form{display:flex;flex-wrap:wrap;gap:8px}
+.glosix-search-form input{flex:1 1 200px;min-width:0;padding:11px 14px;border:1px solid #d8e0e3;border-radius:8px;font:inherit;font-size:.95rem;background:#fff}
+.glosix-search-form input:focus{outline:none;border-color:#20808d;box-shadow:0 0 0 3px rgba(32,128,141,.12)}
+.glosix-search-form button{padding:11px 18px;border-radius:8px;background:#20808d;color:#fff;font:inherit;font-weight:600;cursor:pointer;border:none;transition:background .15s}
+.glosix-search-form button:hover{background:#1a6b76}
 /* Комментарии */
 .comments{margin-top:40px;padding-top:24px;border-top:1px solid #e8edf0}
 .comment{padding:12px 0;border-bottom:1px solid #e8edf0}
@@ -255,9 +261,8 @@ _POST_TEMPLATE = """<!DOCTYPE html>
     {% endif %}
     <section class="cta">
       <h2>Попробуйте Glosix прямо сейчас</h2>
-      <p class="cta-lead">Умный поиск с источниками и готовым ответом. Без регистрации можно искать как гость.</p>
       <form class="cta-form" action="/thread" method="get">
-        <input type="search" name="q" placeholder="Например: как настроить VPN на роутере" required maxlength="2000" autocomplete="off" />
+        <input type="search" name="q" placeholder="Спроси что угодно, на все найду точный ответ" required maxlength="2000" autocomplete="off" />
         <button type="submit">Искать</button>
       </form>
     </section>
@@ -405,6 +410,30 @@ import re as _re
 import unicodedata as _ud
 
 
+def _render_search_blocks(html: str) -> str:
+    """Replace <div class="glosix-search" data-q="..."> with actual search form HTML."""
+    def replace(m: _re.Match) -> str:
+        attrs = m.group(1)
+        placeholder_match = _re.search(r'data-q=["\']([^"\']*)["\']', attrs)
+        placeholder = placeholder_match.group(1) if placeholder_match else "Спроси что угодно, на все найду точный ответ"
+        import html as _html_mod
+        ph = _html_mod.escape(placeholder)
+        return (
+            f'<div class="glosix-search">'
+            f'<form class="glosix-search-form" action="/thread" method="get">'
+            f'<input type="search" name="q" placeholder="{ph}" maxlength="2000" autocomplete="off" />'
+            f'<button type="submit">Искать</button>'
+            f'</form>'
+            f'</div>'
+        )
+    return _re.sub(
+        r'<div([^>]*class=["\'][^"\']*glosix-search[^"\']*["\'][^>]*)>.*?</div>',
+        replace,
+        html,
+        flags=_re.DOTALL | _re.IGNORECASE,
+    )
+
+
 def _slugify(text: str) -> str:
     text = _ud.normalize("NFKD", text).encode("ascii", "ignore").decode("ascii")
     text = _re.sub(r"[^\w\s-]", "", text.lower())
@@ -509,9 +538,11 @@ async def render_post_html(db: AsyncSession, post, *, comments: list | None = No
         comments = await list_approved_comments(db, post.id)
     category = post.category
 
+    # Inline search blocks: convert glosix-search divs to actual forms
+    content_rendered = _render_search_blocks(post.content_html)
     # ToC: extract headings and inject IDs into content
-    toc_items = _extract_toc(post.content_html)
-    content_with_ids = _inject_heading_ids(post.content_html)
+    toc_items = _extract_toc(content_rendered)
+    content_with_ids = _inject_heading_ids(content_rendered)
 
     # Related & neighbors
     try:

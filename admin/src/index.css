@@ -3928,6 +3928,90 @@ pre.small {
   margin: 0;
 }
 
+/* Search block insertion */
+.blog-rte-search-wrap {
+  position: relative;
+}
+.blog-rte-search-btn {
+  background: rgba(32, 128, 141, 0.08);
+  border: 1px solid rgba(32, 128, 141, 0.3);
+  color: var(--accent, #20808d);
+}
+.blog-rte-search-btn:hover {
+  background: rgba(32, 128, 141, 0.15);
+}
+.blog-search-popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 200;
+  background: var(--surface, #fff);
+  border: 1px solid var(--border, #d8e0e3);
+  border-radius: 10px;
+  padding: 14px 16px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.12);
+  min-width: 320px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.blog-search-popover-label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-muted, #5c6b73);
+}
+.blog-search-popover-input {
+  padding: 9px 12px;
+  border: 1px solid var(--border, #d8e0e3);
+  border-radius: 8px;
+  font: inherit;
+  font-size: 0.9rem;
+  width: 100%;
+}
+.blog-search-popover-input:focus {
+  outline: none;
+  border-color: var(--accent, #20808d);
+  box-shadow: 0 0 0 3px rgba(32, 128, 141, 0.12);
+}
+.blog-search-popover-actions {
+  display: flex;
+  gap: 8px;
+}
+.blog-search-popover-ok,
+.blog-search-popover-cancel {
+  padding: 8px 16px;
+  border-radius: 8px;
+  font: inherit;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+}
+.blog-search-popover-ok {
+  background: var(--accent, #20808d);
+  color: #fff;
+}
+.blog-search-popover-cancel {
+  background: var(--surface-hover, #f0f4f5);
+  color: var(--text, #1a2328);
+  border: 1px solid var(--border, #d8e0e3);
+}
+
+/* Inline search block preview in editor */
+.rte-editor .glosix-search {
+  margin: 12px 0;
+  padding: 14px 16px;
+  border-radius: 10px;
+  border: 1.5px dashed rgba(32, 128, 141, 0.4);
+  background: rgba(32, 128, 141, 0.05);
+}
+.rte-editor .glosix-search-preview {
+  margin: 0;
+  color: var(--accent, #20808d);
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
 .blog-rte-editor-wrap .rte-editor,
 .blog-edit-section .rte-editor {
   min-height: 420px;

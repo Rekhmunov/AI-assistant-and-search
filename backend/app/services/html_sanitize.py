@@ -63,6 +63,8 @@ _BLOG_ATTRS = {
     "img": ["src", "alt", "title", "width", "height", "loading"],
     "th": ["colspan", "rowspan"],
     "td": ["colspan", "rowspan"],
+    # Блок встроенного поиска Glosix: <div class="glosix-search" data-q="подсказка">
+    "div": ["class", "style", "data-q"],
 }
 
 _LEGAL_TAGS = frozenset(
