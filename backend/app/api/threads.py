@@ -60,7 +60,11 @@ async def list_threads(
     from sqlalchemy import case, nulls_last
     q = (
         select(Thread)
-        .where(Thread.user_id == user.id, Thread.deleted_at.is_(None))
+        .where(
+            Thread.user_id == user.id,
+            Thread.deleted_at.is_(None),
+            Thread.thread_type != ThreadType.AGENT,  # agent-треды скрыты из истории
+        )
         .order_by(
             # Закреплённые — всегда первые, сортируются по pinned_at DESC
             nulls_last(Thread.pinned_at.desc()),
@@ -99,6 +103,7 @@ async def search_threads(
         .where(
             Thread.user_id == user.id,
             Thread.deleted_at.is_(None),
+            Thread.thread_type != ThreadType.AGENT,  # agent-треды скрыты
             or_(Thread.title.ilike(pattern), message_match),
         )
         .order_by(Thread.last_message_at.desc())
