@@ -560,6 +560,10 @@ async def handle_assistant_dm(
                             ext = "png"
                         elif "webp" in (vi.media_type or ""):
                             ext = "webp"
+                        # Нормализуем MIME: image/jpg → image/jpeg (Claude требует точный MIME)
+                        vi_mime = vi.media_type or f"image/{ext}"
+                        if vi_mime == "image/jpg":
+                            vi_mime = "image/jpeg"
                         file_id = _uuid.uuid4()
                         storage_key = save_upload_bytes(user.id, file_id, img_bytes, ext)
                         from datetime import datetime, timezone as _tz
@@ -567,7 +571,7 @@ async def handle_assistant_dm(
                             id=file_id,
                             user_id=user.id,
                             filename=f"photo.{ext}",
-                            mime_type=vi.media_type or f"image/{ext}",
+                            mime_type=vi_mime,
                             size_bytes=len(img_bytes),
                             media_kind="image",
                             storage_key=storage_key,

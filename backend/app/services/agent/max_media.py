@@ -142,10 +142,12 @@ async def load_message_vision_images(
                 ext = "png"
             elif ".webp" in url.lower():
                 ext = "webp"
+            # "image/jpg" невалидный MIME — Claude требует "image/jpeg"
+            mime = "image/jpeg" if ext == "jpg" else f"image/{ext}"
             images.append(
                 VisionImage(
                     filename=f"max-incoming.{ext}",
-                    media_type=f"image/{ext}",
+                    media_type=mime,
                     data_base64=base64.b64encode(data).decode("ascii"),
                 )
             )
