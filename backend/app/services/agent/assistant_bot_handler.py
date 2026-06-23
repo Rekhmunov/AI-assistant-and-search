@@ -537,18 +537,57 @@ async def handle_assistant_dm(
 
     try:
         query = (effective_text or "").strip()
-        if _has_images(payload):
-            vision_text = await _handle_vision(payload, query, bot, max_user_id)
-            if vision_text:
-                query = vision_text
 
-        if not query:
+        # ── Фото из MAX: скачиваем и сохраняем в Glosix UploadedFile ──────────
+        # Это позволяет: 1) показать превью в треде мини-аппа,
+        #               2) прогнать Vision через стандартный pipeline.
+        _attachment_file_ids: list = []
+        if _has_images(payload):
+            from app.services.agent.max_media import load_message_vision_images
+            from app.services.upload_storage import save_upload_bytes
+            from app.models.uploaded_file import UploadedFile
+            from datetime import timedelta
+            import uuid as _uuid
+
+            try:
+                vision_images = await load_message_vision_images(payload, bot=bot)
+                for vi in vision_images[:3]:
+                    try:
+                        import base64
+                        img_bytes = base64.b64decode(vi.data_base64)
+                        ext = "jpg"
+                        if "png" in (vi.media_type or ""):
+                            ext = "png"
+                        elif "webp" in (vi.media_type or ""):
+                            ext = "webp"
+                        file_id = _uuid.uuid4()
+                        storage_key = save_upload_bytes(user.id, file_id, img_bytes, ext)
+                        from datetime import datetime, timezone as _tz
+                        uf = UploadedFile(
+                            id=file_id,
+                            user_id=user.id,
+                            filename=f"photo.{ext}",
+                            mime_type=vi.media_type or f"image/{ext}",
+                            size_bytes=len(img_bytes),
+                            media_kind="image",
+                            storage_key=storage_key,
+                            extracted_text="",
+                            expires_at=datetime.now(_tz.utc) + timedelta(hours=24),
+                        )
+                        db.add(uf)
+                        await db.flush()
+                        _attachment_file_ids.append(file_id)
+                    except Exception as img_exc:
+                        logger.warning("assistant_bot: image save failed: %s", img_exc)
+            except Exception as vis_exc:
+                logger.warning("assistant_bot: image load failed: %s", vis_exc)
+
+        if not query and not _attachment_file_ids:
             await bot.send_message(max_user_id, "Пожалуйста, добавьте текст к сообщению.")
             return True
 
         # ── Добавляем ограничение длины для бот-контекста ──
-        # Только верхний предел: короткие ответы остаются короткими.
-        llm_query = query + "\n\n[Ответ не длиннее 3500 знаков включая пробелы и знаки препинания. Если ответ короче — оставь как есть.]"
+        llm_query = (query or "Что на фото?") + "\n\n[Ответ не длиннее 3500 знаков включая пробелы и знаки препинания. Если ответ короче — оставь как есть.]"
 
         # ── Сессионный тред ──
         thread = await get_or_create_session_thread(
@@ -557,8 +596,8 @@ async def handle_assistant_dm(
 
         # Обновляем заголовок если тред новый (placeholder)
         if thread.title in ("Новый диалог", "", None):
-            words = query.split()
-            thread.title = " ".join(words[:8])[:120] or query[:120]
+            words = query.split() if query else ["Фото"]
+            thread.title = " ".join(words[:8])[:120] or "Фото"
             await db.flush()
 
         # ── Запуск поиска с обновлением статусов ──
@@ -569,6 +608,7 @@ async def handle_assistant_dm(
         answer, images, follow_ups = await _collect_search_result(
             db, user, redis_client, llm_query, thread.id,
             on_status=_on_status,
+            attachment_file_ids=_attachment_file_ids if _attachment_file_ids else None,
         )
 
         # ── Обновляем TTL сессии в Redis ──
