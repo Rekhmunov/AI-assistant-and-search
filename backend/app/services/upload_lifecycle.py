@@ -258,6 +258,17 @@ async def reconcile_orphan_disk_files(db: AsyncSession, *, max_files: int = 5000
     )
     known = {row[0] for row in result.all() if row[0]}
 
+    # Добавляем blog-изображения из BlogMedia — они хранятся в той же директории,
+    # но в отдельной таблице. Без этого reconcile удаляет их как «сироты».
+    try:
+        from app.models.blog import BlogMedia
+        blog_result = await db.execute(
+            select(BlogMedia.storage_key).where(BlogMedia.storage_key.isnot(None))
+        )
+        known |= {row[0] for row in blog_result.all() if row[0]}
+    except Exception:
+        logger.exception("reconcile: failed to load BlogMedia storage keys — skipping to avoid data loss")
+
     root = _root()
     removed = 0
     if not root.is_dir():
