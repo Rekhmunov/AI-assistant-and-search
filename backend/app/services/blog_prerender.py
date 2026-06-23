@@ -121,6 +121,7 @@ _POST_TEMPLATE = """<!DOCTYPE html>
   <title>{{ meta_title }} — Glosix</title>
   <meta name="description" content="{{ meta_description }}" />
   {% if meta_keywords %}<meta name="keywords" content="{{ meta_keywords }}" />{% endif %}
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   <link rel="canonical" href="{{ canonical_url }}" />
   <meta property="og:type" content="article" />
   <meta property="og:title" content="{{ og_title }}" />
@@ -222,6 +223,7 @@ _INDEX_TEMPLATE = """<!DOCTYPE html>
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Блог Glosix — статьи об ИИ-поиске и ассистентах</title>
   <meta name="description" content="Статьи Glosix: умный поиск, ИИ-ассистент, MAX-бот и полезные гайды." />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   <link rel="canonical" href="{{ blog_url }}" />
   <meta property="og:title" content="Блог Glosix — статьи об ИИ-поиске и ассистентах" />
   <meta property="og:description" content="Статьи Glosix: умный поиск, ИИ-ассистент, MAX-бот и полезные гайды." />
@@ -245,6 +247,7 @@ _CATEGORY_TEMPLATE = """<!DOCTYPE html>
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>{{ category_name }} — Блог Glosix</title>
   {% if category_description %}<meta name="description" content="{{ category_description }}" />{% else %}<meta name="description" content="Статьи в категории «{{ category_name }}» — блог Glosix." />{% endif %}
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   <link rel="canonical" href="{{ canonical_url }}" />
   <meta property="og:title" content="{{ category_name }} — Блог Glosix" />
   <meta property="og:url" content="{{ canonical_url }}" /><meta property="og:type" content="website" />
