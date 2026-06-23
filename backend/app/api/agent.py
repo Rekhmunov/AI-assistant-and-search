@@ -155,7 +155,11 @@ async def list_agent_templates(
     require_agent_eligible(user)
     visibility = await get_template_visibility(db, redis_client)
     result = []
+    # "assistant" создаётся автоматически — не показываем в списке выбора
+    _AUTO_CREATED = {"assistant"}
     for tid, title in TEMPLATE_TITLES.items():
+        if tid in _AUTO_CREATED:
+            continue
         if is_template_visible_for_user(visibility, tid, user.id):
             result.append({"id": tid, "title": title})
     return result
