@@ -103,7 +103,7 @@ VALID_FREE_LLM_IDS = frozenset({"deepseek", "gigachat"})
 # Агентам нужен complete_text — Perplexity его не поддерживает
 VALID_AGENT_LLM_IDS = frozenset({"yandex_gpt", "anthropic_claude", "deepseek", "gigachat"})
 VALID_SEARCH_IDS = frozenset({"yandex_search", "claude_search"})
-VALID_VISION_IDS = frozenset({"alice_vlm", "anthropic_claude", "gigachat"})
+VALID_VISION_IDS = frozenset({"anthropic_claude", "gigachat"})  # alice_vlm отключена Яндексом
 VALID_IMAGE_GEN_IDS = frozenset({"gigachat"})
 DEFAULT_IMAGE_GEN_PROVIDER = "gigachat"
 
@@ -160,17 +160,9 @@ def list_free_llm_providers(settings: Settings) -> list[ProviderInfo]:
 
 
 def list_vision_providers(settings: Settings) -> list[ProviderInfo]:
-    alice_ok = settings.yandex_configured
     claude_ok = settings.anthropic_configured
     giga_ok = settings.gigachat_configured
     return [
-        ProviderInfo(
-            id="alice_vlm",
-            label="Alice AI VLM",
-            kind="vision",
-            configured=alice_ok,
-            hint=None if alice_ok else "Нужны YANDEX_FOLDER_ID и YANDEX_API_KEY в .env",
-        ),
         ProviderInfo(
             id="gigachat",
             label="GigaChat (vision)",

@@ -130,14 +130,10 @@ async def update_settings(
                     ),
                 )
         if key == "vision_provider" and str(value) == "alice_vlm":
-            if not env.yandex_configured:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=(
-                        "YANDEX_FOLDER_ID / YANDEX_API_KEY не загружены в backend — "
-                        "vision через Alice AI VLM недоступен."
-                    ),
-                )
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Alice AI VLM отключена (модель недоступна на серверах Яндекса). Используйте Claude или GigaChat.",
+            )
         if key == "vision_provider" and str(value) == "gigachat":
             if not env.gigachat_configured:
                 raise HTTPException(
