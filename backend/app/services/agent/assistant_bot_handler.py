@@ -266,6 +266,11 @@ async def _collect_search_result(
                     )
                 elif code == "free_image_gen_pro":
                     error_msg = "❌ Генерация картинок доступна только в тарифе Pro."
+                elif code == "vision_unavailable":
+                    error_msg = (
+                        "Сейчас распознавание фотографий временно недоступно — мы уже разбираемся. "
+                        "Попробуйте повторить через несколько минут."
+                    )
                 else:
                     error_msg = data.get("message") or "❌ Не удалось обработать запрос."
                 break
@@ -572,6 +577,10 @@ async def handle_assistant_dm(
                         else:
                             ext = "jpg"
                         vi_mime = "image/jpeg" if ext == "jpg" else f"image/{ext}"
+                        logger.debug(
+                            "VISION_DEBUG save UploadedFile ext=%s vi_mime=%s vi.media_type=%s",
+                            ext, vi_mime, vi.media_type,
+                        )
                         file_id = _uuid.uuid4()
                         storage_key = save_upload_bytes(user.id, file_id, img_bytes, ext)
                         from datetime import datetime, timezone as _tz

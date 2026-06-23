@@ -23,8 +23,8 @@ from app.services.yandex_errors import YandexServiceError
 logger = logging.getLogger(__name__)
 
 VISION_UNAVAILABLE_MSG = (
-    "На данный момент обработка фотографий невозможна. "
-    "Проверьте ключи vision-провайдера в .env на сервере или выберите другой провайдер в админке."
+    "Сейчас распознавание фотографий временно недоступно — мы уже разбираемся. "
+    "Попробуйте повторить запрос через несколько минут."
 )
 
 # Приоритет Vision: Claude → GigaChat (Alice VLM как последний резерв).
@@ -142,6 +142,11 @@ async def _summarize_with_provider(
     prompt_store: PromptStore | None,
     prior_sources_block: str,
 ) -> str:
+    for vi in vision_images:
+        logger.debug(
+            "VISION_DEBUG summarize provider=%s filename=%s media_type=%s",
+            provider_id, vi.filename, vi.media_type,
+        )
     backend = _create_vision_backend(provider_id, settings, prompt_store)
     if isinstance(backend, GigaChatProvider):
         text = await backend.summarize_vision_for_search(
@@ -184,6 +189,11 @@ async def _stream_with_provider(
     model: str,
     prior_sources_block: str,
 ) -> AsyncIterator[str]:
+    for vi in vision_images:
+        logger.debug(
+            "VISION_DEBUG stream provider=%s filename=%s media_type=%s",
+            provider_id, vi.filename, vi.media_type,
+        )
     backend = _create_vision_backend(provider_id, settings, prompt_store)
     answer_model = "pro" if model == "pro" else "lite"
     if not isinstance(backend, (AliceVLMProvider, AnthropicClaudeProvider, GigaChatProvider)):
@@ -256,6 +266,17 @@ async def summarize_vision_for_search(
             logger.exception("Vision summary unexpected error (%s)", provider_id)
             last_error = e
 
+    err_msg = str(last_error)[:300] if last_error else "no providers configured"
+    try:
+        from app.services.service_incidents import record_service_incident
+        await record_service_incident(
+            redis_client,
+            service="vision",
+            kind="all_providers_failed",
+            message=f"Vision summarize: все провайдеры недоступны. {err_msg}",
+        )
+    except Exception:
+        logger.exception("record_service_incident failed (summarize)")
     if last_error:
         raise VisionNotSupportedError(VISION_UNAVAILABLE_MSG) from last_error
     raise VisionNotSupportedError(VISION_UNAVAILABLE_MSG)
@@ -306,6 +327,17 @@ async def stream_vision_answer(
             logger.exception("Vision stream unexpected error (%s)", provider_id)
             last_error = e
 
+    err_msg = str(last_error)[:300] if last_error else "no providers configured"
+    try:
+        from app.services.service_incidents import record_service_incident
+        await record_service_incident(
+            redis_client,
+            service="vision",
+            kind="all_providers_failed",
+            message=f"Vision stream: все провайдеры недоступны. {err_msg}",
+        )
+    except Exception:
+        logger.exception("record_service_incident failed (stream)")
     if last_error:
         raise VisionNotSupportedError(VISION_UNAVAILABLE_MSG) from last_error
     raise VisionNotSupportedError(VISION_UNAVAILABLE_MSG)

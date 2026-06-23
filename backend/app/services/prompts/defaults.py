@@ -127,4 +127,4 @@ for _answer_overrides in PROVIDER_ANSWER_PROMPTS.values():
 DEFAULT_LLM_PROVIDER = "yandex_gpt"
 DEFAULT_FREE_LLM_PROVIDER = "deepseek"
 DEFAULT_SEARCH_PROVIDER = "yandex_search"
-DEFAULT_VISION_PROVIDER = "alice_vlm"
+DEFAULT_VISION_PROVIDER = "anthropic_claude"

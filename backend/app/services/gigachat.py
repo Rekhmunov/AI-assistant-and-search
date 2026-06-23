@@ -140,10 +140,11 @@ class GigaChatProvider(PromptedLLMMixin, LLMProvider):
         return self.settings.gigachat_model_lite
 
     async def _upload_vision_images(self, vision_images: list[VisionImage]) -> list[str]:
+        from app.services.attachment_bundle import normalize_for_gigachat
         ids: list[str] = []
         for img in vision_images[:10]:
             import base64
-
+            img = normalize_for_gigachat(img)
             raw = base64.standard_b64decode(img.data_base64)
             fid = await upload_file_bytes(raw, img.filename, settings=self.settings)
             ids.append(fid)
