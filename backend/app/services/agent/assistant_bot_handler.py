@@ -555,15 +555,23 @@ async def handle_assistant_dm(
                     try:
                         import base64
                         img_bytes = base64.b64decode(vi.data_base64)
-                        ext = "jpg"
-                        if "png" in (vi.media_type or ""):
+                        # Определяем формат из реальных байт (не из заголовка MAX)
+                        from app.services.file_format import sniff_ext_from_bytes as _sniff
+                        import base64 as _b64
+                        try:
+                            _raw = _b64.b64decode(vi.data_base64)
+                            _sniffed = _sniff(_raw)
+                        except Exception:
+                            _sniffed = None
+                        if _sniffed in ("jpg", "png", "webp"):
+                            ext = _sniffed
+                        elif "png" in (vi.media_type or ""):
                             ext = "png"
                         elif "webp" in (vi.media_type or ""):
                             ext = "webp"
-                        # Нормализуем MIME: image/jpg → image/jpeg (Claude требует точный MIME)
-                        vi_mime = vi.media_type or f"image/{ext}"
-                        if vi_mime == "image/jpg":
-                            vi_mime = "image/jpeg"
+                        else:
+                            ext = "jpg"
+                        vi_mime = "image/jpeg" if ext == "jpg" else f"image/{ext}"
                         file_id = _uuid.uuid4()
                         storage_key = save_upload_bytes(user.id, file_id, img_bytes, ext)
                         from datetime import datetime, timezone as _tz

@@ -137,12 +137,18 @@ async def load_message_vision_images(
             data = await bot.download_url(url)
             if not data:
                 continue
-            ext = "jpg"
-            if ".png" in url.lower():
+            # Определяем формат по байтам — надёжнее чем URL
+            from app.services.file_format import sniff_ext_from_bytes
+            sniffed = sniff_ext_from_bytes(data)
+            if sniffed in ("jpg", "png", "webp"):
+                ext = sniffed
+            elif ".png" in url.lower():
                 ext = "png"
             elif ".webp" in url.lower():
                 ext = "webp"
-            # "image/jpg" невалидный MIME — Claude требует "image/jpeg"
+            else:
+                ext = "jpg"
+            # Правильный MIME: image/jpg → image/jpeg
             mime = "image/jpeg" if ext == "jpg" else f"image/{ext}"
             images.append(
                 VisionImage(
