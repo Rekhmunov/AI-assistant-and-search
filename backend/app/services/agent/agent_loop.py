@@ -156,6 +156,23 @@ async def run_onboarding_loop(
                 .replace("{current_date}", _date)
             )
             logger.info("Agent using template=%s RUNTIME prompt (agent is active)", template)
+        elif template == "poster" and agent.status == _AgentStatus.ACTIVE.value:
+            from app.services.agent.templates.poster import POSTER_RUNTIME_PROMPT
+            from datetime import datetime, timezone as _tz
+            _cfg = dict(agent.config or {})
+            try:
+                import zoneinfo as _zi
+                _now = datetime.now(_zi.ZoneInfo("Europe/Moscow"))
+            except Exception:
+                _now = datetime.now(_tz.utc)
+            _date = _now.strftime("%d.%m.%Y (%A)")
+            _instructions = str(_cfg.get("support_instructions") or "")
+            specialized_prompt = (
+                POSTER_RUNTIME_PROMPT
+                .replace("{support_instructions}", _instructions or "(настройки не заданы)")
+                .replace("{current_date}", _date)
+            )
+            logger.info("Agent using template=%s RUNTIME prompt (agent is active)", template)
         else:
             specialized_prompt = template_prompt
             logger.info("Agent using template=%s prompt", template)

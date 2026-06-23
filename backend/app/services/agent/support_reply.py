@@ -141,6 +141,28 @@ async def build_interactive_reply(
         )
         return "Обрабатываю запрос, ответ пришлю в чат…", []
 
+    # Для активных poster-агентов инжектируем runtime-промпт
+    _poster_runtime_prompt: str | None = None
+    _agent_cfg = dict(agent.config or {})
+    if str(_agent_cfg.get("template") or "") == "poster":
+        try:
+            from app.services.agent.templates.poster import POSTER_RUNTIME_PROMPT
+            from datetime import datetime, timezone as _tz2
+            try:
+                import zoneinfo as _zi2
+                _now2 = datetime.now(_zi2.ZoneInfo("Europe/Moscow"))
+            except Exception:
+                _now2 = datetime.now(_tz2.utc)
+            _date2 = _now2.strftime("%d.%m.%Y (%A)")
+            _instructions2 = str(_agent_cfg.get("support_instructions") or "")
+            _poster_runtime_prompt = (
+                POSTER_RUNTIME_PROMPT
+                .replace("{support_instructions}", _instructions2 or "(настройки не заданы)")
+                .replace("{current_date}", _date2)
+            )
+        except Exception:
+            pass
+
     loop_result = await run_max_interactive_loop(
         db,
         redis_client,
@@ -151,6 +173,7 @@ async def build_interactive_reply(
         author=author,
         vision_context=vision_note,
         bot=bot,
+        override_runtime_prompt=_poster_runtime_prompt,
     )
     reply_text = (loop_result.text or "").strip()
     # Если агент уже отправил сообщение через max_send_message — не отправляем дополнительный текст
