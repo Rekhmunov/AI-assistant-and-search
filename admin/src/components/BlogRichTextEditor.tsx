@@ -59,6 +59,12 @@ export const BlogRichTextEditor = forwardRef<BlogRichTextEditorHandle, Props>(fu
     [insertImageHtml, onChange, value],
   );
 
+  // mousedown fires BEFORE the editor loses focus, so the selection is still valid.
+  // We insert the caret marker here so insertHtmlAtCaret knows where to place the image.
+  const onImageButtonMouseDown = useCallback(() => {
+    editorRef.current?.markCaret();
+  }, []);
+
   const onPickImage = () => fileRef.current?.click();
 
   const onFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -79,6 +85,7 @@ export const BlogRichTextEditor = forwardRef<BlogRichTextEditorHandle, Props>(fu
           type="button"
           className="rte-btn blog-rte-image-btn"
           disabled={disabled}
+          onMouseDown={onImageButtonMouseDown}
           onClick={onPickImage}
           title="Вставить изображение"
         >

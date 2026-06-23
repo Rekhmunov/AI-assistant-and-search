@@ -7681,13 +7681,14 @@ a.blog-sidebar-title:hover {
 }
 
 .blog-article-content.prose img {
-  max-width: 100%;
-  width: 100%;
-  height: auto;
+  max-width: 100% !important;
+  width: auto;
+  height: auto !important;
   border-radius: 10px;
   margin: 1.2em 0;
   display: block;
   box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+  box-sizing: border-box;
 }
 
 .blog-article-content.prose a {

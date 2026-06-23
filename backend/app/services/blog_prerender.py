@@ -71,7 +71,7 @@ a{color:#20808d;text-decoration:none}a:hover{text-decoration:underline}
 .prose h2{margin:1.8em 0 .6em;font-size:1.35rem;font-weight:700;border-bottom:1px solid #e8edf0;padding-bottom:8px}
 .prose h3{margin:1.4em 0 .5em;font-size:1.15rem;font-weight:600}
 .prose p{margin:0 0 1.1em}
-.prose img{max-width:100%;width:100%;height:auto;border-radius:10px;margin:1.2em 0;display:block;box-shadow:0 2px 12px rgba(0,0,0,.08)}
+.prose img{max-width:100%!important;width:auto;height:auto!important;border-radius:10px;margin:1.2em 0;display:block;box-sizing:border-box;box-shadow:0 2px 12px rgba(0,0,0,.08)}
 .prose a{color:#20808d;text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:3px}
 .prose ul,.prose ol{margin:0 0 1.1em;padding-left:1.5em}
 .prose li{margin-bottom:.4em}

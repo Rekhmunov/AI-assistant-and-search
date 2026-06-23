@@ -2287,6 +2287,7 @@ pre.small {
   min-height: 320px;
   max-height: 600px;
   overflow-y: auto;
+  overflow-x: hidden;
   padding: 16px 18px;
   font-size: 0.95rem;
   line-height: 1.6;
@@ -2297,6 +2298,9 @@ pre.small {
 .rte-editor img {
   cursor: pointer;
   transition: outline 0.15s;
+  max-width: 100% !important;
+  height: auto !important;
+  box-sizing: border-box;
 }
 .rte-editor img:hover {
   outline: 2px solid var(--accent);
