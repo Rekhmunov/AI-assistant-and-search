@@ -605,11 +605,19 @@ async def handle_assistant_dm(
             if status_mid:
                 await bot.edit_message(status_mid, text)
 
-        answer, images, follow_ups = await _collect_search_result(
-            db, user, redis_client, llm_query, thread.id,
-            on_status=_on_status,
-            attachment_file_ids=_attachment_file_ids if _attachment_file_ids else None,
-        )
+        try:
+            answer, images, follow_ups = await _collect_search_result(
+                db, user, redis_client, llm_query, thread.id,
+                on_status=_on_status,
+                attachment_file_ids=_attachment_file_ids if _attachment_file_ids else None,
+            )
+        except Exception as search_exc:
+            logger.warning("assistant_bot: search with attachment failed, retrying without: %s", search_exc)
+            # Повтор без вложений если vision/attachment упал
+            answer, images, follow_ups = await _collect_search_result(
+                db, user, redis_client, llm_query, thread.id,
+                on_status=_on_status,
+            )
 
         # ── Обновляем TTL сессии в Redis ──
         await touch_session(
