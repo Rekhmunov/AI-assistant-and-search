@@ -142,6 +142,11 @@ async def _summarize_with_provider(
     prompt_store: PromptStore | None,
     prior_sources_block: str,
 ) -> str:
+    for vi in vision_images:
+        logger.debug(
+            "VISION_DEBUG summarize provider=%s filename=%s media_type=%s",
+            provider_id, vi.filename, vi.media_type,
+        )
     backend = _create_vision_backend(provider_id, settings, prompt_store)
     if isinstance(backend, GigaChatProvider):
         text = await backend.summarize_vision_for_search(
@@ -184,6 +189,11 @@ async def _stream_with_provider(
     model: str,
     prior_sources_block: str,
 ) -> AsyncIterator[str]:
+    for vi in vision_images:
+        logger.debug(
+            "VISION_DEBUG stream provider=%s filename=%s media_type=%s",
+            provider_id, vi.filename, vi.media_type,
+        )
     backend = _create_vision_backend(provider_id, settings, prompt_store)
     answer_model = "pro" if model == "pro" else "lite"
     if not isinstance(backend, (AliceVLMProvider, AnthropicClaudeProvider, GigaChatProvider)):

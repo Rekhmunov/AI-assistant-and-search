@@ -3,9 +3,13 @@
 from __future__ import annotations
 
 import base64
+import io
+import logging
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+
+logger = logging.getLogger(__name__)
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -40,6 +44,36 @@ class AttachmentBundle:
     needs_vision: bool = False
     has_document_text: bool = False
     uploaded_files: list[UploadedFile] = field(default_factory=list)
+
+
+def convert_image_to_jpeg(data: bytes) -> bytes:
+    """Конвертирует изображение в JPEG (для провайдеров не поддерживающих WebP/HEIC)."""
+    try:
+        from PIL import Image
+        img = Image.open(io.BytesIO(data)).convert("RGB")
+        buf = io.BytesIO()
+        img.save(buf, format="JPEG", quality=90)
+        return buf.getvalue()
+    except Exception:
+        return data
+
+
+def normalize_for_gigachat(vi: "VisionImage") -> "VisionImage":
+    """Конвертирует изображение в JPEG если GigaChat не поддерживает формат (WebP, HEIC и т.д.)."""
+    supported = ("image/jpeg", "image/png")
+    if vi.media_type in supported:
+        return vi
+    raw = base64.standard_b64decode(vi.data_base64)
+    jpeg_data = convert_image_to_jpeg(raw)
+    logger.debug(
+        "VISION_DEBUG normalized %s → image/jpeg for GigaChat (len %d→%d)",
+        vi.media_type, len(raw), len(jpeg_data),
+    )
+    return VisionImage(
+        filename=vi.filename.rsplit(".", 1)[0] + ".jpg",
+        media_type="image/jpeg",
+        data_base64=base64.standard_b64encode(jpeg_data).decode("ascii"),
+    )
 
 
 def _is_image_row(row: UploadedFile) -> bool:
@@ -89,10 +123,15 @@ async def resolve_attachment_bundle(
             if not raw:
                 raise ValueError("attachment_storage_missing")
             ext = f.filename.rsplit(".", 1)[-1].lower() if "." in f.filename else "jpg"
+            effective_mime = f.mime_type or mime_for_ext(ext)
+            logger.debug(
+                "VISION_DEBUG bundle file=%s db_mime=%s effective_mime=%s",
+                f.filename, f.mime_type, effective_mime,
+            )
             vision_images.append(
                 VisionImage(
                     filename=f.filename,
-                    media_type=f.mime_type or mime_for_ext(ext),
+                    media_type=effective_mime,
                     data_base64=base64.standard_b64encode(raw).decode("ascii"),
                 )
             )

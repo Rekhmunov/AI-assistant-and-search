@@ -572,6 +572,10 @@ async def handle_assistant_dm(
                         else:
                             ext = "jpg"
                         vi_mime = "image/jpeg" if ext == "jpg" else f"image/{ext}"
+                        logger.debug(
+                            "VISION_DEBUG save UploadedFile ext=%s vi_mime=%s vi.media_type=%s",
+                            ext, vi_mime, vi.media_type,
+                        )
                         file_id = _uuid.uuid4()
                         storage_key = save_upload_bytes(user.id, file_id, img_bytes, ext)
                         from datetime import datetime, timezone as _tz

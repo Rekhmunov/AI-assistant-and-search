@@ -150,6 +150,10 @@ async def load_message_vision_images(
                 ext = "jpg"
             # Правильный MIME: image/jpg → image/jpeg
             mime = "image/jpeg" if ext == "jpg" else f"image/{ext}"
+            logger.debug(
+                "VISION_DEBUG main url=%s len=%d sniffed=%s mime=%s",
+                url[:60], len(data), sniffed, mime,
+            )
             images.append(
                 VisionImage(
                     filename=f"max-incoming.{ext}",
@@ -177,10 +181,25 @@ async def load_message_vision_images(
                     data = await bot.download_url(url)
                     if not data:
                         continue
+                    from app.services.file_format import sniff_ext_from_bytes
+                    sniffed = sniff_ext_from_bytes(data)
+                    if sniffed in ("jpg", "png", "webp"):
+                        fb_ext = sniffed
+                    elif ".png" in url.lower():
+                        fb_ext = "png"
+                    elif ".webp" in url.lower():
+                        fb_ext = "webp"
+                    else:
+                        fb_ext = "jpg"
+                    fb_mime = "image/jpeg" if fb_ext == "jpg" else f"image/{fb_ext}"
+                    logger.debug(
+                        "VISION_DEBUG fallback url=%s sniffed=%s mime=%s",
+                        url[:60], sniffed, fb_mime,
+                    )
                     images.append(
                         VisionImage(
-                            filename="max-incoming.jpg",
-                            media_type="image/jpeg",
+                            filename=f"max-incoming.{fb_ext}",
+                            media_type=fb_mime,
                             data_base64=base64.b64encode(data).decode("ascii"),
                         )
                     )
