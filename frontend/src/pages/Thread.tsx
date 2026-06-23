@@ -885,6 +885,14 @@ export function Thread() {
                   streaming: false,
                 };
               }
+              if (code === "vision_unavailable") {
+                return {
+                  ...turn,
+                  answer: "Сейчас распознавание фотографий временно недоступно — мы уже разбираемся. Попробуйте повторить через несколько минут.",
+                  errorCode: "vision_unavailable",
+                  streaming: false,
+                };
+              }
               const keepAnswer = answerHasText(turn.answer);
               return {
                 ...turn,

@@ -23,8 +23,8 @@ from app.services.yandex_errors import YandexServiceError
 logger = logging.getLogger(__name__)
 
 VISION_UNAVAILABLE_MSG = (
-    "На данный момент обработка фотографий временно недоступна. "
-    "Попробуйте повторить запрос чуть позже."
+    "Сейчас распознавание фотографий временно недоступно — мы уже разбираемся. "
+    "Попробуйте повторить запрос через несколько минут."
 )
 
 # Приоритет Vision: Claude → GigaChat (Alice VLM как последний резерв).
@@ -266,6 +266,17 @@ async def summarize_vision_for_search(
             logger.exception("Vision summary unexpected error (%s)", provider_id)
             last_error = e
 
+    err_msg = str(last_error)[:300] if last_error else "no providers configured"
+    try:
+        from app.services.service_incidents import record_service_incident
+        await record_service_incident(
+            redis_client,
+            service="vision",
+            kind="all_providers_failed",
+            message=f"Vision summarize: все провайдеры недоступны. {err_msg}",
+        )
+    except Exception:
+        logger.exception("record_service_incident failed (summarize)")
     if last_error:
         raise VisionNotSupportedError(VISION_UNAVAILABLE_MSG) from last_error
     raise VisionNotSupportedError(VISION_UNAVAILABLE_MSG)
@@ -316,6 +327,17 @@ async def stream_vision_answer(
             logger.exception("Vision stream unexpected error (%s)", provider_id)
             last_error = e
 
+    err_msg = str(last_error)[:300] if last_error else "no providers configured"
+    try:
+        from app.services.service_incidents import record_service_incident
+        await record_service_incident(
+            redis_client,
+            service="vision",
+            kind="all_providers_failed",
+            message=f"Vision stream: все провайдеры недоступны. {err_msg}",
+        )
+    except Exception:
+        logger.exception("record_service_incident failed (stream)")
     if last_error:
         raise VisionNotSupportedError(VISION_UNAVAILABLE_MSG) from last_error
     raise VisionNotSupportedError(VISION_UNAVAILABLE_MSG)
