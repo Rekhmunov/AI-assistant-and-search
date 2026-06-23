@@ -30,6 +30,8 @@ VISION_UNAVAILABLE_MSG = (
 # Приоритет Vision: Claude → GigaChat (Alice VLM как последний резерв).
 # Выбранный в админке провайдер ставится первым, остальные — в этом порядке.
 VISION_FALLBACK_ORDER: tuple[str, ...] = ("anthropic_claude", "gigachat", "alice_vlm")
+# alice_vlm модель gemma-3-27b-it отключена Яндексом — не используем как фолбэк
+_DISABLED_VISION_PROVIDERS = frozenset({"alice_vlm"})
 
 _VISION_REFUSAL_RE = re.compile(
     r"(не\s+могу\s+(помочь|обработать|анализировать|рассмотреть|просмотреть)"
@@ -227,6 +229,8 @@ async def summarize_vision_for_search(
 
     succeeded_provider: str | None = None
     for provider_id in chain:
+        if provider_id in _DISABLED_VISION_PROVIDERS:
+            continue
         if not _vision_configured(provider_id, settings):
             continue
         try:
@@ -275,6 +279,8 @@ async def stream_vision_answer(
     last_error: Exception | None = None
 
     for provider_id in chain:
+        if provider_id in _DISABLED_VISION_PROVIDERS:
+            continue
         if not _vision_configured(provider_id, settings):
             continue
         try:
