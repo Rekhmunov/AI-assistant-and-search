@@ -43,5 +43,9 @@ celery.conf.update(
             "task": "dispatch_poster_scheduled",
             "schedule": crontab(minute="*/5"),  # каждые 5 минут
         },
+        "publish-scheduled-blog-posts": {
+            "task": "publish_scheduled_blog_posts",
+            "schedule": crontab(minute="*/5"),  # каждые 5 минут
+        },
     },
 )

@@ -45,6 +45,7 @@ class BlogPostListItem(BaseModel):
     published_at: datetime | None
     reading_time_min: int
     view_count: int = 0
+    tags: list[str] = []
     category: BlogCategoryOut | None = None
     cover_image: BlogMediaOut | None = None
 
@@ -87,6 +88,9 @@ class BlogPostPublic(BaseModel):
     og_image: BlogMediaOut | None = None
     canonical_path: str
     robots_index: bool
+    tags: list[str] = []
+    helpful_yes: int = 0
+    helpful_no: int = 0
 
 
 class BlogPostAdminOut(BlogPostListItem):
@@ -108,6 +112,7 @@ class BlogPostAdminOut(BlogPostListItem):
     comments_enabled: bool = False
     locale: str = "ru"
     view_count: int = 0
+    publish_at: datetime | None = None
 
 
 class BlogPostCreate(BaseModel):
@@ -126,9 +131,11 @@ class BlogPostCreate(BaseModel):
     og_description: str = ""
     robots_index: bool = True
     published_at: datetime | None = None
+    publish_at: datetime | None = None
     author_name: str = ""
     comments_enabled: bool = False
     locale: str = "ru"
+    tags: list[str] = []
 
 
 class BlogPostUpdate(BaseModel):
@@ -147,10 +154,12 @@ class BlogPostUpdate(BaseModel):
     og_description: str | None = None
     robots_index: bool | None = None
     published_at: datetime | None = None
+    publish_at: datetime | None = None
     author_name: str | None = None
     comments_enabled: bool | None = None
     locale: str | None = None
     view_count: int | None = None
+    tags: list[str] | None = None
 
 
 class BlogMediaUploadOut(BaseModel):

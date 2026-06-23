@@ -29,6 +29,8 @@ type PostForm = {
   author_name: string;
   comments_enabled: boolean;
   view_count: number;
+  tags: string;
+  publish_at: string;
 };
 
 type AdminComment = {
@@ -56,6 +58,8 @@ const EMPTY: PostForm = {
   author_name: "",
   comments_enabled: false,
   view_count: 0,
+  tags: "",
+  publish_at: "",
 };
 
 function mediaSrc(url: string | undefined): string {
@@ -143,6 +147,10 @@ export function BlogEditPage() {
       author_name: post.author_name || "",
       comments_enabled: post.comments_enabled || false,
       view_count: (post as any).view_count || 0,
+      tags: ((post as any).tags as string[] | undefined || []).join(", "),
+      publish_at: (post as any).publish_at
+        ? new Date((post as any).publish_at).toISOString().slice(0, 16)
+        : "",
     });
     setCoverUrl(post.cover_image?.url || "");
   };
@@ -168,11 +176,17 @@ export function BlogEditPage() {
     setBusy(true);
     setMsg("");
     setError("");
+    const tagsArray = form.tags
+      .split(",")
+      .map((t) => t.trim())
+      .filter(Boolean);
     const body: Record<string, unknown> = {
       ...form,
       category_id: form.category_id || null,
       cover_image_id: form.cover_image_id || null,
       og_image_id: form.og_image_id || null,
+      tags: tagsArray,
+      publish_at: form.publish_at ? new Date(form.publish_at).toISOString() : null,
     };
     if (!isNew && !form.slug.trim()) {
       delete body.slug;
@@ -338,6 +352,7 @@ export function BlogEditPage() {
                 disabled={!canWrite}
               >
                 <option value="draft">Черновик</option>
+                <option value="scheduled">Запланировано</option>
                 <option value="published">Опубликовано</option>
                 <option value="archived">Архив</option>
               </select>
@@ -367,6 +382,27 @@ export function BlogEditPage() {
               <span>Комментарии к статье</span>
             </label>
             <hr style={{ margin: "0", border: "none", borderTop: "1px solid var(--border-subtle)" }} />
+            <label className="blog-field">
+              <span className="blog-field-label">🏷 Теги</span>
+              <input
+                type="text"
+                value={form.tags}
+                onChange={(e) => patch({ tags: e.target.value })}
+                disabled={!canWrite}
+                placeholder="SEO, ИИ, поиск"
+              />
+              <span className="hint">Через запятую. Отображаются на странице статьи.</span>
+            </label>
+            <label className="blog-field">
+              <span className="blog-field-label">⏰ Отложенная публикация</span>
+              <input
+                type="datetime-local"
+                value={form.publish_at}
+                onChange={(e) => patch({ publish_at: e.target.value })}
+                disabled={!canWrite}
+              />
+              <span className="hint">Установите статус «scheduled» и дату — статья опубликуется автоматически.</span>
+            </label>
             <label className="blog-field">
               <span className="blog-field-label">👁 Просмотры (начальное значение)</span>
               <input

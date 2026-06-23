@@ -109,6 +109,9 @@ def post_to_public(post: BlogPost) -> dict:
         "canonical_path": blog_canonical_path(post.slug, post.locale or DEFAULT_LOCALE),
         "robots_index": post.robots_index and post.status == "published",
         "view_count": post.view_count or 0,
+        "tags": post.tags or [],
+        "helpful_yes": post.helpful_yes or 0,
+        "helpful_no": post.helpful_no or 0,
     }
 
 
@@ -140,6 +143,8 @@ def post_to_admin(post: BlogPost, *, author_email: str | None = None) -> dict:
         "comments_enabled": bool(post.comments_enabled),
         "locale": post.locale or DEFAULT_LOCALE,
         "view_count": post.view_count or 0,
+        "tags": post.tags or [],
+        "publish_at": post.publish_at,
     }
 
 
@@ -177,33 +182,113 @@ async def list_posts_public(
     db: AsyncSession,
     *,
     category_slug: str | None = None,
+    search: str | None = None,
     offset: int = 0,
     limit: int = 20,
 ) -> tuple[list[BlogPost], int]:
-    q = (
-        select(BlogPost)
-        .where(
-            BlogPost.status == "published",
-            BlogPost.published_at.is_not(None),
-            BlogPost.locale == DEFAULT_LOCALE,
-        )
-        .options(selectinload(BlogPost.category), selectinload(BlogPost.cover_image))
-    )
-    count_q = select(func.count()).select_from(BlogPost).where(
+    base_where = [
         BlogPost.status == "published",
         BlogPost.published_at.is_not(None),
         BlogPost.locale == DEFAULT_LOCALE,
+    ]
+    q = (
+        select(BlogPost)
+        .where(*base_where)
+        .options(selectinload(BlogPost.category), selectinload(BlogPost.cover_image))
     )
+    count_q = select(func.count()).select_from(BlogPost).where(*base_where)
     if category_slug:
         cat = await get_category_by_slug(db, category_slug)
         if not cat:
             return [], 0
         q = q.where(BlogPost.category_id == cat.id)
         count_q = count_q.where(BlogPost.category_id == cat.id)
+    if search:
+        term = f"%{search.strip()}%"
+        search_filter = BlogPost.title.ilike(term) | BlogPost.excerpt.ilike(term)
+        q = q.where(search_filter)
+        count_q = count_q.where(search_filter)
     total = int(await db.scalar(count_q) or 0)
     q = q.order_by(BlogPost.published_at.desc()).offset(offset).limit(limit)
     result = await db.execute(q)
     return list(result.scalars().all()), total
+
+
+async def get_related_posts(db: AsyncSession, post: BlogPost, *, limit: int = 4) -> list[BlogPost]:
+    """Похожие опубликованные статьи из той же категории (исключая текущую)."""
+    q = (
+        select(BlogPost)
+        .where(
+            BlogPost.status == "published",
+            BlogPost.published_at.is_not(None),
+            BlogPost.locale == (post.locale or DEFAULT_LOCALE),
+            BlogPost.id != post.id,
+        )
+        .options(selectinload(BlogPost.category), selectinload(BlogPost.cover_image))
+        .order_by(BlogPost.published_at.desc())
+    )
+    if post.category_id:
+        q = q.where(BlogPost.category_id == post.category_id)
+    result = await db.execute(q.limit(limit))
+    rows = list(result.scalars().all())
+    # If fewer than limit in category, supplement from other categories
+    if len(rows) < limit and post.category_id:
+        extra_q = (
+            select(BlogPost)
+            .where(
+                BlogPost.status == "published",
+                BlogPost.published_at.is_not(None),
+                BlogPost.locale == (post.locale or DEFAULT_LOCALE),
+                BlogPost.id != post.id,
+                BlogPost.category_id != post.category_id,
+            )
+            .options(selectinload(BlogPost.category), selectinload(BlogPost.cover_image))
+            .order_by(BlogPost.published_at.desc())
+            .limit(limit - len(rows))
+        )
+        extra_result = await db.execute(extra_q)
+        rows += list(extra_result.scalars().all())
+    return rows[:limit]
+
+
+async def get_neighbor_posts(
+    db: AsyncSession, post: BlogPost
+) -> tuple[BlogPost | None, BlogPost | None]:
+    """Предыдущая (старше) и следующая (новее) публикации."""
+    if not post.published_at:
+        return None, None
+    locale = post.locale or DEFAULT_LOCALE
+
+    prev_result = await db.execute(
+        select(BlogPost)
+        .where(
+            BlogPost.status == "published",
+            BlogPost.published_at.is_not(None),
+            BlogPost.locale == locale,
+            BlogPost.published_at < post.published_at,
+            BlogPost.id != post.id,
+        )
+        .options(selectinload(BlogPost.cover_image))
+        .order_by(BlogPost.published_at.desc())
+        .limit(1)
+    )
+    prev_post = prev_result.scalar_one_or_none()
+
+    next_result = await db.execute(
+        select(BlogPost)
+        .where(
+            BlogPost.status == "published",
+            BlogPost.published_at.is_not(None),
+            BlogPost.locale == locale,
+            BlogPost.published_at > post.published_at,
+            BlogPost.id != post.id,
+        )
+        .options(selectinload(BlogPost.cover_image))
+        .order_by(BlogPost.published_at.asc())
+        .limit(1)
+    )
+    next_post = next_result.scalar_one_or_none()
+    return prev_post, next_post
 
 
 def _apply_publish_fields(post: BlogPost, status: str, published_at: datetime | None) -> None:
@@ -212,6 +297,9 @@ def _apply_publish_fields(post: BlogPost, status: str, published_at: datetime | 
         if not post.published_at:
             post.published_at = published_at or now
         post.robots_index = True
+    elif status == "scheduled":
+        # Will be published by Celery task when publish_at is reached
+        post.robots_index = False
     elif status == "draft":
         post.robots_index = False
 
@@ -248,6 +336,8 @@ async def create_post(db: AsyncSession, data: dict, *, admin_id: UUID | None) ->
         og_description=(data.get("og_description") or "").strip(),
         robots_index=bool(data.get("robots_index", True)),
         reading_time_min=estimate_reading_time_min(content),
+        tags=data.get("tags") or [],
+        publish_at=data.get("publish_at"),
     )
     _apply_publish_fields(post, status, data.get("published_at"))
     db.add(post)
@@ -301,5 +391,9 @@ async def update_post(db: AsyncSession, post: BlogPost, data: dict) -> BlogPost:
     # view_count: admin can set an arbitrary initial value (≥0)
     if "view_count" in data and data["view_count"] is not None:
         post.view_count = max(0, int(data["view_count"]))
+    if "tags" in data and data["tags"] is not None:
+        post.tags = [str(t).strip() for t in data["tags"] if str(t).strip()]
+    if "publish_at" in data:
+        post.publish_at = data["publish_at"]
     await db.flush()
     return post

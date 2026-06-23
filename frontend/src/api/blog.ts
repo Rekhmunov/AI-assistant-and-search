@@ -22,6 +22,8 @@ export type BlogPostListItem = {
   excerpt: string;
   published_at: string | null;
   reading_time_min: number;
+  view_count: number;
+  tags: string[];
   category: BlogCategory | null;
   cover_image: BlogMedia | null;
 };
@@ -47,7 +49,13 @@ export type BlogPostPublic = BlogPostListItem & {
   og_image: BlogMedia | null;
   canonical_path: string;
   robots_index: boolean;
-  view_count: number;
+  helpful_yes: number;
+  helpful_no: number;
+};
+
+export type BlogNeighbors = {
+  prev: { slug: string; title: string; cover_image: BlogMedia | null } | null;
+  next: { slug: string; title: string; cover_image: BlogMedia | null } | null;
 };
 
 function mediaUrl(path: string): string {
@@ -63,11 +71,13 @@ export function resolveBlogMediaUrl(media: BlogMedia | null | undefined): string
 
 export async function fetchBlogPosts(params?: {
   category?: string;
+  search?: string;
   offset?: number;
   limit?: number;
 }): Promise<BlogPostListItem[]> {
   const qs = new URLSearchParams();
   if (params?.category) qs.set("category", params.category);
+  if (params?.search) qs.set("search", params.search);
   if (params?.offset != null) qs.set("offset", String(params.offset));
   if (params?.limit != null) qs.set("limit", String(params.limit));
   const res = await fetch(`${API_BASE}/api/blog/posts?${qs.toString()}`, { credentials: "include" });
@@ -139,4 +149,33 @@ export async function createBlogComment(
     throw new Error(typeof body.detail === "string" ? body.detail : "Не удалось отправить комментарий");
   }
   return res.json();
+}
+
+export async function fetchBlogRelated(slug: string): Promise<BlogPostListItem[]> {
+  const res = await fetch(`${API_BASE}/api/blog/posts/${encodeURIComponent(slug)}/related`, {
+    credentials: "include",
+  });
+  if (!res.ok) return [];
+  const rows = (await res.json()) as BlogPostListItem[];
+  return rows.map((row) => ({
+    ...row,
+    cover_image: row.cover_image
+      ? { ...row.cover_image, url: mediaUrl(row.cover_image.url) }
+      : null,
+  }));
+}
+
+export async function fetchBlogNeighbors(slug: string): Promise<BlogNeighbors> {
+  const res = await fetch(`${API_BASE}/api/blog/posts/${encodeURIComponent(slug)}/neighbors`, {
+    credentials: "include",
+  });
+  if (!res.ok) return { prev: null, next: null };
+  return res.json();
+}
+
+export async function voteBlogHelpful(slug: string, vote: "yes" | "no"): Promise<void> {
+  await fetch(
+    `${API_BASE}/api/blog/posts/${encodeURIComponent(slug)}/helpful?vote=${vote}`,
+    { method: "POST", credentials: "include" },
+  );
 }

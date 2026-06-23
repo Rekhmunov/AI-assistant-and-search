@@ -14,10 +14,12 @@ from app.services.blog_comments import add_comment, list_approved_comments
 from app.services.blog_posts import (
     DEFAULT_LOCALE,
     blog_media_url,
-    get_category_by_slug,
     get_post_by_slug,
+    get_category_by_slug,
     list_categories,
     list_posts_public,
+    get_related_posts,
+    get_neighbor_posts,
     media_out,
     post_to_public,
     resolve_slug_redirect,
@@ -37,10 +39,11 @@ async def public_categories(db: Annotated[AsyncSession, Depends(get_db)]):
 async def public_posts(
     db: Annotated[AsyncSession, Depends(get_db)],
     category: str | None = Query(default=None),
+    search: str | None = Query(default=None),
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=20, ge=1, le=50),
 ):
-    posts, _ = await list_posts_public(db, category_slug=category, offset=offset, limit=limit)
+    posts, _ = await list_posts_public(db, category_slug=category, search=search, offset=offset, limit=limit)
     return [
         {
             "id": p.id,
@@ -49,6 +52,8 @@ async def public_posts(
             "excerpt": p.excerpt,
             "published_at": p.published_at,
             "reading_time_min": p.reading_time_min,
+            "view_count": p.view_count or 0,
+            "tags": p.tags or [],
             "category": p.category,
             "cover_image": media_out(p.cover_image),
         }
@@ -148,6 +153,85 @@ async def public_blog_media(media_id: UUID, db: Annotated[AsyncSession, Depends(
             "Cache-Control": "public, max-age=31536000, immutable",
         },
     )
+
+
+@router.get("/posts/{slug}/related")
+async def public_post_related(slug: str, db: Annotated[AsyncSession, Depends(get_db)]):
+    """Похожие статьи по категории (до 4 шт.)."""
+    post = await get_post_by_slug(db, slug, locale=DEFAULT_LOCALE)
+    if not post or post.status != "published":
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Статья не найдена")
+    related = await get_related_posts(db, post, limit=4)
+    return [
+        {
+            "id": p.id,
+            "slug": p.slug,
+            "title": p.title,
+            "excerpt": p.excerpt,
+            "published_at": p.published_at,
+            "reading_time_min": p.reading_time_min,
+            "view_count": p.view_count or 0,
+            "tags": p.tags or [],
+            "category": p.category,
+            "cover_image": media_out(p.cover_image),
+        }
+        for p in related
+    ]
+
+
+@router.get("/posts/{slug}/neighbors")
+async def public_post_neighbors(slug: str, db: Annotated[AsyncSession, Depends(get_db)]):
+    """Предыдущая и следующая статья."""
+    post = await get_post_by_slug(db, slug, locale=DEFAULT_LOCALE)
+    if not post or post.status != "published":
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Статья не найдена")
+    prev_post, next_post = await get_neighbor_posts(db, post)
+
+    def _minimal(p: BlogPost | None) -> dict | None:
+        if not p:
+            return None
+        return {
+            "slug": p.slug,
+            "title": p.title,
+            "cover_image": media_out(p.cover_image),
+        }
+
+    return {"prev": _minimal(prev_post), "next": _minimal(next_post)}
+
+
+@router.post("/posts/{slug}/helpful", status_code=status.HTTP_204_NO_CONTENT)
+async def public_post_helpful(
+    slug: str,
+    request: Request,
+    vote: str = Query(description="yes or no"),
+    db: Annotated[AsyncSession, Depends(get_db)] = None,
+    redis=Depends(get_redis),
+):
+    """Голос «Была ли статья полезна?» (дедупликация по IP, 7 дней)."""
+    if vote not in ("yes", "no"):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="vote must be yes or no")
+    post = await get_post_by_slug(db, slug, locale=DEFAULT_LOCALE)
+    if not post or post.status != "published":
+        return
+
+    ip = client_ip(request)
+    dedup_key = f"blog:helpful_ip:{post.id}:{ip}"
+    already = await redis.set(dedup_key, vote, nx=True, ex=7 * 86400)
+    if not already:
+        return  # уже голосовал
+
+    col = BlogPost.helpful_yes if vote == "yes" else BlogPost.helpful_no
+    await db.execute(update(BlogPost).where(BlogPost.id == post.id).values({col: col + 1}))
+    await db.commit()
+
+
+@router.get("/posts/{slug}/helpful")
+async def public_post_helpful_stats(slug: str, db: Annotated[AsyncSession, Depends(get_db)]):
+    """Счётчики голосов helpful."""
+    post = await get_post_by_slug(db, slug, locale=DEFAULT_LOCALE)
+    if not post or post.status != "published":
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    return {"yes": post.helpful_yes or 0, "no": post.helpful_no or 0}
 
 
 @router.get("/sitemap.xml")

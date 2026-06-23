@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import {
@@ -9,9 +9,16 @@ import {
 } from "../api/blog";
 import { BlogComments } from "../components/BlogComments";
 import { BlogTrySearch } from "../components/BlogTrySearch";
+import { BlogToC } from "../components/BlogToC";
+import { BlogShareButtons } from "../components/BlogShareButtons";
+import { BlogRelatedPosts } from "../components/BlogRelatedPosts";
+import { BlogNeighbors } from "../components/BlogNeighbors";
+import { BlogHelpfulWidget } from "../components/BlogHelpfulWidget";
+import { ReadingProgressBar } from "../components/ReadingProgressBar";
 import { useBlogPostMeta } from "../hooks/useBlogMeta";
 
 const API_BASE = import.meta.env.VITE_API_URL || "";
+const PUBLIC_SITE = import.meta.env.VITE_PUBLIC_URL || "https://glosix.ru";
 
 function formatDate(iso: string | null): string {
   if (!iso) return "";
@@ -34,6 +41,9 @@ export function BlogPostPage() {
   const { slug = "" } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
+
+  // processedHtml holds content_html with injected heading ids for ToC anchors
+  const [processedHtml, setProcessedHtml] = useState<string | null>(null);
 
   const { data: post, isLoading, error } = useQuery({
     queryKey: ["blog-post", slug],
@@ -62,20 +72,29 @@ export function BlogPostPage() {
     if (slug) incrementViewCount(slug);
   }, [slug]);
 
+  // Reset processedHtml when slug changes
+  useEffect(() => { setProcessedHtml(null); }, [slug]);
+
+  const onTocProcessed = useCallback((html: string) => {
+    setProcessedHtml(html);
+  }, []);
+
   const cover = post ? resolveBlogMediaUrl(post.cover_image) : null;
+  const pageUrl = post ? `${PUBLIC_SITE}/blog/${post.slug}` : "";
+  const displayHtml = processedHtml ?? post?.content_html ?? "";
 
   return (
     <div className="blog-layout">
+      {/* Reading progress bar */}
+      <ReadingProgressBar />
+
       {/* Боковая панель */}
       <aside className="blog-sidebar">
         <div className="blog-sidebar-header">
           <Link to="/blog" className="blog-sidebar-title">Блог Glosix</Link>
         </div>
         <nav className="blog-sidebar-nav" aria-label="Категории">
-          <Link
-            to="/blog"
-            className="blog-sidebar-item"
-          >
+          <Link to="/blog" className="blog-sidebar-item">
             <span className="blog-sidebar-item-icon">📋</span>
             <span>Все статьи</span>
           </Link>
@@ -125,10 +144,7 @@ export function BlogPostPage() {
             {/* Заголовок */}
             <header className="blog-article-header">
               {post.category && (
-                <Link
-                  to={`/blog/category/${post.category.slug}`}
-                  className="blog-article-cat"
-                >
+                <Link to={`/blog/category/${post.category.slug}`} className="blog-article-cat">
                   {post.category.name}
                 </Link>
               )}
@@ -148,6 +164,14 @@ export function BlogPostPage() {
                   {post.view_count.toLocaleString("ru-RU")}
                 </span>
               </div>
+              {/* Теги */}
+              {post.tags && post.tags.length > 0 && (
+                <div className="blog-article-tags">
+                  {post.tags.map((tag) => (
+                    <span key={tag} className="blog-article-tag">{tag}</span>
+                  ))}
+                </div>
+              )}
             </header>
 
             {/* Обложка */}
@@ -155,17 +179,38 @@ export function BlogPostPage() {
               <img src={cover} alt="" className="blog-article-cover" loading="lazy" />
             )}
 
+            {/* Оглавление */}
+            {post.content_html && (
+              <BlogToC contentHtml={post.content_html} onProcessed={onTocProcessed} />
+            )}
+
             {/* Контент */}
             <div
               className="blog-article-content prose"
-              dangerouslySetInnerHTML={{ __html: post.content_html }}
+              dangerouslySetInnerHTML={{ __html: displayHtml }}
             />
+
+            {/* Поделиться */}
+            <BlogShareButtons title={post.title} url={pageUrl} />
+
+            {/* Была ли статья полезна */}
+            <BlogHelpfulWidget
+              slug={post.slug}
+              helpfulYes={post.helpful_yes || 0}
+              helpfulNo={post.helpful_no || 0}
+            />
+
+            {/* Навигация пред/след */}
+            <BlogNeighbors slug={post.slug} />
 
             {/* Комментарии */}
             {post.comments_enabled && <BlogComments slug={post.slug} />}
 
             {/* CTA */}
             <BlogTrySearch />
+
+            {/* Похожие статьи */}
+            <BlogRelatedPosts slug={post.slug} />
 
             {/* Подвал */}
             <footer className="blog-article-footer">

@@ -1,8 +1,9 @@
 import uuid
 from datetime import datetime
+from typing import Any
 
 from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, Integer, String, Text, func
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -66,6 +67,10 @@ class BlogPost(Base):
     published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     reading_time_min: Mapped[int] = mapped_column(Integer, default=1)
     view_count: Mapped[int] = mapped_column(BigInteger, default=0)
+    tags: Mapped[list[Any]] = mapped_column(JSONB, default=list, server_default="[]")
+    publish_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    helpful_yes: Mapped[int] = mapped_column(BigInteger, default=0)
+    helpful_no: Mapped[int] = mapped_column(BigInteger, default=0)
     meta_title: Mapped[str] = mapped_column(String(255), default="")
     meta_description: Mapped[str] = mapped_column(String(500), default="")
     meta_keywords: Mapped[str] = mapped_column(String(500), default="")

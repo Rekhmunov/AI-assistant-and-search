@@ -81,6 +81,56 @@ async def _reconcile_orphan_uploads_async() -> int:
     return removed
 
 
+@celery.task(name="publish_scheduled_blog_posts")
+def publish_scheduled_blog_posts_task() -> None:
+    asyncio.run(_publish_scheduled_blog_posts_async())
+
+
+async def _publish_scheduled_blog_posts_async() -> int:
+    """Публикует статьи с status='scheduled' у которых publish_at <= now()."""
+    from datetime import datetime, timezone
+    settings_module = __import__("app.core.config", fromlist=["get_settings"])
+    settings = settings_module.get_settings()
+    engine = create_async_engine(settings.database_url)
+    session_factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    published = 0
+
+    try:
+        now = datetime.now(timezone.utc)
+        from sqlalchemy import select, update
+        from app.models.blog import BlogPost
+
+        async with session_factory() as db:
+            result = await db.execute(
+                select(BlogPost).where(
+                    BlogPost.status == "scheduled",
+                    BlogPost.publish_at.is_not(None),
+                    BlogPost.publish_at <= now,
+                )
+            )
+            posts = list(result.scalars().all())
+            for post in posts:
+                post.status = "published"
+                if not post.published_at:
+                    post.published_at = post.publish_at or now
+                post.robots_index = True
+                published += 1
+            if posts:
+                await db.commit()
+                # Rebuild prerender for published posts
+                try:
+                    from app.services.blog_prerender import rebuild_all_prerender
+                    await rebuild_all_prerender(db)
+                except Exception:
+                    logger.warning("blog prerender failed after scheduled publish", exc_info=True)
+    finally:
+        await engine.dispose()
+
+    if published:
+        logger.info("publish_scheduled_blog_posts: published %s posts", published)
+    return published
+
+
 @celery.task(name="purge_deleted_accounts")
 def purge_deleted_accounts_task() -> None:
     asyncio.run(_purge_deleted_accounts_async())

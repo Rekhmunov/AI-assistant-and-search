@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link, useLocation } from "react-router-dom";
+import { useState } from "react";
 import { fetchBlogCategories, fetchBlogPosts, resolveBlogMediaUrl } from "../api/blog";
 import { useBlogListMeta } from "../hooks/useBlogMeta";
 
@@ -19,10 +20,19 @@ function formatDate(iso: string | null): string {
 export function BlogPage() {
   useBlogListMeta();
   const location = useLocation();
+  const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+
+  // Debounce search
+  const onSearchChange = (val: string) => {
+    setSearch(val);
+    clearTimeout((window as any)._blogSearchTimer);
+    (window as any)._blogSearchTimer = setTimeout(() => setDebouncedSearch(val), 300);
+  };
 
   const { data: posts = [], isLoading } = useQuery({
-    queryKey: ["blog-posts"],
-    queryFn: () => fetchBlogPosts({ limit: 50 }),
+    queryKey: ["blog-posts", debouncedSearch],
+    queryFn: () => fetchBlogPosts({ limit: 50, search: debouncedSearch || undefined }),
   });
 
   const { data: categories = [] } = useQuery({
@@ -68,6 +78,33 @@ export function BlogPage() {
           <p className="blog-main-lead">Статьи об умном поиске, ИИ-ассистенте и автоматизации в MAX</p>
         </div>
 
+        {/* Поиск */}
+        <div className="blog-search-wrap">
+          <div className="blog-search-field">
+            <svg className="blog-search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+            </svg>
+            <input
+              type="search"
+              className="blog-search-input"
+              placeholder="Поиск по статьям…"
+              value={search}
+              onChange={(e) => onSearchChange(e.target.value)}
+              aria-label="Поиск по статьям"
+            />
+            {search && (
+              <button
+                type="button"
+                className="blog-search-clear"
+                onClick={() => { setSearch(""); setDebouncedSearch(""); }}
+                aria-label="Очистить поиск"
+              >
+                ×
+              </button>
+            )}
+          </div>
+        </div>
+
         {isLoading ? (
           <div className="blog-loading">
             {[1, 2, 3].map((i) => (
@@ -76,7 +113,10 @@ export function BlogPage() {
           </div>
         ) : posts.length === 0 ? (
           <div className="blog-empty">
-            <p>Скоро здесь появятся статьи</p>
+            {debouncedSearch
+              ? <p>По запросу «{debouncedSearch}» ничего не найдено</p>
+              : <p>Скоро здесь появятся статьи</p>
+            }
           </div>
         ) : (
           <div className="blog-posts-list">
@@ -110,13 +150,20 @@ export function BlogPage() {
                         {post.reading_time_min > 0 && (
                           <span>{post.reading_time_min} мин</span>
                         )}
-                        {(post as any).view_count > 0 && (
+                        {post.view_count > 0 && (
                           <>
                             <span className="blog-post-row-sep">·</span>
-                            <span>👁 {((post as any).view_count as number).toLocaleString("ru-RU")}</span>
+                            <span>👁 {post.view_count.toLocaleString("ru-RU")}</span>
                           </>
                         )}
                       </div>
+                      {post.tags && post.tags.length > 0 && (
+                        <div className="blog-post-row-tags">
+                          {post.tags.map((tag) => (
+                            <span key={tag} className="blog-post-row-tag">{tag}</span>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   </Link>
                 </article>
