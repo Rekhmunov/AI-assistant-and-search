@@ -98,9 +98,9 @@ a{color:#20808d;text-decoration:none}a:hover{text-decoration:underline}
 .prose blockquote{margin:1.2em 0;padding:12px 16px;border-left:3px solid #20808d;background:#f4f7f8;border-radius:0 8px 8px 0;color:#5c6b73;font-style:italic}
 .prose code{background:#f0f4f5;padding:2px 6px;border-radius:4px;font-size:.9em;font-family:ui-monospace,monospace}
 /* Поделиться */
-.art-share{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:28px 0 16px;padding:16px 0;border-top:1px solid #e8edf0;border-bottom:1px solid #e8edf0}
-.share-label{font-size:.85rem;font-weight:600;color:#5c6b73;text-transform:uppercase;letter-spacing:.04em}
-.share-btn{display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border-radius:8px;font-size:.875rem;font-weight:500;text-decoration:none;cursor:pointer;border:none;font-family:inherit;transition:opacity .15s}
+.art-share{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:28px 0 16px;padding:14px 0;border-top:1px solid #e8edf0;border-bottom:1px solid #e8edf0}
+.share-label{font-size:.8rem;font-weight:600;color:#5c6b73;text-transform:uppercase;letter-spacing:.04em;white-space:nowrap}
+.share-btn{display:inline-flex;align-items:center;gap:5px;padding:6px 12px;border-radius:7px;font-size:.85rem;font-weight:500;text-decoration:none;cursor:pointer;border:none;font-family:inherit;transition:opacity .15s;white-space:nowrap;flex-shrink:0}
 .share-btn:hover{opacity:.85;text-decoration:none}
 .share-tg{background:#2AABEE;color:#fff}
 .share-vk{background:#4680C2;color:#fff}

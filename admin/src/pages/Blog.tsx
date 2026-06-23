@@ -75,11 +75,11 @@ function HelpfulBar({ yes, no }: { yes: number; no: number }) {
   if (total === 0) return <span className="blog-helpful-empty">—</span>;
   const pct = Math.round((yes / total) * 100);
   return (
-    <div className="blog-helpful-bar">
-      <div className="blog-helpful-bar-fill" style={{ width: `${pct}%` }} title={`${pct}%`} />
-      <span className="blog-helpful-bar-label">
-        👍{yes} / 👎{no}
-      </span>
+    <div className="blog-helpful-wrap">
+      <div className="blog-helpful-bar" title={`${pct}%`}>
+        <div className="blog-helpful-bar-fill" style={{ width: `${pct}%` }} />
+      </div>
+      <span className="blog-helpful-counts">👍{yes} · 👎{no}</span>
     </div>
   );
 }
