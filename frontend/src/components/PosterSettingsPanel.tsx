@@ -57,6 +57,8 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
   const [cfg, setCfg] = useState<PosterConfig>({ ...DEFAULTS });
   const [saving, setSaving] = useState(false);
   const [verifying, setVerifying] = useState(false);
+  const [generating, setGenerating] = useState(false);
+  const [generateResult, setGenerateResult] = useState<"" | "approval" | "published" | "error">("");
   const [activationStatus, setActivationStatus] = useState<"idle" | "active" | "inactive" | "error">("idle");
   const [activationHint, setActivationHint] = useState("");
   const [error, setError] = useState("");
@@ -181,6 +183,32 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
       setSaving(false);
       setVerifying(false);
       setError(e instanceof Error ? e.message : "Ошибка сохранения");
+    }
+  };
+
+  const generatePost = async () => {
+    setGenerating(true);
+    setGenerateResult("");
+    try {
+      const res = await fetch(`${API_BASE}/api/agent/threads/${threadId}/generate-post`, {
+        method: "POST",
+        credentials: "include",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      const data = res.ok ? await res.json() : null;
+      if (data?.ok) {
+        setGenerateResult(data.mode === "published" ? "published" : "approval");
+      } else {
+        setGenerateResult("error");
+        setError(data?.error || "Не удалось сгенерировать пост");
+      }
+    } catch {
+      setGenerateResult("error");
+      setError("Ошибка при генерации поста");
+    } finally {
+      setGenerating(false);
+      // Clear result after 8s
+      setTimeout(() => { setGenerateResult(""); setError(""); }, 8000);
     }
   };
 
@@ -375,6 +403,42 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
       {activationStatus === "inactive" && (
         <div className="poster-status poster-status--inactive">
           ⏸ Агент деактивирован. Чтобы включить — активируйте его в форме выше.
+        </div>
+      )}
+
+      {/* One-time post generation — shown when active */}
+      {activationStatus === "active" && (
+        <div className="poster-generate">
+          <button
+            type="button"
+            className="poster-generate__btn"
+            disabled={generating}
+            onClick={generatePost}
+          >
+            {generating ? (
+              <>
+                <span className="poster-status__spinner" />
+                Генерируем пост…
+              </>
+            ) : (
+              "✏️ Сгенерировать разовый пост"
+            )}
+          </button>
+          {generateResult === "approval" && (
+            <span className="poster-generate__result poster-generate__result--ok">
+              ✓ Черновик отправлен на согласование в чат агента
+            </span>
+          )}
+          {generateResult === "published" && (
+            <span className="poster-generate__result poster-generate__result--ok">
+              ✓ Пост опубликован в канале
+            </span>
+          )}
+          {generateResult === "error" && (
+            <span className="poster-generate__result poster-generate__result--err">
+              ⚠️ {error}
+            </span>
+          )}
         </div>
       )}
     </div>

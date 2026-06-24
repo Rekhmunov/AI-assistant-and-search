@@ -267,6 +267,81 @@ async def patch_agent_config(
     return {"ok": True, "config": {k: v for k, v in cfg.items() if k.startswith("poster_")}}
 
 
+@router.post("/threads/{thread_id}/generate-post")
+async def generate_poster_post(
+    thread_id: UUID,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+    redis_client: redis.Redis = Depends(get_redis),
+):
+    """Generate a one-off post for the poster agent (ignores schedule)."""
+    result = await db.execute(
+        select(Thread).where(
+            Thread.id == thread_id,
+            Thread.user_id == user.id,
+            Thread.thread_type == ThreadType.AGENT,
+        )
+    )
+    thread = result.scalar_one_or_none()
+    if not thread:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Тред не найден")
+    agent = await get_agent_for_thread(db, thread.id)
+    if not agent:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Агент не найден")
+
+    try:
+        from app.services.agent.poster_executor import (
+            generate_post,
+            get_approval_mode,
+            get_poster_channel_id,
+            publish_to_channel,
+            save_pending_draft,
+            save_post_to_history,
+            send_draft_for_approval,
+            update_post_status,
+            _pick_next_topic,
+        )
+        from app.services.providers.factory import resolve_agent_providers
+        from app.services.bot import MaxBotService
+        import uuid as _uuid
+
+        topic = _pick_next_topic(agent)
+        llm, _, _, _, _ = await resolve_agent_providers(db, redis_client)
+        post_text = await generate_post(agent, topic, llm)
+        post_id = str(_uuid.uuid4())
+
+        save_post_to_history(agent, post_id=post_id, topic=topic, text=post_text, status="draft")
+
+        approval_mode = get_approval_mode(agent)
+        channel_id = get_poster_channel_id(agent)
+        approval_chat_id = agent.max_chat_id
+        bot = MaxBotService()
+
+        if approval_mode == "auto" and channel_id:
+            ok = await publish_to_channel(bot, channel_id=channel_id, text=post_text)
+            if ok:
+                update_post_status(agent, post_id, "published")
+                await db.commit()
+                return {"ok": True, "mode": "published", "topic": topic}
+            return {"ok": False, "error": "Не удалось опубликовать в канал. Проверьте права бота."}
+        elif approval_chat_id:
+            save_pending_draft(agent, post_id=post_id, topic=topic, text=post_text)
+            msg_id = await send_draft_for_approval(
+                agent, db, bot,
+                approval_chat_id=approval_chat_id,
+                post_id=post_id, topic=topic, text=post_text,
+            )
+            save_pending_draft(agent, post_id=post_id, topic=topic, text=post_text, draft_message_id=msg_id)
+            await db.commit()
+            return {"ok": True, "mode": "approval", "topic": topic}
+        else:
+            await db.commit()
+            return {"ok": False, "error": "Не настроен канал или группа для согласования"}
+    except Exception as exc:
+        logger.exception("generate_poster_post failed thread=%s: %s", thread_id, exc)
+        return {"ok": False, "error": str(exc)[:300]}
+
+
 @router.post("/threads/{thread_id}/verify-channel")
 async def verify_poster_channel(
     thread_id: UUID,
