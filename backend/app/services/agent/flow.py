@@ -187,9 +187,25 @@ async def create_agent_thread(
     db.add(agent)
     await db.flush()
 
-    from app.services.agent.templates import get_template_welcome
-    welcome_text = get_template_welcome(template) or AGENT_WELCOME
-    welcome = await _assistant_reply(db, thread, welcome_text)
+    from app.services.agent.templates import get_template_welcome, TEMPLATE_WELCOMES
+    # If template explicitly defines a welcome (even empty ""), use it.
+    # Fall back to AGENT_WELCOME only when template has NO entry at all.
+    if template and template in TEMPLATE_WELCOMES:
+        welcome_text = TEMPLATE_WELCOMES[template]  # may be "" for poster
+    else:
+        welcome_text = get_template_welcome(template) or AGENT_WELCOME
+    # Don't create an empty welcome message (e.g. poster template has no welcome)
+    if welcome_text:
+        welcome = await _assistant_reply(db, thread, welcome_text)
+    else:
+        # Create a minimal placeholder so the API response is valid
+        welcome = Message(
+            thread_id=thread.id,
+            role=MessageRole.ASSISTANT,
+            content="",
+        )
+        db.add(welcome)
+        await db.flush()
     return thread, agent, welcome
 
 
