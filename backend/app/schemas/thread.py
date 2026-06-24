@@ -75,6 +75,7 @@ class ThreadDetail(BaseModel):
     is_saved: bool
     pinned_at: datetime | None = None
     messages: list[MessageOut]
+    agent_config: dict | None = None  # poster_* fields for agent threads
 
     model_config = {"from_attributes": True}
 

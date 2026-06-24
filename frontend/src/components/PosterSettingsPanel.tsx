@@ -165,8 +165,23 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
     patch("poster_schedule", cfg.poster_schedule.filter((_, i) => i !== idx));
   };
 
+  const persistEnabled = async (val: boolean) => {
+    try {
+      await fetch(`${API_BASE}/api/agent/threads/${threadId}/config`, {
+        method: "PATCH",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ poster_enabled: val }),
+      });
+    } catch { /* silent — UI state takes priority */ }
+  };
+
   const handleToggle = (val: boolean) => {
     onToggle(val);
+    void persistEnabled(val);
     if (!val) {
       setActivationStatus("inactive");
       setError("");
@@ -232,7 +247,8 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
         return;
       }
 
-      // Step 3: Success
+      // Step 3: Success — persist enabled state so it survives page reload
+      void persistEnabled(true);
       setActivationStatus("active");
       void loadHistory();
       const channelName = verifyData?.chat_name ? ` (${verifyData.chat_name})` : "";

@@ -127,6 +127,7 @@ export interface ThreadDetail {
   agent_seq?: number | null;
   is_saved: boolean;
   messages: Message[];
+  agent_config?: Record<string, unknown> | null;
 }
 
 export interface AgentThreadCreateResponse {

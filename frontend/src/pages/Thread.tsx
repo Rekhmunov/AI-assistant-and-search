@@ -283,8 +283,14 @@ export function Thread() {
   const threadHasPending = Boolean(thread && threadHasPendingAnswer(thread.messages));
 
   // Poster agent settings form state
-  const posterConfig = (thread as any)?.agent_config ?? {};
-  const [posterEnabled, setPosterEnabled] = useState(false);
+  const posterConfig = thread?.agent_config ?? {};
+  const [posterEnabled, setPosterEnabled] = useState<boolean>(false);
+  // Restore toggle state from backend when thread loads
+  useEffect(() => {
+    if (thread?.agent_config && thread.title?.startsWith("Постинг")) {
+      setPosterEnabled(Boolean(thread.agent_config.poster_enabled));
+    }
+  }, [thread?.agent_config, thread?.title]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const { data: answerStatus } = useQuery({
     queryKey: ["thread-answer-status", activeThreadKey],

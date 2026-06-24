@@ -317,6 +317,20 @@ async def get_thread(
             )
         )
 
+    # For agent threads, include poster_enabled and other agent config
+    # so the frontend can restore toggle state without requiring re-save
+    agent_config: dict | None = None
+    if thread.thread_type and "agent" in str(thread.thread_type):
+        try:
+            from app.services.agent.lifecycle import get_agent_for_thread
+            agent = await get_agent_for_thread(db, thread.id)
+            if agent and agent.config:
+                cfg = dict(agent.config)
+                # Only expose poster_* fields (safe subset of agent config)
+                agent_config = {k: v for k, v in cfg.items() if k.startswith("poster_") or k == "template"}
+        except Exception:
+            pass
+
     return ThreadDetail(
         id=thread.id,
         title=thread.title,
@@ -324,6 +338,7 @@ async def get_thread(
         agent_seq=thread.agent_seq,
         is_saved=thread.is_saved,
         messages=messages_out,
+        agent_config=agent_config,
     )
 
 
