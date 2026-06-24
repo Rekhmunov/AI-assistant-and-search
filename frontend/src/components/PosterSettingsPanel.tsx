@@ -52,7 +52,7 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
   const token = useAuthStore((s) => s.token);
   const [cfg, setCfg] = useState<PosterConfig>({ ...DEFAULTS });
   const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
+  const [activationStatus, setActivationStatus] = useState<"idle" | "active" | "inactive">("idle");
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -83,6 +83,18 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
     patch("poster_days", days);
   };
 
+  // When toggle changes to OFF — show deactivation status
+  const handleToggle = (val: boolean) => {
+    onToggle(val);
+    if (!val) {
+      setActivationStatus("inactive");
+      setError("");
+    } else {
+      // Re-enabling: reset to idle until they save again
+      setActivationStatus("idle");
+    }
+  };
+
   const save = async () => {
     setSaving(true);
     setError("");
@@ -97,8 +109,7 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
         body: JSON.stringify(cfg),
       });
       if (!res.ok) throw new Error("Не удалось сохранить");
-      setSaved(true);
-      setTimeout(() => setSaved(false), 2000);
+      setActivationStatus("active");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Ошибка");
     } finally {
@@ -117,7 +128,7 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
           <input
             type="checkbox"
             checked={enabled}
-            onChange={(e) => onToggle(e.target.checked)}
+            onChange={(e) => handleToggle(e.target.checked)}
           />
           <span className="poster-settings__toggle-track">
             <span className="poster-settings__toggle-thumb" />
@@ -265,14 +276,26 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
           {error && <span className="poster-settings__error">{error}</span>}
           <button
             type="button"
-            className={`poster-settings__save${saved ? " poster-settings__save--ok" : ""}`}
+            className="poster-settings__save"
             disabled={saving || f}
             onClick={save}
           >
-            {saved ? "✓ Сохранено" : saving ? "Сохраняем…" : "Сохранить настройки"}
+            {saving ? "Сохраняем…" : "Сохранить настройки"}
           </button>
         </div>
       </div>
+
+      {/* Status message — shown below the form */}
+      {activationStatus === "active" && (
+        <div className="poster-status poster-status--active">
+          ✅ Агент активирован. Посты будут публиковаться по заданному расписанию.
+        </div>
+      )}
+      {activationStatus === "inactive" && (
+        <div className="poster-status poster-status--inactive">
+          ⏸ Агент деактивирован. Чтобы включить — активируйте его в форме выше.
+        </div>
+      )}
     </div>
   );
 }

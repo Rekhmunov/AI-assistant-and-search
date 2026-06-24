@@ -1146,8 +1146,8 @@ export function Thread() {
           ref={answerPanelRef}
           hidden={activeTab !== "answer"}
         >
-          {/* Poster agent: show settings form if welcome message mentions Постинг */}
-          {isAgentThread && threadId && turns.some((t) => t.agentWelcome && String(t.answer).includes("Постинг")) && (
+          {/* Poster agent: show settings form for poster threads (detected by title prefix) */}
+          {isAgentThread && threadId && thread?.title?.startsWith("Постинг") && (
             <div className="poster-settings-wrap">
               <PosterSettingsPanel
                 threadId={threadId}
@@ -1224,6 +1224,11 @@ export function Thread() {
               turn.followUps.length > 0 &&
               !streaming &&
               !isActive;
+
+            // Poster: skip empty welcome turn (POSTER_WELCOME is "")
+            if (turn.agentWelcome && !answerHasText(turn.answer) && thread?.title?.startsWith("Постинг")) {
+              return null;
+            }
 
             if (turn.agentActivityLog && threadId) {
               return (

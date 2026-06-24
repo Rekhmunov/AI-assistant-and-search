@@ -8323,8 +8323,10 @@ a.blog-sidebar-title:hover {
 .poster-settings__save { padding: 10px 22px; border-radius: 8px; border: none; background: var(--accent, #20808d); color: #fff; font: inherit; font-weight: 600; cursor: pointer; transition: background 0.15s, opacity 0.15s; }
 .poster-settings__save:hover:not(:disabled) { background: #1a6b76; }
 .poster-settings__save:disabled { opacity: 0.5; cursor: not-allowed; }
-.poster-settings__save--ok { background: #38a169; }
 .poster-settings--disabled .poster-settings__body { opacity: 0.45; pointer-events: none; }
+.poster-status { padding: 14px 20px; font-size: 0.9rem; font-weight: 500; border-top: 1px solid var(--border-subtle, #e8edf0); }
+.poster-status--active { color: #276749; background: #f0fff4; }
+.poster-status--inactive { color: #744210; background: #fffaf0; }
 .poster-field__input:disabled,.poster-field__textarea:disabled,.poster-field__select:disabled { background: var(--surface-hover, #f7fafb); cursor: not-allowed; }
 .poster-toggle--disabled { opacity: 0.5; cursor: not-allowed; }
 .poster-day--disabled { opacity: 0.5; cursor: not-allowed; }
