@@ -284,7 +284,7 @@ export function Thread() {
 
   // Poster agent settings form state
   const posterConfig = (thread as any)?.agent_config ?? {};
-  const [posterEnabled, setPosterEnabled] = useState(true);
+  const [posterEnabled, setPosterEnabled] = useState(false);
 
   const { data: answerStatus } = useQuery({
     queryKey: ["thread-answer-status", activeThreadKey],

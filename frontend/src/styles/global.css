@@ -8324,3 +8324,7 @@ a.blog-sidebar-title:hover {
 .poster-settings__save:hover:not(:disabled) { background: #1a6b76; }
 .poster-settings__save:disabled { opacity: 0.5; cursor: not-allowed; }
 .poster-settings__save--ok { background: #38a169; }
+.poster-settings--disabled .poster-settings__body { opacity: 0.45; pointer-events: none; }
+.poster-field__input:disabled,.poster-field__textarea:disabled,.poster-field__select:disabled { background: var(--surface-hover, #f7fafb); cursor: not-allowed; }
+.poster-toggle--disabled { opacity: 0.5; cursor: not-allowed; }
+.poster-day--disabled { opacity: 0.5; cursor: not-allowed; }
