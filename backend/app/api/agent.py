@@ -260,11 +260,44 @@ async def patch_agent_config(
 
     cfg = dict(agent.config or {})
     for key, value in body.items():
+        # poster_* and support_instructions are allowed; validate timezone
+        if key == "poster_timezone":
+            import zoneinfo
+            try:
+                zoneinfo.ZoneInfo(str(value))
+            except Exception:
+                continue  # skip invalid timezone
         if key.startswith("poster_") or key in ("support_instructions",):
             cfg[key] = value
     agent.config = cfg
     await db.commit()
     return {"ok": True, "config": {k: v for k, v in cfg.items() if k.startswith("poster_")}}
+
+
+@router.get("/threads/{thread_id}/post-history")
+async def get_poster_history(
+    thread_id: UUID,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+):
+    """Return post history for the poster agent."""
+    result = await db.execute(
+        select(Thread).where(
+            Thread.id == thread_id,
+            Thread.user_id == user.id,
+            Thread.thread_type == ThreadType.AGENT,
+        )
+    )
+    thread = result.scalar_one_or_none()
+    if not thread:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Тред не найден")
+    agent = await get_agent_for_thread(db, thread.id)
+    if not agent:
+        return {"items": []}
+
+    from app.services.agent.poster_executor import get_post_history
+    history = get_post_history(agent)
+    return {"items": list(reversed(history[-20:]))}  # latest first
 
 
 @router.post("/threads/{thread_id}/generate-post")
@@ -314,7 +347,6 @@ async def generate_poster_post(
 
         approval_mode = get_approval_mode(agent)
         channel_id = get_poster_channel_id(agent)
-        approval_chat_id = agent.max_chat_id
         bot = MaxBotService()
 
         if approval_mode == "auto" and channel_id:
@@ -324,19 +356,21 @@ async def generate_poster_post(
                 await db.commit()
                 return {"ok": True, "mode": "published", "topic": topic}
             return {"ok": False, "error": "Не удалось опубликовать в канал. Проверьте права бота."}
-        elif approval_chat_id:
+        else:
+            # With approval: send to group chat OR owner DM
+            from app.services.agent.poster_executor import get_approval_destination
+            dest_chat_id, dest_user_id = get_approval_destination(agent)
+            if not dest_chat_id and not dest_user_id:
+                await db.commit()
+                return {"ok": False, "error": "Нет получателя для согласования. Привяжите бот к MAX или добавьте агента в группу."}
             save_pending_draft(agent, post_id=post_id, topic=topic, text=post_text)
             msg_id = await send_draft_for_approval(
                 agent, db, bot,
-                approval_chat_id=approval_chat_id,
                 post_id=post_id, topic=topic, text=post_text,
             )
             save_pending_draft(agent, post_id=post_id, topic=topic, text=post_text, draft_message_id=msg_id)
             await db.commit()
             return {"ok": True, "mode": "approval", "topic": topic}
-        else:
-            await db.commit()
-            return {"ok": False, "error": "Не настроен канал или группа для согласования"}
     except Exception as exc:
         logger.exception("generate_poster_post failed thread=%s: %s", thread_id, exc)
         return {"ok": False, "error": str(exc)[:300]}

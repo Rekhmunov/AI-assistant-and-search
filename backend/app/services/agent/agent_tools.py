@@ -758,7 +758,7 @@ async def _tool_generate_post_draft(
         save_pending_draft,
         save_post_to_history,
         send_draft_for_approval,
-        send_dm_notification,
+        update_post_status,
         _pick_next_topic,
     )
     from app.services.providers.factory import resolve_agent_providers
@@ -780,31 +780,18 @@ async def _tool_generate_post_draft(
     if approval_mode == "auto" and channel_id:
         ok = await publish_to_channel(bot, channel_id=channel_id, text=post_text)
         if ok:
-            from app.services.agent.poster_executor import update_post_status
             update_post_status(agent, post_id, "published")
             return {"ok": True, "tool": "generate_post_draft", "result": "Пост опубликован автоматически.", "outbound_sent": True}
         return {"ok": False, "tool": "generate_post_draft", "error": "Не удалось опубликовать пост в канал."}
 
-    # С согласованием
+    # С согласованием — отправляем в group chat или DM владельца
     save_pending_draft(agent, post_id=post_id, topic=topic, text=post_text)
-    if approval_chat_id:
-        msg_id = await send_draft_for_approval(
-            agent, db, bot,
-            approval_chat_id=approval_chat_id,
-            post_id=post_id,
-            topic=topic,
-            text=post_text,
-        )
+    msg_id = await send_draft_for_approval(
+        agent, db, bot,
+        post_id=post_id, topic=topic, text=post_text,
+    )
+    if msg_id:
         save_pending_draft(agent, post_id=post_id, topic=topic, text=post_text, draft_message_id=msg_id)
-
-        # DM уведомление владельцу
-        cfg = dict(agent.config or {})
-        owner_uid = cfg.get("owner_max_user_id")
-        if owner_uid and owner_uid != approval_chat_id:
-            try:
-                await send_dm_notification(agent, bot, owner_max_user_id=int(owner_uid), approval_chat_id=approval_chat_id)
-            except Exception:
-                pass
 
     return {
         "ok": True,

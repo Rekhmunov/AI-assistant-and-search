@@ -292,19 +292,37 @@ async def generate_post(
 # Отправка черновика на согласование
 # ─────────────────────────────────────────────────────────────────────────────
 
+def get_approval_destination(agent: AgentInstance) -> tuple[int | None, int | None]:
+    """
+    Returns (chat_id, user_id) for sending approval draft.
+    Prefers group chat (max_chat_id), falls back to DM with owner (max_user_id).
+    Exactly one of them will be non-None.
+    """
+    cfg = _get_cfg(agent)
+    chat_id = agent.max_chat_id or cfg.get("registered_group_chat_id")
+    if chat_id:
+        return int(chat_id), None
+    user_id = agent.max_user_id
+    if user_id:
+        return None, int(user_id)
+    return None, None
+
+
 async def send_draft_for_approval(
     agent: AgentInstance,
     db: AsyncSession,
     bot: MaxBotService,
     *,
-    approval_chat_id: int,
+    approval_chat_id: int | None = None,
     post_id: str,
     topic: str,
     text: str,
 ) -> str | None:
     """
-    Отправляет черновик в чат агента с кнопками согласования.
-    Возвращает message_id отправленного сообщения (для редактирования).
+    Отправляет черновик с кнопками согласования.
+    Если approval_chat_id не указан — определяет назначение из конфига агента.
+    Поддерживает как групповой чат, так и DM с владельцем.
+    Возвращает message_id отправленного сообщения.
     """
     header = f"📝 **Черновик поста** — тема: _{topic}_\n\n"
     full_text = header + text
@@ -320,13 +338,25 @@ async def send_draft_for_approval(
         ],
     ])
 
-    result = await bot.send_message(
-        None,
-        full_text,
-        attachments=[keyboard],
-        chat_id=approval_chat_id,
-        notify=True,
-    )
+    # Resolve destination
+    if approval_chat_id:
+        dest_chat_id, dest_user_id = approval_chat_id, None
+    else:
+        dest_chat_id, dest_user_id = get_approval_destination(agent)
+
+    if dest_chat_id:
+        result = await bot.send_message(
+            None, full_text, attachments=[keyboard],
+            chat_id=dest_chat_id, notify=True,
+        )
+    elif dest_user_id:
+        result = await bot.send_message(
+            dest_user_id, full_text, attachments=[keyboard],
+        )
+    else:
+        logger.warning("send_draft_for_approval: no destination for agent=%s", agent.id)
+        return None
+
     return result.message_id if result.ok else None
 
 

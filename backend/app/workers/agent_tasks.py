@@ -201,9 +201,6 @@ async def _dispatch_poster_scheduled_async() -> None:
             agents = result.scalars().all()
 
             now = datetime.now(_tz.utc)
-            now_local = now.astimezone()
-            current_day = _WEEKDAY_KEYS[now_local.weekday()]
-            current_hm = now_local.strftime("%H:%M")
 
             bot = MaxBotService()
 
@@ -216,6 +213,17 @@ async def _dispatch_poster_scheduled_async() -> None:
                 schedule = get_poster_schedule(agent)
                 if not schedule:
                     continue  # ручной режим — не запускаем автоматически
+
+                # Localize to agent's configured timezone
+                tz_name = cfg.get("poster_timezone", "Europe/Moscow")
+                try:
+                    import zoneinfo
+                    tz = zoneinfo.ZoneInfo(tz_name)
+                    now_local = now.astimezone(tz)
+                except Exception:
+                    now_local = now.astimezone()
+
+                current_day = _WEEKDAY_KEYS[now_local.weekday()]
 
                 # Проверяем каждый слот расписания
                 for slot in schedule:

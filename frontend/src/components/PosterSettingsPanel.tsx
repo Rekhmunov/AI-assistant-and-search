@@ -1,7 +1,24 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useAuthStore } from "../store/authStore";
 
 const API_BASE = import.meta.env.VITE_API_URL || "";
+
+const TIMEZONES = [
+  { value: "Europe/Moscow", label: "Москва (UTC+3)" },
+  { value: "Europe/Kaliningrad", label: "Калининград (UTC+2)" },
+  { value: "Europe/Samara", label: "Самара (UTC+4)" },
+  { value: "Asia/Yekaterinburg", label: "Екатеринбург (UTC+5)" },
+  { value: "Asia/Omsk", label: "Омск (UTC+6)" },
+  { value: "Asia/Krasnoyarsk", label: "Красноярск (UTC+7)" },
+  { value: "Asia/Irkutsk", label: "Иркутск (UTC+8)" },
+  { value: "Asia/Vladivostok", label: "Владивосток (UTC+10)" },
+  { value: "Asia/Kamchatka", label: "Камчатка (UTC+12)" },
+  { value: "UTC", label: "UTC" },
+  { value: "Asia/Almaty", label: "Алматы (UTC+5)" },
+  { value: "Asia/Dubai", label: "Дубай (UTC+4)" },
+];
+
+type HistoryItem = { id: string; topic: string; status: string; at: string; text: string };
 
 const DAY_OPTIONS = [
   { key: "mon", label: "Понедельник" },
@@ -28,6 +45,7 @@ type PosterConfig = {
   poster_cta: boolean;
   poster_media: string;
   poster_schedule: ScheduleSlot[];
+  poster_timezone: string;
   poster_approval: boolean;
   poster_reflection: boolean;
 };
@@ -41,6 +59,7 @@ const DEFAULTS: PosterConfig = {
   poster_cta: false,
   poster_media: "none",
   poster_schedule: [],
+  poster_timezone: "Europe/Moscow",
   poster_approval: true,
   poster_reflection: true,
 };
@@ -62,7 +81,26 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
   const [activationStatus, setActivationStatus] = useState<"idle" | "active" | "inactive" | "error">("idle");
   const [activationHint, setActivationHint] = useState("");
   const [error, setError] = useState("");
+  const [history, setHistory] = useState<HistoryItem[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
   const initDone = useRef(false);
+
+  const loadHistory = useCallback(async () => {
+    if (!activationStatus) return;
+    setHistoryLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/agent/threads/${threadId}/post-history`, {
+        credentials: "include",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setHistory(data.items || []);
+      }
+    } catch { /* silent */ } finally {
+      setHistoryLoading(false);
+    }
+  }, [threadId, token, activationStatus]);
 
   useEffect(() => {
     if (!initialConfig || initDone.current) return;
@@ -86,6 +124,7 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
       poster_cta: Boolean(initialConfig.poster_cta),
       poster_media: String(initialConfig.poster_media ?? "none"),
       poster_schedule: schedule,
+      poster_timezone: String(initialConfig.poster_timezone ?? "Europe/Moscow"),
       poster_approval: initialConfig.poster_approval !== false,
       poster_reflection: initialConfig.poster_reflection !== false,
     });
@@ -172,6 +211,7 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
 
       // Step 3: Success
       setActivationStatus("active");
+      void loadHistory();
       const channelName = verifyData?.chat_name ? ` (${verifyData.chat_name})` : "";
       if (cfg.poster_schedule.length === 0) {
         setActivationHint(`Канал${channelName} подключён. Расписание не задано — посты генерируются только по запросу в чате агента.`);
@@ -356,6 +396,24 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
           )}
         </div>
 
+        {/* Timezone — only shown when schedule is set */}
+        {cfg.poster_schedule.length > 0 && (
+          <div className="poster-field">
+            <label className="poster-field__label">Часовой пояс</label>
+            <select
+              className="poster-field__select"
+              value={cfg.poster_timezone}
+              disabled={f}
+              onChange={(e) => patch("poster_timezone", e.target.value)}
+            >
+              {TIMEZONES.map((tz) => (
+                <option key={tz.value} value={tz.value}>{tz.label}</option>
+              ))}
+            </select>
+            <span className="poster-field__hint">Время публикации в вашем часовом поясе</span>
+          </div>
+        )}
+
         {/* Approval + Reflection */}
         <div className="poster-field-row">
           <label className={`poster-toggle${f ? " poster-toggle--disabled" : ""}`}>
@@ -413,7 +471,7 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
             type="button"
             className="poster-generate__btn"
             disabled={generating}
-            onClick={generatePost}
+            onClick={async () => { await generatePost(); loadHistory(); }}
           >
             {generating ? (
               <>
@@ -426,7 +484,7 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
           </button>
           {generateResult === "approval" && (
             <span className="poster-generate__result poster-generate__result--ok">
-              ✓ Черновик отправлен на согласование в чат агента
+              ✓ Черновик отправлен в MAX для согласования
             </span>
           )}
           {generateResult === "published" && (
@@ -438,6 +496,35 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
             <span className="poster-generate__result poster-generate__result--err">
               ⚠️ {error}
             </span>
+          )}
+        </div>
+      )}
+
+      {/* Post history — shown when active */}
+      {activationStatus === "active" && (
+        <div className="poster-history">
+          <div className="poster-history__header">
+            <span className="poster-history__title">История постов</span>
+            <button type="button" className="poster-history__refresh" onClick={loadHistory} title="Обновить">
+              {historyLoading ? "⟳" : "↺"}
+            </button>
+          </div>
+          {history.length === 0 ? (
+            <div className="poster-history__empty">Постов ещё нет</div>
+          ) : (
+            <div className="poster-history__list">
+              {history.map((item) => (
+                <div key={item.id} className="poster-history__item">
+                  <span className={`poster-history__badge poster-history__badge--${item.status}`}>
+                    {item.status === "published" ? "✅" : item.status === "rejected" ? "❌" : "📝"}
+                  </span>
+                  <div className="poster-history__item-body">
+                    <span className="poster-history__topic">{item.topic}</span>
+                    <span className="poster-history__date">{item.at.slice(0, 10)}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
           )}
         </div>
       )}
