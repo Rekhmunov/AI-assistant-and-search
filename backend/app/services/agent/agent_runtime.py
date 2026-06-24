@@ -77,6 +77,17 @@ async def run_max_interactive_loop(
             .replace("{support_instructions}", instructions or "(инструкция не задана)")
             .replace("{current_date}", current_date)
         )
+    elif override_runtime_prompt is None and template == "poster":
+        from app.services.agent.templates.poster import POSTER_RUNTIME_PROMPT
+        from app.services.agent.poster_executor import _build_style_from_config
+        from datetime import datetime, timezone
+        current_date = datetime.now(timezone.utc).strftime("%d.%m.%Y")
+        instructions = _build_style_from_config(agent)
+        override_runtime_prompt = (
+            POSTER_RUNTIME_PROMPT
+            .replace("{support_instructions}", instructions or "(настройки не заданы)")
+            .replace("{current_date}", current_date)
+        )
 
     result = await run_runtime_loop(
         db,

@@ -234,3 +234,34 @@ async def get_agent_activity_logs(
 
     rows = await list_agent_activity_logs(db, thread_id=thread_id, user_id=user.id)
     return AgentActivityLogsOut(items=[AgentActivityLogOut.model_validate(r) for r in rows])
+
+
+@router.patch("/threads/{thread_id}/config")
+async def patch_agent_config(
+    thread_id: UUID,
+    body: dict,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+):
+    """Update agent config from settings form (poster agent)."""
+    result = await db.execute(
+        select(Thread).where(
+            Thread.id == thread_id,
+            Thread.user_id == user.id,
+            Thread.thread_type == ThreadType.AGENT,
+        )
+    )
+    thread = result.scalar_one_or_none()
+    if not thread:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Тред не найден")
+    agent = await get_agent_for_thread(db, thread.id)
+    if not agent:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Агент не найден")
+
+    cfg = dict(agent.config or {})
+    for key, value in body.items():
+        if key.startswith("poster_") or key in ("support_instructions",):
+            cfg[key] = value
+    agent.config = cfg
+    await db.commit()
+    return {"ok": True, "config": {k: v for k, v in cfg.items() if k.startswith("poster_")}}

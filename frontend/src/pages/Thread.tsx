@@ -23,6 +23,7 @@ import { ImageGenProNotice } from "../components/ImageGenProNotice";
 import { ImageGenStatusLine } from "../components/ImageGenStatusLine";
 import { DocGenStatusLine } from "../components/DocGenStatusLine";
 import { AgentActivityLogPanel } from "../components/AgentActivityLogPanel";
+import { PosterSettingsPanel } from "../components/PosterSettingsPanel";
 import { AgentThinkingPanel } from "../components/AgentThinkingPanel";
 import type { AgentThinkingEvent } from "../api/client";
 import { CollapsibleMarkdownDocument } from "../components/CollapsibleMarkdownDocument";
@@ -280,6 +281,10 @@ export function Thread() {
 
   const isAgentThread = thread?.thread_type === "agent";
   const threadHasPending = Boolean(thread && threadHasPendingAnswer(thread.messages));
+
+  // Poster agent settings form state
+  const posterConfig = (thread as any)?.agent_config ?? {};
+  const [posterEnabled, setPosterEnabled] = useState(true);
 
   const { data: answerStatus } = useQuery({
     queryKey: ["thread-answer-status", activeThreadKey],
@@ -1141,6 +1146,18 @@ export function Thread() {
           ref={answerPanelRef}
           hidden={activeTab !== "answer"}
         >
+          {/* Poster agent: show settings form if welcome message mentions Постинг */}
+          {isAgentThread && threadId && turns.some((t) => t.agentWelcome && String(t.answer).includes("Постинг")) && (
+            <div className="poster-settings-wrap">
+              <PosterSettingsPanel
+                threadId={threadId}
+                initialConfig={posterConfig}
+                enabled={posterEnabled}
+                onToggle={setPosterEnabled}
+              />
+            </div>
+          )}
+
           {turns.map((turn, index) => {
             const isActive = turn.streaming;
             const sources = turn.sources ?? [];

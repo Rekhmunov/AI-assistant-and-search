@@ -46,6 +46,9 @@ def get_poster_channel_id(agent: AgentInstance) -> int | None:
 def get_approval_mode(agent: AgentInstance) -> str:
     """'manual' | 'auto'"""
     cfg = _get_cfg(agent)
+    # Structured config takes priority over text-based instructions
+    if "poster_approval" in cfg:
+        return "manual" if cfg["poster_approval"] else "auto"
     instr = str(cfg.get("support_instructions") or "").lower()
     if "автоматически" in instr or "без согласования" in instr:
         return "auto"
@@ -54,26 +57,60 @@ def get_approval_mode(agent: AgentInstance) -> str:
 
 def get_reflection_enabled(agent: AgentInstance) -> bool:
     cfg = _get_cfg(agent)
+    if "poster_reflection" in cfg:
+        return bool(cfg["poster_reflection"])
     instr = str(cfg.get("support_instructions") or "").lower()
-    # Рефлексия включена по умолчанию, отключается явно
     return "рефлексия: нет" not in instr
+
+
+def _build_style_from_config(agent: AgentInstance) -> str:
+    """Build human-readable style instructions from structured poster config keys."""
+    cfg = _get_cfg(agent)
+    parts = []
+    topics = cfg.get("poster_topics", "")
+    if topics:
+        parts.append(f"Темы: {topics}")
+    tone = cfg.get("poster_tone", "")
+    tone_map = {"official": "официальный", "informal": "неформальный", "expert": "экспертный", "inspiring": "вдохновляющий"}
+    if tone:
+        parts.append(f"Тон: {tone_map.get(tone, tone)}")
+    emoji = cfg.get("poster_emoji", True)
+    parts.append(f"Эмодзи: {'да' if emoji else 'нет'}")
+    length = cfg.get("poster_length", "medium")
+    length_map = {"short": "короткий (~500 зн.)", "medium": "средний (~1000 зн.)", "long": "длинный (~2000 зн.)"}
+    parts.append(f"Длина: {length_map.get(length, length)}")
+    cta = cfg.get("poster_cta", False)
+    parts.append(f"CTA: {'да' if cta else 'нет'}")
+    media = cfg.get("poster_media", "none")
+    media_map = {"none": "без изображений", "manual": "изображение вручную", "ai": "генерация ИИ"}
+    parts.append(f"Медиа: {media_map.get(media, media)}")
+    channel_id = cfg.get("poster_channel_id") or cfg.get("max_chat_id")
+    if channel_id:
+        parts.append(f"Канал: {channel_id}")
+    return "\n".join(parts)
 
 
 def _parse_style_instructions(agent: AgentInstance) -> str:
     cfg = _get_cfg(agent)
-    instr = str(cfg.get("support_instructions") or "")
-    return instr
+    # Prefer structured config over legacy text-based instructions
+    if cfg.get("poster_topics"):
+        return _build_style_from_config(agent)
+    return str(cfg.get("support_instructions") or "")
 
 
 def _pick_next_topic(agent: AgentInstance) -> str:
     """Выбирает следующую тему по ротации."""
     cfg = _get_cfg(agent)
-    instr = str(cfg.get("support_instructions") or "")
+    # Try structured topics first
+    topics_raw = cfg.get("poster_topics", "")
+    if not topics_raw:
+        instr = str(cfg.get("support_instructions") or "")
+        m = re.search(r"темы:\s*(.+?)(?:\.|$)", instr, re.IGNORECASE)
+        topics_raw = m.group(1) if m else ""
+
     topics: list[str] = []
-    m = re.search(r"темы:\s*(.+?)(?:\.|$)", instr, re.IGNORECASE)
-    if m:
-        raw = m.group(1)
-        topics = [t.strip() for t in re.split(r"[;,]", raw) if t.strip()]
+    if topics_raw:
+        topics = [t.strip() for t in re.split(r"[;,\n]", topics_raw) if t.strip()]
 
     if not topics:
         return "общая тема канала"
