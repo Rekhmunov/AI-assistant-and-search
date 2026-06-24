@@ -56,7 +56,8 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
   const token = useAuthStore((s) => s.token);
   const [cfg, setCfg] = useState<PosterConfig>({ ...DEFAULTS });
   const [saving, setSaving] = useState(false);
-  const [activationStatus, setActivationStatus] = useState<"idle" | "active" | "inactive">("idle");
+  const [verifying, setVerifying] = useState(false);
+  const [activationStatus, setActivationStatus] = useState<"idle" | "active" | "inactive" | "error">("idle");
   const [activationHint, setActivationHint] = useState("");
   const [error, setError] = useState("");
   const initDone = useRef(false);
@@ -130,7 +131,9 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
     if (!canSave) return;
     setSaving(true);
     setError("");
+    setActivationStatus("idle");
     try {
+      // Step 1: Save config
       const res = await fetch(`${API_BASE}/api/agent/threads/${threadId}/config`, {
         method: "PATCH",
         credentials: "include",
@@ -141,17 +144,43 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
         body: JSON.stringify(cfg),
       });
       if (!res.ok) throw new Error("Не удалось сохранить настройки");
+      setSaving(false);
+
+      // Step 2: Verify channel admin status
+      setVerifying(true);
+      const verifyRes = await fetch(`${API_BASE}/api/agent/threads/${threadId}/verify-channel`, {
+        method: "POST",
+        credentials: "include",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      const verifyData = verifyRes.ok ? await verifyRes.json() : null;
+      setVerifying(false);
+
+      if (verifyData && !verifyData.ok) {
+        setActivationStatus("error");
+        setActivationHint(verifyData.error || "Не удалось подключиться к каналу. Проверьте ID и права бота.");
+        return;
+      }
+      if (verifyData && verifyData.ok && !verifyData.bot_is_admin) {
+        setActivationStatus("error");
+        const name = verifyData.chat_name ? ` «${verifyData.chat_name}»` : "";
+        setActivationHint(`Бот не является администратором канала${name}. Назначьте бота Glosix администратором и сохраните снова.`);
+        return;
+      }
+
+      // Step 3: Success
       setActivationStatus("active");
+      const channelName = verifyData?.chat_name ? ` (${verifyData.chat_name})` : "";
       if (cfg.poster_schedule.length === 0) {
-        setActivationHint("Расписание не задано — посты генерируются только по запросу в чате агента.");
+        setActivationHint(`Канал${channelName} подключён. Расписание не задано — посты генерируются только по запросу в чате агента.`);
       } else {
         const parts = cfg.poster_schedule.map((s) => `${DAY_SHORT[s.day] ?? s.day} в ${s.time}`);
-        setActivationHint(`Публикации по расписанию: ${parts.join(", ")}.`);
+        setActivationHint(`Канал${channelName} подключён. Публикации по расписанию: ${parts.join(", ")}.`);
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Ошибка сохранения");
-    } finally {
       setSaving(false);
+      setVerifying(false);
+      setError(e instanceof Error ? e.message : "Ошибка сохранения");
     }
   };
 
@@ -317,18 +346,30 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
           <button
             type="button"
             className="poster-settings__save"
-            disabled={!canSave}
+            disabled={!canSave || saving || verifying}
             onClick={save}
             title={validationHint || undefined}
           >
-            {saving ? "Сохраняем…" : "Сохранить настройки"}
+            {saving ? "Сохраняем…" : verifying ? "Проверяем канал…" : "Сохранить настройки"}
           </button>
         </div>
       </div>
 
-      {activationStatus === "active" && (
+      {/* Status messages */}
+      {(saving || verifying) && (
+        <div className="poster-status poster-status--checking">
+          <span className="poster-status__spinner" />
+          {verifying ? "Проверяем права бота в канале…" : "Сохраняем настройки…"}
+        </div>
+      )}
+      {!saving && !verifying && activationStatus === "active" && (
         <div className="poster-status poster-status--active">
           ✅ Агент активирован. {activationHint}
+        </div>
+      )}
+      {!saving && !verifying && activationStatus === "error" && (
+        <div className="poster-status poster-status--error">
+          ⚠️ {activationHint}
         </div>
       )}
       {activationStatus === "inactive" && (

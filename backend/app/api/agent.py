@@ -265,3 +265,64 @@ async def patch_agent_config(
     agent.config = cfg
     await db.commit()
     return {"ok": True, "config": {k: v for k, v in cfg.items() if k.startswith("poster_")}}
+
+
+@router.post("/threads/{thread_id}/verify-channel")
+async def verify_poster_channel(
+    thread_id: UUID,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+    redis_client: redis.Redis = Depends(get_redis),
+):
+    """Check if bot is admin in the configured poster channel."""
+    result = await db.execute(
+        select(Thread).where(
+            Thread.id == thread_id,
+            Thread.user_id == user.id,
+            Thread.thread_type == ThreadType.AGENT,
+        )
+    )
+    thread = result.scalar_one_or_none()
+    if not thread:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Тред не найден")
+    agent = await get_agent_for_thread(db, thread.id)
+    if not agent:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Агент не найден")
+
+    cfg = dict(agent.config or {})
+    channel_id_raw = cfg.get("poster_channel_id") or ""
+    if not channel_id_raw:
+        return {"ok": False, "bot_is_admin": False, "error": "Канал не указан в настройках"}
+
+    # Try to parse channel id
+    try:
+        channel_id = int(str(channel_id_raw).strip().lstrip("@").replace("https://max.ru/", ""))
+    except ValueError:
+        channel_id = None
+
+    if not channel_id:
+        # Try string-based lookup
+        try:
+            from app.services.agent.max_probe import resolve_channel_link, probe_max_chat
+            from app.services.bot import MaxBotService
+            bot = MaxBotService()
+            resolved = await resolve_channel_link(str(channel_id_raw).strip(), bot=bot)
+            if not resolved:
+                return {"ok": False, "bot_is_admin": False, "error": f"Не удалось найти канал: {channel_id_raw}"}
+            channel_id = resolved
+        except Exception as exc:
+            return {"ok": False, "bot_is_admin": False, "error": str(exc)[:200]}
+
+    try:
+        from app.services.agent.max_probe import probe_max_chat
+        from app.services.bot import MaxBotService
+        bot = MaxBotService()
+        probe = await probe_max_chat(channel_id, bot=bot)
+        return {
+            "ok": probe.get("ok", False),
+            "bot_is_admin": probe.get("bot_is_admin", False),
+            "chat_name": probe.get("chat_name", ""),
+            "error": probe.get("error", "") if not probe.get("ok") else "",
+        }
+    except Exception as exc:
+        return {"ok": False, "bot_is_admin": False, "error": str(exc)[:200]}
