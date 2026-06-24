@@ -8347,6 +8347,8 @@ a.blog-sidebar-title:hover {
 .poster-draft__header { padding: 10px 14px; border-bottom: 1px solid var(--border-subtle, #e8edf0); background: var(--surface-hover, #f7fafb); }
 .poster-draft__label { font-size: 0.82rem; font-weight: 600; color: var(--text-muted, #5c6b73); }
 .poster-draft__label em { color: var(--accent, #20808d); font-style: normal; }
+.poster-draft__image-wrap { padding: 10px 14px 0; }
+.poster-draft__image { width: 100%; max-height: 300px; object-fit: cover; border-radius: 8px; display: block; }
 .poster-draft__text { padding: 12px 14px; font-size: 0.9rem; line-height: 1.6; color: var(--text, #1a2328); white-space: pre-wrap; word-break: break-word; max-height: 280px; overflow-y: auto; }
 .poster-draft__error { padding: 6px 14px; font-size: 0.82rem; color: #9b2c2c; background: #fff5f5; }
 .poster-draft__actions { display: flex; gap: 8px; padding: 10px 14px; border-top: 1px solid var(--border-subtle, #e8edf0); flex-wrap: wrap; }

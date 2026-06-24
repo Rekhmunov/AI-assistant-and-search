@@ -362,15 +362,37 @@ async def generate_poster_post(
                 return {"ok": True, "mode": "published", "topic": topic, "post_text": post_text}
             return {"ok": False, "error": "Не удалось опубликовать в канал. Проверьте права бота."}
         else:
-            # Manual draft: return to frontend for in-app review (no DM)
+            # Manual draft: save image as temp file for preview, return URL to frontend
+            image_url: str | None = None
+            image_file_id: str | None = None
+            if image_bytes:
+                try:
+                    from app.services.image_gen_service import persist_generated_image
+                    from app.services.image_gen_service import public_file_content_url
+                    fid, _ = await persist_generated_image(db, user, image_bytes, title=topic, ttl_hours=24)
+                    image_url = public_file_content_url(fid)
+                    image_file_id = str(fid)
+                except Exception as img_exc:
+                    logger.warning("poster draft image save failed: %s", img_exc)
+
             save_pending_draft(agent, post_id=post_id, topic=topic, text=post_text)
+
+            # Store image_file_id in draft so it can be used at approval time
+            if image_file_id:
+                cfg = dict(agent.config or {})
+                draft_data = cfg.get("poster_pending_draft", {})
+                draft_data["image_file_id"] = image_file_id
+                cfg["poster_pending_draft"] = draft_data
+                agent.config = cfg
+
             await db.commit()
             return {
                 "ok": True,
-                "mode": "web_draft",  # shown in mini-app, not sent to DM
+                "mode": "web_draft",
                 "topic": topic,
                 "post_id": post_id,
                 "post_text": post_text,
+                "image_url": image_url,  # None if no ai image or save failed
             }
     except Exception as exc:
         logger.exception("generate_poster_post failed thread=%s: %s", thread_id, exc)
@@ -425,8 +447,28 @@ async def poster_draft_action(
         bot = MaxBotService()
         draft_text = draft.get("text", "")
         draft_topic = draft.get("topic", "")
-        # Generate image if ai mode configured
-        image_bytes = await generate_poster_image(agent, draft_topic, draft_text, db=db, redis_client=redis_client)
+
+        # Try to use pre-generated image from draft (avoids second 16s generation)
+        image_bytes = None
+        image_file_id = draft.get("image_file_id")
+        if image_file_id:
+            try:
+                from uuid import UUID as _UUID
+                from app.models.uploaded_file import UploadedFile as _UF
+                from app.services.upload_storage import load_upload_bytes
+                _uf_result = await db.execute(
+                    select(_UF).where(_UF.id == _UUID(image_file_id))
+                )
+                _uf = _uf_result.scalar_one_or_none()
+                if _uf and _uf.storage_key:
+                    image_bytes = load_upload_bytes(_uf.storage_key)
+            except Exception as _exc:
+                logger.warning("poster draft image load failed: %s", _exc)
+
+        # If no pre-generated image (e.g. expired or text was edited), generate fresh
+        if not image_bytes:
+            image_bytes = await generate_poster_image(agent, draft_topic, draft_text, db=db, redis_client=redis_client)
+
         ok = await publish_to_channel(bot, channel_id=channel_id, text=draft_text, image_bytes=image_bytes)
         if ok:
             update_post_status(agent, post_id, "published")

@@ -78,7 +78,7 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
   const [verifying, setVerifying] = useState(false);
   const [verifyStep, setVerifyStep] = useState<"channel" | "admin" | "">(""); 
   const [generating, setGenerating] = useState(false);
-  const [draft, setDraft] = useState<{ postId: string; text: string; topic: string } | null>(null);
+  const [draft, setDraft] = useState<{ postId: string; text: string; topic: string; imageUrl?: string } | null>(null);
   const [draftAction, setDraftAction] = useState<"" | "actioning" | "editing" | "published" | "rejected" | "error">("");
   const [draftError, setDraftError] = useState("");
   const [editedText, setEditedText] = useState("");
@@ -269,8 +269,8 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
         setDraftAction("published");
         void loadHistory();
       } else if (data.mode === "web_draft") {
-        // Show draft card in the panel — user reviews here, no DM
-        setDraft({ postId: data.post_id, text: data.post_text, topic: data.topic });
+        // Show draft card with text + optional image preview
+        setDraft({ postId: data.post_id, text: data.post_text, topic: data.topic, imageUrl: data.image_url ?? undefined });
       }
     } catch {
       setDraftAction("error");
@@ -306,7 +306,7 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
         setDraft(null);
         setDraftAction("rejected");
       } else if (data.mode === "web_draft") {
-        setDraft({ postId: data.post_id, text: data.post_text, topic: data.topic });
+        setDraft({ postId: data.post_id, text: data.post_text, topic: data.topic, imageUrl: data.image_url ?? undefined });
         setDraftAction("");
         setEditedText("");
       }
@@ -580,11 +580,11 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
               disabled={generating || draftAction === "actioning"}
               onClick={generatePost}
             >
-              {generating ? (
-                <><span className="poster-status__spinner" /> Генерируем пост…</>
-              ) : (
-                "✏️ Сгенерировать разовый пост"
-              )}
+            {generating ? (
+              <><span className="poster-status__spinner" /> Генерируем пост и изображение…</>
+            ) : (
+              "✏️ Сгенерировать разовый пост"
+            )}
             </button>
           )}
 
@@ -615,6 +615,18 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
                   </button>
                 )}
               </div>
+
+              {/* Image preview */}
+              {draft.imageUrl && draftAction !== "editing" && (
+                <div className="poster-draft__image-wrap">
+                  <img
+                    src={draft.imageUrl}
+                    alt="Превью изображения"
+                    className="poster-draft__image"
+                    loading="lazy"
+                  />
+                </div>
+              )}
 
               {/* Edit mode: textarea */}
               {draftAction === "editing" ? (
