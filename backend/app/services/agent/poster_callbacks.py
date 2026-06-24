@@ -117,6 +117,7 @@ async def _handle_approve(
     post_id = draft.get("post_id", "")
     topic = draft.get("topic", "")
 
+    # Generate image if ai mode (db/redis not available here — image was already generated or skip)
     ok = await publish_to_channel(bot, channel_id=channel_id, text=text)
     if ok:
         update_post_status(agent, post_id, "published")
@@ -174,6 +175,7 @@ async def _handle_regen(
             post_id=new_post_id, topic=topic, text=new_text,
         )
         save_pending_draft(agent, post_id=new_post_id, topic=topic, text=new_text, draft_message_id=msg_id)
+        # Note: image is generated at publish time (approve action), not at draft creation
 
     except Exception as exc:
         logger.exception("Poster regen failed: %s", exc)

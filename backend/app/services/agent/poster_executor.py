@@ -237,6 +237,35 @@ def set_awaiting_edit(agent: AgentInstance, awaiting: bool) -> None:
 # Генерация поста
 # ─────────────────────────────────────────────────────────────────────────────
 
+async def generate_poster_image(
+    agent: AgentInstance,
+    topic: str,
+    post_text: str,
+    *,
+    db,
+    redis_client,
+) -> bytes | None:
+    """
+    Генерирует изображение для поста если poster_media='ai'.
+    Использует провайдер генерации картинок из настроек админки.
+    Возвращает байты изображения или None.
+    """
+    cfg = _get_cfg(agent)
+    if cfg.get("poster_media") != "ai":
+        return None
+    try:
+        from app.services.image_gen_service import generate_image, resolve_image_gen_provider_id
+        from app.services.image_gen_routing import image_generation_prompt
+        provider_id = await resolve_image_gen_provider_id(db, redis_client)
+        # Build image prompt from topic and short excerpt of post
+        img_prompt = f"{topic}. {post_text[:150]}"
+        image_bytes, _ = await generate_image(img_prompt, provider_id)
+        return image_bytes
+    except Exception as exc:
+        logger.warning("Poster image generation failed (topic=%s): %s", topic, exc)
+        return None
+
+
 async def generate_post(
     agent: AgentInstance,
     topic: str,

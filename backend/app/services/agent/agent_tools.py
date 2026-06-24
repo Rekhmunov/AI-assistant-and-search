@@ -752,6 +752,7 @@ async def _tool_generate_post_draft(
     import uuid as _uuid
     from app.services.agent.poster_executor import (
         generate_post,
+        generate_poster_image,
         get_approval_mode,
         get_poster_channel_id,
         publish_to_channel,
@@ -777,8 +778,11 @@ async def _tool_generate_post_draft(
     approval_mode = get_approval_mode(agent)
     channel_id = get_poster_channel_id(agent)
 
+    # Generate image if ai mode configured
+    image_bytes = await generate_poster_image(agent, topic, post_text, db=db, redis_client=redis_client)
+
     if approval_mode == "auto" and channel_id:
-        ok = await publish_to_channel(bot, channel_id=channel_id, text=post_text)
+        ok = await publish_to_channel(bot, channel_id=channel_id, text=post_text, image_bytes=image_bytes)
         if ok:
             update_post_status(agent, post_id, "published")
             return {"ok": True, "tool": "generate_post_draft", "result": "Пост опубликован автоматически.", "outbound_sent": True}

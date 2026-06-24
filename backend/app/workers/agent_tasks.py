@@ -254,6 +254,7 @@ async def _dispatch_poster_scheduled_async() -> None:
                     try:
                         from app.services.agent.poster_executor import (
                             generate_post,
+                            generate_poster_image,
                             get_approval_mode,
                             get_poster_channel_id,
                             publish_to_channel,
@@ -275,10 +276,14 @@ async def _dispatch_poster_scheduled_async() -> None:
 
                         approval_mode = get_approval_mode(agent)
                         channel_id = get_poster_channel_id(agent)
-                        approval_chat_id = agent.max_chat_id
+
+                        # Generate image if configured
+                        image_bytes = await generate_poster_image(
+                            agent, topic, post_text, db=db, redis_client=redis_client
+                        )
 
                         if approval_mode == "auto" and channel_id:
-                            ok = await publish_to_channel(bot, channel_id=channel_id, text=post_text)
+                            ok = await publish_to_channel(bot, channel_id=channel_id, text=post_text, image_bytes=image_bytes)
                             if ok:
                                 update_post_status(agent, post_id, "published")
                         elif approval_chat_id:

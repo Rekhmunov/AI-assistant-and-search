@@ -325,6 +325,7 @@ async def generate_poster_post(
     try:
         from app.services.agent.poster_executor import (
             generate_post,
+            generate_poster_image,
             get_approval_mode,
             get_poster_channel_id,
             publish_to_channel,
@@ -349,9 +350,12 @@ async def generate_poster_post(
         channel_id = get_poster_channel_id(agent)
         bot = MaxBotService()
 
+        # Generate image if ai mode configured
+        image_bytes = await generate_poster_image(agent, topic, post_text, db=db, redis_client=redis_client)
+
         if approval_mode == "auto" and channel_id:
             # Auto-publish: publish directly
-            ok = await publish_to_channel(bot, channel_id=channel_id, text=post_text)
+            ok = await publish_to_channel(bot, channel_id=channel_id, text=post_text, image_bytes=image_bytes)
             if ok:
                 update_post_status(agent, post_id, "published")
                 await db.commit()
@@ -405,7 +409,7 @@ async def poster_draft_action(
 
     from app.services.agent.poster_executor import (
         get_pending_draft, clear_pending_draft, update_post_status,
-        get_poster_channel_id, publish_to_channel,
+        get_poster_channel_id, publish_to_channel, generate_poster_image,
         generate_post, save_post_to_history, save_pending_draft, _pick_next_topic,
     )
     from app.services.bot import MaxBotService
@@ -419,7 +423,11 @@ async def poster_draft_action(
         if not channel_id:
             return {"ok": False, "error": "Канал не настроен"}
         bot = MaxBotService()
-        ok = await publish_to_channel(bot, channel_id=channel_id, text=draft.get("text", ""))
+        draft_text = draft.get("text", "")
+        draft_topic = draft.get("topic", "")
+        # Generate image if ai mode configured
+        image_bytes = await generate_poster_image(agent, draft_topic, draft_text, db=db, redis_client=redis_client)
+        ok = await publish_to_channel(bot, channel_id=channel_id, text=draft_text, image_bytes=image_bytes)
         if ok:
             update_post_status(agent, post_id, "published")
             clear_pending_draft(agent)
