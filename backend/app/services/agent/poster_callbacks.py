@@ -88,7 +88,7 @@ async def handle_poster_callback(
     channel_id = get_poster_channel_id(agent)
 
     if action == "approve":
-        await _handle_approve(db, agent, bot, callback_id, draft=draft, channel_id=channel_id)
+        await _handle_approve(db, redis_client, agent, bot, callback_id, draft=draft, channel_id=channel_id)
     elif action == "reject":
         await _handle_reject(db, agent, bot, callback_id, draft=draft)
     elif action == "regen":
@@ -102,6 +102,7 @@ async def handle_poster_callback(
 
 async def _handle_approve(
     db: AsyncSession,
+    redis_client,
     agent: AgentInstance,
     bot: MaxBotService,
     callback_id: str,
@@ -117,8 +118,11 @@ async def _handle_approve(
     post_id = draft.get("post_id", "")
     topic = draft.get("topic", "")
 
-    # Generate image if ai mode (db/redis not available here — image was already generated or skip)
-    ok = await publish_to_channel(bot, channel_id=channel_id, text=text)
+    # Generate image if poster_media='ai' — uses admin-configured provider
+    from app.services.agent.poster_executor import generate_poster_image
+    image_bytes = await generate_poster_image(agent, topic, text, db=db, redis_client=redis_client)
+
+    ok = await publish_to_channel(bot, channel_id=channel_id, text=text, image_bytes=image_bytes)
     if ok:
         update_post_status(agent, post_id, "published")
         clear_pending_draft(agent)
