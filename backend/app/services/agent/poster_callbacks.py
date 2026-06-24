@@ -22,7 +22,6 @@ from app.services.agent.poster_executor import (
     send_draft_for_approval,
     set_awaiting_edit,
     update_post_status,
-    _get_cfg,
     _pick_next_topic,
 )
 

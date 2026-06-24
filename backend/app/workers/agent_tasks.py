@@ -286,15 +286,16 @@ async def _dispatch_poster_scheduled_async() -> None:
                             ok = await publish_to_channel(bot, channel_id=channel_id, text=post_text, image_bytes=image_bytes)
                             if ok:
                                 update_post_status(agent, post_id, "published")
-                        elif approval_chat_id:
+                        else:
+                            # Manual: send to group chat OR owner DM (auto-resolved)
                             save_pending_draft(agent, post_id=post_id, topic=topic, text=post_text)
                             msg_id = await send_draft_for_approval(
                                 agent, db, bot,
-                                approval_chat_id=approval_chat_id,
                                 post_id=post_id, topic=topic, text=post_text,
                             )
-                            save_pending_draft(agent, post_id=post_id, topic=topic,
-                                               text=post_text, draft_message_id=msg_id)
+                            if msg_id:
+                                save_pending_draft(agent, post_id=post_id, topic=topic,
+                                                   text=post_text, draft_message_id=msg_id)
 
                         agent.config = cfg
                         await db.commit()
