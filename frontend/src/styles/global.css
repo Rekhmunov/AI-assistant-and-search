@@ -8330,6 +8330,17 @@ a.blog-sidebar-title:hover {
 .poster-status { padding: 14px 20px; font-size: 0.9rem; font-weight: 500; border-top: 1px solid var(--border-subtle, #e8edf0); }
 .poster-status--active { color: #276749; background: #f0fff4; }
 .poster-status--inactive { color: #744210; background: #fffaf0; }
+/* Schedule slots */
+.poster-schedule-empty { font-size: 0.85rem; color: var(--text-muted, #8fa0a8); padding: 8px 0; font-style: italic; }
+.poster-schedule-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 8px; }
+.poster-slot { display: flex; align-items: center; gap: 8px; }
+.poster-slot__day { flex: 1 1 140px; min-width: 0; padding: 8px 10px; border: 1px solid var(--border, #d8e0e3); border-radius: 8px; font: inherit; font-size: 0.875rem; background: var(--surface, #fff); }
+.poster-slot__time { width: 100px; flex-shrink: 0; padding: 8px 10px; border: 1px solid var(--border, #d8e0e3); border-radius: 8px; font: inherit; font-size: 0.875rem; background: var(--surface, #fff); }
+.poster-slot__day:focus,.poster-slot__time:focus { outline: none; border-color: var(--accent, #20808d); box-shadow: 0 0 0 3px rgba(32,128,141,0.12); }
+.poster-slot__remove { width: 28px; height: 28px; border-radius: 6px; border: 1px solid var(--border, #d8e0e3); background: var(--surface, #fff); color: var(--text-muted, #8fa0a8); font-size: 1.1rem; line-height: 1; cursor: pointer; flex-shrink: 0; display: flex; align-items: center; justify-content: center; transition: all 0.12s; }
+.poster-slot__remove:hover { border-color: #e53e3e; color: #e53e3e; background: #fff5f5; }
+.poster-add-slot { display: inline-flex; align-items: center; gap: 4px; padding: 7px 12px; border: 1px dashed var(--accent, #20808d); border-radius: 8px; background: transparent; color: var(--accent, #20808d); font: inherit; font-size: 0.875rem; font-weight: 500; cursor: pointer; transition: background 0.12s; margin-top: 4px; }
+.poster-add-slot:hover { background: rgba(32,128,141,0.06); }
 .poster-field__input:disabled,.poster-field__textarea:disabled,.poster-field__select:disabled { background: var(--surface-hover, #f7fafb); cursor: not-allowed; }
 .poster-toggle--disabled { opacity: 0.5; cursor: not-allowed; }
 .poster-day--disabled { opacity: 0.5; cursor: not-allowed; }

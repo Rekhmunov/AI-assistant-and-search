@@ -3,19 +3,21 @@ import { useAuthStore } from "../store/authStore";
 
 const API_BASE = import.meta.env.VITE_API_URL || "";
 
-const DAYS = [
-  { key: "mon", label: "Пн" },
-  { key: "tue", label: "Вт" },
-  { key: "wed", label: "Ср" },
-  { key: "thu", label: "Чт" },
-  { key: "fri", label: "Пт" },
-  { key: "sat", label: "Сб" },
-  { key: "sun", label: "Вс" },
+const DAY_OPTIONS = [
+  { key: "mon", label: "Понедельник" },
+  { key: "tue", label: "Вторник" },
+  { key: "wed", label: "Среда" },
+  { key: "thu", label: "Четверг" },
+  { key: "fri", label: "Пятница" },
+  { key: "sat", label: "Суббота" },
+  { key: "sun", label: "Воскресенье" },
 ];
 
-const DAY_LABELS: Record<string, string> = {
+const DAY_SHORT: Record<string, string> = {
   mon: "Пн", tue: "Вт", wed: "Ср", thu: "Чт", fri: "Пт", sat: "Сб", sun: "Вс",
 };
+
+type ScheduleSlot = { day: string; time: string };
 
 type PosterConfig = {
   poster_channel_id: string;
@@ -25,8 +27,7 @@ type PosterConfig = {
   poster_length: string;
   poster_cta: boolean;
   poster_media: string;
-  poster_days: string[];
-  poster_time: string;
+  poster_schedule: ScheduleSlot[];
   poster_approval: boolean;
   poster_reflection: boolean;
 };
@@ -39,8 +40,7 @@ const DEFAULTS: PosterConfig = {
   poster_length: "medium",
   poster_cta: false,
   poster_media: "none",
-  poster_days: [],
-  poster_time: "10:00",
+  poster_schedule: [],
   poster_approval: true,
   poster_reflection: true,
 };
@@ -64,6 +64,16 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
   useEffect(() => {
     if (!initialConfig || initDone.current) return;
     initDone.current = true;
+
+    // Support both legacy (poster_days + poster_time) and new poster_schedule
+    let schedule: ScheduleSlot[] = [];
+    if (Array.isArray(initialConfig.poster_schedule)) {
+      schedule = initialConfig.poster_schedule as ScheduleSlot[];
+    } else if (Array.isArray(initialConfig.poster_days) && (initialConfig.poster_days as string[]).length > 0) {
+      const time = String(initialConfig.poster_time ?? "10:00");
+      schedule = (initialConfig.poster_days as string[]).map((day) => ({ day, time }));
+    }
+
     setCfg({
       poster_channel_id: String(initialConfig.poster_channel_id ?? ""),
       poster_topics: String(initialConfig.poster_topics ?? ""),
@@ -72,8 +82,7 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
       poster_length: String(initialConfig.poster_length ?? "medium"),
       poster_cta: Boolean(initialConfig.poster_cta),
       poster_media: String(initialConfig.poster_media ?? "none"),
-      poster_days: Array.isArray(initialConfig.poster_days) ? (initialConfig.poster_days as string[]) : [],
-      poster_time: String(initialConfig.poster_time ?? "10:00"),
+      poster_schedule: schedule,
       poster_approval: initialConfig.poster_approval !== false,
       poster_reflection: initialConfig.poster_reflection !== false,
     });
@@ -82,12 +91,18 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
   const patch = <K extends keyof PosterConfig>(key: K, value: PosterConfig[K]) =>
     setCfg((c) => ({ ...c, [key]: value }));
 
-  const toggleDay = (day: string) => {
-    if (!enabled) return;
-    const days = cfg.poster_days.includes(day)
-      ? cfg.poster_days.filter((d) => d !== day)
-      : [...cfg.poster_days, day];
-    patch("poster_days", days);
+  // Schedule slot operations
+  const addSlot = () => {
+    patch("poster_schedule", [...cfg.poster_schedule, { day: "mon", time: "10:00" }]);
+  };
+
+  const updateSlot = (idx: number, field: keyof ScheduleSlot, value: string) => {
+    const slots = cfg.poster_schedule.map((s, i) => i === idx ? { ...s, [field]: value } : s);
+    patch("poster_schedule", slots);
+  };
+
+  const removeSlot = (idx: number) => {
+    patch("poster_schedule", cfg.poster_schedule.filter((_, i) => i !== idx));
   };
 
   const handleToggle = (val: boolean) => {
@@ -100,20 +115,15 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
     }
   };
 
-  // Validation: channel and topics are required
+  // Validation
   const channelOk = cfg.poster_channel_id.trim() !== "";
   const topicsOk = cfg.poster_topics.trim() !== "";
   const canSave = enabled && channelOk && topicsOk && !saving;
 
-  // Validation hint for unfilled required fields
-  const validationHint = !enabled
-    ? ""
-    : !channelOk && !topicsOk
-    ? "Укажите канал и темы публикаций"
-    : !channelOk
-    ? "Укажите канал MAX"
-    : !topicsOk
-    ? "Укажите темы публикаций"
+  const validationHint = !enabled ? ""
+    : !channelOk && !topicsOk ? "Укажите канал и темы публикаций"
+    : !channelOk ? "Укажите канал MAX"
+    : !topicsOk ? "Укажите темы публикаций"
     : "";
 
   const save = async () => {
@@ -132,12 +142,11 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
       });
       if (!res.ok) throw new Error("Не удалось сохранить настройки");
       setActivationStatus("active");
-      // Build status hint
-      if (cfg.poster_days.length === 0) {
+      if (cfg.poster_schedule.length === 0) {
         setActivationHint("Расписание не задано — посты генерируются только по запросу в чате агента.");
       } else {
-        const dayStr = cfg.poster_days.map((d) => DAY_LABELS[d] ?? d).join(", ");
-        setActivationHint(`Публикации по расписанию: ${dayStr} в ${cfg.poster_time}.`);
+        const parts = cfg.poster_schedule.map((s) => `${DAY_SHORT[s.day] ?? s.day} в ${s.time}`);
+        setActivationHint(`Публикации по расписанию: ${parts.join(", ")}.`);
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Ошибка сохранения");
@@ -146,7 +155,7 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
     }
   };
 
-  const f = !enabled; // fields frozen when toggle is off
+  const f = !enabled;
 
   return (
     <div className={`poster-settings${f ? " poster-settings--disabled" : ""}`}>
@@ -154,11 +163,7 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
       <div className="poster-settings__header">
         <span className="poster-settings__title">Постинг в канал</span>
         <label className="poster-settings__toggle">
-          <input
-            type="checkbox"
-            checked={enabled}
-            onChange={(e) => handleToggle(e.target.checked)}
-          />
+          <input type="checkbox" checked={enabled} onChange={(e) => handleToggle(e.target.checked)} />
           <span className="poster-settings__toggle-track">
             <span className="poster-settings__toggle-thumb" />
           </span>
@@ -166,9 +171,8 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
         </label>
       </div>
 
-      {/* Form body */}
       <div className="poster-settings__body">
-        {/* Channel — required */}
+        {/* Channel */}
         <div className="poster-field">
           <label className="poster-field__label">
             Канал MAX <span className="poster-field__required">*</span>
@@ -184,7 +188,7 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
           <span className="poster-field__hint">Ссылка или ID канала, где бот — администратор</span>
         </div>
 
-        {/* Topics — required */}
+        {/* Topics */}
         <div className="poster-field">
           <label className="poster-field__label">
             Темы публикаций <span className="poster-field__required">*</span>
@@ -243,41 +247,57 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
           </select>
         </div>
 
-        {/* Schedule */}
+        {/* Schedule slots */}
         <div className="poster-field">
-          <label className="poster-field__label">Дни публикации</label>
-          <div className="poster-days">
-            {DAYS.map((d) => (
-              <button
-                key={d.key}
-                type="button"
-                disabled={f}
-                className={`poster-day${cfg.poster_days.includes(d.key) ? " poster-day--active" : ""}${f ? " poster-day--disabled" : ""}`}
-                onClick={() => toggleDay(d.key)}
-              >
-                {d.label}
-              </button>
-            ))}
-          </div>
-          <span className="poster-field__hint">
-            {cfg.poster_days.length === 0
-              ? "Не выбрано — ручной режим: посты по запросу в чате"
-              : `Выбрано: ${cfg.poster_days.map((d) => DAY_LABELS[d] ?? d).join(", ")}`}
-          </span>
-        </div>
+          <label className="poster-field__label">Расписание публикаций</label>
 
-        {cfg.poster_days.length > 0 && (
-          <div className="poster-field">
-            <label className="poster-field__label">Время публикации</label>
-            <input
-              className="poster-field__input poster-field__input--time"
-              type="time"
-              value={cfg.poster_time}
-              disabled={f}
-              onChange={(e) => patch("poster_time", e.target.value)}
-            />
-          </div>
-        )}
+          {cfg.poster_schedule.length === 0 ? (
+            <div className="poster-schedule-empty">
+              Не задано — ручной режим: посты только по запросу в чате агента
+            </div>
+          ) : (
+            <div className="poster-schedule-list">
+              {cfg.poster_schedule.map((slot, idx) => (
+                <div key={idx} className="poster-slot">
+                  <select
+                    className="poster-slot__day"
+                    value={slot.day}
+                    disabled={f}
+                    onChange={(e) => updateSlot(idx, "day", e.target.value)}
+                  >
+                    {DAY_OPTIONS.map((d) => (
+                      <option key={d.key} value={d.key}>{d.label}</option>
+                    ))}
+                  </select>
+                  <input
+                    className="poster-slot__time"
+                    type="time"
+                    value={slot.time}
+                    disabled={f}
+                    onChange={(e) => updateSlot(idx, "time", e.target.value)}
+                  />
+                  {!f && (
+                    <button
+                      type="button"
+                      className="poster-slot__remove"
+                      onClick={() => removeSlot(idx)}
+                      aria-label="Удалить слот"
+                      title="Удалить"
+                    >
+                      ×
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {!f && (
+            <button type="button" className="poster-add-slot" onClick={addSlot}>
+              + Добавить время публикации
+            </button>
+          )}
+        </div>
 
         {/* Approval + Reflection */}
         <div className="poster-field-row">
@@ -291,11 +311,9 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
           </label>
         </div>
 
-        {/* Save row */}
+        {/* Save */}
         <div className="poster-settings__footer">
-          <span className="poster-settings__validation-hint">
-            {error || validationHint}
-          </span>
+          <span className="poster-settings__validation-hint">{error || validationHint}</span>
           <button
             type="button"
             className="poster-settings__save"
@@ -308,7 +326,6 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
         </div>
       </div>
 
-      {/* Status messages */}
       {activationStatus === "active" && (
         <div className="poster-status poster-status--active">
           ✅ Агент активирован. {activationHint}

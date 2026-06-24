@@ -63,6 +63,26 @@ def get_reflection_enabled(agent: AgentInstance) -> bool:
     return "рефлексия: нет" not in instr
 
 
+_DAY_LABELS_RU = {
+    "mon": "Пн", "tue": "Вт", "wed": "Ср",
+    "thu": "Чт", "fri": "Пт", "sat": "Сб", "sun": "Вс",
+}
+
+
+def get_poster_schedule(agent: AgentInstance) -> list[dict]:
+    """Return list of {day, time} slots. Supports both poster_schedule and legacy poster_days/poster_time."""
+    cfg = _get_cfg(agent)
+    schedule = cfg.get("poster_schedule")
+    if isinstance(schedule, list) and schedule:
+        return [s for s in schedule if isinstance(s, dict) and s.get("day") and s.get("time")]
+    # Legacy fallback
+    days = cfg.get("poster_days", [])
+    time = cfg.get("poster_time", "10:00")
+    if isinstance(days, list) and days:
+        return [{"day": d, "time": time} for d in days]
+    return []
+
+
 def _build_style_from_config(agent: AgentInstance) -> str:
     """Build human-readable style instructions from structured poster config keys."""
     cfg = _get_cfg(agent)
@@ -87,6 +107,12 @@ def _build_style_from_config(agent: AgentInstance) -> str:
     channel_id = cfg.get("poster_channel_id") or cfg.get("max_chat_id")
     if channel_id:
         parts.append(f"Канал: {channel_id}")
+    schedule = get_poster_schedule(agent)
+    if schedule:
+        slots_str = ", ".join(f"{_DAY_LABELS_RU.get(s['day'], s['day'])} в {s['time']}" for s in schedule)
+        parts.append(f"Расписание: {slots_str}")
+    else:
+        parts.append("Расписание: ручной режим (по запросу)")
     return "\n".join(parts)
 
 
