@@ -251,18 +251,21 @@ async def generate_poster_image(
     Возвращает байты изображения или None.
     """
     cfg = _get_cfg(agent)
-    if cfg.get("poster_media") != "ai":
+    media_mode = cfg.get("poster_media", "none")
+    logger.info("POSTER_IMG agent=%s poster_media=%s topic=%s", agent.id, media_mode, topic[:50])
+    if media_mode != "ai":
+        logger.info("POSTER_IMG skipped: poster_media=%s (not 'ai')", media_mode)
         return None
     try:
         from app.services.image_gen_service import generate_image, resolve_image_gen_provider_id
-        from app.services.image_gen_routing import image_generation_prompt
         provider_id = await resolve_image_gen_provider_id(db, redis_client)
-        # Build image prompt from topic and short excerpt of post
+        logger.info("POSTER_IMG generating with provider=%s prompt=%s...", provider_id, topic[:40])
         img_prompt = f"{topic}. {post_text[:150]}"
         image_bytes, _ = await generate_image(img_prompt, provider_id)
+        logger.info("POSTER_IMG success: %d bytes", len(image_bytes))
         return image_bytes
     except Exception as exc:
-        logger.warning("Poster image generation failed (topic=%s): %s", topic, exc)
+        logger.warning("POSTER_IMG FAILED (topic=%s): %s", topic, exc)
         return None
 
 
