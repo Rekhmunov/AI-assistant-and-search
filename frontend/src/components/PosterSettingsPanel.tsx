@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useAuthStore } from "../store/authStore";
 
 const API_BASE = import.meta.env.VITE_API_URL || "";
@@ -12,6 +12,10 @@ const DAYS = [
   { key: "sat", label: "Сб" },
   { key: "sun", label: "Вс" },
 ];
+
+const DAY_LABELS: Record<string, string> = {
+  mon: "Пн", tue: "Вт", wed: "Ср", thu: "Чт", fri: "Пт", sat: "Сб", sun: "Вс",
+};
 
 type PosterConfig = {
   poster_channel_id: string;
@@ -53,10 +57,13 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
   const [cfg, setCfg] = useState<PosterConfig>({ ...DEFAULTS });
   const [saving, setSaving] = useState(false);
   const [activationStatus, setActivationStatus] = useState<"idle" | "active" | "inactive">("idle");
+  const [activationHint, setActivationHint] = useState("");
   const [error, setError] = useState("");
+  const initDone = useRef(false);
 
   useEffect(() => {
-    if (!initialConfig) return;
+    if (!initialConfig || initDone.current) return;
+    initDone.current = true;
     setCfg({
       poster_channel_id: String(initialConfig.poster_channel_id ?? ""),
       poster_topics: String(initialConfig.poster_topics ?? ""),
@@ -83,19 +90,34 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
     patch("poster_days", days);
   };
 
-  // When toggle changes to OFF — show deactivation status
   const handleToggle = (val: boolean) => {
     onToggle(val);
     if (!val) {
       setActivationStatus("inactive");
       setError("");
     } else {
-      // Re-enabling: reset to idle until they save again
       setActivationStatus("idle");
     }
   };
 
+  // Validation: channel and topics are required
+  const channelOk = cfg.poster_channel_id.trim() !== "";
+  const topicsOk = cfg.poster_topics.trim() !== "";
+  const canSave = enabled && channelOk && topicsOk && !saving;
+
+  // Validation hint for unfilled required fields
+  const validationHint = !enabled
+    ? ""
+    : !channelOk && !topicsOk
+    ? "Укажите канал и темы публикаций"
+    : !channelOk
+    ? "Укажите канал MAX"
+    : !topicsOk
+    ? "Укажите темы публикаций"
+    : "";
+
   const save = async () => {
+    if (!canSave) return;
     setSaving(true);
     setError("");
     try {
@@ -108,20 +130,27 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
         },
         body: JSON.stringify(cfg),
       });
-      if (!res.ok) throw new Error("Не удалось сохранить");
+      if (!res.ok) throw new Error("Не удалось сохранить настройки");
       setActivationStatus("active");
+      // Build status hint
+      if (cfg.poster_days.length === 0) {
+        setActivationHint("Расписание не задано — посты генерируются только по запросу в чате агента.");
+      } else {
+        const dayStr = cfg.poster_days.map((d) => DAY_LABELS[d] ?? d).join(", ");
+        setActivationHint(`Публикации по расписанию: ${dayStr} в ${cfg.poster_time}.`);
+      }
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Ошибка");
+      setError(e instanceof Error ? e.message : "Ошибка сохранения");
     } finally {
       setSaving(false);
     }
   };
 
-  const f = !enabled; // fields disabled when toggle is off
+  const f = !enabled; // fields frozen when toggle is off
 
   return (
     <div className={`poster-settings${f ? " poster-settings--disabled" : ""}`}>
-      {/* Toggle */}
+      {/* Toggle header */}
       <div className="poster-settings__header">
         <span className="poster-settings__title">Постинг в канал</span>
         <label className="poster-settings__toggle">
@@ -137,13 +166,15 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
         </label>
       </div>
 
-      {/* Body — always visible, but fields disabled when off */}
+      {/* Form body */}
       <div className="poster-settings__body">
-        {/* Channel */}
+        {/* Channel — required */}
         <div className="poster-field">
-          <label className="poster-field__label">Канал MAX</label>
+          <label className="poster-field__label">
+            Канал MAX <span className="poster-field__required">*</span>
+          </label>
           <input
-            className="poster-field__input"
+            className={`poster-field__input${!channelOk && enabled ? " poster-field__input--error" : ""}`}
             type="text"
             placeholder="@mychannel или -123456789"
             value={cfg.poster_channel_id}
@@ -153,11 +184,13 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
           <span className="poster-field__hint">Ссылка или ID канала, где бот — администратор</span>
         </div>
 
-        {/* Topics */}
+        {/* Topics — required */}
         <div className="poster-field">
-          <label className="poster-field__label">Темы публикаций</label>
+          <label className="poster-field__label">
+            Темы публикаций <span className="poster-field__required">*</span>
+          </label>
           <textarea
-            className="poster-field__textarea"
+            className={`poster-field__textarea${!topicsOk && enabled ? " poster-field__input--error" : ""}`}
             rows={3}
             placeholder="Новости компании; Советы и лайфхаки; Акции и скидки"
             value={cfg.poster_topics}
@@ -171,12 +204,7 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
         <div className="poster-field-row">
           <div className="poster-field">
             <label className="poster-field__label">Тон</label>
-            <select
-              className="poster-field__select"
-              value={cfg.poster_tone}
-              disabled={f}
-              onChange={(e) => patch("poster_tone", e.target.value)}
-            >
+            <select className="poster-field__select" value={cfg.poster_tone} disabled={f} onChange={(e) => patch("poster_tone", e.target.value)}>
               <option value="official">Официальный</option>
               <option value="informal">Неформальный</option>
               <option value="expert">Экспертный</option>
@@ -185,12 +213,7 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
           </div>
           <div className="poster-field">
             <label className="poster-field__label">Длина поста</label>
-            <select
-              className="poster-field__select"
-              value={cfg.poster_length}
-              disabled={f}
-              onChange={(e) => patch("poster_length", e.target.value)}
-            >
+            <select className="poster-field__select" value={cfg.poster_length} disabled={f} onChange={(e) => patch("poster_length", e.target.value)}>
               <option value="short">Короткий (~500 зн.)</option>
               <option value="medium">Средний (~1000 зн.)</option>
               <option value="long">Длинный (~2000 зн.)</option>
@@ -213,12 +236,7 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
         {/* Media */}
         <div className="poster-field">
           <label className="poster-field__label">Изображения</label>
-          <select
-            className="poster-field__select"
-            value={cfg.poster_media}
-            disabled={f}
-            onChange={(e) => patch("poster_media", e.target.value)}
-          >
+          <select className="poster-field__select" value={cfg.poster_media} disabled={f} onChange={(e) => patch("poster_media", e.target.value)}>
             <option value="none">Без изображений (только текст)</option>
             <option value="manual">Прикреплять вручную при запросе</option>
             <option value="ai">Генерировать через ИИ автоматически</option>
@@ -241,9 +259,11 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
               </button>
             ))}
           </div>
-          {!f && cfg.poster_days.length === 0 && (
-            <span className="poster-field__hint">Не выбрано — только по ручному запросу</span>
-          )}
+          <span className="poster-field__hint">
+            {cfg.poster_days.length === 0
+              ? "Не выбрано — ручной режим: посты по запросу в чате"
+              : `Выбрано: ${cfg.poster_days.map((d) => DAY_LABELS[d] ?? d).join(", ")}`}
+          </span>
         </div>
 
         {cfg.poster_days.length > 0 && (
@@ -271,24 +291,27 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
           </label>
         </div>
 
-        {/* Save */}
+        {/* Save row */}
         <div className="poster-settings__footer">
-          {error && <span className="poster-settings__error">{error}</span>}
+          <span className="poster-settings__validation-hint">
+            {error || validationHint}
+          </span>
           <button
             type="button"
             className="poster-settings__save"
-            disabled={saving || f}
+            disabled={!canSave}
             onClick={save}
+            title={validationHint || undefined}
           >
             {saving ? "Сохраняем…" : "Сохранить настройки"}
           </button>
         </div>
       </div>
 
-      {/* Status message — shown below the form */}
+      {/* Status messages */}
       {activationStatus === "active" && (
         <div className="poster-status poster-status--active">
-          ✅ Агент активирован. Посты будут публиковаться по заданному расписанию.
+          ✅ Агент активирован. {activationHint}
         </div>
       )}
       {activationStatus === "inactive" && (

@@ -8324,6 +8324,9 @@ a.blog-sidebar-title:hover {
 .poster-settings__save:hover:not(:disabled) { background: #1a6b76; }
 .poster-settings__save:disabled { opacity: 0.5; cursor: not-allowed; }
 .poster-settings--disabled .poster-settings__body { opacity: 0.45; pointer-events: none; }
+.poster-field__required { color: #e53e3e; margin-left: 2px; }
+.poster-field__input--error { border-color: #e53e3e !important; }
+.poster-settings__validation-hint { font-size: 0.82rem; color: #e53e3e; flex: 1; min-width: 0; }
 .poster-status { padding: 14px 20px; font-size: 0.9rem; font-weight: 500; border-top: 1px solid var(--border-subtle, #e8edf0); }
 .poster-status--active { color: #276749; background: #f0fff4; }
 .poster-status--inactive { color: #744210; background: #fffaf0; }
