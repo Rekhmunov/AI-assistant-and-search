@@ -284,13 +284,15 @@ export function Thread() {
 
   // Poster agent settings form state
   const posterConfig = thread?.agent_config ?? {};
-  const [posterEnabled, setPosterEnabled] = useState<boolean>(false);
-  // Restore toggle state from backend when thread loads
-  useEffect(() => {
-    if (thread?.agent_config && thread.title?.startsWith("Постинг")) {
-      setPosterEnabled(Boolean(thread.agent_config.poster_enabled));
-    }
-  }, [thread?.agent_config, thread?.title]); // eslint-disable-line react-hooks/exhaustive-deps
+  // localPosterOverride: null = use backend value; true/false = user explicitly toggled this session
+  const [localPosterOverride, setLocalPosterOverride] = useState<boolean | null>(null);
+  // Derive enabled state: local override wins; fallback to saved backend value
+  const posterEnabled = localPosterOverride !== null
+    ? localPosterOverride
+    : Boolean(posterConfig?.poster_enabled);
+  const setPosterEnabled = (val: boolean) => setLocalPosterOverride(val);
+  // Reset local override when navigating to a different thread
+  useEffect(() => { setLocalPosterOverride(null); }, [threadId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const { data: answerStatus } = useQuery({
     queryKey: ["thread-answer-status", activeThreadKey],
