@@ -448,9 +448,10 @@ async def poster_draft_action(
         draft_text = draft.get("text", "")
         draft_topic = draft.get("topic", "")
 
-        # Try to use pre-generated image from draft (avoids second 16s generation)
+        # Try to use pre-generated image from draft
         image_bytes = None
         image_file_id = draft.get("image_file_id")
+        logger.info("POSTER_APPROVE image_file_id=%s channel=%s", image_file_id, channel_id)
         if image_file_id:
             try:
                 from uuid import UUID as _UUID
@@ -462,14 +463,22 @@ async def poster_draft_action(
                 _uf = _uf_result.scalar_one_or_none()
                 if _uf and _uf.storage_key:
                     image_bytes = load_upload_bytes(_uf.storage_key)
+                    logger.info("POSTER_APPROVE loaded image %d bytes from storage", len(image_bytes) if image_bytes else 0)
+                else:
+                    logger.warning("POSTER_APPROVE UploadedFile not found or no storage_key: %s", image_file_id)
             except Exception as _exc:
-                logger.warning("poster draft image load failed: %s", _exc)
+                logger.warning("POSTER_APPROVE image load failed: %s", _exc)
 
-        # If no pre-generated image (e.g. expired or text was edited), generate fresh
+        # If no pre-generated image, generate fresh
         if not image_bytes:
+            logger.info("POSTER_APPROVE generating fresh image (poster_media=%s)",
+                        (agent.config or {}).get("poster_media"))
             image_bytes = await generate_poster_image(agent, draft_topic, draft_text, db=db, redis_client=redis_client)
+            logger.info("POSTER_APPROVE fresh image result: %s bytes",
+                        len(image_bytes) if image_bytes else "None")
 
         ok = await publish_to_channel(bot, channel_id=channel_id, text=draft_text, image_bytes=image_bytes)
+        logger.info("POSTER_APPROVE publish ok=%s image=%s", ok, "yes" if image_bytes else "no")
         if ok:
             update_post_status(agent, post_id, "published")
             clear_pending_draft(agent)
@@ -494,6 +503,7 @@ async def poster_draft_action(
 
     elif action == "regen":
         from app.services.providers.factory import resolve_agent_providers
+        from app.services.image_gen_service import persist_generated_image, public_file_content_url
         import uuid as _uuid
         topic = draft.get("topic", _pick_next_topic(agent))
         update_post_status(agent, post_id, "rejected")
@@ -504,8 +514,26 @@ async def poster_draft_action(
             new_id = str(_uuid.uuid4())
             save_post_to_history(agent, post_id=new_id, topic=topic, text=new_text, status="draft")
             save_pending_draft(agent, post_id=new_id, topic=topic, text=new_text)
+
+            # Also regenerate image
+            image_url: str | None = None
+            image_bytes_regen = await generate_poster_image(agent, topic, new_text, db=db, redis_client=redis_client)
+            if image_bytes_regen:
+                try:
+                    fid, _ = await persist_generated_image(db, user, image_bytes_regen, title=topic, ttl_hours=24)
+                    image_url = public_file_content_url(fid)
+                    # Store image_file_id in draft
+                    cfg = dict(agent.config or {})
+                    draft_data = cfg.get("poster_pending_draft", {})
+                    draft_data["image_file_id"] = str(fid)
+                    cfg["poster_pending_draft"] = draft_data
+                    agent.config = cfg
+                except Exception as img_exc:
+                    logger.warning("poster regen image save failed: %s", img_exc)
+
             await db.commit()
-            return {"ok": True, "mode": "web_draft", "post_id": new_id, "post_text": new_text, "topic": topic}
+            return {"ok": True, "mode": "web_draft", "post_id": new_id, "post_text": new_text,
+                    "topic": topic, "image_url": image_url}
         except Exception as exc:
             return {"ok": False, "error": str(exc)[:200]}
 

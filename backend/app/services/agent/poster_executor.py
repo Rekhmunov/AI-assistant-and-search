@@ -427,12 +427,18 @@ async def publish_to_channel(
     attachments = []
 
     if image_bytes:
+        logger.info("POSTER_PUBLISH uploading image %d bytes to MAX", len(image_bytes))
         try:
             token = await bot.upload_media(image_bytes, "post_image.jpg", "image")
+            logger.info("POSTER_PUBLISH upload_media token=%s", bool(token))
             if token:
                 attachments.append({"type": "image", "payload": {"token": token}})
+            else:
+                logger.warning("POSTER_PUBLISH upload_media returned empty token")
         except Exception as exc:
-            logger.warning("Poster: image upload failed: %s", exc)
+            logger.warning("POSTER_PUBLISH image upload failed: %s", exc)
+    else:
+        logger.info("POSTER_PUBLISH no image (text only)")
 
     result = await bot.send_message(
         None,
@@ -441,6 +447,7 @@ async def publish_to_channel(
         chat_id=channel_id,
         notify=True,
     )
+    logger.info("POSTER_PUBLISH send_message ok=%s has_image=%s", result.ok, bool(attachments))
     return result.ok
 
 
