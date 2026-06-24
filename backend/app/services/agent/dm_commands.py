@@ -151,6 +151,36 @@ async def handle_dm_message(
         await bot.send_message(max_user_id, "\n\n".join(lines) if lines else "Агенты активны.")
         return True
 
+    # Poster agent: check if awaiting text edit in DM context
+    from sqlalchemy import select as _select
+    _poster_result = await db.execute(
+        _select(AgentInstance).where(
+            AgentInstance.max_user_id == max_user_id,
+            AgentInstance.status == AgentStatus.ACTIVE.value,
+        )
+    )
+    for _poster_agent in _poster_result.scalars().all():
+        _cfg = dict(_poster_agent.config or {})
+        if _cfg.get("template") != "poster":
+            continue
+        _draft = _cfg.get("poster_pending_draft")
+        if _draft and _draft.get("awaiting_edit") and text:
+            try:
+                from app.services.agent.poster_callbacks import handle_poster_edit_input
+                from app.services.agent.poster_executor import get_approval_destination, _pick_next_topic
+                dest_chat, dest_user = get_approval_destination(_poster_agent)
+                # For DM context, approval goes back to user DM
+                _handled = await handle_poster_edit_input(
+                    db, _poster_agent, bot,
+                    text=text,
+                    approval_chat_id=dest_chat or 0,
+                )
+                if _handled:
+                    await db.commit()
+                    return True
+            except Exception as _exc:
+                logger.warning("poster dm edit-input failed: %s", _exc)
+
     # Личный ассистент обрабатывается до всех других агентов
     from app.services.agent.assistant_bot_handler import handle_assistant_dm
     assistant_handled = await handle_assistant_dm(

@@ -88,8 +88,14 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
   const [historyLoading, setHistoryLoading] = useState(false);
   const initDone = useRef(false);
 
+  // If agent already configured (has channel), show active UI without requiring re-save
+  const isConfigured = Boolean(
+    (initialConfig?.poster_channel_id as string | undefined)?.trim()
+  );
+  const showActiveUI = activationStatus === "active" || (isConfigured && enabled && activationStatus === "idle");
+
   const loadHistory = useCallback(async () => {
-    if (!activationStatus) return;
+    if (!showActiveUI) return;
     setHistoryLoading(true);
     try {
       const res = await fetch(`${API_BASE}/api/agent/threads/${threadId}/post-history`, {
@@ -104,6 +110,14 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
       setHistoryLoading(false);
     }
   }, [threadId, token, activationStatus]);
+
+  // Load history on mount if already configured
+  useEffect(() => {
+    if (isConfigured && enabled) {
+      void loadHistory();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     if (!initialConfig || initDone.current) return;
@@ -525,7 +539,7 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
           {verifying ? "Проверяем права бота в канале…" : "Сохраняем настройки…"}
         </div>
       )}
-      {!saving && !verifying && activationStatus === "active" && (
+      {!saving && !verifying && showActiveUI && (
         <div className="poster-status poster-status--active">
           ✅ Агент активирован. {activationHint}
         </div>
@@ -542,7 +556,7 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
       )}
 
       {/* One-time post generation */}
-      {activationStatus === "active" && (
+      {showActiveUI && (
         <div className="poster-generate">
           {/* Generate button — hidden while draft is shown */}
           {!draft && (
@@ -661,7 +675,7 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
       )}
 
       {/* Post history — shown when active */}
-      {activationStatus === "active" && (
+      {showActiveUI && (
         <div className="poster-history">
           <div className="poster-history__header">
             <span className="poster-history__title">История постов</span>
