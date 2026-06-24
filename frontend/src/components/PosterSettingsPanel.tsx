@@ -76,6 +76,7 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
   const [cfg, setCfg] = useState<PosterConfig>({ ...DEFAULTS });
   const [saving, setSaving] = useState(false);
   const [verifying, setVerifying] = useState(false);
+  const [verifyStep, setVerifyStep] = useState<"channel" | "admin" | "">(""); 
   const [generating, setGenerating] = useState(false);
   const [draft, setDraft] = useState<{ postId: string; text: string; topic: string } | null>(null);
   const [draftAction, setDraftAction] = useState<"" | "actioning" | "editing" | "published" | "rejected" | "error">("");
@@ -206,6 +207,10 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
 
       // Step 2: Verify channel admin status
       setVerifying(true);
+      setVerifyStep("channel");
+      // Small delay so user sees the step
+      await new Promise((r) => setTimeout(r, 400));
+      setVerifyStep("admin");
       const verifyRes = await fetch(`${API_BASE}/api/agent/threads/${threadId}/verify-channel`, {
         method: "POST",
         credentials: "include",
@@ -213,6 +218,7 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
       });
       const verifyData = verifyRes.ok ? await verifyRes.json() : null;
       setVerifying(false);
+      setVerifyStep("");
 
       if (verifyData && !verifyData.ok) {
         setActivationStatus("error");
@@ -239,6 +245,7 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
     } catch (e) {
       setSaving(false);
       setVerifying(false);
+      setVerifyStep("");
       setError(e instanceof Error ? e.message : "Ошибка сохранения");
     }
   };
@@ -527,7 +534,11 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
             onClick={save}
             title={validationHint || undefined}
           >
-            {saving ? "Сохраняем…" : verifying ? "Проверяем канал…" : "Сохранить настройки"}
+            {saving ? "Сохраняем…"
+              : verifying && verifyStep === "channel" ? "Проверяем канал…"
+              : verifying && verifyStep === "admin" ? "Проверяем права…"
+              : verifying ? "Проверяем…"
+              : "Сохранить настройки"}
           </button>
         </div>
       </div>
@@ -536,7 +547,10 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
       {(saving || verifying) && (
         <div className="poster-status poster-status--checking">
           <span className="poster-status__spinner" />
-          {verifying ? "Проверяем права бота в канале…" : "Сохраняем настройки…"}
+          {verifying && verifyStep === "channel" && "Проверяем доступ к каналу…"}
+          {verifying && verifyStep === "admin" && "Проверяем права администратора…"}
+          {verifying && !verifyStep && "Проверяем канал…"}
+          {saving && "Сохраняем настройки…"}
         </div>
       )}
       {!saving && !verifying && showActiveUI && (

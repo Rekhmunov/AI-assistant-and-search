@@ -521,10 +521,18 @@ async def verify_poster_channel(
 
     try:
         probe = await probe_max_chat(bot, channel_id)
+        if probe.get("ok"):
+            # Save the resolved numeric channel_id back to config
+            # so get_poster_channel_id() always finds an int
+            cfg["poster_channel_id"] = str(channel_id)
+            agent.config = cfg
+            await db.commit()
+
         return {
             "ok": probe.get("ok", False),
             "bot_is_admin": probe.get("bot_is_admin", False),
             "chat_name": probe.get("title") or probe.get("chat_name", ""),
+            "channel_id": channel_id,
             "error": probe.get("error", "") if not probe.get("ok") else "",
         }
     except Exception as exc:
