@@ -433,6 +433,15 @@ async def poster_draft_action(
         await db.commit()
         return {"ok": True, "mode": "rejected"}
 
+    elif action == "edit":
+        new_text = str(body.get("text", "")).strip()
+        if not new_text:
+            return {"ok": False, "error": "Текст не может быть пустым"}
+        # Update draft with edited text
+        save_pending_draft(agent, post_id=post_id, topic=draft.get("topic", ""), text=new_text)
+        await db.commit()
+        return {"ok": True, "mode": "web_draft", "post_id": post_id, "post_text": new_text, "topic": draft.get("topic", "")}
+
     elif action == "regen":
         from app.services.providers.factory import resolve_agent_providers
         import uuid as _uuid

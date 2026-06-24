@@ -78,8 +78,9 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
   const [verifying, setVerifying] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [draft, setDraft] = useState<{ postId: string; text: string; topic: string } | null>(null);
-  const [draftAction, setDraftAction] = useState<"" | "actioning" | "published" | "rejected" | "error">("");
+  const [draftAction, setDraftAction] = useState<"" | "actioning" | "editing" | "published" | "rejected" | "error">("");
   const [draftError, setDraftError] = useState("");
+  const [editedText, setEditedText] = useState("");
   const [activationStatus, setActivationStatus] = useState<"idle" | "active" | "inactive" | "error">("idle");
   const [activationHint, setActivationHint] = useState("");
   const [error, setError] = useState("");
@@ -284,12 +285,46 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
         setDraft(null);
         setDraftAction("rejected");
       } else if (data.mode === "web_draft") {
-        // New draft after regen
         setDraft({ postId: data.post_id, text: data.post_text, topic: data.topic });
         setDraftAction("");
+        setEditedText("");
       }
     } catch {
       setDraftAction("error");
+      setDraftError("Ошибка");
+    }
+  };
+
+  const handleStartEdit = () => {
+    setEditedText(draft?.text ?? "");
+    setDraftAction("editing");
+  };
+
+  const handleSaveEdit = async () => {
+    if (!draft) return;
+    setDraftAction("actioning");
+    setDraftError("");
+    try {
+      const res = await fetch(`${API_BASE}/api/agent/threads/${threadId}/draft-action`, {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ action: "edit", post_id: draft.postId, text: editedText }),
+      });
+      const data = res.ok ? await res.json() : null;
+      if (!data?.ok) {
+        setDraftAction("editing");
+        setDraftError(data?.error || "Ошибка сохранения");
+      } else {
+        setDraft({ postId: data.post_id, text: data.post_text, topic: data.topic });
+        setDraftAction("");
+        setEditedText("");
+      }
+    } catch {
+      setDraftAction("editing");
       setDraftError("Ошибка");
     }
   };
@@ -541,37 +576,85 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
             <div className="poster-draft">
               <div className="poster-draft__header">
                 <span className="poster-draft__label">📝 Черновик — тема: <em>{draft.topic}</em></span>
+                {draftAction !== "editing" && (
+                  <button
+                    type="button"
+                    className="poster-draft__edit-toggle"
+                    onClick={handleStartEdit}
+                    title="Редактировать текст"
+                  >
+                    ✏️
+                  </button>
+                )}
               </div>
-              <div className="poster-draft__text">{draft.text}</div>
+
+              {/* Edit mode: textarea */}
+              {draftAction === "editing" ? (
+                <div className="poster-draft__edit-area">
+                  <textarea
+                    className="poster-draft__textarea"
+                    value={editedText}
+                    rows={10}
+                    autoFocus
+                    onChange={(e) => setEditedText(e.target.value)}
+                  />
+                  {draftError && <div className="poster-draft__error">⚠️ {draftError}</div>}
+                  <div className="poster-draft__edit-footer">
+                    <span className="poster-draft__char-count">{editedText.length} зн.</span>
+                    <div className="poster-draft__edit-btns">
+                      <button type="button" className="poster-draft__btn poster-draft__btn--approve" onClick={handleSaveEdit}>
+                        Сохранить
+                      </button>
+                      <button type="button" className="poster-draft__btn poster-draft__btn--regen" onClick={() => { setDraftAction(""); setDraftError(""); }}>
+                        Отмена
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="poster-draft__text">{draft.text}</div>
+              )}
+
               {draftAction === "error" && (
                 <div className="poster-draft__error">⚠️ {draftError}</div>
               )}
-              <div className="poster-draft__actions">
-                <button
-                  type="button"
-                  className="poster-draft__btn poster-draft__btn--approve"
-                  disabled={draftAction === "actioning"}
-                  onClick={() => handleDraftAction("approve")}
-                >
-                  {draftAction === "actioning" ? <span className="poster-status__spinner" /> : "✅"} Опубликовать
-                </button>
-                <button
-                  type="button"
-                  className="poster-draft__btn poster-draft__btn--regen"
-                  disabled={draftAction === "actioning"}
-                  onClick={() => handleDraftAction("regen")}
-                >
-                  🔄 Перегенерировать
-                </button>
-                <button
-                  type="button"
-                  className="poster-draft__btn poster-draft__btn--reject"
-                  disabled={draftAction === "actioning"}
-                  onClick={() => handleDraftAction("reject")}
-                >
-                  ❌ Отклонить
-                </button>
-              </div>
+
+              {draftAction !== "editing" && (
+                <div className="poster-draft__actions">
+                  <button
+                    type="button"
+                    className="poster-draft__btn poster-draft__btn--approve"
+                    disabled={draftAction === "actioning"}
+                    onClick={() => handleDraftAction("approve")}
+                  >
+                    {draftAction === "actioning" ? <span className="poster-status__spinner" /> : "✅"} Опубликовать
+                  </button>
+                  <button
+                    type="button"
+                    className="poster-draft__btn poster-draft__btn--regen"
+                    disabled={draftAction === "actioning"}
+                    onClick={() => handleDraftAction("regen")}
+                  >
+                    🔄 Перегенерировать
+                  </button>
+                  <button
+                    type="button"
+                    className="poster-draft__btn poster-draft__btn--edit"
+                    disabled={draftAction === "actioning"}
+                    onClick={handleStartEdit}
+                  >
+                    ✏️ Редактировать
+                  </button>
+                  <button
+                    type="button"
+                    className="poster-draft__btn poster-draft__btn--reject"
+                    disabled={draftAction === "actioning"}
+                    onClick={() => handleDraftAction("reject")}
+                  >
+                    ❌ Отклонить
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </div>
