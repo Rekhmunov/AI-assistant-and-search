@@ -77,7 +77,9 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
   const [saving, setSaving] = useState(false);
   const [verifying, setVerifying] = useState(false);
   const [generating, setGenerating] = useState(false);
-  const [generateResult, setGenerateResult] = useState<"" | "approval" | "published" | "error">("");
+  const [draft, setDraft] = useState<{ postId: string; text: string; topic: string } | null>(null);
+  const [draftAction, setDraftAction] = useState<"" | "actioning" | "published" | "rejected" | "error">("");
+  const [draftError, setDraftError] = useState("");
   const [activationStatus, setActivationStatus] = useState<"idle" | "active" | "inactive" | "error">("idle");
   const [activationHint, setActivationHint] = useState("");
   const [error, setError] = useState("");
@@ -228,7 +230,9 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
 
   const generatePost = async () => {
     setGenerating(true);
-    setGenerateResult("");
+    setDraft(null);
+    setDraftAction("");
+    setDraftError("");
     try {
       const res = await fetch(`${API_BASE}/api/agent/threads/${threadId}/generate-post`, {
         method: "POST",
@@ -236,19 +240,57 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
       const data = res.ok ? await res.json() : null;
-      if (data?.ok) {
-        setGenerateResult(data.mode === "published" ? "published" : "approval");
-      } else {
-        setGenerateResult("error");
-        setError(data?.error || "Не удалось сгенерировать пост");
+      if (!data?.ok) {
+        setDraftAction("error");
+        setDraftError(data?.error || "Не удалось сгенерировать пост");
+      } else if (data.mode === "published") {
+        setDraftAction("published");
+        void loadHistory();
+      } else if (data.mode === "web_draft") {
+        // Show draft card in the panel — user reviews here, no DM
+        setDraft({ postId: data.post_id, text: data.post_text, topic: data.topic });
       }
     } catch {
-      setGenerateResult("error");
-      setError("Ошибка при генерации поста");
+      setDraftAction("error");
+      setDraftError("Ошибка при генерации поста");
     } finally {
       setGenerating(false);
-      // Clear result after 8s
-      setTimeout(() => { setGenerateResult(""); setError(""); }, 8000);
+    }
+  };
+
+  const handleDraftAction = async (action: "approve" | "reject" | "regen") => {
+    if (!draft) return;
+    setDraftAction("actioning");
+    setDraftError("");
+    try {
+      const res = await fetch(`${API_BASE}/api/agent/threads/${threadId}/draft-action`, {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ action, post_id: draft.postId }),
+      });
+      const data = res.ok ? await res.json() : null;
+      if (!data?.ok) {
+        setDraftAction("error");
+        setDraftError(data?.error || "Ошибка");
+      } else if (data.mode === "published") {
+        setDraft(null);
+        setDraftAction("published");
+        void loadHistory();
+      } else if (data.mode === "rejected") {
+        setDraft(null);
+        setDraftAction("rejected");
+      } else if (data.mode === "web_draft") {
+        // New draft after regen
+        setDraft({ postId: data.post_id, text: data.post_text, topic: data.topic });
+        setDraftAction("");
+      }
+    } catch {
+      setDraftAction("error");
+      setDraftError("Ошибка");
     }
   };
 
@@ -464,38 +506,73 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
         </div>
       )}
 
-      {/* One-time post generation — shown when active */}
+      {/* One-time post generation */}
       {activationStatus === "active" && (
         <div className="poster-generate">
-          <button
-            type="button"
-            className="poster-generate__btn"
-            disabled={generating}
-            onClick={async () => { await generatePost(); loadHistory(); }}
-          >
-            {generating ? (
-              <>
-                <span className="poster-status__spinner" />
-                Генерируем пост…
-              </>
-            ) : (
-              "✏️ Сгенерировать разовый пост"
-            )}
-          </button>
-          {generateResult === "approval" && (
-            <span className="poster-generate__result poster-generate__result--ok">
-              ✓ Черновик отправлен в MAX для согласования
-            </span>
+          {/* Generate button — hidden while draft is shown */}
+          {!draft && (
+            <button
+              type="button"
+              className="poster-generate__btn"
+              disabled={generating || draftAction === "actioning"}
+              onClick={generatePost}
+            >
+              {generating ? (
+                <><span className="poster-status__spinner" /> Генерируем пост…</>
+              ) : (
+                "✏️ Сгенерировать разовый пост"
+              )}
+            </button>
           )}
-          {generateResult === "published" && (
-            <span className="poster-generate__result poster-generate__result--ok">
-              ✓ Пост опубликован в канале
-            </span>
+
+          {/* Status after action */}
+          {!draft && draftAction === "published" && (
+            <span className="poster-generate__result poster-generate__result--ok">✓ Пост опубликован в канале</span>
           )}
-          {generateResult === "error" && (
-            <span className="poster-generate__result poster-generate__result--err">
-              ⚠️ {error}
-            </span>
+          {!draft && draftAction === "rejected" && (
+            <span className="poster-generate__result poster-generate__result--ok" style={{color: "var(--text-muted)"}}>Пост отклонён</span>
+          )}
+          {!draft && draftAction === "error" && (
+            <span className="poster-generate__result poster-generate__result--err">⚠️ {draftError}</span>
+          )}
+
+          {/* Draft card — inline review in mini-app */}
+          {draft && (
+            <div className="poster-draft">
+              <div className="poster-draft__header">
+                <span className="poster-draft__label">📝 Черновик — тема: <em>{draft.topic}</em></span>
+              </div>
+              <div className="poster-draft__text">{draft.text}</div>
+              {draftAction === "error" && (
+                <div className="poster-draft__error">⚠️ {draftError}</div>
+              )}
+              <div className="poster-draft__actions">
+                <button
+                  type="button"
+                  className="poster-draft__btn poster-draft__btn--approve"
+                  disabled={draftAction === "actioning"}
+                  onClick={() => handleDraftAction("approve")}
+                >
+                  {draftAction === "actioning" ? <span className="poster-status__spinner" /> : "✅"} Опубликовать
+                </button>
+                <button
+                  type="button"
+                  className="poster-draft__btn poster-draft__btn--regen"
+                  disabled={draftAction === "actioning"}
+                  onClick={() => handleDraftAction("regen")}
+                >
+                  🔄 Перегенерировать
+                </button>
+                <button
+                  type="button"
+                  className="poster-draft__btn poster-draft__btn--reject"
+                  disabled={draftAction === "actioning"}
+                  onClick={() => handleDraftAction("reject")}
+                >
+                  ❌ Отклонить
+                </button>
+              </div>
+            </div>
           )}
         </div>
       )}

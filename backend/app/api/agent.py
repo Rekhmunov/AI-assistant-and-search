@@ -350,30 +350,107 @@ async def generate_poster_post(
         bot = MaxBotService()
 
         if approval_mode == "auto" and channel_id:
+            # Auto-publish: publish directly
             ok = await publish_to_channel(bot, channel_id=channel_id, text=post_text)
             if ok:
                 update_post_status(agent, post_id, "published")
                 await db.commit()
-                return {"ok": True, "mode": "published", "topic": topic}
+                return {"ok": True, "mode": "published", "topic": topic, "post_text": post_text}
             return {"ok": False, "error": "Не удалось опубликовать в канал. Проверьте права бота."}
         else:
-            # With approval: send to group chat OR owner DM
-            from app.services.agent.poster_executor import get_approval_destination
-            dest_chat_id, dest_user_id = get_approval_destination(agent)
-            if not dest_chat_id and not dest_user_id:
-                await db.commit()
-                return {"ok": False, "error": "Нет получателя для согласования. Привяжите бот к MAX или добавьте агента в группу."}
+            # Manual draft: return to frontend for in-app review (no DM)
             save_pending_draft(agent, post_id=post_id, topic=topic, text=post_text)
-            msg_id = await send_draft_for_approval(
-                agent, db, bot,
-                post_id=post_id, topic=topic, text=post_text,
-            )
-            save_pending_draft(agent, post_id=post_id, topic=topic, text=post_text, draft_message_id=msg_id)
             await db.commit()
-            return {"ok": True, "mode": "approval", "topic": topic}
+            return {
+                "ok": True,
+                "mode": "web_draft",  # shown in mini-app, not sent to DM
+                "topic": topic,
+                "post_id": post_id,
+                "post_text": post_text,
+            }
     except Exception as exc:
         logger.exception("generate_poster_post failed thread=%s: %s", thread_id, exc)
         return {"ok": False, "error": str(exc)[:300]}
+
+
+@router.post("/threads/{thread_id}/draft-action")
+async def poster_draft_action(
+    thread_id: UUID,
+    body: dict,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+    redis_client: redis.Redis = Depends(get_redis),
+):
+    """
+    Handle draft actions from the web mini-app:
+    action: 'approve' | 'reject' | 'regen'
+    post_id: str
+    """
+    action = str(body.get("action", ""))
+    post_id = str(body.get("post_id", ""))
+
+    result = await db.execute(
+        select(Thread).where(
+            Thread.id == thread_id,
+            Thread.user_id == user.id,
+            Thread.thread_type == ThreadType.AGENT,
+        )
+    )
+    thread = result.scalar_one_or_none()
+    if not thread:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Тред не найден")
+    agent = await get_agent_for_thread(db, thread.id)
+    if not agent:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Агент не найден")
+
+    from app.services.agent.poster_executor import (
+        get_pending_draft, clear_pending_draft, update_post_status,
+        get_poster_channel_id, publish_to_channel,
+        generate_post, save_post_to_history, save_pending_draft, _pick_next_topic,
+    )
+    from app.services.bot import MaxBotService
+
+    draft = get_pending_draft(agent)
+    if not draft or draft.get("post_id") != post_id:
+        return {"ok": False, "error": "Черновик устарел или уже обработан"}
+
+    if action == "approve":
+        channel_id = get_poster_channel_id(agent)
+        if not channel_id:
+            return {"ok": False, "error": "Канал не настроен"}
+        bot = MaxBotService()
+        ok = await publish_to_channel(bot, channel_id=channel_id, text=draft.get("text", ""))
+        if ok:
+            update_post_status(agent, post_id, "published")
+            clear_pending_draft(agent)
+            await db.commit()
+            return {"ok": True, "mode": "published"}
+        return {"ok": False, "error": "Не удалось опубликовать. Проверьте права бота."}
+
+    elif action == "reject":
+        update_post_status(agent, post_id, "rejected")
+        clear_pending_draft(agent)
+        await db.commit()
+        return {"ok": True, "mode": "rejected"}
+
+    elif action == "regen":
+        from app.services.providers.factory import resolve_agent_providers
+        import uuid as _uuid
+        topic = draft.get("topic", _pick_next_topic(agent))
+        update_post_status(agent, post_id, "rejected")
+        clear_pending_draft(agent)
+        try:
+            llm, _, _, _, _ = await resolve_agent_providers(db, redis_client)
+            new_text = await generate_post(agent, topic, llm)
+            new_id = str(_uuid.uuid4())
+            save_post_to_history(agent, post_id=new_id, topic=topic, text=new_text, status="draft")
+            save_pending_draft(agent, post_id=new_id, topic=topic, text=new_text)
+            await db.commit()
+            return {"ok": True, "mode": "web_draft", "post_id": new_id, "post_text": new_text, "topic": topic}
+        except Exception as exc:
+            return {"ok": False, "error": str(exc)[:200]}
+
+    return {"ok": False, "error": f"Неизвестное действие: {action}"}
 
 
 @router.post("/threads/{thread_id}/verify-channel")

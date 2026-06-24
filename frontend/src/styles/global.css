@@ -8342,6 +8342,22 @@ a.blog-sidebar-title:hover {
 .poster-generate__result { font-size: 0.82rem; font-weight: 500; }
 .poster-generate__result--ok { color: #276749; }
 .poster-generate__result--err { color: #9b2c2c; }
+/* Draft card (inline review) */
+.poster-draft { margin-top: 10px; border: 1px solid var(--border, #d8e0e3); border-radius: 10px; background: var(--surface, #fff); overflow: hidden; width: 100%; }
+.poster-draft__header { padding: 10px 14px; border-bottom: 1px solid var(--border-subtle, #e8edf0); background: var(--surface-hover, #f7fafb); }
+.poster-draft__label { font-size: 0.82rem; font-weight: 600; color: var(--text-muted, #5c6b73); }
+.poster-draft__label em { color: var(--accent, #20808d); font-style: normal; }
+.poster-draft__text { padding: 12px 14px; font-size: 0.9rem; line-height: 1.6; color: var(--text, #1a2328); white-space: pre-wrap; word-break: break-word; max-height: 280px; overflow-y: auto; }
+.poster-draft__error { padding: 6px 14px; font-size: 0.82rem; color: #9b2c2c; background: #fff5f5; }
+.poster-draft__actions { display: flex; gap: 8px; padding: 10px 14px; border-top: 1px solid var(--border-subtle, #e8edf0); flex-wrap: wrap; }
+.poster-draft__btn { display: inline-flex; align-items: center; gap: 4px; padding: 7px 12px; border-radius: 7px; font: inherit; font-size: 0.82rem; font-weight: 600; cursor: pointer; border: 1px solid transparent; transition: opacity 0.12s; }
+.poster-draft__btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.poster-draft__btn--approve { background: #20808d; color: #fff; }
+.poster-draft__btn--approve:hover:not(:disabled) { background: #1a6b76; }
+.poster-draft__btn--regen { background: var(--surface-hover, #f0f4f5); color: var(--text, #1a2328); border-color: var(--border, #d8e0e3); }
+.poster-draft__btn--regen:hover:not(:disabled) { background: #e8f0f2; }
+.poster-draft__btn--reject { background: #fff5f5; color: #9b2c2c; border-color: #feb2b2; }
+.poster-draft__btn--reject:hover:not(:disabled) { background: #fee2e2; }
 /* Post history */
 .poster-history { padding: 14px 20px 18px; border-top: 1px solid var(--border-subtle, #e8edf0); }
 .poster-history__header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
