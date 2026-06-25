@@ -1265,23 +1265,26 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
 
       {/* Approval confirmation modal */}
       {approvalConfirmModal && (
-        <div className="poster-confirm-overlay">
-          <div className="poster-confirm-modal">
-            <h3 className="poster-confirm-modal__title">Отключить согласование?</h3>
-            <p className="poster-confirm-modal__text">
-              Посты будут публиковаться в канал автоматически без вашего подтверждения. Вы уверены?
+        <div
+          className="app-modal-overlay poster-confirm-overlay"
+          onClick={(e) => { if (e.target === e.currentTarget) setApprovalConfirmModal(false); }}
+        >
+          <div className="app-modal feedback-modal poster-confirm-modal" role="dialog" aria-modal="true">
+            <h3 className="feedback-modal-title">Отключить согласование?</h3>
+            <p className="feedback-modal-hint">
+              Посты будут публиковаться в канал автоматически, без вашего подтверждения каждого поста.
             </p>
-            <div className="poster-confirm-modal__actions">
+            <div className="feedback-modal-actions poster-confirm-modal__actions">
               <button
                 type="button"
-                className="poster-confirm-modal__btn poster-confirm-modal__btn--danger"
+                className="btn-primary danger"
                 onClick={() => { patch("poster_approval", false); setApprovalConfirmModal(false); }}
               >
                 Да, публиковать автоматически
               </button>
               <button
                 type="button"
-                className="poster-confirm-modal__btn poster-confirm-modal__btn--cancel"
+                className="btn-secondary"
                 onClick={() => setApprovalConfirmModal(false)}
               >
                 Отмена
