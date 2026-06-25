@@ -878,10 +878,16 @@ def _build_schedule_text(body: dict) -> str:
             return f"через {value} часов"
         return f"через {value} минут"
 
-    # one_time — need date
+    # one_time — need date in YYYY-MM-DD format for parse_reminder_schedule
     date_str = str(body.get("date") or "").strip()
     if date_str:
-        return f"{date_str} в {time_str}"
+        # Convert DD.MM.YYYY or DD/MM/YYYY → YYYY-MM-DD
+        import re as _re
+        m = _re.match(r"^(\d{1,2})[./](\d{1,2})[./](\d{4})$", date_str)
+        if m:
+            dd, mm, yyyy = m.group(1).zfill(2), m.group(2).zfill(2), m.group(3)
+            date_str = f"{yyyy}-{mm}-{dd}"
+        return f"{date_str} {time_str}"
     return f"сегодня в {time_str}"
 
 

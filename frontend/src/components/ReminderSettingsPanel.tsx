@@ -147,11 +147,10 @@ function ScheduleFields({
       {/* Date for one_time */}
       {stype === "one_time" && (
         <div className="rm-field">
-          <label className="rm-label">Дата (ДД.ММ.ГГГГ)</label>
+          <label className="rm-label">Дата</label>
           <input
-            type="text"
+            type="date"
             className="rm-input"
-            placeholder={todayStr()}
             value={form.date}
             onChange={(e) => onChange({ date: e.target.value })}
           />
