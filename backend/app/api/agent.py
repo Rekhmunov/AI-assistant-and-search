@@ -826,3 +826,334 @@ async def verify_poster_channel(
         }
     except Exception as exc:
         return {"ok": False, "bot_is_admin": False, "error": str(exc)[:200]}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Reminder management endpoints
+# ─────────────────────────────────────────────────────────────────────────────
+
+_WEEKDAY_RU = {
+    "mon": "понедельник",
+    "tue": "вторник",
+    "wed": "среда",
+    "thu": "четверг",
+    "fri": "пятница",
+    "sat": "суббота",
+    "sun": "воскресенье",
+}
+
+
+def _build_schedule_text(body: dict) -> str:
+    """Convert form fields to a schedule_text string parseable by parse_reminder_schedule."""
+    stype = str(body.get("schedule_type") or "one_time")
+    time_str = str(body.get("time") or "09:00").strip() or "09:00"
+
+    if stype == "daily":
+        return f"каждый день в {time_str}"
+
+    if stype == "weekly":
+        day_key = str(body.get("weekday") or "mon")
+        day_ru = _WEEKDAY_RU.get(day_key, day_key)
+        return f"каждый {day_ru} в {time_str}"
+
+    if stype == "monthly":
+        day_of_month = int(body.get("day_of_month") or 1)
+        return f"раз в месяц каждое {day_of_month} число в {time_str}"
+
+    if stype == "quarterly":
+        return f"раз в квартал в {time_str}"
+
+    if stype == "yearly":
+        return f"раз в год в {time_str}"
+
+    if stype == "interval":
+        value = int(body.get("interval_value") or 30)
+        unit = body.get("interval_unit") or "minutes"
+        if unit == "hours":
+            return f"через {value} часов"
+        return f"через {value} минут"
+
+    # one_time — need date
+    date_str = str(body.get("date") or "").strip()
+    if date_str:
+        return f"{date_str} в {time_str}"
+    return f"сегодня в {time_str}"
+
+
+def _recurrence_label(recurrence: str | None) -> str:
+    if not recurrence:
+        return "Разово"
+    if recurrence == "daily":
+        return "Ежедневно"
+    if recurrence == "hourly":
+        return "Каждый час"
+    if recurrence == "quarterly":
+        return "Раз в квартал"
+    if recurrence == "yearly":
+        return "Раз в год"
+    if recurrence.startswith("weekly:"):
+        wd_names = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"]
+        try:
+            idx = int(recurrence.split(":")[1])
+            return f"Еженедельно ({wd_names[idx]})"
+        except (IndexError, ValueError):
+            return "Еженедельно"
+    if recurrence.startswith("monthly:"):
+        try:
+            day = recurrence.split(":")[1]
+            return f"Ежемесячно ({day}-е)"
+        except IndexError:
+            return "Ежемесячно"
+    return recurrence
+
+
+async def _get_hub_and_reminder_agents(
+    db: AsyncSession,
+    thread_id: UUID,
+    user: "User",
+):
+    """Returns (hub_agent, list_of_sub_reminder_agents)."""
+    from app.models.agent import AgentInstance
+
+    result = await db.execute(
+        select(Thread).where(
+            Thread.id == thread_id,
+            Thread.user_id == user.id,
+        )
+    )
+    thread = result.scalar_one_or_none()
+    if not thread:
+        raise HTTPException(status_code=404, detail="Тред не найден")
+
+    hub_agent = await get_agent_for_thread(db, thread.id)
+    if not hub_agent:
+        raise HTTPException(status_code=404, detail="Агент не найден")
+
+    sub_result = await db.execute(
+        select(AgentInstance).where(
+            AgentInstance.user_id == user.id,
+            AgentInstance.config["parent_hub_id"].astext == str(hub_agent.id),
+        ).order_by(AgentInstance.created_at.asc())
+    )
+    sub_agents = list(sub_result.scalars().all())
+    return hub_agent, sub_agents
+
+
+def _agent_to_reminder_out(agent: "AgentInstance") -> dict:
+    cfg = dict(agent.config or {})
+    return {
+        "id": str(agent.id),
+        "thread_id": str(agent.thread_id),
+        "text": cfg.get("reminder_message", ""),
+        "schedule_text": cfg.get("schedule_text", ""),
+        "schedule_type": cfg.get("schedule_type", "one_time"),
+        "time": cfg.get("schedule_time", ""),
+        "weekday": cfg.get("schedule_weekday", ""),
+        "day_of_month": cfg.get("schedule_day_of_month"),
+        "date": cfg.get("schedule_date", ""),
+        "interval_value": cfg.get("schedule_interval_value"),
+        "interval_unit": cfg.get("schedule_interval_unit", "minutes"),
+        "delivery_mode": cfg.get("delivery_mode", "dm"),
+        "max_chat_id": agent.max_chat_id,
+        "timezone": cfg.get("timezone", "Europe/Moscow"),
+        "enabled": agent.status == "active",
+        "status": agent.status,
+        "next_run_at": cfg.get("next_run_at"),
+        "recurrence_label": _recurrence_label(cfg.get("recurrence_stored")),
+    }
+
+
+@router.get("/threads/{thread_id}/reminders")
+async def list_reminders(
+    thread_id: UUID,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+):
+    """List all reminder sub-agents linked to a hub reminder thread."""
+    hub_agent, sub_agents = await _get_hub_and_reminder_agents(db, thread_id, user)
+    return {"reminders": [_agent_to_reminder_out(a) for a in sub_agents]}
+
+
+@router.post("/threads/{thread_id}/reminders")
+async def create_reminder(
+    thread_id: UUID,
+    body: dict,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+):
+    """Create a new reminder sub-agent linked to this hub thread."""
+    from app.models.agent import AgentInstance, AgentStatus
+    from app.services.agent.reminders import activate_agent
+    from app.services.agent.schedule import parse_reminder_schedule
+
+    hub_agent, _ = await _get_hub_and_reminder_agents(db, thread_id, user)
+
+    schedule_text = _build_schedule_text(body)
+    timezone = str(body.get("timezone") or "Europe/Moscow")
+    delivery_mode = str(body.get("delivery_mode") or "dm")
+    role = "group_reminder" if delivery_mode == "group" else "personal_reminder"
+    max_chat_id_raw = body.get("max_chat_id")
+    max_chat_id = int(max_chat_id_raw) if max_chat_id_raw else None
+
+    try:
+        run_at, recurrence = parse_reminder_schedule(schedule_text, tz_name=timezone)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=f"Не удалось разобрать расписание: {exc}")
+
+    from app.services.thread_factory import create_thread, next_agent_seq
+    seq = await next_agent_seq(db, user.id)
+    sub_thread = await create_thread(
+        db,
+        user_id=user.id,
+        title=f"Напоминание {seq}",
+        thread_type=ThreadType.AGENT,
+        agent_seq=seq,
+    )
+
+    max_uid = int(user.max_user_id) if user.max_user_id else 0
+    sub_cfg: dict = {
+        "template": "reminder",
+        "is_sub_reminder": True,
+        "parent_hub_id": str(hub_agent.id),
+        "reminder_message": str(body.get("text") or "Напоминание"),
+        "schedule_text": schedule_text,
+        "schedule_type": str(body.get("schedule_type") or "one_time"),
+        "schedule_time": str(body.get("time") or ""),
+        "schedule_weekday": str(body.get("weekday") or ""),
+        "schedule_day_of_month": body.get("day_of_month"),
+        "schedule_date": str(body.get("date") or ""),
+        "schedule_interval_value": body.get("interval_value"),
+        "schedule_interval_unit": str(body.get("interval_unit") or "minutes"),
+        "timezone": timezone,
+        "delivery_mode": delivery_mode,
+        "content_pipeline": "static",
+        "recurrence_stored": recurrence,
+    }
+
+    sub_agent = AgentInstance(
+        thread_id=sub_thread.id,
+        user_id=user.id,
+        max_user_id=max_uid,
+        status=AgentStatus.DRAFT.value,
+        role=role,
+        config=sub_cfg,
+        max_chat_id=max_chat_id,
+    )
+    db.add(sub_agent)
+    await db.flush()
+
+    await activate_agent(db, sub_agent)
+    await db.commit()
+    await db.refresh(sub_agent)
+
+    return _agent_to_reminder_out(sub_agent)
+
+
+@router.patch("/threads/{thread_id}/reminders/{reminder_agent_id}")
+async def update_reminder(
+    thread_id: UUID,
+    reminder_agent_id: UUID,
+    body: dict,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+):
+    """Update a reminder sub-agent (reschedule, change text, or toggle enabled)."""
+    from app.models.agent import AgentStatus
+    from app.services.agent.reminders import activate_agent, cancel_reminders_for_agent
+    from app.services.agent.schedule import parse_reminder_schedule
+
+    hub_agent, sub_agents = await _get_hub_and_reminder_agents(db, thread_id, user)
+    sub_agent = next((a for a in sub_agents if a.id == reminder_agent_id), None)
+    if not sub_agent:
+        raise HTTPException(status_code=404, detail="Напоминание не найдено")
+
+    cfg = dict(sub_agent.config or {})
+
+    if "text" in body:
+        cfg["reminder_message"] = str(body["text"])
+    if "timezone" in body:
+        cfg["timezone"] = str(body["timezone"])
+
+    delivery_mode = str(body.get("delivery_mode") or cfg.get("delivery_mode") or "dm")
+    cfg["delivery_mode"] = delivery_mode
+    sub_agent.role = "group_reminder" if delivery_mode == "group" else "personal_reminder"
+
+    if "max_chat_id" in body:
+        raw = body["max_chat_id"]
+        sub_agent.max_chat_id = int(raw) if raw else None
+
+    schedule_fields = {"schedule_type", "time", "weekday", "day_of_month", "date", "interval_value", "interval_unit"}
+    needs_reschedule = bool(schedule_fields & set(body.keys()))
+
+    if needs_reschedule:
+        for k in schedule_fields:
+            if k in body:
+                cfg[f"schedule_{k}"] = body[k]
+        if "schedule_type" in body:
+            cfg["schedule_type"] = str(body["schedule_type"])
+
+        merged = {**cfg}
+        merged["schedule_type"] = cfg.get("schedule_type", "one_time")
+        merged["time"] = cfg.get("schedule_time", "09:00")
+        merged["weekday"] = cfg.get("schedule_weekday", "mon")
+        merged["day_of_month"] = cfg.get("schedule_day_of_month", 1)
+        merged["date"] = cfg.get("schedule_date", "")
+        merged["interval_value"] = cfg.get("schedule_interval_value", 30)
+        merged["interval_unit"] = cfg.get("schedule_interval_unit", "minutes")
+
+        schedule_text = _build_schedule_text(merged)
+        timezone = cfg.get("timezone", "Europe/Moscow")
+        try:
+            run_at, recurrence = parse_reminder_schedule(schedule_text, tz_name=timezone)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=f"Не удалось разобрать расписание: {exc}")
+        cfg["schedule_text"] = schedule_text
+        cfg["recurrence_stored"] = recurrence
+
+    sub_agent.config = cfg
+    await db.flush()
+
+    if "enabled" in body:
+        if body["enabled"]:
+            await activate_agent(db, sub_agent)
+        else:
+            await cancel_reminders_for_agent(db, sub_agent.id)
+            sub_agent.status = AgentStatus.PAUSED.value
+            await db.flush()
+    elif needs_reschedule:
+        await activate_agent(db, sub_agent)
+
+    await db.commit()
+    await db.refresh(sub_agent)
+    return _agent_to_reminder_out(sub_agent)
+
+
+@router.delete("/threads/{thread_id}/reminders/{reminder_agent_id}")
+async def delete_reminder(
+    thread_id: UUID,
+    reminder_agent_id: UUID,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+):
+    """Cancel and soft-delete a reminder sub-agent."""
+    from app.models.agent import AgentStatus
+    from app.services.agent.reminders import cancel_reminders_for_agent
+    from datetime import datetime, timezone as _tz
+
+    hub_agent, sub_agents = await _get_hub_and_reminder_agents(db, thread_id, user)
+    sub_agent = next((a for a in sub_agents if a.id == reminder_agent_id), None)
+    if not sub_agent:
+        raise HTTPException(status_code=404, detail="Напоминание не найдено")
+
+    await cancel_reminders_for_agent(db, sub_agent.id)
+    sub_agent.status = AgentStatus.CANCELLED.value
+
+    sub_thread_result = await db.execute(
+        select(Thread).where(Thread.id == sub_agent.thread_id)
+    )
+    sub_thread = sub_thread_result.scalar_one_or_none()
+    if sub_thread:
+        sub_thread.deleted_at = datetime.now(_tz.utc)
+
+    await db.commit()
+    return {"ok": True}

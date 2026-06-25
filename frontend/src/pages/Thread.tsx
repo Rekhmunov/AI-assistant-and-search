@@ -24,6 +24,7 @@ import { ImageGenStatusLine } from "../components/ImageGenStatusLine";
 import { DocGenStatusLine } from "../components/DocGenStatusLine";
 import { AgentActivityLogPanel } from "../components/AgentActivityLogPanel";
 import { PosterSettingsPanel } from "../components/PosterSettingsPanel";
+import { ReminderSettingsPanel } from "../components/ReminderSettingsPanel";
 import { AgentThinkingPanel } from "../components/AgentThinkingPanel";
 import type { AgentThinkingEvent } from "../api/client";
 import { CollapsibleMarkdownDocument } from "../components/CollapsibleMarkdownDocument";
@@ -1163,6 +1164,13 @@ export function Thread() {
                 enabled={posterEnabled}
                 onToggle={setPosterEnabled}
               />
+            </div>
+          )}
+
+          {/* Reminder agent: show reminder management panel */}
+          {isAgentThread && threadId && thread?.title?.startsWith("Напоминания") && (
+            <div className="poster-settings-wrap">
+              <ReminderSettingsPanel threadId={threadId} />
             </div>
           )}
 

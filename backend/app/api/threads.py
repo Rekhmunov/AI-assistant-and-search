@@ -59,18 +59,21 @@ async def list_threads(
 ):
     cutoff = _history_cutoff(user)
     from sqlalchemy import case, nulls_last
-    # Скрываем только треды агента «Личный ассистент» (template=assistant).
-    # Треды Напоминаний, Затрат, Постинга — полезны для настройки, оставляем.
-    assistant_thread_ids = select(AgentInstance.thread_id).where(
+    # Hide assistant threads (auto-created, not user-managed).
+    # Hide sub-reminder threads (is_sub_reminder=true in config, managed via hub panel).
+    hidden_thread_ids = select(AgentInstance.thread_id).where(
         AgentInstance.user_id == user.id,
-        AgentInstance.config["template"].astext == "assistant",
+        or_(
+            AgentInstance.config["template"].astext == "assistant",
+            AgentInstance.config["is_sub_reminder"].astext == "true",
+        ),
     )
     q = (
         select(Thread)
         .where(
             Thread.user_id == user.id,
             Thread.deleted_at.is_(None),
-            Thread.id.not_in(assistant_thread_ids),
+            Thread.id.not_in(hidden_thread_ids),
         )
         .order_by(
             # Закреплённые — всегда первые, сортируются по pinned_at DESC
