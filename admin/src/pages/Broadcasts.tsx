@@ -4,6 +4,15 @@ import { useAuth } from "../AuthContext";
 import { RichTextEditor } from "../components/RichTextEditor";
 import { isWelcomeHtmlEmpty, welcomeTextToEditorHtml } from "../lib/welcomeText";
 
+interface UserSearchResult {
+  id: string;
+  email: string;
+  name: string;
+  plan: string;
+  max_user_id: number | null;
+  has_max: boolean;
+}
+
 type Audience = "all" | "free" | "pro";
 type WelcomeMediaType = "none" | "image" | "video";
 
@@ -72,6 +81,22 @@ export function BroadcastsPage() {
   const [welcomeBusy, setWelcomeBusy] = useState(false);
   const [uploadBusy, setUploadBusy] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Direct message state
+  const [dmSearchQ, setDmSearchQ] = useState("");
+  const [dmSearchResults, setDmSearchResults] = useState<UserSearchResult[]>([]);
+  const [dmSearchBusy, setDmSearchBusy] = useState(false);
+  const [dmSelectedUser, setDmSelectedUser] = useState<UserSearchResult | null>(null);
+  const [dmText, setDmText] = useState("");
+  const [dmMediaType, setDmMediaType] = useState<WelcomeMediaType>("none");
+  const [dmMediaToken, setDmMediaToken] = useState<string | null>(null);
+  const [dmMediaFilename, setDmMediaFilename] = useState<string | null>(null);
+  const [dmUploadBusy, setDmUploadBusy] = useState(false);
+  const [dmSending, setDmSending] = useState(false);
+  const [dmMsg, setDmMsg] = useState("");
+  const [dmError, setDmError] = useState("");
+  const dmFileInputRef = useRef<HTMLInputElement>(null);
+  const dmSearchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -288,6 +313,71 @@ export function BroadcastsPage() {
     return max - welcomeText.length;
   }, [welcome?.max_text_length, welcomeText.length]);
 
+  // Direct message handlers
+  const onDmSearch = (q: string) => {
+    setDmSearchQ(q);
+    setDmSelectedUser(null);
+    if (dmSearchTimer.current) clearTimeout(dmSearchTimer.current);
+    if (!q.trim()) { setDmSearchResults([]); return; }
+    dmSearchTimer.current = setTimeout(async () => {
+      setDmSearchBusy(true);
+      try {
+        const res = await apiFetch<UserSearchResult[]>(`/api/admin/broadcasts/user-search?q=${encodeURIComponent(q.trim())}`);
+        setDmSearchResults(res);
+      } catch { setDmSearchResults([]); }
+      finally { setDmSearchBusy(false); }
+    }, 400);
+  };
+
+  const onDmMediaFile = async (file: File | null) => {
+    if (!file) return;
+    setDmUploadBusy(true);
+    setDmError("");
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      const uploaded = await apiUpload<{ media_type: WelcomeMediaType; media_token: string; media_filename: string }>(
+        "/api/admin/broadcasts/media", form
+      );
+      setDmMediaType(uploaded.media_type);
+      setDmMediaToken(uploaded.media_token);
+      setDmMediaFilename(uploaded.media_filename);
+    } catch (e) { setDmError(String(e)); }
+    finally { setDmUploadBusy(false); if (dmFileInputRef.current) dmFileInputRef.current.value = ""; }
+  };
+
+  const sendDirect = async () => {
+    if (!dmSelectedUser || !canWrite) return;
+    setDmSending(true);
+    setDmMsg("");
+    setDmError("");
+    try {
+      const res = await apiFetch<{ ok: boolean; error?: string; max_user_id?: number }>(
+        "/api/admin/broadcasts/direct",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            user_id: dmSelectedUser.id,
+            text: dmText,
+            media_type: dmMediaType,
+            media_token: dmMediaToken,
+            media_filename: dmMediaFilename,
+          }),
+        }
+      );
+      if (res.ok) {
+        setDmMsg(`✅ Сообщение отправлено пользователю ${dmSelectedUser.email || dmSelectedUser.name} (MAX ID: ${res.max_user_id})`);
+        setDmText("");
+        setDmMediaType("none");
+        setDmMediaToken(null);
+        setDmMediaFilename(null);
+      } else {
+        setDmError(res.error || "Ошибка отправки");
+      }
+    } catch (e) { setDmError(String(e)); }
+    finally { setDmSending(false); }
+  };
+
   const openSendConfirm = async (draft: Broadcast) => {
     setDraftPreview(null);
     setConfirmId(draft.id);
@@ -373,6 +463,136 @@ export function BroadcastsPage() {
           )}
         </form>
       </section>
+
+      {/* ── Direct message ──────────────────────────────────────────────── */}
+      {canWrite && (
+        <section className="card broadcasts-section">
+          <h2 className="broadcasts-section-title">Личное сообщение</h2>
+          <p className="hint" style={{ marginBottom: 12 }}>
+            Найдите пользователя по e-mail или MAX ID и отправьте ему сообщение напрямую через бота.
+          </p>
+
+          {/* Search */}
+          <div className="broadcasts-field" style={{ marginBottom: 8 }}>
+            <span className="broadcasts-field-label">Поиск пользователя</span>
+            <input
+              type="text"
+              className="broadcasts-dm-search"
+              placeholder="E-mail, имя или MAX ID..."
+              value={dmSearchQ}
+              onChange={(e) => onDmSearch(e.target.value)}
+              style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: "1px solid #d1d5db", fontSize: 14, boxSizing: "border-box" }}
+            />
+          </div>
+
+          {dmSearchBusy && <p className="hint">Поиск…</p>}
+
+          {!dmSelectedUser && dmSearchResults.length > 0 && (
+            <ul className="broadcasts-dm-results">
+              {dmSearchResults.map((u) => (
+                <li key={u.id} className="broadcasts-dm-result" onClick={() => { setDmSelectedUser(u); setDmSearchQ(u.email || u.name); setDmSearchResults([]); }}>
+                  <span className="broadcasts-dm-result-name">{u.email || u.name || "—"}</span>
+                  {u.name && u.email && <span className="broadcasts-dm-result-sub">{u.name}</span>}
+                  <span className={"broadcasts-dm-result-plan broadcasts-dm-result-plan--" + u.plan}>{u.plan.toUpperCase()}</span>
+                  {u.has_max
+                    ? <span className="broadcasts-dm-result-max">MAX {u.max_user_id}</span>
+                    : <span className="broadcasts-dm-result-nomax">Нет MAX ID</span>}
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {!dmSelectedUser && dmSearchQ.trim() && !dmSearchBusy && dmSearchResults.length === 0 && (
+            <p className="hint" style={{ marginBottom: 8 }}>Пользователи не найдены</p>
+          )}
+
+          {dmSelectedUser && (
+            <div className="broadcasts-dm-selected">
+              <span>
+                <strong>{dmSelectedUser.email || dmSelectedUser.name}</strong>
+                {dmSelectedUser.name && dmSelectedUser.email && <> — {dmSelectedUser.name}</>}
+                &nbsp;·&nbsp;{dmSelectedUser.plan.toUpperCase()}
+                {dmSelectedUser.has_max
+                  ? <> &nbsp;·&nbsp; MAX {dmSelectedUser.max_user_id}</>
+                  : <> &nbsp;·&nbsp; <span style={{ color: "#dc2626" }}>Нет MAX ID</span></>}
+              </span>
+              <button
+                type="button"
+                className="btn-secondary"
+                style={{ marginLeft: 12, fontSize: 12, padding: "2px 10px" }}
+                onClick={() => { setDmSelectedUser(null); setDmSearchQ(""); setDmSearchResults([]); }}
+              >
+                Изменить
+              </button>
+            </div>
+          )}
+
+          {dmSelectedUser && !dmSelectedUser.has_max && (
+            <p className="error" style={{ marginTop: 8 }}>Пользователь не запускал бота — MAX ID отсутствует. Сообщение не будет доставлено.</p>
+          )}
+
+          {dmSelectedUser && dmSelectedUser.has_max && (
+            <>
+              <div className="broadcasts-field broadcasts-field--wide" style={{ marginTop: 12 }}>
+                <span className="broadcasts-field-label">Текст сообщения</span>
+                <textarea
+                  rows={4}
+                  value={dmText}
+                  onChange={(e) => setDmText(e.target.value)}
+                  placeholder="Текст личного сообщения в MAX"
+                  maxLength={4000}
+                  style={{ width: "100%", boxSizing: "border-box" }}
+                />
+              </div>
+
+              <div className="broadcasts-welcome-media" style={{ marginTop: 8 }}>
+                <span className="broadcasts-field-label">Медиа (необязательно)</span>
+                <div className="broadcasts-media-toolbar">
+                  <label className="btn-secondary broadcasts-file-btn">
+                    {dmUploadBusy ? "Загрузка…" : "Загрузить фото или видео"}
+                    <input
+                      ref={dmFileInputRef}
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm,video/quicktime"
+                      hidden
+                      disabled={dmUploadBusy}
+                      onChange={(e) => void onDmMediaFile(e.target.files?.[0] ?? null)}
+                    />
+                  </label>
+                  {dmMediaFilename && (
+                    <span className="broadcasts-media-name">
+                      {dmMediaType === "video" ? "🎬" : "🖼"} {dmMediaFilename}
+                    </span>
+                  )}
+                  {dmMediaToken && (
+                    <button
+                      type="button"
+                      className="btn-secondary btn-danger-outline"
+                      disabled={dmUploadBusy}
+                      onClick={() => { setDmMediaType("none"); setDmMediaToken(null); setDmMediaFilename(null); }}
+                    >
+                      Убрать
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {dmError && <p className="error" style={{ marginTop: 8 }}>{dmError}</p>}
+              {dmMsg && <p className="ok" style={{ marginTop: 8 }}>{dmMsg}</p>}
+
+              <button
+                type="button"
+                className="btn-primary"
+                style={{ marginTop: 12 }}
+                disabled={dmSending || (!dmText.trim() && !dmMediaToken)}
+                onClick={() => void sendDirect()}
+              >
+                {dmSending ? "Отправка…" : "Отправить сообщение"}
+              </button>
+            </>
+          )}
+        </section>
+      )}
 
       <section className="card broadcasts-section broadcasts-rules">
         <h2 className="broadcasts-section-title">Правила MAX — чтобы не получить бан</h2>

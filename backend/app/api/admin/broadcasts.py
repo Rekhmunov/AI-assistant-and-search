@@ -2,6 +2,7 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile, status
+from pydantic import BaseModel
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -317,3 +318,120 @@ async def send_broadcast(
         ip_address=request.client.host if request.client else None,
     )
     return {"ok": True, "broadcast_id": str(broadcast_id)}
+
+
+# ─── Direct / personal message ────────────────────────────────────────────────
+
+@router.get("/user-search")
+async def search_users_for_dm(
+    q: str,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    _admin: Annotated[AdminUser, Depends(require_permission("broadcasts:write"))],
+):
+    """Поиск пользователей по email или MAX ID для личного сообщения."""
+    from sqlalchemy import or_
+
+    q = q.strip()
+    conditions = [User.deleted_at.is_(None)]
+
+    # If q looks like a number — search by max_user_id
+    if q.lstrip("-").isdigit():
+        try:
+            max_id = int(q)
+            conditions.append(User.max_user_id == max_id)
+        except ValueError:
+            pass
+    else:
+        # Email or name partial match
+        conditions.append(
+            or_(
+                User.email.ilike(f"%{q}%"),
+                User.name.ilike(f"%{q}%"),
+            )
+        )
+
+    result = await db.execute(
+        select(User)
+        .where(*conditions)
+        .order_by(User.created_at.desc())
+        .limit(10)
+    )
+    users = result.scalars().all()
+    return [
+        {
+            "id": str(u.id),
+            "email": u.email or "",
+            "name": u.name or "",
+            "plan": u.plan.value if u.plan else "free",
+            "max_user_id": u.max_user_id,
+            "has_max": u.max_user_id is not None,
+        }
+        for u in users
+    ]
+
+
+class DirectMessageIn(BaseModel):
+    user_id: str
+    text: str
+    media_type: str = "none"
+    media_token: str | None = None
+    media_filename: str | None = None
+
+
+class DirectMessageOut(BaseModel):
+    ok: bool
+    error: str | None = None
+    max_user_id: int | None = None
+
+
+@router.post("/direct", response_model=DirectMessageOut)
+async def send_direct_message(
+    body: DirectMessageIn,
+    request: Request,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    admin: Annotated[AdminUser, Depends(require_permission("broadcasts:write"))],
+):
+    """Отправить личное сообщение конкретному пользователю через MAX бот."""
+    import uuid as _uuid
+
+    try:
+        uid = _uuid.UUID(body.user_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Некорректный user_id")
+
+    result = await db.execute(select(User).where(User.id == uid, User.deleted_at.is_(None)))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="Пользователь не найден")
+    if not user.max_user_id:
+        raise HTTPException(status_code=422, detail="У пользователя нет MAX ID — он не запускал бота")
+
+    from app.services.bot import MaxBotService
+    from app.services.bot_media import max_bot_media_attachments
+
+    bot = MaxBotService()
+    attachments = max_bot_media_attachments(body.media_type, body.media_token)
+    message_text = body.text.strip() or " "
+
+    send_result = await bot.send_message(user.max_user_id, message_text, attachments)
+
+    await log_admin_action(
+        db,
+        admin=admin,
+        action="broadcast.direct",
+        resource_type="user",
+        resource_id=str(uid),
+        details={
+            "max_user_id": user.max_user_id,
+            "text_len": len(message_text),
+            "ok": send_result.ok,
+            "error": send_result.error or None,
+        },
+        ip_address=request.client.host if request.client else None,
+    )
+
+    return DirectMessageOut(
+        ok=send_result.ok,
+        error=send_result.error if not send_result.ok else None,
+        max_user_id=user.max_user_id,
+    )
