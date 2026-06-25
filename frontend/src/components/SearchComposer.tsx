@@ -116,6 +116,7 @@ export function SearchComposer({
   const dragCounterRef = useRef(0);
   const [proUpgradeModalOpen, setProUpgradeModalOpen] = useState(false);
   const [agentProModalOpen, setAgentProModalOpen] = useState(false);
+  const [multiFileProModalOpen, setMultiFileProModalOpen] = useState(false);
   const blurTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const attachMenuOpenRef = useRef(false);
   const modelMenuOpenRef = useRef(false);
@@ -321,6 +322,13 @@ export function SearchComposer({
 
   const onFilesPicked = async (files: FileList | null, expected?: FileKind) => {
     if (!files?.length || !canAttachFiles) return;
+
+    // Free users: maximum 1 file per upload
+    const totalAlready = attachments.length + uploading.length;
+    if (plan !== "pro" && (files.length > 1 || totalAlready >= 1)) {
+      setMultiFileProModalOpen(true);
+      return;
+    }
 
     let slots = MAX_ATTACHMENTS - attachments.length - uploading.length;
     if (slots <= 0) {
@@ -865,6 +873,12 @@ export function SearchComposer({
         onClose={() => setAgentProModalOpen(false)}
         title={t("agentProModalTitle")}
         description={t("agentProModalDescription")}
+      />
+      <ProUpgradeModal
+        open={multiFileProModalOpen}
+        onClose={() => setMultiFileProModalOpen(false)}
+        title="Ограничение бесплатного тарифа"
+        description="На вашем тарифе доступна загрузка и сжатие/конвертация одного файла за раз."
       />
     </div>
   );

@@ -4,6 +4,7 @@ export const PRO_BENEFIT_KEYS = [
   "proBenefitFullHistory",
   "proBenefitSearchPriority",
   "proBenefitVoiceInput",
+  "proBenefitMultiFile",
   "proBenefitCoffeePrice",
 ] as const;
 
