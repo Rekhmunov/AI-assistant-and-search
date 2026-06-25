@@ -301,7 +301,7 @@ class MaxBotService:
                 )
 
         upload_resp = await self._request_with_rate_limit(_init_upload)
-        logger.info("MAX upload_media init: status=%s body=%s", upload_resp.status_code, upload_resp.text[:300])
+        logger.warning("MAX upload_media init: status=%s body=%s", upload_resp.status_code, upload_resp.text[:300])
         if not upload_resp.is_success:
             logger.warning("MAX upload init failed: %s", upload_resp.text[:300])
             return None
@@ -309,12 +309,12 @@ class MaxBotService:
         body = upload_resp.json()
         upload_url = body.get("url")
         token = body.get("token")
-        logger.info("MAX upload_media: upload_url=%s token=%s", bool(upload_url), bool(token))
+        logger.warning("MAX upload_media: upload_url=%s token=%s", bool(upload_url), bool(token))
         if not upload_url:
             return str(token) if token else None
 
         content_type = mimetypes.guess_type(filename)[0] or "application/octet-stream"
-        logger.info("MAX upload_media: uploading %d bytes as %s content_type=%s", len(data), filename, content_type)
+        logger.warning("MAX upload_media: uploading %d bytes as %s content_type=%s", len(data), filename, content_type)
 
         async def _upload_file():
             async with httpx.AsyncClient(timeout=120.0) as client:
@@ -324,7 +324,7 @@ class MaxBotService:
                 )
 
         put_resp = await _upload_file()
-        logger.info("MAX upload_media CDN: status=%s body=%s", put_resp.status_code, put_resp.text[:300])
+        logger.warning("MAX upload_media CDN: status=%s body=%s", put_resp.status_code, put_resp.text[:300])
         if not put_resp.is_success:
             logger.warning("MAX upload POST failed: %s", put_resp.text[:300])
             return str(token) if token else None
