@@ -591,7 +591,7 @@ async def poster_draft_action(
             bot, channel_id=channel_id, text=draft_text,
             image_bytes_list=images_bytes_list if images_bytes_list else None,
         )
-        logger.info("POSTER_APPROVE publish ok=%s image=%s", ok, "yes" if image_bytes else "no")
+        logger.warning("POSTER_APPROVE publish ok=%s images=%d", ok, len(images_bytes_list))
         if ok:
             update_post_status(agent, post_id, "published")
             clear_pending_draft(agent)
@@ -705,8 +705,11 @@ async def poster_draft_action(
             from app.services.image_gen_service import persist_generated_image, public_file_content_url
             import uuid as _uuid
             fid, _ = await persist_generated_image(db, user, new_image_bytes, title=topic, ttl_hours=24)
-            # Replace all existing images with the new AI one
-            set_draft_image_file_ids(agent, [str(fid)])
+            # ADD to existing images (do not replace all)
+            current_ids = get_draft_image_file_ids(agent)
+            if len(current_ids) >= MAX_DRAFT_IMAGES:
+                return {"ok": False, "error": f"Максимум {MAX_DRAFT_IMAGES} фото. Удалите одно."}
+            set_draft_image_file_ids(agent, current_ids + [str(fid)])
             # Return base64 for immediate preview
             import base64 as _b64
             from app.services.image_bytes import detect_image_mime as _det

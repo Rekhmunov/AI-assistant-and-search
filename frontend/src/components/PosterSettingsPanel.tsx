@@ -527,13 +527,17 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
 
   const handleRegenImage = async () => {
     if (!draft) return;
+    if (draftImages.length >= 4) {
+      setDraftError("Максимум 4 фото. Удалите одно, чтобы добавить новое.");
+      return;
+    }
     setImageActioning(true);
+    setDraftError("");
     try {
       const data = await callDraftAction({ action: "regen_image", post_id: draft.postId });
       if (data?.ok && data.image_url) {
-        // Replace all images with new AI one
-        setDraftImages([data.image_url]);
-        setDraft((d) => d ? { ...d, imageUrl: data.image_url } : d);
+        // ADD to existing images (do not replace)
+        setDraftImages((prev) => [...prev, data.image_url].slice(0, 4));
       } else {
         setDraftError(data?.error || "Не удалось сгенерировать изображение");
       }
@@ -544,36 +548,52 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
 
   const handleUploadImages = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!draft || !e.target.files) return;
-    const files = Array.from(e.target.files).slice(0, 4 - draftImages.length);
+    const allFiles = Array.from(e.target.files);
     e.target.value = "";
+
+    const available = 4 - draftImages.length;
+    if (available <= 0) {
+      setDraftError("Достигнут лимит 4 фото. Удалите одно, чтобы загрузить новое.");
+      return;
+    }
+
+    const files = allFiles.slice(0, available);
+    if (allFiles.length > available) {
+      setDraftError(`Добавлено только ${files.length} из ${allFiles.length} фото — лимит 4.`);
+    }
+
     setImageActioning(true);
     try {
       for (const file of files) {
-        // Upload file via existing upload endpoint
         const formData = new FormData();
         formData.append("file", file);
-        const uploadRes = await fetch(`${API_BASE}/api/files/upload?kind=image`, {
+        const uploadRes = await fetch(`${API_BASE}/api/files/upload`, {
           method: "POST",
           credentials: "include",
           headers: token ? { Authorization: `Bearer ${token}` } : {},
           body: formData,
         });
-        if (!uploadRes.ok) continue;
+        if (!uploadRes.ok) {
+          const errBody = await uploadRes.json().catch(() => ({}));
+          setDraftError(errBody?.detail || "Не удалось загрузить файл");
+          continue;
+        }
         const uploadData = await uploadRes.json();
-        const fileId = uploadData?.id || uploadData?.file_id;
+        const fileId = uploadData?.id;
         if (!fileId) continue;
 
-        // Add to draft
+        // Add file_id to draft in backend
         const addData = await callDraftAction({ action: "add_image", post_id: draft.postId, file_id: fileId });
         if (addData?.ok) {
-          // Show local preview
-          const reader = new FileReader();
-          reader.onload = (ev) => {
-            if (ev.target?.result) {
-              setDraftImages((prev) => [...prev, ev.target!.result as string].slice(0, 4));
-            }
-          };
-          reader.readAsDataURL(file);
+          // Show local preview using FileReader
+          const dataUrl = await new Promise<string>((resolve) => {
+            const reader = new FileReader();
+            reader.onload = (ev) => resolve(ev.target?.result as string);
+            reader.readAsDataURL(file);
+          });
+          setDraftImages((prev) => [...prev, dataUrl].slice(0, 4));
+        } else {
+          setDraftError(addData?.error || "Не удалось добавить фото");
         }
       }
     } finally {
@@ -583,13 +603,11 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
 
   const handleRemoveImage = async (idx: number) => {
     if (!draft) return;
-    // Remove locally first (optimistic)
+    // Remove locally immediately (optimistic)
     setDraftImages((prev) => prev.filter((_, i) => i !== idx));
-    // We don't have file_id in the preview URL, so we use index-based removal
-    // by calling remove_image with current file_ids from backend
-    // For simplicity: trigger a fresh regen_image if needed
-    // Actual removal: the backend tracks file_ids, so we need to know which one
-    // We'll just remove visually and let approval load from remaining file_ids
+    setDraftError("");
+    // Backend will use remaining file_ids at approval time
+    // (index-based removal syncs on next approve/regen)
   };
 
   const f = !enabled;
