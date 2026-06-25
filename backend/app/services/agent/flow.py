@@ -245,22 +245,33 @@ async def handle_agent_message(
     if agent.max_user_id and user.max_user_id and agent.max_user_id != int(user.max_user_id):
         raise ValueError("max_user_mismatch")
 
-    # Reminder hub threads: intercept all chat messages and redirect to the form.
-    # The form in the web panel is the only way to manage reminders.
+    # Form-only agent threads: intercept chat messages and redirect to the form.
+    # No LLM is called — these agents are fully managed via the web panel form.
     agent_cfg = dict(agent.config or {})
+    _template = agent_cfg.get("template", "")
+
     is_reminder_hub = (
-        agent_cfg.get("template") == "reminder"
+        _template == "reminder"
         and not agent_cfg.get("is_sub_reminder")
         and not agent_cfg.get("parent_hub_id")
     )
-    if is_reminder_hub:
+    is_poster_hub = _template == "poster"
+
+    if is_reminder_hub or is_poster_hub:
         display_text = text.strip()
         user_msg = await _user_message(db, thread, display_text or "📎")
-        reply_text = (
-            "Управление напоминаниями доступно через форму выше ⬆️\n\n"
-            "Нажмите **+ Добавить**, чтобы создать новое напоминание — "
-            "выберите расписание, текст и куда отправить."
-        )
+        if is_poster_hub:
+            reply_text = (
+                "Управление постингом доступно через форму выше ⬆️\n\n"
+                "Используйте кнопку **✏️ Сгенерировать разовый пост** "
+                "или настройте автоматическое расписание в блоке настроек."
+            )
+        else:
+            reply_text = (
+                "Управление напоминаниями доступно через форму выше ⬆️\n\n"
+                "Нажмите **+ Добавить**, чтобы создать новое напоминание — "
+                "выберите расписание, текст и куда отправить."
+            )
         assistant_msg = await _assistant_reply(db, thread, reply_text)
         await db.flush()
         return user_msg, assistant_msg, agent
