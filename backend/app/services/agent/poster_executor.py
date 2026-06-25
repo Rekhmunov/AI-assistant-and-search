@@ -340,24 +340,26 @@ def get_approval_destination(agent: AgentInstance) -> tuple[int | None, int | No
     return None, None
 
 
-async def send_draft_for_approval(
-    agent: AgentInstance,
-    db: AsyncSession,
+async def _build_draft_attachments(
     bot: MaxBotService,
-    *,
-    approval_chat_id: int | None = None,
+    agent: AgentInstance,
     post_id: str,
-    topic: str,
-    text: str,
-) -> str | None:
-    """
-    Отправляет черновик с кнопками согласования.
-    Если approval_chat_id не указан — определяет назначение из конфига агента.
-    Поддерживает как групповой чат, так и DM с владельцем.
-    Возвращает message_id отправленного сообщения.
-    """
-    header = f"📝 **Черновик поста** — тема: _{topic}_\n\n"
-    full_text = header + text
+    image_bytes: bytes | None = None,
+) -> list:
+    """Build list of attachments: optional image + keyboard buttons."""
+    attachments = []
+    if image_bytes:
+        try:
+            from app.services.image_bytes import detect_image_mime
+            mime = detect_image_mime(image_bytes)
+            fname = "draft_image.png" if mime == "image/png" else "draft_image.jpg"
+            token = await bot.upload_media(image_bytes, fname, "image")
+            if token:
+                attachments.append({"type": "image", "payload": {"token": token}})
+            else:
+                logger.warning("send_draft_for_approval: image upload returned empty token")
+        except Exception as exc:
+            logger.warning("send_draft_for_approval: image upload failed: %s", exc)
 
     keyboard = bot.make_keyboard_attachment([
         [
@@ -369,8 +371,30 @@ async def send_draft_for_approval(
             {"type": "callback", "text": "❌ Отклонить", "payload": f"poster:reject:{agent.id}:{post_id}"},
         ],
     ])
+    attachments.append(keyboard)
+    return attachments
 
-    # Resolve destination
+
+async def send_draft_for_approval(
+    agent: AgentInstance,
+    db: AsyncSession,
+    bot: MaxBotService,
+    *,
+    approval_chat_id: int | None = None,
+    post_id: str,
+    topic: str,
+    text: str,
+    image_bytes: bytes | None = None,
+) -> str | None:
+    """
+    Отправляет черновик с кнопками согласования (опционально с изображением).
+    Если approval_chat_id не указан — определяет назначение из конфига агента.
+    Возвращает message_id отправленного сообщения.
+    """
+    header = f"📝 **Черновик поста** — тема: _{topic}_\n\n"
+    full_text = header + text
+    attachments = await _build_draft_attachments(bot, agent, post_id, image_bytes)
+
     if approval_chat_id:
         dest_chat_id, dest_user_id = approval_chat_id, None
     else:
@@ -378,18 +402,48 @@ async def send_draft_for_approval(
 
     if dest_chat_id:
         result = await bot.send_message(
-            None, full_text, attachments=[keyboard],
+            None, full_text, attachments=attachments,
             chat_id=dest_chat_id, notify=True,
         )
     elif dest_user_id:
         result = await bot.send_message(
-            dest_user_id, full_text, attachments=[keyboard],
+            dest_user_id, full_text, attachments=attachments,
         )
     else:
         logger.warning("send_draft_for_approval: no destination for agent=%s", agent.id)
         return None
 
     return result.message_id if result.ok else None
+
+
+async def edit_draft_message(
+    bot: MaxBotService,
+    agent: AgentInstance,
+    *,
+    draft_message_id: str,
+    post_id: str,
+    topic: str,
+    text: str,
+    image_bytes: bytes | None = None,
+) -> bool:
+    """Edit existing DM/group draft message with new content."""
+    header = f"📝 **Черновик поста** — тема: _{topic}_\n\n"
+    full_text = header + text
+    attachments = await _build_draft_attachments(bot, agent, post_id, image_bytes)
+    return await bot.edit_message(draft_message_id, full_text, attachments=attachments)
+
+
+async def mark_draft_message_done(
+    bot: MaxBotService,
+    *,
+    draft_message_id: str,
+    status_text: str,
+) -> None:
+    """Replace draft message with a simple status (no buttons)."""
+    try:
+        await bot.edit_message(draft_message_id, status_text)
+    except Exception as exc:
+        logger.warning("mark_draft_message_done failed: %s", exc)
 
 
 async def send_dm_notification(

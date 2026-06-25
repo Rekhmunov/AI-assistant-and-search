@@ -79,6 +79,7 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
   const [verifyStep, setVerifyStep] = useState<"channel" | "admin" | "">(""); 
   const [generating, setGenerating] = useState(false);
   const [draft, setDraft] = useState<{ postId: string; text: string; topic: string; imageUrl?: string } | null>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [draftAction, setDraftAction] = useState<"" | "actioning" | "editing" | "published" | "rejected" | "error">("");
   const [draftError, setDraftError] = useState("");
   const [editedText, setEditedText] = useState("");
@@ -112,11 +113,33 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
     }
   }, [threadId, token, activationStatus]);
 
-  // On mount: if already configured → restore status and load history
+  const checkPendingDraft = useCallback(async () => {
+    if (!showActiveUI) return;
+    try {
+      const res = await fetch(`${API_BASE}/api/agent/threads/${threadId}/pending-draft`, {
+        credentials: "include",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data.draft && (!draft || draft.postId !== data.draft.post_id)) {
+        // New draft from Celery — show in thread
+        setDraft({ postId: data.draft.post_id, text: data.draft.text, topic: data.draft.topic });
+        setDraftAction("");
+        setDraftError("");
+      } else if (!data.draft && draft && draftAction !== "published" && draftAction !== "rejected") {
+        // Draft was cleared (approved/rejected via DM)
+        setDraft(null);
+        void loadHistory();
+      }
+    } catch { /* silent */ }
+  }, [threadId, token, showActiveUI, draft, draftAction, loadHistory]);
+
+  // On mount: if already configured → restore status and load history + start polling
   useEffect(() => {
     if (!isConfigured || !enabled) return;
     void loadHistory();
-    // Rebuild activation hint from saved schedule so it's visible after reload
+    // Rebuild activation hint from saved schedule
     const savedSchedule = (initialConfig?.poster_schedule ?? []) as ScheduleSlot[];
     if (savedSchedule.length === 0) {
       setActivationHint("Расписание не задано — посты по запросу в чате агента.");
@@ -125,6 +148,10 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
       setActivationHint(`Публикации по расписанию: ${parts.join(", ")}.`);
     }
     setActivationStatus("active");
+    // Check immediately + poll every 30s for pending drafts from Celery
+    void checkPendingDraft();
+    pollRef.current = setInterval(() => { void checkPendingDraft(); }, 30000);
+    return () => { if (pollRef.current) clearInterval(pollRef.current); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

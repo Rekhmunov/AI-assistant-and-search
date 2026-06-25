@@ -403,6 +403,41 @@ async def generate_poster_post(
         return {"ok": False, "error": str(exc)[:300]}
 
 
+@router.get("/threads/{thread_id}/pending-draft")
+async def get_pending_draft_status(
+    thread_id: UUID,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+):
+    """Return current pending draft for the poster agent (for thread polling)."""
+    result = await db.execute(
+        select(Thread).where(
+            Thread.id == thread_id,
+            Thread.user_id == user.id,
+            Thread.thread_type == ThreadType.AGENT,
+        )
+    )
+    thread = result.scalar_one_or_none()
+    if not thread:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Тред не найден")
+    agent = await get_agent_for_thread(db, thread.id)
+    if not agent:
+        return {"draft": None}
+
+    from app.services.agent.poster_executor import get_pending_draft
+    draft = get_pending_draft(agent)
+    if not draft:
+        return {"draft": None}
+
+    return {
+        "draft": {
+            "post_id": draft.get("post_id"),
+            "topic": draft.get("topic"),
+            "text": draft.get("text"),
+        }
+    }
+
+
 @router.post("/threads/{thread_id}/draft-action")
 async def poster_draft_action(
     thread_id: UUID,
@@ -437,6 +472,7 @@ async def poster_draft_action(
         get_pending_draft, clear_pending_draft, update_post_status,
         get_poster_channel_id, publish_to_channel, generate_poster_image,
         generate_post, save_post_to_history, save_pending_draft, _pick_next_topic,
+        mark_draft_message_done, edit_draft_message,
     )
     from app.services.bot import MaxBotService
 
@@ -444,11 +480,13 @@ async def poster_draft_action(
     if not draft or draft.get("post_id") != post_id:
         return {"ok": False, "error": "Черновик устарел или уже обработан"}
 
+    bot = MaxBotService()
+    draft_message_id = draft.get("draft_message_id")  # for DM sync
+
     if action == "approve":
         channel_id = get_poster_channel_id(agent)
         if not channel_id:
             return {"ok": False, "error": "Канал не настроен"}
-        bot = MaxBotService()
         draft_text = draft.get("text", "")
         draft_topic = draft.get("topic", "")
 
@@ -486,13 +524,26 @@ async def poster_draft_action(
         if ok:
             update_post_status(agent, post_id, "published")
             clear_pending_draft(agent)
+            # Edit DM message to show published status
+            if draft_message_id:
+                await mark_draft_message_done(
+                    bot, draft_message_id=draft_message_id,
+                    status_text=f"✅ Пост «{draft_topic[:60]}» опубликован в канале.",
+                )
             await db.commit()
             return {"ok": True, "mode": "published"}
         return {"ok": False, "error": "Не удалось опубликовать. Проверьте права бота."}
 
     elif action == "reject":
+        topic = draft.get("topic", "")
         update_post_status(agent, post_id, "rejected")
         clear_pending_draft(agent)
+        # Edit DM message to show rejected status
+        if draft_message_id:
+            await mark_draft_message_done(
+                bot, draft_message_id=draft_message_id,
+                status_text=f"❌ Пост «{topic[:60]}» отклонён.",
+            )
         await db.commit()
         return {"ok": True, "mode": "rejected"}
 
@@ -500,10 +551,14 @@ async def poster_draft_action(
         new_text = str(body.get("text", "")).strip()
         if not new_text:
             return {"ok": False, "error": "Текст не может быть пустым"}
-        # Update draft with edited text
-        save_pending_draft(agent, post_id=post_id, topic=draft.get("topic", ""), text=new_text)
+        topic = draft.get("topic", "")
+        save_pending_draft(agent, post_id=post_id, topic=topic, text=new_text)
+        # Edit DM message with updated text (no image change for text-only edits)
+        if draft_message_id:
+            await edit_draft_message(bot, agent, draft_message_id=draft_message_id,
+                                     post_id=post_id, topic=topic, text=new_text)
         await db.commit()
-        return {"ok": True, "mode": "web_draft", "post_id": post_id, "post_text": new_text, "topic": draft.get("topic", "")}
+        return {"ok": True, "mode": "web_draft", "post_id": post_id, "post_text": new_text, "topic": topic}
 
     elif action == "regen":
         from app.services.providers.factory import resolve_agent_providers
@@ -538,6 +593,29 @@ async def poster_draft_action(
                     image_url = f"data:{_mime};base64,{_b64.b64encode(image_bytes_regen).decode('ascii')}"
                 except Exception as img_exc:
                     logger.warning("poster regen image save failed: %s", img_exc)
+
+            # Edit DM message with new draft
+            if draft_message_id and image_bytes_regen:
+                try:
+                    await edit_draft_message(
+                        bot, agent, draft_message_id=draft_message_id,
+                        post_id=new_id, topic=topic, text=new_text,
+                        image_bytes=image_bytes_regen,
+                    )
+                    save_pending_draft(agent, post_id=new_id, topic=topic,
+                                       text=new_text, draft_message_id=draft_message_id)
+                except Exception as _dme:
+                    logger.warning("regen DM edit failed: %s", _dme)
+            elif draft_message_id:
+                try:
+                    await edit_draft_message(
+                        bot, agent, draft_message_id=draft_message_id,
+                        post_id=new_id, topic=topic, text=new_text,
+                    )
+                    save_pending_draft(agent, post_id=new_id, topic=topic,
+                                       text=new_text, draft_message_id=draft_message_id)
+                except Exception as _dme:
+                    logger.warning("regen DM edit (no img) failed: %s", _dme)
 
             await db.commit()
             return {"ok": True, "mode": "web_draft", "post_id": new_id, "post_text": new_text,

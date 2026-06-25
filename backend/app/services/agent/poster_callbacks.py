@@ -12,10 +12,13 @@ from app.models.agent import AgentInstance, AgentStatus
 from app.services.bot import MaxBotService
 from app.services.agent.poster_executor import (
     clear_pending_draft,
+    edit_draft_message,
     generate_post,
+    generate_poster_image,
     get_pending_draft,
     get_poster_channel_id,
     get_approval_destination,
+    mark_draft_message_done,
     publish_to_channel,
     save_pending_draft,
     save_post_to_history,
@@ -28,11 +31,7 @@ from app.services.agent.poster_executor import (
 logger = logging.getLogger(__name__)
 
 
-async def _notify_owner(
-    bot: MaxBotService,
-    agent: AgentInstance,
-    text: str,
-) -> None:
+async def _notify_owner(bot: MaxBotService, agent: AgentInstance, text: str) -> None:
     """Send a status notification to the correct destination (group or DM)."""
     dest_chat_id, dest_user_id = get_approval_destination(agent)
     try:
@@ -71,7 +70,6 @@ async def handle_poster_callback(
     result = await db.execute(
         select(AgentInstance).where(
             AgentInstance.id == agent_uuid,
-            AgentInstance.status == AgentStatus.ACTIVE.value,
         )
     )
     agent = result.scalar_one_or_none()
@@ -85,15 +83,29 @@ async def handle_poster_callback(
         return True
 
     channel_id = get_poster_channel_id(agent)
+    draft_message_id = draft.get("draft_message_id")
 
     if action == "approve":
-        await _handle_approve(db, redis_client, agent, bot, callback_id, draft=draft, channel_id=channel_id)
+        # Answer immediately so button doesn't freeze
+        await bot.answer_callback(callback_id, "⏳ Публикуем пост…")
+        await _handle_approve(db, redis_client, agent, bot,
+                              draft=draft, channel_id=channel_id,
+                              draft_message_id=draft_message_id)
+
     elif action == "reject":
-        await _handle_reject(db, agent, bot, callback_id, draft=draft)
+        await bot.answer_callback(callback_id, "Пост отклонён.")
+        await _handle_reject(db, agent, bot,
+                             draft=draft, draft_message_id=draft_message_id)
+
     elif action == "regen":
-        await _handle_regen(db, redis_client, agent, bot, callback_id, draft=draft)
+        await bot.answer_callback(callback_id, "🔄 Генерирую новый вариант…")
+        await _handle_regen(db, redis_client, agent, bot,
+                            draft=draft, draft_message_id=draft_message_id)
+
     elif action == "edit":
-        await _handle_edit(agent, bot, callback_id, draft=draft)
+        set_awaiting_edit(agent, True)
+        await bot.answer_callback(callback_id, "✏️ Отправьте исправленный текст.")
+        await _notify_owner(bot, agent, "✏️ Отправьте исправленный текст поста следующим сообщением.")
 
     await db.commit()
     return True
@@ -104,61 +116,66 @@ async def _handle_approve(
     redis_client,
     agent: AgentInstance,
     bot: MaxBotService,
-    callback_id: str,
     *,
     draft: dict,
     channel_id: int | None,
+    draft_message_id: str | None,
 ) -> None:
     if not channel_id:
-        await bot.answer_callback(callback_id, "Канал не настроен. Укажите канал в настройках агента.")
+        await _notify_owner(bot, agent, "❌ Канал не настроен. Укажите канал в настройках агента.")
         return
 
     text = draft.get("text", "")
     post_id = draft.get("post_id", "")
     topic = draft.get("topic", "")
 
-    # Generate image if poster_media='ai' — uses admin-configured provider
-    from app.services.agent.poster_executor import generate_poster_image
+    # Generate image if ai mode
     image_bytes = await generate_poster_image(agent, topic, text, db=db, redis_client=redis_client)
 
     ok = await publish_to_channel(bot, channel_id=channel_id, text=text, image_bytes=image_bytes)
     if ok:
         update_post_status(agent, post_id, "published")
         clear_pending_draft(agent)
-        await bot.answer_callback(callback_id, "✅ Пост опубликован!")
-        await _notify_owner(bot, agent, f"✅ Пост «{topic[:60]}» опубликован в канале.")
+        # Update DM message to show published status
+        if draft_message_id:
+            await mark_draft_message_done(bot, draft_message_id=draft_message_id,
+                                          status_text=f"✅ Пост «{topic[:60]}» опубликован в канале.")
+        else:
+            await _notify_owner(bot, agent, f"✅ Пост «{topic[:60]}» опубликован в канале.")
     else:
-        await bot.answer_callback(callback_id, "❌ Ошибка публикации. Проверьте права бота в канале.")
+        await _notify_owner(bot, agent, "❌ Ошибка публикации. Проверьте права бота в канале.")
 
 
 async def _handle_reject(
     db: AsyncSession,
     agent: AgentInstance,
     bot: MaxBotService,
-    callback_id: str,
     *,
     draft: dict,
+    draft_message_id: str | None,
 ) -> None:
     post_id = draft.get("post_id", "")
     topic = draft.get("topic", "")
     update_post_status(agent, post_id, "rejected")
     clear_pending_draft(agent)
-    await bot.answer_callback(callback_id, "Пост отклонён.")
-    await _notify_owner(bot, agent, f"❌ Пост «{topic[:60]}» отклонён.")
+    # Update DM message to show rejected status
+    if draft_message_id:
+        await mark_draft_message_done(bot, draft_message_id=draft_message_id,
+                                      status_text=f"❌ Пост «{topic[:60]}» отклонён.")
+    else:
+        await _notify_owner(bot, agent, f"❌ Пост «{topic[:60]}» отклонён.")
 
 
 async def _handle_regen(
     db: AsyncSession,
-    redis_client: aioredis.Redis,
+    redis_client,
     agent: AgentInstance,
     bot: MaxBotService,
-    callback_id: str,
     *,
     draft: dict,
+    draft_message_id: str | None,
 ) -> None:
     from app.services.providers.factory import resolve_agent_providers
-
-    await bot.answer_callback(callback_id, "🔄 Генерирую новый вариант…")
 
     topic = draft.get("topic", _pick_next_topic(agent))
     old_post_id = draft.get("post_id", "")
@@ -168,33 +185,37 @@ async def _handle_regen(
     try:
         llm, _, _, _, _ = await resolve_agent_providers(db, redis_client)
         new_text = await generate_post(agent, topic, llm)
-        new_post_id = str(uuid.uuid4())
+        new_id = str(uuid.uuid4())
 
-        save_post_to_history(agent, post_id=new_post_id, topic=topic, text=new_text, status="draft")
-        save_pending_draft(agent, post_id=new_post_id, topic=topic, text=new_text)
+        save_post_to_history(agent, post_id=new_id, topic=topic, text=new_text, status="draft")
+        save_pending_draft(agent, post_id=new_id, topic=topic, text=new_text)
 
-        msg_id = await send_draft_for_approval(
-            agent, db, bot,
-            post_id=new_post_id, topic=topic, text=new_text,
-        )
-        save_pending_draft(agent, post_id=new_post_id, topic=topic, text=new_text, draft_message_id=msg_id)
-        # Note: image is generated at publish time (approve action), not at draft creation
+        # Generate new image
+        new_image_bytes = await generate_poster_image(agent, topic, new_text, db=db, redis_client=redis_client)
+
+        if draft_message_id:
+            # Edit the existing DM message with new draft
+            await edit_draft_message(
+                bot, agent,
+                draft_message_id=draft_message_id,
+                post_id=new_id, topic=topic, text=new_text,
+                image_bytes=new_image_bytes,
+            )
+            save_pending_draft(agent, post_id=new_id, topic=topic,
+                               text=new_text, draft_message_id=draft_message_id)
+        else:
+            # Send new message
+            msg_id = await send_draft_for_approval(
+                agent, db, bot,
+                post_id=new_id, topic=topic, text=new_text,
+                image_bytes=new_image_bytes,
+            )
+            save_pending_draft(agent, post_id=new_id, topic=topic,
+                               text=new_text, draft_message_id=msg_id)
 
     except Exception as exc:
         logger.exception("Poster regen failed: %s", exc)
         await _notify_owner(bot, agent, "❌ Не удалось перегенерировать пост. Попробуйте позже.")
-
-
-async def _handle_edit(
-    agent: AgentInstance,
-    bot: MaxBotService,
-    callback_id: str,
-    *,
-    draft: dict,
-) -> None:
-    set_awaiting_edit(agent, True)
-    await bot.answer_callback(callback_id, "✏️ Отправьте исправленный текст поста.")
-    await _notify_owner(bot, agent, "✏️ Отправьте исправленный текст поста следующим сообщением.")
 
 
 async def handle_poster_edit_input(
@@ -212,11 +233,20 @@ async def handle_poster_edit_input(
     set_awaiting_edit(agent, False)
     post_id = draft.get("post_id", str(uuid.uuid4()))
     topic = draft.get("topic", "—")
+    old_msg_id = draft.get("draft_message_id")
     save_pending_draft(agent, post_id=post_id, topic=topic, text=text)
 
-    msg_id = await send_draft_for_approval(
-        agent, db, bot,
-        post_id=post_id, topic=topic, text=text,
-    )
-    save_pending_draft(agent, post_id=post_id, topic=topic, text=text, draft_message_id=msg_id)
+    if old_msg_id:
+        # Edit the existing DM message (no image needed — user edited text)
+        await edit_draft_message(bot, agent, draft_message_id=old_msg_id,
+                                 post_id=post_id, topic=topic, text=text)
+        save_pending_draft(agent, post_id=post_id, topic=topic,
+                           text=text, draft_message_id=old_msg_id)
+    else:
+        msg_id = await send_draft_for_approval(
+            agent, db, bot,
+            post_id=post_id, topic=topic, text=text,
+        )
+        save_pending_draft(agent, post_id=post_id, topic=topic,
+                           text=text, draft_message_id=msg_id)
     return True

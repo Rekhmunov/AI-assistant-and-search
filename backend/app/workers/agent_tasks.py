@@ -269,6 +269,7 @@ async def _dispatch_poster_scheduled_async() -> None:
                             save_post_to_history,
                             send_draft_for_approval,
                             update_post_status,
+                            mark_draft_message_done,
                             _pick_next_topic,
                         )
                         from app.services.providers.factory import resolve_agent_providers
@@ -294,11 +295,12 @@ async def _dispatch_poster_scheduled_async() -> None:
                             if ok:
                                 update_post_status(agent, post_id, "published")
                         else:
-                            # Manual: send to group chat OR owner DM (auto-resolved)
+                            # Manual: send draft with image to DM or group
                             save_pending_draft(agent, post_id=post_id, topic=topic, text=post_text)
                             msg_id = await send_draft_for_approval(
                                 agent, db, bot,
                                 post_id=post_id, topic=topic, text=post_text,
+                                image_bytes=image_bytes,
                             )
                             if msg_id:
                                 save_pending_draft(agent, post_id=post_id, topic=topic,
