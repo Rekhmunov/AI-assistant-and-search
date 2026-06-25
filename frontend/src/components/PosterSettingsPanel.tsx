@@ -1066,7 +1066,7 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
                   </div>
                   {/* Show image/upload errors inline (visible in non-edit mode) */}
                   {draftError && draftAction !== "error" && (
-                    <div className="poster-draft__error" style={{marginTop: 6}}>⚠️ {draftError}</div>
+                    <div className="poster-draft__media-error">⚠️ {draftError}</div>
                   )}
                 </div>
               )}
