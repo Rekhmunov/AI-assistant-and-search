@@ -38,7 +38,9 @@ type ScheduleSlot = { day: string; time: string };
 
 type PosterConfig = {
   poster_channel_id: string;
-  poster_topics: string;
+  poster_topics: string;        // legacy fallback
+  poster_topic_list: string[];  // new: individual topic fields
+  poster_topic_mode: string;    // "random" | "no_repeat" | "sequential" | "priority"
   poster_tone: string;
   poster_emoji: boolean;
   poster_length: string;
@@ -53,6 +55,8 @@ type PosterConfig = {
 const DEFAULTS: PosterConfig = {
   poster_channel_id: "",
   poster_topics: "",
+  poster_topic_list: [""],
+  poster_topic_mode: "no_repeat",
   poster_tone: "official",
   poster_emoji: true,
   poster_length: "medium",
@@ -171,9 +175,20 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
       schedule = (initialConfig.poster_days as string[]).map((day) => ({ day, time }));
     }
 
+    // Load topic list: prefer new poster_topic_list, fall back to legacy poster_topics string
+    let topicList: string[] = [];
+    if (Array.isArray(initialConfig.poster_topic_list) && (initialConfig.poster_topic_list as string[]).length > 0) {
+      topicList = (initialConfig.poster_topic_list as string[]).filter(Boolean);
+    } else if (initialConfig.poster_topics) {
+      topicList = String(initialConfig.poster_topics).split(/[;,\n]/).map((t) => t.trim()).filter(Boolean);
+    }
+    if (topicList.length === 0) topicList = [""];
+
     setCfg({
       poster_channel_id: String(initialConfig.poster_channel_id ?? ""),
       poster_topics: String(initialConfig.poster_topics ?? ""),
+      poster_topic_list: topicList,
+      poster_topic_mode: String(initialConfig.poster_topic_mode ?? "no_repeat"),
       poster_tone: String(initialConfig.poster_tone ?? "official"),
       poster_emoji: initialConfig.poster_emoji !== false,
       poster_length: String(initialConfig.poster_length ?? "medium"),
@@ -190,6 +205,27 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
     setCfg((c) => ({ ...c, [key]: value }));
 
   // Schedule slot operations
+  // Topic list operations
+  const addTopic = () => {
+    if (cfg.poster_topic_list.length >= 20) return;
+    patch("poster_topic_list", [...cfg.poster_topic_list, ""]);
+  };
+  const updateTopic = (idx: number, val: string) => {
+    const list = cfg.poster_topic_list.map((t, i) => (i === idx ? val : t));
+    patch("poster_topic_list", list);
+  };
+  const removeTopic = (idx: number) => {
+    const list = cfg.poster_topic_list.filter((_, i) => i !== idx);
+    patch("poster_topic_list", list.length > 0 ? list : [""]);
+  };
+  const moveTopic = (idx: number, dir: -1 | 1) => {
+    const list = [...cfg.poster_topic_list];
+    const newIdx = idx + dir;
+    if (newIdx < 0 || newIdx >= list.length) return;
+    [list[idx], list[newIdx]] = [list[newIdx], list[idx]];
+    patch("poster_topic_list", list);
+  };
+
   const addSlot = () => {
     patch("poster_schedule", [...cfg.poster_schedule, { day: "mon", time: "10:00" }]);
   };
@@ -230,7 +266,7 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
 
   // Validation
   const channelOk = cfg.poster_channel_id.trim() !== "";
-  const topicsOk = cfg.poster_topics.trim() !== "";
+  const topicsOk = cfg.poster_topic_list.some((t) => t.trim() !== "");
   const canSave = enabled && channelOk && topicsOk && !saving;
 
   const validationHint = !enabled ? ""
@@ -520,20 +556,65 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
           <span className="poster-field__hint">Ссылка или ID канала, где бот — администратор</span>
         </div>
 
-        {/* Topics */}
+        {/* Topics — multiple fields */}
         <div className="poster-field">
           <label className="poster-field__label">
             Темы публикаций <span className="poster-field__required">*</span>
           </label>
-          <textarea
-            className={`poster-field__textarea${!topicsOk && enabled ? " poster-field__input--error" : ""}`}
-            rows={3}
-            placeholder="Новости компании; Советы и лайфхаки; Акции и скидки"
-            value={cfg.poster_topics}
+          <div className="poster-topic-list">
+            {cfg.poster_topic_list.map((topic, idx) => (
+              <div key={idx} className="poster-topic-row">
+                <div className="poster-topic-order">
+                  <button type="button" className="poster-topic-arrow" disabled={f || idx === 0}
+                    onClick={() => moveTopic(idx, -1)} title="Вверх">↑</button>
+                  <button type="button" className="poster-topic-arrow" disabled={f || idx === cfg.poster_topic_list.length - 1}
+                    onClick={() => moveTopic(idx, 1)} title="Вниз">↓</button>
+                </div>
+                <input
+                  className={`poster-field__input poster-topic-input${!topic.trim() && enabled ? " poster-field__input--error" : ""}`}
+                  type="text"
+                  placeholder={`Тема ${idx + 1}`}
+                  value={topic}
+                  disabled={f}
+                  onChange={(e) => updateTopic(idx, e.target.value)}
+                />
+                {cfg.poster_topic_list.length > 1 && !f && (
+                  <button type="button" className="poster-topic-remove" onClick={() => removeTopic(idx)}
+                    title="Удалить тему" aria-label="Удалить">×</button>
+                )}
+              </div>
+            ))}
+          </div>
+          {!f && cfg.poster_topic_list.length < 20 && (
+            <button type="button" className="poster-add-slot" onClick={addTopic} style={{ marginTop: 6 }}>
+              + Добавить тему
+            </button>
+          )}
+          {cfg.poster_topic_mode === "priority" && (
+            <span className="poster-field__hint">⬆️ Темы выше в списке — публикуются чаще</span>
+          )}
+        </div>
+
+        {/* Topic rotation mode */}
+        <div className="poster-field">
+          <label className="poster-field__label">Порядок публикации тем</label>
+          <select
+            className="poster-field__select"
+            value={cfg.poster_topic_mode}
             disabled={f}
-            onChange={(e) => patch("poster_topics", e.target.value)}
-          />
-          <span className="poster-field__hint">Через точку с запятой. Темы чередуются по очереди.</span>
+            onChange={(e) => patch("poster_topic_mode", e.target.value)}
+          >
+            <option value="no_repeat">Случайный без повторов</option>
+            <option value="random">Случайный</option>
+            <option value="sequential">По очереди (1→2→3→...)</option>
+            <option value="priority">Приоритетный (первые чаще)</option>
+          </select>
+          <span className="poster-field__hint">
+            {cfg.poster_topic_mode === "no_repeat" && "Выбирает случайно, но не повторяет тему дважды подряд"}
+            {cfg.poster_topic_mode === "random" && "Выбирает любую тему полностью случайно"}
+            {cfg.poster_topic_mode === "sequential" && "Строго по порядку сверху вниз, затем начинает снова"}
+            {cfg.poster_topic_mode === "priority" && "Тема 1 — самая частая, последняя — наименее частая"}
+          </span>
         </div>
 
         {/* Tone + Length */}

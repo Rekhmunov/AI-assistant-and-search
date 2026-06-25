@@ -87,9 +87,13 @@ def _build_style_from_config(agent: AgentInstance) -> str:
     """Build human-readable style instructions from structured poster config keys."""
     cfg = _get_cfg(agent)
     parts = []
-    topics = cfg.get("poster_topics", "")
-    if topics:
-        parts.append(f"Темы: {topics}")
+    topic_list = _get_topic_list(agent)
+    if topic_list:
+        parts.append(f"Темы: {'; '.join(topic_list)}")
+    mode_labels = {"random": "случайный", "no_repeat": "случайный без повторов",
+                   "sequential": "по очереди", "priority": "приоритетный"}
+    mode = cfg.get("poster_topic_mode", "no_repeat")
+    parts.append(f"Порядок тем: {mode_labels.get(mode, mode)}")
     tone = cfg.get("poster_tone", "")
     tone_map = {"official": "официальный", "informal": "неформальный", "expert": "экспертный", "inspiring": "вдохновляющий"}
     if tone:
@@ -124,28 +128,72 @@ def _parse_style_instructions(agent: AgentInstance) -> str:
     return str(cfg.get("support_instructions") or "")
 
 
-def _pick_next_topic(agent: AgentInstance) -> str:
-    """Выбирает следующую тему по ротации."""
+def _get_topic_list(agent: AgentInstance) -> list[str]:
+    """Return list of topics, supporting both new (poster_topic_list) and legacy (poster_topics) formats."""
     cfg = _get_cfg(agent)
-    # Try structured topics first
+
+    # New format: structured list
+    topic_list = cfg.get("poster_topic_list")
+    if isinstance(topic_list, list):
+        topics = [str(t).strip() for t in topic_list if str(t).strip()]
+        if topics:
+            return topics
+
+    # Legacy: semicolon-separated string
     topics_raw = cfg.get("poster_topics", "")
     if not topics_raw:
         instr = str(cfg.get("support_instructions") or "")
         m = re.search(r"темы:\s*(.+?)(?:\.|$)", instr, re.IGNORECASE)
         topics_raw = m.group(1) if m else ""
 
-    topics: list[str] = []
     if topics_raw:
-        topics = [t.strip() for t in re.split(r"[;,\n]", topics_raw) if t.strip()]
+        return [t.strip() for t in re.split(r"[;,\n]", topics_raw) if t.strip()]
+    return []
+
+
+def _pick_next_topic(agent: AgentInstance) -> str:
+    """
+    Выбирает следующую тему согласно настроенному режиму ротации.
+
+    Режимы (poster_topic_mode):
+      random      — полностью случайный
+      no_repeat   — случайный, но не повторяет тему два раза подряд (default)
+      sequential  — строго по очереди 1→2→3→1→...
+      priority    — первые темы появляются чаще (убывающий вес)
+    """
+    import random as _random
+
+    cfg = _get_cfg(agent)
+    topics = _get_topic_list(agent)
 
     if not topics:
         return "общая тема канала"
+    if len(topics) == 1:
+        return topics[0]
 
+    mode = cfg.get("poster_topic_mode", "no_repeat")
     last_idx = int(cfg.get("poster_last_topic_idx", -1))
-    next_idx = (last_idx + 1) % len(topics)
-    cfg["poster_last_topic_idx"] = next_idx
+
+    if mode == "random":
+        idx = _random.randrange(len(topics))
+
+    elif mode == "sequential":
+        idx = (last_idx + 1) % len(topics)
+
+    elif mode == "priority":
+        # Descending weights: topic 0 gets weight N, topic N-1 gets weight 1
+        n = len(topics)
+        weights = [n - i for i in range(n)]
+        idx = _random.choices(range(n), weights=weights, k=1)[0]
+
+    else:  # "no_repeat" (default)
+        # Pick randomly from all except the last-used topic
+        candidates = [i for i in range(len(topics)) if i != last_idx]
+        idx = _random.choice(candidates) if candidates else _random.randrange(len(topics))
+
+    cfg["poster_last_topic_idx"] = idx
     _save_cfg(agent, cfg)
-    return topics[next_idx]
+    return topics[idx]
 
 
 # ─────────────────────────────────────────────────────────────────────────────
