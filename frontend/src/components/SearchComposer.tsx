@@ -594,10 +594,7 @@ export function SearchComposer({
 
   const handleAgentClick = () => {
     if (!onAgentClick) return;
-    if (plan !== "pro") {
-      setAgentProModalOpen(true);
-      return;
-    }
+    // Agents now open to all registered users (Free + Pro)
     onAgentClick();
   };
 

@@ -1153,7 +1153,7 @@ export function Thread() {
         />
       )}
 
-      <div className={`thread-mobile-body${isDesktop ? " thread-mobile-body--desktop" : ""}`}>
+      <div className={`thread-mobile-body${isDesktop ? " thread-mobile-body--desktop" : ""}${isAgentThread && !isDesktop ? " thread-mobile-body--agent-footer" : ""}`}>
       <div
         className={`thread-conversation${isDesktop ? "" : " thread-conversation--mobile-tabs"}`}
         ref={conversationRef}

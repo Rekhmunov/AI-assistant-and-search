@@ -357,11 +357,26 @@ body:has(.page-thread) {
     z-index: auto;
   }
 
-  /* Agent thread (mobile): "Новый поиск +" footer */
-  .mobile-new-thread-bar--agent {
-    position: static;
+  /* Agent thread (mobile): fix conversation height so footer is visible */
+  .page-thread--mobile .thread-mobile-body--agent-footer .thread-conversation {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .page-thread--mobile .thread-mobile-body--agent-footer .thread-conversation--mobile-tabs {
+    height: auto; /* override height:100% so footer has room */
+  }
+  .page-thread--mobile .thread-mobile-body--agent-footer .thread-panel--answer {
+    height: auto; /* override height:100% */
+    min-height: 0;
+  }
+
+  /* "Новый поиск +" footer bar in agent thread */
+  .page-thread--mobile .thread-mobile-body--agent-footer .mobile-new-thread-bar--agent {
+    flex: 0 0 auto;
     flex-shrink: 0;
-    pointer-events: auto;
+    position: static;
     display: flex;
     justify-content: flex-end;
     align-items: center;
