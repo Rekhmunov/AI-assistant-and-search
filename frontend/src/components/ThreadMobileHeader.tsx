@@ -35,13 +35,16 @@ export function ThreadMobileHeader({
         </Link>
       </div>
 
-      <ThreadTabsBar
-        variant="segment"
-        activeTab={activeTab}
-        onTabChange={onTabChange}
-        showImagesTab={showImagesTab}
-        totalImages={totalImages}
-      />
+      {/* Only show tab switcher when there are multiple tabs to choose from */}
+      {showImagesTab && (
+        <ThreadTabsBar
+          variant="segment"
+          activeTab={activeTab}
+          onTabChange={onTabChange}
+          showImagesTab={showImagesTab}
+          totalImages={totalImages}
+        />
+      )}
 
       <div className="thread-mobile-header-side thread-mobile-header-side--right" aria-hidden />
     </header>
