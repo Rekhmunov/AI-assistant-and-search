@@ -150,26 +150,10 @@ async def stream_pdf_compress_turn(
         db.add(thread)
         await db.flush()
 
-    # ── Определяем шаг ДО создания user_msg чтобы получить filename ──
-    has_pdf_attachment = False
-    pdf_file: UploadedFile | None = None
-
-    if attachment_ids:
-        for fid in attachment_ids:
-            res = await db.execute(
-                select(UploadedFile).where(
-                    UploadedFile.id == fid,
-                    UploadedFile.user_id == user.id,
-                )
-            )
-            uf = res.scalar_one_or_none()
-            if uf and (uf.mime_type or "").lower() == "application/pdf":
-                has_pdf_attachment = True
-                pdf_file = uf
-                break
-
-    # Сохраняем вложения с filename — обязательное поле MessageAttachmentOut
+    # ── Собираем ВСЕ PDF-вложения (поддержка нескольких файлов) ──
+    pdf_files: list[UploadedFile] = []
     attachments_payload = None
+
     if attachment_ids:
         attachments_payload = []
         for fid in attachment_ids:
@@ -179,12 +163,18 @@ async def stream_pdf_compress_turn(
                     UploadedFile.user_id == user.id,
                 )
             )
-            uf_any = res.scalar_one_or_none()
+            uf = res.scalar_one_or_none()
             attachments_payload.append({
                 "id": str(fid),
-                "filename": (uf_any.filename if uf_any else None) or "document.pdf",
+                "filename": (uf.filename if uf else None) or "document.pdf",
                 "kind": "document",
             })
+            if uf and (uf.mime_type or "").lower() == "application/pdf":
+                pdf_files.append(uf)
+
+    has_pdf_attachment = len(pdf_files) > 0
+    # Backward-compat: single-file variable
+    pdf_file: UploadedFile | None = pdf_files[0] if pdf_files else None
 
     user_msg = Message(
         thread_id=thread.id,
@@ -217,143 +207,120 @@ async def stream_pdf_compress_turn(
         },
     )
 
-    if has_pdf_attachment and pdf_file:
-        # PDF загружен — сжимаем сразу.
-        # Уровень берём из запроса если явно указан, иначе — оптимальный по умолчанию.
-        pass  # управление переходит к шагу сжатия ниже
-
     # ── ШАГ 2: сжимаем ──
     level = detect_compression_level(query)
 
-    # pdf_file уже найден если пришёл с вложением; иначе ищем в истории треда
-    if not pdf_file:
-        pdf_file = await _find_pdf_in_thread(db, thread.id, user.id)
+    # Если нет вложений — ищем в истории треда (один файл)
+    if not pdf_files:
+        found = await _find_pdf_in_thread(db, thread.id, user.id)
+        if found:
+            pdf_files = [found]
 
-    if not pdf_file:
+    if not pdf_files:
         answer_text = (
             "Не нашёл PDF-файл в этом диалоге. "
             "Загрузите PDF-файл и попросите сжать."
         )
-        assistant_msg = Message(
-            thread_id=thread.id,
-            role=MessageRole.ASSISTANT,
-            content=answer_text,
-        )
+        assistant_msg = Message(thread_id=thread.id, role=MessageRole.ASSISTANT, content=answer_text)
         db.add(assistant_msg)
         thread.message_count = (thread.message_count or 0) + 2
         thread.last_message_at = datetime.now(timezone.utc)
         await db.commit()
         for chunk in _chunks(answer_text, 30):
             yield sse_event("token", {"text": chunk})
-        yield sse_event(
-            "done",
-            {"message_id": str(assistant_msg.id), "needs_search": False, "answer_model": "lite"},
-        )
+        yield sse_event("done", {"message_id": str(assistant_msg.id), "needs_search": False, "answer_model": "lite"})
         await clear_search_pending(redis_client, thread.id)
         return
 
-    original_bytes = load_upload_bytes(pdf_file.storage_key)
-    if not original_bytes:
-        yield sse_event(
-            "error",
-            {"code": "compress_failed", "message": "Не удалось прочитать PDF-файл."},
-        )
-        await clear_search_pending(redis_client, thread.id)
-        return
-
-    # Сжимаем
-    status_text = f"Сжимаем PDF (качество - {_LEVEL_LABELS.get(level, level)})"
-    for chunk in _chunks(status_text, 30):
+    base_url = (settings.public_web_url or "https://glosix.ru").rstrip("/")
+    level_label = _LEVEL_LABELS.get(level, level)
+    n = len(pdf_files)
+    plural = "PDF" if n == 1 else f"{n} PDF"
+    status_text = f"Сжимаем {plural} (качество - {level_label})"
+    for chunk in _chunks(status_text, 40):
         yield sse_event("token", {"text": chunk})
 
-    try:
-        compressed_bytes = compress_pdf_bytes(original_bytes, level)
-    except Exception as exc:
-        logger.warning("pdf compress failed: %s", exc)
-        yield sse_event(
-            "error",
-            {"code": "compress_failed", "message": "Не удалось сжать PDF. Попробуйте позже."},
-        )
-        await clear_search_pending(redis_client, thread.id)
-        return
+    results: list[dict] = []
+    for pdf_file in pdf_files:
+        original_bytes = load_upload_bytes(pdf_file.storage_key)
+        if not original_bytes:
+            results.append({"error": f"Не удалось прочитать «{pdf_file.filename}»"})
+            continue
+        try:
+            compressed_bytes = compress_pdf_bytes(original_bytes, level)
+        except Exception as exc:
+            logger.warning("pdf compress failed %s: %s", pdf_file.filename, exc)
+            results.append({"error": f"Ошибка сжатия «{pdf_file.filename}»"})
+            continue
 
-    orig_size = len(original_bytes)
-    comp_size = len(compressed_bytes)
-    reduction = int((1 - comp_size / max(orig_size, 1)) * 100)
+        orig_size = len(original_bytes)
+        comp_size = len(compressed_bytes)
+        reduction = int((1 - comp_size / max(orig_size, 1)) * 100)
 
-    # Сохраняем сжатый файл
-    new_file_id = uuid.uuid4()
-    original_name = pdf_file.filename or "document.pdf"
-    stem = original_name.rsplit(".", 1)[0] if "." in original_name else original_name
-    compressed_name = f"{stem}_compressed.pdf"
+        new_file_id = uuid.uuid4()
+        original_name = pdf_file.filename or "document.pdf"
+        stem = original_name.rsplit(".", 1)[0] if "." in original_name else original_name
+        compressed_name = f"{stem}_compressed.pdf"
 
-    storage_key = save_upload_bytes(user.id, new_file_id, compressed_bytes, "pdf")
-    now = datetime.now(timezone.utc)
-    expires_at = now + timedelta(hours=_COMPRESSED_TTL_HOURS)
-    compressed_file = UploadedFile(
-        id=new_file_id,
-        user_id=user.id,
-        filename=compressed_name,
-        mime_type="application/pdf",
-        size_bytes=comp_size,
-        media_kind="compressed",
-        storage_key=storage_key,
-        extracted_text="",
-        expires_at=expires_at,
-    )
-    db.add(compressed_file)
-    await db.flush()
+        storage_key = save_upload_bytes(user.id, new_file_id, compressed_bytes, "pdf")
+        now = datetime.now(timezone.utc)
+        expires_at = now + timedelta(hours=_COMPRESSED_TTL_HOURS)
+        db.add(UploadedFile(
+            id=new_file_id, user_id=user.id, filename=compressed_name,
+            mime_type="application/pdf", size_bytes=comp_size,
+            media_kind="compressed", storage_key=storage_key,
+            extracted_text="", expires_at=expires_at,
+        ))
+        await db.flush()
 
-    download_url = f"{(settings.public_web_url or 'https://glosix.ru').rstrip('/')}/api/files/{new_file_id}/content"
+        download_url = f"{base_url}/api/files/{new_file_id}/content"
+        results.append({
+            "file_id": str(new_file_id), "filename": compressed_name,
+            "download_url": download_url, "expires_at": expires_at.isoformat(),
+            "orig_size": orig_size, "comp_size": comp_size, "reduction": reduction,
+        })
 
-    result_text = (
-        f"\n\n✅ Готово!\n"
-        f"Исходный размер: {format_size(orig_size)}\n"
-        f"После сжатия: {format_size(comp_size)}\n"
-        f"Уменьшение: {reduction}%"
-    )
-    for chunk in _chunks(result_text, 40):
+    # Формируем итоговый текст
+    result_lines = ["\n\n✅ Готово!"]
+    attachments_out = []
+    for r in results:
+        if "error" in r:
+            result_lines.append(f"⚠️ {r['error']}")
+        else:
+            result_lines.append(
+                f"\n**{r['filename']}**\n"
+                f"Исходный: {format_size(r['orig_size'])} → После сжатия: {format_size(r['comp_size'])} (-{r['reduction']}%)"
+            )
+            attachments_out.append({
+                "id": r["file_id"], "filename": r["filename"],
+                "kind": "document", "url": r["download_url"],
+                "ttl_hours": _COMPRESSED_TTL_HOURS, "expires_at": r["expires_at"],
+            })
+
+    result_text = "\n".join(result_lines)
+    for chunk in _chunks(result_text, 50):
         yield sse_event("token", {"text": chunk})
 
     answer_full = status_text + result_text
     assistant_msg = Message(
-        thread_id=thread.id,
-        role=MessageRole.ASSISTANT,
-        content=answer_full,
-        # Сохраняем вложение чтобы кнопка «Скачать» была видна при повторном открытии треда
-        attachments=[{
-            "id": str(new_file_id),
-            "filename": compressed_name,
-            "kind": "document",
-            "url": download_url,
-            "ttl_hours": _COMPRESSED_TTL_HOURS,
-            "expires_at": expires_at.isoformat(),
-        }],
+        thread_id=thread.id, role=MessageRole.ASSISTANT,
+        content=answer_full, attachments=attachments_out or None,
     )
     db.add(assistant_msg)
     thread.message_count = (thread.message_count or 0) + 2
     thread.last_message_at = datetime.now(timezone.utc)
     await db.commit()
 
-    yield sse_event(
-        "document_ready",
-        {
-            "file_id": str(new_file_id),
-            "filename": compressed_name,
-            "download_url": download_url,
-            "ttl_hours": _COMPRESSED_TTL_HOURS,
-            "expires_at": expires_at.isoformat(),
-        },
-    )
-    yield sse_event(
-        "done",
-        {
-            "message_id": str(assistant_msg.id),
-            "needs_search": False,
-            "answer_model": "lite",
-        },
-    )
+    # Отправляем document_ready для каждого успешно сжатого файла
+    for r in results:
+        if "error" not in r:
+            yield sse_event("document_ready", {
+                "file_id": r["file_id"], "filename": r["filename"],
+                "download_url": r["download_url"],
+                "ttl_hours": _COMPRESSED_TTL_HOURS, "expires_at": r["expires_at"],
+            })
 
+    yield sse_event("done", {"message_id": str(assistant_msg.id), "needs_search": False, "answer_model": "lite"})
     await clear_search_pending(redis_client, thread.id)
 
 

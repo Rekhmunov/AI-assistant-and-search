@@ -6,6 +6,7 @@ import { downloadRemoteFile } from "../lib/triggerBrowserDownload";
 
 type Props = {
   document: GeneratedDocumentInfo;
+  extraDocuments?: GeneratedDocumentInfo[];
 };
 
 function isExpired(doc: GeneratedDocumentInfo): boolean {
@@ -13,11 +14,10 @@ function isExpired(doc: GeneratedDocumentInfo): boolean {
   return new Date(doc.expires_at) < new Date();
 }
 
-export function GeneratedDocumentCard({ document: doc }: Props) {
+function SingleDocumentRow({ doc }: { doc: GeneratedDocumentInfo }) {
   const openUrl = resolveGeneratedDocumentOpenUrl(doc);
-  const filename = doc.filename || "document.docx";
+  const filename = doc.filename || "document";
   const expired = isExpired(doc);
-
   return (
     <div className={`generated-document-card${expired ? " generated-document-card--expired" : ""}`}>
       <div className="generated-document-card-icon" aria-hidden>
@@ -41,6 +41,22 @@ export function GeneratedDocumentCard({ document: doc }: Props) {
           </button>
         )}
       </div>
+    </div>
+  );
+}
+
+export function GeneratedDocumentCard({ document: doc, extraDocuments }: Props) {
+  const allDocs = [doc, ...(extraDocuments ?? [])];
+
+  if (allDocs.length === 1) {
+    return <SingleDocumentRow doc={doc} />;
+  }
+
+  return (
+    <div className="generated-document-cards-multi">
+      {allDocs.map((d, i) => (
+        <SingleDocumentRow key={d.id ?? i} doc={d} />
+      ))}
     </div>
   );
 }

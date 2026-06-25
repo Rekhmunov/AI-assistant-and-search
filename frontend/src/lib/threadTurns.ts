@@ -28,6 +28,8 @@ export type ThreadTurn = {
   userFeedback?: MessageFeedback | null;
   /** Сгенерированный .docx на ответе ассистента */
   generatedDocument?: MessageAttachment | null;
+  /** Дополнительные файлы при мульти-файловой конвертации/сжатии */
+  extraDocuments?: MessageAttachment[];
   /** Markdown-документ в чате (оферта и т.п.) */
   markdownDocument?: MarkdownDocumentInfo | null;
   streaming?: boolean;

@@ -700,19 +700,32 @@ export function Thread() {
         onDocumentReady: (doc: GeneratedDocumentInfo) => {
           const expiresAt = doc.expires_at
             ?? (doc.ttl_hours ? new Date(Date.now() + doc.ttl_hours * 3600 * 1000).toISOString() : null);
-          setTurns((prev) =>
-            updateLastStreamingTurn(prev, {
-              generatedDocument: {
-                id: doc.id,
-                filename: doc.filename,
-                kind: "document",
-                url: doc.url,
-                share_url: doc.share_url,
-                ttl_hours: doc.ttl_hours,
-                expires_at: expiresAt,
-              },
-            }),
-          );
+          const newDoc: MessageAttachment = {
+            id: doc.id,
+            filename: doc.filename,
+            kind: "document",
+            url: doc.url,
+            share_url: doc.share_url,
+            ttl_hours: doc.ttl_hours,
+            expires_at: expiresAt,
+          };
+          setTurns((prev) => {
+            const idx = findLastIndex(prev, (t) => t.streaming);
+            if (idx < 0) return prev;
+            const current = prev[idx];
+            const next = [...prev];
+            if (!current.generatedDocument) {
+              // First document
+              next[idx] = { ...current, generatedDocument: newDoc };
+            } else {
+              // Additional documents go into extraDocuments
+              next[idx] = {
+                ...current,
+                extraDocuments: [...(current.extraDocuments ?? []), newDoc],
+              };
+            }
+            return next;
+          });
         },
         onImageGenStart: (status) => {
           console.warn("[IMGGEN] onImageGenStart received status=%s ts=%d", status, Date.now());
@@ -1409,7 +1422,10 @@ export function Thread() {
                       />
                     ) : null}
                     {turn.generatedDocument && (
-                      <GeneratedDocumentCard document={turn.generatedDocument} />
+                      <GeneratedDocumentCard
+                        document={turn.generatedDocument as unknown as GeneratedDocumentInfo}
+                        extraDocuments={turn.extraDocuments as GeneratedDocumentInfo[] | undefined}
+                      />
                     )}
                     {showEntityImages && (
                       <div className="answer-generated-media">
