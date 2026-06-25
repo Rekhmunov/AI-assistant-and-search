@@ -18,7 +18,8 @@ const TIMEZONES = [
   { value: "Asia/Dubai", label: "Дубай (UTC+4)" },
 ];
 
-type HistoryItem = { id: string; topic: string; status: string; at: string; text: string };
+type HistoryItem = { id: string; topic: string; status: string; at: string; text?: string };
+type HistoryPage = { items: HistoryItem[]; total: number; page: number; pages: number };
 
 const DAY_OPTIONS = [
   { key: "mon", label: "Понедельник" },
@@ -93,8 +94,13 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
   const [activationStatus, setActivationStatus] = useState<"idle" | "active" | "inactive" | "error">("idle");
   const [activationHint, setActivationHint] = useState("");
   const [error, setError] = useState("");
-  const [history, setHistory] = useState<HistoryItem[]>([]);
+  const [historyPage, setHistoryPage] = useState<HistoryPage | null>(null);
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [historySearch, setHistorySearch] = useState("");
+  const [historyCurrentPage, setHistoryCurrentPage] = useState(1);
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const HISTORY_PER_PAGE = 10;
   const initDone = useRef(false);
 
   // If agent already configured (has channel), show active UI without requiring re-save
@@ -103,22 +109,85 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
   );
   const showActiveUI = activationStatus === "active" || (isConfigured && enabled && activationStatus === "idle");
 
-  const loadHistory = useCallback(async () => {
+  const loadHistory = useCallback(async (page?: number, search?: string) => {
     if (!showActiveUI) return;
+    const p = page ?? historyCurrentPage;
+    const s = search ?? historySearch;
     setHistoryLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/api/agent/threads/${threadId}/post-history`, {
-        credentials: "include",
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
+      const qs = new URLSearchParams({ page: String(p), per_page: String(HISTORY_PER_PAGE) });
+      if (s.trim()) qs.set("search", s.trim());
+      const res = await fetch(
+        `${API_BASE}/api/agent/threads/${threadId}/post-history?${qs}`,
+        { credentials: "include", headers: token ? { Authorization: `Bearer ${token}` } : {} },
+      );
       if (res.ok) {
         const data = await res.json();
-        setHistory(data.items || []);
+        setHistoryPage(data);
+        setSelectedIds(new Set());
       }
     } catch { /* silent */ } finally {
       setHistoryLoading(false);
     }
-  }, [threadId, token, activationStatus]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [threadId, token, showActiveUI, historyCurrentPage, historySearch, HISTORY_PER_PAGE]);
+
+  const handleHistorySearch = (val: string) => {
+    setHistorySearch(val);
+    setHistoryCurrentPage(1);
+    void loadHistory(1, val);
+  };
+
+  const handleHistoryPage = (p: number) => {
+    setHistoryCurrentPage(p);
+    void loadHistory(p);
+  };
+
+  const deleteHistoryItem = async (id: string) => {
+    await fetch(`${API_BASE}/api/agent/threads/${threadId}/post-history/${id}`, {
+      method: "DELETE",
+      credentials: "include",
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    void loadHistory();
+  };
+
+  const deleteSelected = async () => {
+    if (selectedIds.size === 0) return;
+    await fetch(`${API_BASE}/api/agent/threads/${threadId}/post-history/clear`, {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      body: JSON.stringify({ ids: Array.from(selectedIds) }),
+    });
+    void loadHistory(1);
+  };
+
+  const clearAllHistory = async () => {
+    if (!window.confirm("Очистить всю историю постов?")) return;
+    await fetch(`${API_BASE}/api/agent/threads/${threadId}/post-history/clear`, {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      body: JSON.stringify({ all: true }),
+    });
+    setHistoryPage(null);
+    setSelectedIds(new Set());
+  };
+
+  const toggleExpand = (id: string) =>
+    setExpandedIds((prev) => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s; });
+
+  const toggleSelect = (id: string) =>
+    setSelectedIds((prev) => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s; });
+
+  const useAsBase = (item: HistoryItem) => {
+    if (!item.text) return;
+    setDraft({ postId: `base-${item.id}`, text: item.text, topic: item.topic });
+    setDraftImages([]);
+    setDraftAction("");
+    setDraftError("");
+  };
 
   const checkPendingDraft = useCallback(async () => {
     if (!showActiveUI) return;
@@ -970,31 +1039,83 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
         </div>
       )}
 
-      {/* Post history — shown when active */}
+      {/* Post history */}
       {showActiveUI && (
         <div className="poster-history">
           <div className="poster-history__header">
             <span className="poster-history__title">История постов</span>
-            <button type="button" className="poster-history__refresh" onClick={loadHistory} title="Обновить">
-              {historyLoading ? "⟳" : "↺"}
-            </button>
-          </div>
-          {history.length === 0 ? (
-            <div className="poster-history__empty">Постов ещё нет</div>
-          ) : (
-            <div className="poster-history__list">
-              {history.map((item) => (
-                <div key={item.id} className="poster-history__item">
-                  <span className={`poster-history__badge poster-history__badge--${item.status}`}>
-                    {item.status === "published" ? "✅" : item.status === "rejected" ? "❌" : "📝"}
-                  </span>
-                  <div className="poster-history__item-body">
-                    <span className="poster-history__topic">{item.topic}</span>
-                    <span className="poster-history__date">{item.at.slice(0, 10)}</span>
-                  </div>
-                </div>
-              ))}
+            <div className="poster-history__header-actions">
+              {selectedIds.size > 0 && (
+                <button type="button" className="poster-history__action-btn poster-history__action-btn--danger"
+                  onClick={deleteSelected}>Удалить {selectedIds.size}</button>
+              )}
+              {(historyPage?.total ?? 0) > 0 && (
+                <button type="button" className="poster-history__action-btn poster-history__action-btn--danger"
+                  onClick={clearAllHistory}>Очистить всё</button>
+              )}
+              <button type="button" className="poster-history__refresh"
+                onClick={() => void loadHistory()}>{historyLoading ? "⟳" : "↺"}</button>
             </div>
+          </div>
+          <div className="poster-history__search-wrap">
+            <input className="poster-history__search" type="search" placeholder="Поиск по теме…"
+              value={historySearch} onChange={(e) => handleHistorySearch(e.target.value)} />
+          </div>
+          {!historyPage || historyPage.items.length === 0 ? (
+            <div className="poster-history__empty">{historySearch ? "Ничего не найдено" : "Постов ещё нет"}</div>
+          ) : (
+            <>
+              <div className="poster-history__list">
+                {historyPage.items.map((item) => {
+                  const expanded = expandedIds.has(item.id);
+                  const selected = selectedIds.has(item.id);
+                  return (
+                    <div key={item.id} className={`poster-history__item${selected ? " poster-history__item--selected" : ""}`}>
+                      <div className="poster-history__item-left">
+                        <input type="checkbox" checked={selected} onChange={() => toggleSelect(item.id)} className="poster-history__checkbox" />
+                        <span className="poster-history__badge">
+                          {item.status === "published" ? "✅" : item.status === "rejected" ? "❌" : "📝"}
+                        </span>
+                      </div>
+                      <div className="poster-history__item-body">
+                        <div className="poster-history__item-row">
+                          <button type="button" className="poster-history__topic" onClick={() => toggleExpand(item.id)}>
+                            {item.topic}<span className="poster-history__expand-icon">{expanded ? " ▲" : " ▼"}</span>
+                          </button>
+                          <span className="poster-history__date">{item.at?.slice(0, 10)}</span>
+                        </div>
+                        {expanded && item.text && (
+                          <div className="poster-history__text">{item.text}</div>
+                        )}
+                        {expanded && (
+                          <div className="poster-history__item-actions">
+                            {item.text && (
+                              <button type="button" className="poster-history__act-btn" onClick={() => useAsBase(item)}>
+                                ✏️ Использовать как основу
+                              </button>
+                            )}
+                            <button type="button" className="poster-history__act-btn poster-history__act-btn--danger"
+                              onClick={() => deleteHistoryItem(item.id)}>🗑 Удалить</button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              {historyPage.pages > 1 && (
+                <div className="poster-history__pagination">
+                  <button type="button" className="poster-history__page-btn"
+                    disabled={historyCurrentPage <= 1} onClick={() => handleHistoryPage(historyCurrentPage - 1)}>←</button>
+                  <span className="poster-history__page-info">
+                    {historyCurrentPage} / {historyPage.pages}
+                    <span className="poster-history__page-total"> ({historyPage.total})</span>
+                  </span>
+                  <button type="button" className="poster-history__page-btn"
+                    disabled={historyCurrentPage >= historyPage.pages} onClick={() => handleHistoryPage(historyCurrentPage + 1)}>→</button>
+                </div>
+              )}
+            </>
           )}
         </div>
       )}

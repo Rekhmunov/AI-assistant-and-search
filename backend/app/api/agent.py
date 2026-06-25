@@ -279,8 +279,11 @@ async def get_poster_history(
     thread_id: UUID,
     db: Annotated[AsyncSession, Depends(get_db)],
     user: Annotated[User, Depends(get_current_user)],
+    page: int = 1,
+    per_page: int = 10,
+    search: str = "",
 ):
-    """Return post history for the poster agent."""
+    """Return post history with pagination and search."""
     result = await db.execute(
         select(Thread).where(
             Thread.id == thread_id,
@@ -293,11 +296,84 @@ async def get_poster_history(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Тред не найден")
     agent = await get_agent_for_thread(db, thread.id)
     if not agent:
-        return {"items": []}
+        return {"items": [], "total": 0, "page": page, "per_page": per_page}
 
     from app.services.agent.poster_executor import get_post_history
-    history = get_post_history(agent)
-    return {"items": list(reversed(history[-20:]))}  # latest first
+    history = list(reversed(get_post_history(agent)))  # latest first
+
+    # Filter by search
+    search = search.strip().lower()
+    if search:
+        history = [h for h in history if search in h.get("topic", "").lower() or
+                   search in (h.get("text") or "").lower()]
+
+    total = len(history)
+    per_page = max(5, min(per_page, 50))
+    start = (page - 1) * per_page
+    items = history[start:start + per_page]
+
+    return {"items": items, "total": total, "page": page, "per_page": per_page,
+            "pages": (total + per_page - 1) // per_page if total > 0 else 1}
+
+
+@router.delete("/threads/{thread_id}/post-history/{post_id}",
+               status_code=status.HTTP_204_NO_CONTENT)
+async def delete_poster_history_item(
+    thread_id: UUID,
+    post_id: str,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+):
+    """Delete a single post from history."""
+    result = await db.execute(
+        select(Thread).where(
+            Thread.id == thread_id,
+            Thread.user_id == user.id,
+            Thread.thread_type == ThreadType.AGENT,
+        )
+    )
+    thread = result.scalar_one_or_none()
+    if not thread:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Тред не найден")
+    agent = await get_agent_for_thread(db, thread.id)
+    if not agent:
+        return
+
+    from app.services.agent.poster_executor import delete_post_from_history
+    delete_post_from_history(agent, post_id)
+    await db.commit()
+
+
+@router.post("/threads/{thread_id}/post-history/clear",
+             status_code=status.HTTP_204_NO_CONTENT)
+async def clear_poster_history(
+    thread_id: UUID,
+    body: dict,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+):
+    """Delete multiple posts or clear all history. body: {ids?: list[str], all?: bool}"""
+    result = await db.execute(
+        select(Thread).where(
+            Thread.id == thread_id,
+            Thread.user_id == user.id,
+            Thread.thread_type == ThreadType.AGENT,
+        )
+    )
+    thread = result.scalar_one_or_none()
+    if not thread:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Тред не найден")
+    agent = await get_agent_for_thread(db, thread.id)
+    if not agent:
+        return
+
+    from app.services.agent.poster_executor import delete_post_from_history, clear_post_history
+    if body.get("all"):
+        clear_post_history(agent)
+    else:
+        for pid in (body.get("ids") or []):
+            delete_post_from_history(agent, str(pid))
+    await db.commit()
 
 
 @router.post("/threads/{thread_id}/generate-post")

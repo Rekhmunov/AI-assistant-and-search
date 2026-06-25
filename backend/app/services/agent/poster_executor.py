@@ -228,6 +228,21 @@ def get_post_history(agent: AgentInstance) -> list[dict]:
     return list(cfg.get("poster_history", []))
 
 
+def delete_post_from_history(agent: AgentInstance, post_id: str) -> None:
+    """Remove a single post record from history by id."""
+    cfg = _get_cfg(agent)
+    history = [r for r in cfg.get("poster_history", []) if r.get("id") != post_id]
+    cfg["poster_history"] = history
+    _save_cfg(agent, cfg)
+
+
+def clear_post_history(agent: AgentInstance) -> None:
+    """Remove all post history records."""
+    cfg = _get_cfg(agent)
+    cfg["poster_history"] = []
+    _save_cfg(agent, cfg)
+
+
 def update_post_status(agent: AgentInstance, post_id: str, status: str) -> None:
     cfg = _get_cfg(agent)
     history: list[dict] = cfg.get("poster_history", [])
