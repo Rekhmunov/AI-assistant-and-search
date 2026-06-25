@@ -24,6 +24,34 @@ async def cancel_reminders_for_agent(db: AsyncSession, agent_id: UUID) -> int:
     return len(result.scalars().all())
 
 
+async def activate_agent_direct(db: AsyncSession, agent: AgentInstance) -> AgentReminder | None:
+    """Activate a scheduled reminder agent bypassing full validate_activation (for API-created sub-reminders)."""
+    await cancel_reminders_for_agent(db, agent.id)
+    cfg = dict(agent.config or {})
+
+    if agent.role not in SCHEDULED_ROLES:
+        raise ValueError("role_unsupported")
+
+    message_text = str(cfg.get("reminder_message") or cfg.get("image_prompt") or cfg.get("search_topic") or "—")
+    run_at, recurrence = parse_reminder_schedule(
+        str(cfg["schedule_text"]),
+        tz_name=str(cfg.get("timezone") or "Europe/Moscow"),
+    )
+    reminder = AgentReminder(
+        agent_id=agent.id,
+        run_at=run_at,
+        message_text=message_text,
+        recurrence=recurrence,
+        status="pending",
+    )
+    db.add(reminder)
+    agent.status = AgentStatus.ACTIVE.value
+    cfg["next_run_at"] = run_at.isoformat()
+    agent.config = cfg
+    await db.flush()
+    return reminder
+
+
 async def activate_agent(db: AsyncSession, agent: AgentInstance) -> AgentReminder | None:
     """Активирует агента: напоминание для scheduled-ролей или просто ACTIVE для event-driven."""
     validate_activation(agent)

@@ -245,6 +245,26 @@ async def handle_agent_message(
     if agent.max_user_id and user.max_user_id and agent.max_user_id != int(user.max_user_id):
         raise ValueError("max_user_mismatch")
 
+    # Reminder hub threads: intercept all chat messages and redirect to the form.
+    # The form in the web panel is the only way to manage reminders.
+    agent_cfg = dict(agent.config or {})
+    is_reminder_hub = (
+        agent_cfg.get("template") == "reminder"
+        and not agent_cfg.get("is_sub_reminder")
+        and not agent_cfg.get("parent_hub_id")
+    )
+    if is_reminder_hub:
+        display_text = text.strip()
+        user_msg = await _user_message(db, thread, display_text or "📎")
+        reply_text = (
+            "Управление напоминаниями доступно через форму выше ⬆️\n\n"
+            "Нажмите **+ Добавить**, чтобы создать новое напоминание — "
+            "выберите расписание, текст и куда отправить."
+        )
+        assistant_msg = await _assistant_reply(db, thread, reply_text)
+        await db.flush()
+        return user_msg, assistant_msg, agent
+
     allowed, _used, _limit = await limiter.check_search_limit(str(user.id), user.plan)
     if not allowed:
         raise ValueError("rate_limit")

@@ -1001,7 +1001,7 @@ async def create_reminder(
 ):
     """Create a new reminder sub-agent linked to this hub thread."""
     from app.models.agent import AgentInstance, AgentStatus
-    from app.services.agent.reminders import activate_agent
+    from app.services.agent.reminders import activate_agent_direct
     from app.services.agent.schedule import parse_reminder_schedule
 
     hub_agent, _ = await _get_hub_and_reminder_agents(db, thread_id, user)
@@ -1060,7 +1060,12 @@ async def create_reminder(
     db.add(sub_agent)
     await db.flush()
 
-    await activate_agent(db, sub_agent)
+    try:
+        await activate_agent_direct(db, sub_agent)
+    except ValueError as exc:
+        await db.rollback()
+        raise HTTPException(status_code=422, detail=f"Ошибка активации: {exc}")
+
     await db.commit()
     await db.refresh(sub_agent)
 
@@ -1077,7 +1082,7 @@ async def update_reminder(
 ):
     """Update a reminder sub-agent (reschedule, change text, or toggle enabled)."""
     from app.models.agent import AgentStatus
-    from app.services.agent.reminders import activate_agent, cancel_reminders_for_agent
+    from app.services.agent.reminders import activate_agent_direct, cancel_reminders_for_agent
     from app.services.agent.schedule import parse_reminder_schedule
 
     hub_agent, sub_agents = await _get_hub_and_reminder_agents(db, thread_id, user)
@@ -1131,15 +1136,19 @@ async def update_reminder(
     sub_agent.config = cfg
     await db.flush()
 
-    if "enabled" in body:
-        if body["enabled"]:
-            await activate_agent(db, sub_agent)
-        else:
-            await cancel_reminders_for_agent(db, sub_agent.id)
-            sub_agent.status = AgentStatus.PAUSED.value
-            await db.flush()
-    elif needs_reschedule:
-        await activate_agent(db, sub_agent)
+    try:
+        if "enabled" in body:
+            if body["enabled"]:
+                await activate_agent_direct(db, sub_agent)
+            else:
+                await cancel_reminders_for_agent(db, sub_agent.id)
+                sub_agent.status = AgentStatus.PAUSED.value
+                await db.flush()
+        elif needs_reschedule:
+            await activate_agent_direct(db, sub_agent)
+    except ValueError as exc:
+        await db.rollback()
+        raise HTTPException(status_code=422, detail=f"Ошибка активации: {exc}")
 
     await db.commit()
     await db.refresh(sub_agent)
