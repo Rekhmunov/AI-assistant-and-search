@@ -586,11 +586,14 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
         });
         if (!uploadRes.ok) {
           const errBody = await uploadRes.json().catch(() => ({}));
-          setDraftError(errBody?.detail || "Не удалось загрузить файл");
+          const errMsg = errBody?.detail || `HTTP ${uploadRes.status}`;
+          console.error("[poster upload] file upload failed:", errMsg, uploadRes.status);
+          setDraftError(`Не удалось загрузить файл: ${errMsg}`);
           continue;
         }
         const uploadData = await uploadRes.json();
         const fileId = String(uploadData?.id || "").trim();
+        console.info("[poster upload] file uploaded, fileId=", fileId, "post_id=", draft.postId);
         if (!fileId) {
           setDraftError("Ошибка: сервер не вернул ID файла");
           continue;
@@ -598,6 +601,7 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
 
         // Register file_id in backend draft (so it's included at publish time)
         const addData = await callDraftAction({ action: "add_image", post_id: draft.postId, file_id: fileId });
+        console.info("[poster upload] add_image result:", addData);
         if (addData?.ok) {
           setDraftImages((prev) => [...prev, { url: dataUrl, fileId }].slice(0, 4));
         } else {

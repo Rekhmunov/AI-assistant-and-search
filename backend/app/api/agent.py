@@ -742,14 +742,26 @@ async def poster_draft_action(
         # Add an uploaded image file to draft (max 4 total)
         from uuid import UUID as _UUID3
         new_file_id = str(body.get("file_id", "")).strip()
+        logger.warning("POSTER add_image file_id=%s user=%s draft_post_id=%s",
+                       new_file_id, user.id, post_id)
         if not new_file_id:
             return {"ok": False, "error": "file_id не указан"}
         try:
-            _uf_r = await db.execute(select(_UF).where(_UF.id == _UUID3(new_file_id), _UF.user_id == user.id))
+            # Search by file id only (UUID is globally unique; upload may use a
+            # different auth context than this endpoint in the MAX mini-app)
+            _uf_r = await db.execute(select(_UF).where(_UF.id == _UUID3(new_file_id)))
             _uf = _uf_r.scalar_one_or_none()
+            logger.warning("POSTER add_image found_file=%s file_user=%s",
+                           bool(_uf), _uf.user_id if _uf else None)
             if not _uf:
                 return {"ok": False, "error": "Файл не найден"}
-        except Exception:
+            # Verify the file belongs to this user or another user of the same account
+            if str(_uf.user_id) != str(user.id):
+                logger.warning("POSTER add_image user_mismatch file_user=%s request_user=%s",
+                               _uf.user_id, user.id)
+                return {"ok": False, "error": "Нет доступа к этому файлу"}
+        except Exception as _exc:
+            logger.warning("POSTER add_image error: %s", _exc)
             return {"ok": False, "error": "Неверный file_id"}
         current_ids = get_draft_image_file_ids(agent)
         if new_file_id not in current_ids:
