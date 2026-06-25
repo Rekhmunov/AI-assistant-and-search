@@ -112,11 +112,19 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
     }
   }, [threadId, token, activationStatus]);
 
-  // Load history on mount if already configured
+  // On mount: if already configured → restore status and load history
   useEffect(() => {
-    if (isConfigured && enabled) {
-      void loadHistory();
+    if (!isConfigured || !enabled) return;
+    void loadHistory();
+    // Rebuild activation hint from saved schedule so it's visible after reload
+    const savedSchedule = (initialConfig?.poster_schedule ?? []) as ScheduleSlot[];
+    if (savedSchedule.length === 0) {
+      setActivationHint("Расписание не задано — посты по запросу в чате агента.");
+    } else {
+      const parts = savedSchedule.map((s) => `${DAY_SHORT[s.day] ?? s.day} в ${s.time}`);
+      setActivationHint(`Публикации по расписанию: ${parts.join(", ")}.`);
     }
+    setActivationStatus("active");
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

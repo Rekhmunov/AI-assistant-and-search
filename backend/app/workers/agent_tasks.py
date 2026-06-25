@@ -195,8 +195,12 @@ async def _dispatch_poster_scheduled_async() -> None:
         from app.models.agent import AgentStatus
 
         async with session_factory() as db:
+            # Include ACTIVE and DRAFT poster agents (poster agents start as draft
+            # until first verify-channel; also catches agents created before this fix)
             result = await db.execute(
-                select(AgentInstance).where(AgentInstance.status == AgentStatus.ACTIVE.value)
+                select(AgentInstance).where(
+                    AgentInstance.status.in_([AgentStatus.ACTIVE.value, "draft"])
+                )
             )
             agents = result.scalars().all()
 
@@ -207,6 +211,9 @@ async def _dispatch_poster_scheduled_async() -> None:
             for agent in agents:
                 cfg = dict(agent.config or {})
                 if cfg.get("task_mode") != "poster" and cfg.get("template") != "poster":
+                    continue
+                # Skip if explicitly disabled by user toggle
+                if cfg.get("poster_enabled") is False:
                     continue
 
                 from app.services.agent.poster_executor import get_poster_schedule

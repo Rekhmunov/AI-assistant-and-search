@@ -601,9 +601,12 @@ async def verify_poster_channel(
         probe = await probe_max_chat(bot, channel_id)
         if probe.get("ok"):
             # Save the resolved numeric channel_id back to config
-            # so get_poster_channel_id() always finds an int
             cfg["poster_channel_id"] = str(channel_id)
             agent.config = cfg
+            # Activate agent so Celery picks it up for scheduled posting
+            from app.models.agent import AgentStatus
+            if agent.status in (AgentStatus.DRAFT.value, "draft"):
+                agent.status = AgentStatus.ACTIVE.value
             await db.commit()
 
         return {
