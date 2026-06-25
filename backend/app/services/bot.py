@@ -331,9 +331,16 @@ class MaxBotService:
 
         try:
             put_body = put_resp.json()
+            # Token at top level (older MAX API format)
             if isinstance(put_body, dict) and put_body.get("token"):
                 return str(put_body["token"])
-        except ValueError:
+            # Token nested inside photos dict: {"photos": {"<id>": {"token": "..."}}}
+            if isinstance(put_body, dict) and isinstance(put_body.get("photos"), dict):
+                photos = put_body["photos"]
+                for photo_data in photos.values():
+                    if isinstance(photo_data, dict) and photo_data.get("token"):
+                        return str(photo_data["token"])
+        except (ValueError, AttributeError):
             pass
 
         return str(token) if token else None
