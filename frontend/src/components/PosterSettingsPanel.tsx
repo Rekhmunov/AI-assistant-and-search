@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useAuthStore } from "../store/authStore";
+import { ProUpgradeModal } from "./ProUpgradeModal";
 
 const API_BASE = import.meta.env.VITE_API_URL || "";
 
@@ -78,6 +79,10 @@ type Props = {
 
 export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle }: Props) {
   const token = useAuthStore((s) => s.token);
+  const user = useAuthStore((s) => s.user);
+  const isFree = !user || user.plan !== "pro";
+  const [imageLimitModal, setImageLimitModal] = useState(false);
+  const [approvalConfirmModal, setApprovalConfirmModal] = useState(false);
   const [cfg, setCfg] = useState<PosterConfig>({ ...DEFAULTS });
   const [saving, setSaving] = useState(false);
   const [verifying, setVerifying] = useState(false);
@@ -598,7 +603,13 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
         // ADD to existing images (do not replace)
         setDraftImages((prev) => [...prev, { url: data.image_url, fileId: data.file_id ?? null }].slice(0, 4));
       } else {
-        setDraftError(data?.error || "Не удалось сгенерировать изображение");
+        // For Free users hitting image generation limit — show upgrade modal
+        const errMsg = data?.error || "";
+        if (isFree && (errMsg.includes("лимит") || errMsg.includes("limit") || errMsg.includes("Pro"))) {
+          setImageLimitModal(true);
+        } else {
+          setDraftError(errMsg || "Не удалось сгенерировать изображение");
+        }
       }
     } finally {
       setImageRegenLoading(false);
@@ -892,12 +903,24 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
         {/* Approval + Reflection */}
         <div className="poster-field-row">
           <label className={`poster-toggle${f ? " poster-toggle--disabled" : ""}`}>
-            <input type="checkbox" checked={cfg.poster_approval} disabled={f} onChange={(e) => patch("poster_approval", e.target.checked)} />
+            <input
+              type="checkbox"
+              checked={cfg.poster_approval}
+              disabled={f}
+              onChange={(e) => {
+                if (!e.target.checked) {
+                  // Ask for confirmation before disabling approval
+                  setApprovalConfirmModal(true);
+                } else {
+                  patch("poster_approval", true);
+                }
+              }}
+            />
             <span>Согласование перед публикацией</span>
           </label>
           <label className={`poster-toggle${f ? " poster-toggle--disabled" : ""}`}>
             <input type="checkbox" checked={cfg.poster_reflection} disabled={f} onChange={(e) => patch("poster_reflection", e.target.checked)} />
-            <span>Проверка качества (рефлексия)</span>
+            <span>Проверка качества поста {isFree ? "(Lite ИИ, + 1 запрос)" : "(+ 1 запрос)"}</span>
           </label>
         </div>
 
@@ -933,6 +956,12 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
       {!saving && !verifying && showActiveUI && (
         <div className="poster-status poster-status--active">
           ✅ Агент активирован. {activationHint}
+        </div>
+      )}
+      {/* Free tier notice — shown when agent is active */}
+      {showActiveUI && isFree && (
+        <div className="poster-free-notice">
+          ℹ️ Вы используете бесплатный тариф. При генерации текста используется лёгкая версия ИИ, а также некоторые функции ограничены.
         </div>
       )}
       {!saving && !verifying && activationStatus === "error" && (
@@ -1221,6 +1250,44 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
               )}
             </>
           )}
+        </div>
+      )}
+
+      {/* Image generation limit modal (Free users) */}
+      {imageLimitModal && (
+        <ProUpgradeModal
+          open={imageLimitModal}
+          title="Лимит генерации изображений исчерпан"
+          description="На бесплатном тарифе количество ИИ-картинок ограничено. Перейдите на Pro для неограниченной генерации, или загрузите своё фото."
+          onClose={() => setImageLimitModal(false)}
+        />
+      )}
+
+      {/* Approval confirmation modal */}
+      {approvalConfirmModal && (
+        <div className="poster-confirm-overlay">
+          <div className="poster-confirm-modal">
+            <h3 className="poster-confirm-modal__title">Отключить согласование?</h3>
+            <p className="poster-confirm-modal__text">
+              Посты будут публиковаться в канал автоматически без вашего подтверждения. Вы уверены?
+            </p>
+            <div className="poster-confirm-modal__actions">
+              <button
+                type="button"
+                className="poster-confirm-modal__btn poster-confirm-modal__btn--danger"
+                onClick={() => { patch("poster_approval", false); setApprovalConfirmModal(false); }}
+              >
+                Да, публиковать автоматически
+              </button>
+              <button
+                type="button"
+                className="poster-confirm-modal__btn poster-confirm-modal__btn--cancel"
+                onClick={() => setApprovalConfirmModal(false)}
+              >
+                Отмена
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

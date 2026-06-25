@@ -8449,6 +8449,21 @@ a.blog-sidebar-title:hover {
 .poster-toggle--disabled { opacity: 0.5; cursor: not-allowed; }
 .poster-day--disabled { opacity: 0.5; cursor: not-allowed; }
 
+/* Free tier notice */
+.poster-free-notice { margin: 0; padding: 10px 16px; font-size: 0.83rem; color: #744210; background: #fffbeb; border-top: 1px solid #fde68a; border-bottom: 1px solid #fde68a; line-height: 1.5; }
+
+/* Approval confirmation modal */
+.poster-confirm-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 1000; display: flex; align-items: center; justify-content: center; padding: 16px; }
+.poster-confirm-modal { background: var(--surface, #fff); border-radius: 14px; padding: 24px; max-width: 380px; width: 100%; box-shadow: 0 20px 60px rgba(0,0,0,0.2); }
+.poster-confirm-modal__title { font-size: 1.05rem; font-weight: 700; color: var(--text, #1a2328); margin: 0 0 10px; }
+.poster-confirm-modal__text { font-size: 0.9rem; color: var(--text-muted, #5c6b73); line-height: 1.55; margin: 0 0 20px; }
+.poster-confirm-modal__actions { display: flex; flex-direction: column; gap: 10px; }
+.poster-confirm-modal__btn { padding: 11px 16px; border-radius: 9px; font: inherit; font-size: 0.9rem; font-weight: 600; cursor: pointer; border: none; transition: background 0.12s; }
+.poster-confirm-modal__btn--danger { background: #e53e3e; color: #fff; }
+.poster-confirm-modal__btn--danger:hover { background: #c53030; }
+.poster-confirm-modal__btn--cancel { background: var(--surface-hover, #f0f4f5); color: var(--text, #1a2328); border: 1px solid var(--border, #d8e0e3); }
+.poster-confirm-modal__btn--cancel:hover { background: #e4ecee; }
+
 /* ─── Reminder Settings Panel ──────────────────────────────────────────────── */
 .rm-panel { background: var(--surface, #fff); border: 1px solid var(--border, #d8e0e3); border-radius: 12px; padding: 20px; margin-bottom: 16px; }
 .rm-panel-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }

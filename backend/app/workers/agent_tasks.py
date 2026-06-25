@@ -307,16 +307,27 @@ async def _dispatch_poster_scheduled_async() -> None:
                             agent, topic, post_text, db=db, redis_client=redis_client
                         )
 
+                        # If AI image was expected but not generated (limit or error),
+                        # add a note to DM draft so user knows to add image manually
+                        cfg_a = dict(agent.config or {})
+                        wants_ai_image = str(cfg_a.get("poster_media") or "none").lower() == "ai"
+                        image_failed = wants_ai_image and image_bytes is None
+
+                        # Append note to DM text when image was not generated
+                        dm_text = post_text
+                        if image_failed and approval_mode != "auto":
+                            dm_text = post_text + "\n\n_⚠️ ИИ-картинка не сгенерирована (исчерпан лимит или ошибка). Загрузите фото вручную в треде агента._"
+
                         if approval_mode == "auto" and channel_id:
                             ok = await publish_to_channel(bot, channel_id=channel_id, text=post_text, image_bytes=image_bytes)
                             if ok:
                                 update_post_status(agent, post_id, "published")
                         else:
                             # Manual: send draft with image to DM or group
-                            save_pending_draft(agent, post_id=post_id, topic=topic, text=post_text)
+                            save_pending_draft(agent, post_id=post_id, topic=topic, text=dm_text)
                             msg_id = await send_draft_for_approval(
                                 agent, db, bot,
-                                post_id=post_id, topic=topic, text=post_text,
+                                post_id=post_id, topic=topic, text=dm_text,
                                 image_bytes=image_bytes,
                             )
                             if msg_id:
