@@ -72,13 +72,19 @@ type FormState = {
   timezone: string;
 };
 
+function tomorrowDate(): string {
+  const d = new Date();
+  d.setDate(d.getDate() + 1);
+  return d.toISOString().slice(0, 10); // YYYY-MM-DD
+}
+
 const defaultForm = (): FormState => ({
   text: "",
   schedule_type: "one_time",
   time: "09:00",
   weekday: "mon",
   day_of_month: 1,
-  date: "",
+  date: tomorrowDate(),
   interval_value: 30,
   interval_unit: "minutes",
   delivery_mode: "dm",
@@ -367,7 +373,7 @@ function ReminderCard({
             {item.schedule_text && (
               <span className="rm-card-schedule">{item.schedule_text}</span>
             )}
-            {item.next_run_at && item.enabled && (
+            {item.next_run_at && item.enabled && item.recurrence_label !== "Разово" && (
               <span className="rm-card-next">
                 Следующее: {formatNextRun(item.next_run_at)}
               </span>
