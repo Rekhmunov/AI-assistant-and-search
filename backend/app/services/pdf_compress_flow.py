@@ -289,6 +289,7 @@ async def stream_pdf_compress_turn(
 
     storage_key = save_upload_bytes(user.id, new_file_id, compressed_bytes, "pdf")
     now = datetime.now(timezone.utc)
+    expires_at = now + timedelta(hours=_COMPRESSED_TTL_HOURS)
     compressed_file = UploadedFile(
         id=new_file_id,
         user_id=user.id,
@@ -298,7 +299,7 @@ async def stream_pdf_compress_turn(
         media_kind="compressed",
         storage_key=storage_key,
         extracted_text="",
-        expires_at=now + timedelta(hours=_COMPRESSED_TTL_HOURS),
+        expires_at=expires_at,
     )
     db.add(compressed_file)
     await db.flush()
