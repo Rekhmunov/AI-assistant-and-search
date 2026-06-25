@@ -273,7 +273,24 @@ async def _dispatch_poster_scheduled_async() -> None:
                             _pick_next_topic,
                         )
                         from app.services.providers.factory import resolve_agent_providers
+                        from app.core.limiter import RateLimiter
                         import uuid as _uuid
+
+                        # Billing: scheduled post counts as 1 request for the agent owner
+                        from sqlalchemy import select as _select
+                        _user_res = await db.execute(_select(User).where(User.id == agent.user_id))
+                        _owner = _user_res.scalar_one_or_none()
+                        if _owner:
+                            _limiter = RateLimiter(redis_client)
+                            _allowed, _used, _limit = await _limiter.check_search_limit(
+                                str(_owner.id), _owner.plan, user=_owner
+                            )
+                            if not _allowed:
+                                logger.info(
+                                    "Poster scheduled: agent=%s skipped — daily limit reached (used=%s, limit=%s)",
+                                    agent.id, _used, _limit,
+                                )
+                                continue
 
                         topic = _pick_next_topic(agent)
                         llm, _, _, _, _ = await resolve_agent_providers(db, redis_client)
