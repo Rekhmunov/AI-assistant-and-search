@@ -29,7 +29,9 @@ def _get_cfg(agent: AgentInstance) -> dict:
 
 
 def _save_cfg(agent: AgentInstance, cfg: dict) -> None:
+    from sqlalchemy.orm.attributes import flag_modified
     agent.config = cfg
+    flag_modified(agent, "config")
 
 
 def get_poster_channel_id(agent: AgentInstance) -> int | None:

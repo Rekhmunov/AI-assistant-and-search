@@ -84,8 +84,10 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
   const [verifyStep, setVerifyStep] = useState<"channel" | "admin" | "">(""); 
   const [generating, setGenerating] = useState(false);
   const [draft, setDraft] = useState<{ postId: string; text: string; topic: string; imageUrl?: string; fromCelery?: boolean } | null>(null);
-  const [draftImages, setDraftImages] = useState<string[]>([]); // list of base64 data URLs for preview
-  const [imageActioning, setImageActioning] = useState(false);
+  // Each entry: { url: base64/blob preview, fileId: backend file_id or null }
+  const [draftImages, setDraftImages] = useState<{ url: string; fileId: string | null }[]>([]);
+  const [imageRegenLoading, setImageRegenLoading] = useState(false);
+  const [imageUploadLoading, setImageUploadLoading] = useState(false);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [draftAction, setDraftAction] = useState<"" | "actioning" | "editing" | "published" | "rejected" | "error">("");
@@ -430,7 +432,7 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
       } else if (data.mode === "web_draft") {
         const imgUrl = data.image_url ?? undefined;
         setDraft({ postId: data.post_id, text: data.post_text, topic: data.topic, imageUrl: imgUrl });
-        setDraftImages(imgUrl ? [imgUrl] : []);
+        setDraftImages(imgUrl ? [{ url: imgUrl, fileId: data.file_id ?? null }] : []);
       }
     } catch {
       setDraftAction("error");
@@ -468,7 +470,7 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
       } else if (data.mode === "web_draft") {
         const imgUrl2 = data.image_url ?? undefined;
         setDraft({ postId: data.post_id, text: data.post_text, topic: data.topic, imageUrl: imgUrl2 });
-        setDraftImages(imgUrl2 ? [imgUrl2] : []);
+        setDraftImages(imgUrl2 ? [{ url: imgUrl2, fileId: data.file_id ?? null }] : []);
         setDraftAction("");
         setEditedText("");
       }
@@ -531,18 +533,18 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
       setDraftError("Максимум 4 фото. Удалите одно, чтобы добавить новое.");
       return;
     }
-    setImageActioning(true);
+    setImageRegenLoading(true);
     setDraftError("");
     try {
       const data = await callDraftAction({ action: "regen_image", post_id: draft.postId });
       if (data?.ok && data.image_url) {
         // ADD to existing images (do not replace)
-        setDraftImages((prev) => [...prev, data.image_url].slice(0, 4));
+        setDraftImages((prev) => [...prev, { url: data.image_url, fileId: data.file_id ?? null }].slice(0, 4));
       } else {
         setDraftError(data?.error || "Не удалось сгенерировать изображение");
       }
     } finally {
-      setImageActioning(false);
+      setImageRegenLoading(false);
     }
   };
 
@@ -560,11 +562,20 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
     const files = allFiles.slice(0, available);
     if (allFiles.length > available) {
       setDraftError(`Добавлено только ${files.length} из ${allFiles.length} фото — лимит 4.`);
+    } else {
+      setDraftError("");
     }
 
-    setImageActioning(true);
+    setImageUploadLoading(true);
     try {
       for (const file of files) {
+        // Build preview first (fast, no network)
+        const dataUrl = await new Promise<string>((resolve) => {
+          const reader = new FileReader();
+          reader.onload = (ev) => resolve(ev.target?.result as string);
+          reader.readAsDataURL(file);
+        });
+
         const formData = new FormData();
         formData.append("file", file);
         const uploadRes = await fetch(`${API_BASE}/api/files/upload`, {
@@ -579,35 +590,35 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
           continue;
         }
         const uploadData = await uploadRes.json();
-        const fileId = uploadData?.id;
-        if (!fileId) continue;
+        const fileId = String(uploadData?.id || "").trim();
+        if (!fileId) {
+          setDraftError("Ошибка: сервер не вернул ID файла");
+          continue;
+        }
 
-        // Add file_id to draft in backend
+        // Register file_id in backend draft (so it's included at publish time)
         const addData = await callDraftAction({ action: "add_image", post_id: draft.postId, file_id: fileId });
         if (addData?.ok) {
-          // Show local preview using FileReader
-          const dataUrl = await new Promise<string>((resolve) => {
-            const reader = new FileReader();
-            reader.onload = (ev) => resolve(ev.target?.result as string);
-            reader.readAsDataURL(file);
-          });
-          setDraftImages((prev) => [...prev, dataUrl].slice(0, 4));
+          setDraftImages((prev) => [...prev, { url: dataUrl, fileId }].slice(0, 4));
         } else {
-          setDraftError(addData?.error || "Не удалось добавить фото");
+          setDraftError(addData?.error || "Не удалось добавить фото к черновику");
         }
       }
     } finally {
-      setImageActioning(false);
+      setImageUploadLoading(false);
     }
   };
 
   const handleRemoveImage = async (idx: number) => {
     if (!draft) return;
+    const item = draftImages[idx];
     // Remove locally immediately (optimistic)
     setDraftImages((prev) => prev.filter((_, i) => i !== idx));
     setDraftError("");
-    // Backend will use remaining file_ids at approval time
-    // (index-based removal syncs on next approve/regen)
+    // Sync removal with backend if we know the file_id
+    if (item?.fileId) {
+      await callDraftAction({ action: "remove_image", post_id: draft.postId, file_id: item.fileId }).catch(() => null);
+    }
   };
 
   const f = !enabled;
@@ -927,9 +938,9 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
                   {/* Image previews grid */}
                   {draftImages.length > 0 && (
                     <div className="poster-draft__images-grid">
-                      {draftImages.map((src, idx) => (
+                      {draftImages.map((img, idx) => (
                         <div key={idx} className="poster-draft__img-thumb">
-                          <img src={src} alt={`Фото ${idx + 1}`} />
+                          <img src={img.url} alt={`Фото ${idx + 1}`} />
                           <button
                             type="button"
                             className="poster-draft__img-remove"
@@ -946,28 +957,38 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
                     <button
                       type="button"
                       className="poster-draft__media-btn"
-                      disabled={imageActioning}
+                      disabled={imageRegenLoading || imageUploadLoading}
                       onClick={handleRegenImage}
                       title="Сгенерировать новое ИИ-изображение"
                     >
-                      {imageActioning ? <span className="poster-status__spinner" /> : "🤖"} ИИ-картинка
+                      {imageRegenLoading ? <span className="poster-status__spinner" /> : "🤖"} ИИ-картинка
                     </button>
                     {draftImages.length < 4 && (
                       <button
                         type="button"
                         className="poster-draft__media-btn"
-                        disabled={imageActioning}
+                        disabled={imageRegenLoading || imageUploadLoading}
                         onClick={() => imageInputRef.current?.click()}
                         title="Загрузить фото (до 4)"
                       >
-                        📎 Загрузить ({draftImages.length}/4)
+                        {imageUploadLoading ? <span className="poster-status__spinner" /> : "📎"} Загрузить ({draftImages.length}/4)
                       </button>
                     )}
                     {draftImages.length > 0 && (
                       <button
                         type="button"
                         className="poster-draft__media-btn poster-draft__media-btn--danger"
-                        onClick={() => setDraftImages([])}
+                        disabled={imageRegenLoading || imageUploadLoading}
+                        onClick={async () => {
+                          // Remove all images: sync each fileId with backend
+                          if (draft) {
+                            const toRemove = draftImages.filter(img => img.fileId);
+                            for (const img of toRemove) {
+                              await callDraftAction({ action: "remove_image", post_id: draft.postId, file_id: img.fileId }).catch(() => null);
+                            }
+                          }
+                          setDraftImages([]);
+                        }}
                         title="Убрать все фото"
                       >
                         ✕ Без фото
@@ -982,6 +1003,10 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
                       onChange={handleUploadImages}
                     />
                   </div>
+                  {/* Show image/upload errors inline (visible in non-edit mode) */}
+                  {draftError && draftAction !== "error" && (
+                    <div className="poster-draft__error" style={{marginTop: 6}}>⚠️ {draftError}</div>
+                  )}
                 </div>
               )}
 

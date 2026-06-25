@@ -471,6 +471,7 @@ async def generate_poster_post(
                 "post_id": post_id,
                 "post_text": post_text,
                 "image_url": image_url,  # None if no ai image or save failed
+                "file_id": image_file_ids_list[0] if image_file_ids_list else None,
             }
     except Exception as exc:
         logger.exception("generate_poster_post failed thread=%s: %s", thread_id, exc)
