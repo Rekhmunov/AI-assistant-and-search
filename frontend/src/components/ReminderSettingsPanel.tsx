@@ -99,13 +99,26 @@ function formatNextRun(nextRunAt: string | null): string {
   }
 }
 
-function todayStr(): string {
-  const d = new Date();
-  const dd = String(d.getDate()).padStart(2, "0");
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  const yyyy = d.getFullYear();
-  return `${dd}.${mm}.${yyyy}`;
-}
+
+// Preset time options every 30 minutes
+const TIME_OPTIONS = Array.from({ length: 48 }, (_, i) => {
+  const h = Math.floor(i / 2).toString().padStart(2, "0");
+  const m = i % 2 === 0 ? "00" : "30";
+  return `${h}:${m}`;
+});
+
+// Pre-set interval options
+const INTERVAL_OPTIONS = [
+  { label: "5 минут",   value: 5,  unit: "minutes" },
+  { label: "10 минут",  value: 10, unit: "minutes" },
+  { label: "15 минут",  value: 15, unit: "minutes" },
+  { label: "30 минут",  value: 30, unit: "minutes" },
+  { label: "1 час",     value: 1,  unit: "hours" },
+  { label: "2 часа",    value: 2,  unit: "hours" },
+  { label: "3 часа",    value: 3,  unit: "hours" },
+  { label: "6 часов",   value: 6,  unit: "hours" },
+  { label: "12 часов",  value: 12, unit: "hours" },
+];
 
 function ScheduleFields({
   form,
@@ -115,6 +128,9 @@ function ScheduleFields({
   onChange: (patch: Partial<FormState>) => void;
 }) {
   const stype = form.schedule_type;
+
+  // Current interval selection key for the combined select
+  const intervalKey = `${form.interval_value}_${form.interval_unit}`;
 
   return (
     <div className="rm-schedule-fields">
@@ -131,20 +147,7 @@ function ScheduleFields({
         </select>
       </div>
 
-      {/* Time field — for all types except interval */}
-      {stype !== "interval" && (
-        <div className="rm-field">
-          <label className="rm-label">Время</label>
-          <input
-            type="time"
-            className="rm-input"
-            value={form.time}
-            onChange={(e) => onChange({ time: e.target.value })}
-          />
-        </div>
-      )}
-
-      {/* Date for one_time */}
+      {/* Date for one_time — native date picker (mobile friendly) */}
       {stype === "one_time" && (
         <div className="rm-field">
           <label className="rm-label">Дата</label>
@@ -154,6 +157,26 @@ function ScheduleFields({
             value={form.date}
             onChange={(e) => onChange({ date: e.target.value })}
           />
+        </div>
+      )}
+
+      {/* Time as dropdown — for all types except interval */}
+      {stype !== "interval" && (
+        <div className="rm-field">
+          <label className="rm-label">Время</label>
+          <select
+            className="rm-select"
+            value={TIME_OPTIONS.includes(form.time) ? form.time : form.time}
+            onChange={(e) => onChange({ time: e.target.value })}
+          >
+            {/* Include custom value if not in presets */}
+            {!TIME_OPTIONS.includes(form.time) && form.time && (
+              <option value={form.time}>{form.time}</option>
+            )}
+            {TIME_OPTIONS.map((t) => (
+              <option key={t} value={t}>{t}</option>
+            ))}
+          </select>
         </div>
       )}
 
@@ -173,45 +196,42 @@ function ScheduleFields({
         </div>
       )}
 
-      {/* Day of month for monthly */}
+      {/* Day of month for monthly — select 1-31 */}
       {stype === "monthly" && (
         <div className="rm-field">
-          <label className="rm-label">Число месяца (1–31)</label>
-          <input
-            type="number"
-            className="rm-input"
-            min={1}
-            max={31}
+          <label className="rm-label">Число месяца</label>
+          <select
+            className="rm-select"
             value={form.day_of_month}
             onChange={(e) => onChange({ day_of_month: Number(e.target.value) })}
-          />
+          >
+            {Array.from({ length: 31 }, (_, i) => i + 1).map((d) => (
+              <option key={d} value={d}>{d}-е</option>
+            ))}
+          </select>
         </div>
       )}
 
-      {/* Interval */}
+      {/* Interval — single select with presets */}
       {stype === "interval" && (
-        <div className="rm-field-row">
-          <div className="rm-field">
-            <label className="rm-label">Через</label>
-            <input
-              type="number"
-              className="rm-input rm-input--sm"
-              min={1}
-              value={form.interval_value}
-              onChange={(e) => onChange({ interval_value: Number(e.target.value) })}
-            />
-          </div>
-          <div className="rm-field">
-            <label className="rm-label">&nbsp;</label>
-            <select
-              className="rm-select"
-              value={form.interval_unit}
-              onChange={(e) => onChange({ interval_unit: e.target.value })}
-            >
-              <option value="minutes">минут</option>
-              <option value="hours">часов</option>
-            </select>
-          </div>
+        <div className="rm-field">
+          <label className="rm-label">Интервал</label>
+          <select
+            className="rm-select"
+            value={intervalKey}
+            onChange={(e) => {
+              const opt = INTERVAL_OPTIONS.find(
+                (o) => `${o.value}_${o.unit}` === e.target.value
+              );
+              if (opt) onChange({ interval_value: opt.value, interval_unit: opt.unit });
+            }}
+          >
+            {INTERVAL_OPTIONS.map((o) => (
+              <option key={`${o.value}_${o.unit}`} value={`${o.value}_${o.unit}`}>
+                {o.label}
+              </option>
+            ))}
+          </select>
         </div>
       )}
     </div>
