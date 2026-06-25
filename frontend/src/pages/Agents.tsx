@@ -106,22 +106,16 @@ export function AgentsPage() {
       )}
 
       {isDesktop ? (
-        <>
-          <div className="agents-catalog">
-            {visibleTemplates.map((tmpl) => (
-              <AgentTemplateCard
-                key={tmpl.id}
-                template={tmpl}
-                loading={createAgent.isPending && createAgent.variables === tmpl.id}
-                onClick={() => { createAgent.reset(); createAgent.mutate(tmpl.id); }}
-              />
-            ))}
-          </div>
-          {/* Desktop new-search footer — always visible at bottom */}
-          <div className="agents-new-search-bar">
-            <MobileNewThreadButton variant="labeled" onClick={() => navigate("/")} />
-          </div>
-        </>
+        <div className="agents-catalog">
+          {visibleTemplates.map((tmpl) => (
+            <AgentTemplateCard
+              key={tmpl.id}
+              template={tmpl}
+              loading={createAgent.isPending && createAgent.variables === tmpl.id}
+              onClick={() => { createAgent.reset(); createAgent.mutate(tmpl.id); }}
+            />
+          ))}
+        </div>
       ) : (
         <>
           <div className="agents-scroll">

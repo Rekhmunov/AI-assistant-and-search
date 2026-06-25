@@ -35,6 +35,7 @@ import { SearchStatusLine, type SearchPhase } from "../components/SearchStatusLi
 import { ClaudeSearchTimeline } from "../components/ClaudeSearchTimeline";
 import { ThreadImagesTab } from "../components/ThreadImagesTab";
 import { ThreadMobileHeader } from "../components/ThreadMobileHeader";
+import { MobileNewThreadButton } from "../components/MobileNewThreadButton";
 import { ThreadQuery } from "../components/ThreadQuery";
 import { ThreadTabsBar, type ThreadTab } from "../components/ThreadTabsBar";
 import { TurnImageGallery } from "../components/TurnImageGallery";
@@ -1478,25 +1479,32 @@ export function Thread() {
         </button>
       )}
 
-      <SearchComposer
-        value={composerQuery}
-        onChange={setComposerQuery}
-        onSubmit={(p) => {
-          setComposerQuery("");
-          onComposerSubmit(p);
-        }}
-        disabled={isAgentThread ? agentLoading : streaming}
-        placeholder={isAgentThread ? t("agentComposerPlaceholder") : t("askFollowUp")}
-        attachments={attachments}
-        onAttachmentsChange={setAttachments}
-        requireTextWithAttachments={isAgentThread || (!isAgentThread && turns.length === 0)}
-        layoutMode={isDesktop ? "default" : "threadMobile"}
-        onNewChat={isDesktop ? undefined : () => navigate("/")}
-        onAgentClick={startNewAgentThread}
-        agentStarting={agentStarting}
-        agentError={agentError}
-        agentMode={isAgentThread}
-      />
+      {/* Mobile agent thread: replace composer with "Новый поиск +" footer */}
+      {isAgentThread && !isDesktop ? (
+        <div className="mobile-new-thread-bar mobile-new-thread-bar--docked mobile-new-thread-bar--agent">
+          <MobileNewThreadButton variant="labeled" onClick={() => navigate("/")} />
+        </div>
+      ) : (
+        <SearchComposer
+          value={composerQuery}
+          onChange={setComposerQuery}
+          onSubmit={(p) => {
+            setComposerQuery("");
+            onComposerSubmit(p);
+          }}
+          disabled={isAgentThread ? agentLoading : streaming}
+          placeholder={isAgentThread ? t("agentComposerPlaceholder") : t("askFollowUp")}
+          attachments={attachments}
+          onAttachmentsChange={setAttachments}
+          requireTextWithAttachments={isAgentThread || (!isAgentThread && turns.length === 0)}
+          layoutMode={isDesktop ? "default" : "threadMobile"}
+          onNewChat={isDesktop ? undefined : () => navigate("/")}
+          onAgentClick={startNewAgentThread}
+          agentStarting={agentStarting}
+          agentError={agentError}
+          agentMode={isAgentThread}
+        />
+      )}
       </div>
     </div>
     <ProUpgradeModal
