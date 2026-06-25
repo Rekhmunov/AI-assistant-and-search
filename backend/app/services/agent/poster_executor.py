@@ -216,7 +216,7 @@ def save_post_to_history(
     history.append({
         "id": post_id,
         "topic": topic,
-        "text": text[:500],
+        "text": text,
         "status": status,
         "channel_id": channel_id,
         "at": datetime.now(timezone.utc).isoformat(),
