@@ -958,8 +958,8 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
           ✅ Агент активирован. {activationHint}
         </div>
       )}
-      {/* Free tier notice — shown when agent is active */}
-      {showActiveUI && isFree && (
+      {/* Free tier notice — shown whenever the toggle is on */}
+      {enabled && isFree && (
         <div className="poster-free-notice">
           ℹ️ Вы используете бесплатный тариф. При генерации текста используется лёгкая версия ИИ, а также некоторые функции ограничены.
         </div>
