@@ -183,12 +183,42 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
   const toggleSelect = (id: string) =>
     setSelectedIds((prev) => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s; });
 
-  const useAsBase = (item: HistoryItem) => {
+  const useAsBase = async (item: HistoryItem) => {
     if (!item.text) return;
-    setDraft({ postId: `base-${item.id}`, text: item.text, topic: item.topic });
-    setDraftImages([]);
     setDraftAction("");
     setDraftError("");
+    setDraftImages([]);
+    // Show optimistic draft immediately
+    setDraft({ postId: `pending-${item.id}`, text: item.text, topic: item.topic });
+    try {
+      const data = await callDraftAction({
+        action: "use_as_base",
+        post_id: "",           // not used for this action
+        text: item.text,
+        topic: item.topic,
+      });
+      if (data?.ok && data.post_id) {
+        setDraft({ postId: data.post_id, text: data.post_text ?? item.text, topic: data.topic ?? item.topic });
+        // Auto-load AI image in background if configured
+        if (data.wants_ai_image) {
+          setImageRegenLoading(true);
+          try {
+            const imgData = await callDraftAction({ action: "regen_image", post_id: data.post_id });
+            if (imgData?.ok && imgData.image_url) {
+              setDraftImages([{ url: imgData.image_url, fileId: imgData.file_id ?? null }]);
+            }
+          } finally {
+            setImageRegenLoading(false);
+          }
+        }
+      } else {
+        setDraftError(data?.error || "Не удалось создать черновик");
+        setDraft(null);
+      }
+    } catch {
+      setDraftError("Ошибка при создании черновика");
+      setDraft(null);
+    }
   };
 
   const checkPendingDraft = useCallback(async () => {

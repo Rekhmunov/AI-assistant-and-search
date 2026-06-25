@@ -543,6 +543,23 @@ async def poster_draft_action(
     from app.services.upload_storage import load_upload_bytes
     from app.models.uploaded_file import UploadedFile as _UF
 
+    # use_as_base: create new draft from history item text (no existing draft needed)
+    if action == "use_as_base":
+        import uuid as _uuid_base
+        new_text = str(body.get("text") or "").strip()
+        new_topic = str(body.get("topic") or "").strip()
+        if not new_text:
+            return {"ok": False, "error": "Текст не может быть пустым"}
+        new_id = str(_uuid_base.uuid4())
+        save_post_to_history(agent, post_id=new_id, topic=new_topic, text=new_text, status="draft")
+        save_pending_draft(agent, post_id=new_id, topic=new_topic, text=new_text, image_file_ids=[])
+        cfg_ub = dict(agent.config or {})
+        wants_ai = str(cfg_ub.get("poster_media") or "none").lower() == "ai"
+        await db.commit()
+        return {"ok": True, "mode": "web_draft", "post_id": new_id,
+                "post_text": new_text, "topic": new_topic,
+                "image_url": None, "wants_ai_image": wants_ai}
+
     draft = get_pending_draft(agent)
     if not draft or draft.get("post_id") != post_id:
         return {"ok": False, "error": "Черновик устарел или уже обработан"}
