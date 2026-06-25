@@ -381,9 +381,15 @@ async def generate_poster_post(
     thread_id: UUID,
     db: Annotated[AsyncSession, Depends(get_db)],
     user: Annotated[User, Depends(get_current_user)],
+    limiter: Annotated[RateLimiter, Depends(get_rate_limiter)],
     redis_client: redis.Redis = Depends(get_redis),
 ):
     """Generate a one-off post for the poster agent (ignores schedule)."""
+    # Billing: post generation uses 1 request from the daily limit
+    allowed, _used, _limit = await limiter.check_search_limit(str(user.id), user.plan, user=user)
+    if not allowed:
+        return {"ok": False, "error": "Достигнут дневной лимит запросов. Попробуйте завтра или подключите Pro."}
+
     result = await db.execute(
         select(Thread).where(
             Thread.id == thread_id,
@@ -512,6 +518,7 @@ async def poster_draft_action(
     body: dict,
     db: Annotated[AsyncSession, Depends(get_db)],
     user: Annotated[User, Depends(get_current_user)],
+    limiter: Annotated[RateLimiter, Depends(get_rate_limiter)],
     redis_client: redis.Redis = Depends(get_redis),
 ):
     """
@@ -632,6 +639,11 @@ async def poster_draft_action(
         return {"ok": True, "mode": "web_draft", "post_id": post_id, "post_text": new_text, "topic": topic}
 
     elif action == "regen":
+        # Billing: text+image regen costs 1 request
+        allowed, _used, _limit = await limiter.check_search_limit(str(user.id), user.plan, user=user)
+        if not allowed:
+            return {"ok": False, "error": "Достигнут дневной лимит запросов. Попробуйте завтра или подключите Pro."}
+
         from app.services.providers.factory import resolve_agent_providers
         from app.services.image_gen_service import persist_generated_image
         import uuid as _uuid
@@ -695,6 +707,11 @@ async def poster_draft_action(
             return {"ok": False, "error": str(exc)[:200]}
 
     elif action == "regen_image":
+        # Billing: image regen costs 1 request
+        allowed, _used, _limit = await limiter.check_search_limit(str(user.id), user.plan, user=user)
+        if not allowed:
+            return {"ok": False, "error": "Достигнут дневной лимит запросов. Попробуйте завтра или подключите Pro."}
+
         # Regenerate AI image only (keep current text)
         topic = draft.get("topic", "")
         text = draft.get("text", "")
