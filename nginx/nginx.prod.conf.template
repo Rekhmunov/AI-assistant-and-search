@@ -14,7 +14,7 @@ map $args $glosix_private_query {
 server {
     listen 80;
     server_name ${APP_SERVER_NAMES};
-    client_max_body_size 20m;
+    client_max_body_size 30m;
 
     add_header X-Content-Type-Options "nosniff" always;
     add_header X-Frame-Options "SAMEORIGIN" always;
@@ -43,6 +43,21 @@ server {
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    # Broadcast / welcome media: videos up to 50 MB
+    location ~ ^/api/admin/broadcasts/(welcome/)?media {
+        client_max_body_size 55m;
+        set $backend_upstream backend:8000;
+        proxy_pass http://$backend_upstream;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_buffering off;
+        proxy_read_timeout 300s;
+        proxy_connect_timeout 60s;
     }
 
     location /api/ {
@@ -91,7 +106,7 @@ server {
 server {
     listen 80;
     server_name ${API_HOST};
-    client_max_body_size 20m;
+    client_max_body_size 30m;
 
     add_header X-Content-Type-Options "nosniff" always;
     add_header X-Frame-Options "DENY" always;
