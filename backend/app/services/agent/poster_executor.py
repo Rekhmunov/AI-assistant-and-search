@@ -429,7 +429,16 @@ async def publish_to_channel(
     if image_bytes:
         logger.info("POSTER_PUBLISH uploading image %d bytes to MAX", len(image_bytes))
         try:
-            token = await bot.upload_media(image_bytes, "post_image.jpg", "image")
+            # Detect real format from magic bytes to avoid MIME mismatch
+            from app.services.image_bytes import detect_image_mime
+            mime = detect_image_mime(image_bytes)
+            if mime == "image/png":
+                filename = "post_image.png"
+            else:
+                filename = "post_image.jpg"
+                mime = "image/jpeg"
+            logger.info("POSTER_PUBLISH detected format: %s", mime)
+            token = await bot.upload_media(image_bytes, filename, "image")
             logger.info("POSTER_PUBLISH upload_media token=%s", bool(token))
             if token:
                 attachments.append({"type": "image", "payload": {"token": token}})

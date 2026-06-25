@@ -367,11 +367,15 @@ async def generate_poster_post(
             image_file_id: str | None = None
             if image_bytes:
                 try:
+                    # Save for later use at approval time
                     from app.services.image_gen_service import persist_generated_image
-                    from app.services.image_gen_service import public_file_content_url
                     fid, _ = await persist_generated_image(db, user, image_bytes, title=topic, ttl_hours=24)
-                    image_url = public_file_content_url(fid)
                     image_file_id = str(fid)
+                    # Return as base64 data URL — works without auth in <img> tag
+                    import base64 as _b64
+                    from app.services.image_bytes import detect_image_mime as _detect_mime
+                    _mime = _detect_mime(image_bytes) or "image/jpeg"
+                    image_url = f"data:{_mime};base64,{_b64.b64encode(image_bytes).decode('ascii')}"
                 except Exception as img_exc:
                     logger.warning("poster draft image save failed: %s", img_exc)
 
@@ -503,7 +507,7 @@ async def poster_draft_action(
 
     elif action == "regen":
         from app.services.providers.factory import resolve_agent_providers
-        from app.services.image_gen_service import persist_generated_image, public_file_content_url
+        from app.services.image_gen_service import persist_generated_image
         import uuid as _uuid
         topic = draft.get("topic", _pick_next_topic(agent))
         update_post_status(agent, post_id, "rejected")
@@ -521,13 +525,17 @@ async def poster_draft_action(
             if image_bytes_regen:
                 try:
                     fid, _ = await persist_generated_image(db, user, image_bytes_regen, title=topic, ttl_hours=24)
-                    image_url = public_file_content_url(fid)
-                    # Store image_file_id in draft
+                    # Store image_file_id in draft for approval reuse
                     cfg = dict(agent.config or {})
                     draft_data = cfg.get("poster_pending_draft", {})
                     draft_data["image_file_id"] = str(fid)
                     cfg["poster_pending_draft"] = draft_data
                     agent.config = cfg
+                    # Return base64 data URL for instant preview (no auth needed)
+                    import base64 as _b64
+                    from app.services.image_bytes import detect_image_mime as _detect_mime
+                    _mime = _detect_mime(image_bytes_regen) or "image/jpeg"
+                    image_url = f"data:{_mime};base64,{_b64.b64encode(image_bytes_regen).decode('ascii')}"
                 except Exception as img_exc:
                     logger.warning("poster regen image save failed: %s", img_exc)
 
