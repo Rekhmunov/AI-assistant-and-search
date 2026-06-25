@@ -432,11 +432,9 @@ async def generate_poster_post(
         channel_id = get_poster_channel_id(agent)
         bot = MaxBotService()
 
-        # Generate image if ai mode configured
-        image_bytes = await generate_poster_image(agent, topic, post_text, db=db, redis_client=redis_client)
-
         if approval_mode == "auto" and channel_id:
-            # Auto-publish: publish directly
+            # Auto-publish mode: generate image then publish immediately
+            image_bytes = await generate_poster_image(agent, topic, post_text, db=db, redis_client=redis_client)
             ok = await publish_to_channel(bot, channel_id=channel_id, text=post_text, image_bytes=image_bytes)
             if ok:
                 update_post_status(agent, post_id, "published")
@@ -444,25 +442,12 @@ async def generate_poster_post(
                 return {"ok": True, "mode": "published", "topic": topic, "post_text": post_text}
             return {"ok": False, "error": "Не удалось опубликовать в канал. Проверьте права бота."}
         else:
-            # Manual draft: save image as temp file for preview, return URL to frontend
-            image_url: str | None = None
-            image_file_ids_list: list[str] = []
-            if image_bytes:
-                try:
-                    # Save for later use at approval time
-                    from app.services.image_gen_service import persist_generated_image
-                    fid, _ = await persist_generated_image(db, user, image_bytes, title=topic, ttl_hours=24)
-                    image_file_ids_list = [str(fid)]
-                    import base64 as _b64
-                    from app.services.image_bytes import detect_image_mime as _detect_mime
-                    _mime = _detect_mime(image_bytes) or "image/jpeg"
-                    image_url = f"data:{_mime};base64,{_b64.b64encode(image_bytes).decode('ascii')}"
-                except Exception as img_exc:
-                    logger.warning("poster draft image save failed: %s", img_exc)
+            # Manual draft: return TEXT immediately without waiting for image.
+            # Frontend will call gen_image action separately to load image in background.
+            cfg = dict(agent.config or {})
+            wants_ai_image = str(cfg.get("poster_media") or "none").lower() == "ai"
 
-            save_pending_draft(agent, post_id=post_id, topic=topic, text=post_text,
-                               image_file_ids=image_file_ids_list if image_file_ids_list else [])
-
+            save_pending_draft(agent, post_id=post_id, topic=topic, text=post_text, image_file_ids=[])
             await db.commit()
             return {
                 "ok": True,
@@ -470,8 +455,10 @@ async def generate_poster_post(
                 "topic": topic,
                 "post_id": post_id,
                 "post_text": post_text,
-                "image_url": image_url,  # None if no ai image or save failed
-                "file_id": image_file_ids_list[0] if image_file_ids_list else None,
+                "image_url": None,
+                "file_id": None,
+                # Signal frontend to auto-trigger image generation
+                "wants_ai_image": wants_ai_image,
             }
     except Exception as exc:
         logger.exception("generate_poster_post failed thread=%s: %s", thread_id, exc)
@@ -646,7 +633,6 @@ async def poster_draft_action(
             return {"ok": False, "error": "Достигнут дневной лимит запросов. Попробуйте завтра или подключите Pro."}
 
         from app.services.providers.factory import resolve_agent_providers
-        from app.services.image_gen_service import persist_generated_image
         import uuid as _uuid
         topic = draft.get("topic", _pick_next_topic(agent))
         update_post_status(agent, post_id, "rejected")
@@ -656,54 +642,26 @@ async def poster_draft_action(
             new_text = await generate_post(agent, topic, llm)
             new_id = str(_uuid.uuid4())
             save_post_to_history(agent, post_id=new_id, topic=topic, text=new_text, status="draft")
-            save_pending_draft(agent, post_id=new_id, topic=topic, text=new_text)
+            save_pending_draft(agent, post_id=new_id, topic=topic, text=new_text, image_file_ids=[])
 
-            # Also regenerate image
-            image_url: str | None = None
-            image_bytes_regen = await generate_poster_image(agent, topic, new_text, db=db, redis_client=redis_client)
-            if image_bytes_regen:
-                try:
-                    fid, _ = await persist_generated_image(db, user, image_bytes_regen, title=topic, ttl_hours=24)
-                    # Store image_file_id in draft for approval reuse
-                    cfg = dict(agent.config or {})
-                    draft_data = cfg.get("poster_pending_draft", {})
-                    draft_data["image_file_id"] = str(fid)
-                    cfg["poster_pending_draft"] = draft_data
-                    agent.config = cfg
-                    # Return base64 data URL for instant preview (no auth needed)
-                    import base64 as _b64
-                    from app.services.image_bytes import detect_image_mime as _detect_mime
-                    _mime = _detect_mime(image_bytes_regen) or "image/jpeg"
-                    image_url = f"data:{_mime};base64,{_b64.b64encode(image_bytes_regen).decode('ascii')}"
-                except Exception as img_exc:
-                    logger.warning("poster regen image save failed: %s", img_exc)
-
-            # Edit DM message with new draft
-            if draft_message_id and image_bytes_regen:
+            # Signal DM message update (text only; frontend handles image separately)
+            if draft_message_id:
                 try:
                     await edit_draft_message(
                         bot, agent, draft_message_id=draft_message_id,
                         post_id=new_id, topic=topic, text=new_text,
-                        image_bytes=image_bytes_regen,
                     )
                     save_pending_draft(agent, post_id=new_id, topic=topic,
                                        text=new_text, draft_message_id=draft_message_id)
                 except Exception as _dme:
                     logger.warning("regen DM edit failed: %s", _dme)
-            elif draft_message_id:
-                try:
-                    await edit_draft_message(
-                        bot, agent, draft_message_id=draft_message_id,
-                        post_id=new_id, topic=topic, text=new_text,
-                    )
-                    save_pending_draft(agent, post_id=new_id, topic=topic,
-                                       text=new_text, draft_message_id=draft_message_id)
-                except Exception as _dme:
-                    logger.warning("regen DM edit (no img) failed: %s", _dme)
+
+            cfg_r = dict(agent.config or {})
+            wants_ai_image = str(cfg_r.get("poster_media") or "none").lower() == "ai"
 
             await db.commit()
             return {"ok": True, "mode": "web_draft", "post_id": new_id, "post_text": new_text,
-                    "topic": topic, "image_url": image_url}
+                    "topic": topic, "image_url": None, "wants_ai_image": wants_ai_image}
         except Exception as exc:
             return {"ok": False, "error": str(exc)[:200]}
 

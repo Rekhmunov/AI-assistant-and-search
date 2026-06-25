@@ -430,9 +430,24 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
         setDraftAction("published");
         void loadHistory();
       } else if (data.mode === "web_draft") {
-        const imgUrl = data.image_url ?? undefined;
-        setDraft({ postId: data.post_id, text: data.post_text, topic: data.topic, imageUrl: imgUrl });
-        setDraftImages(imgUrl ? [{ url: imgUrl, fileId: data.file_id ?? null }] : []);
+        // Show draft card immediately (text is ready, image may not be yet)
+        setDraft({ postId: data.post_id, text: data.post_text, topic: data.topic });
+        setDraftImages([]);
+        setGenerating(false);  // unlock UI immediately
+
+        // Auto-generate AI image in background if configured
+        if (data.wants_ai_image) {
+          setImageRegenLoading(true);
+          try {
+            const imgData = await callDraftAction({ action: "regen_image", post_id: data.post_id });
+            if (imgData?.ok && imgData.image_url) {
+              setDraftImages([{ url: imgData.image_url, fileId: imgData.file_id ?? null }]);
+            }
+          } finally {
+            setImageRegenLoading(false);
+          }
+        }
+        return; // early return to skip the outer finally setGenerating(false)
       }
     } catch {
       setDraftAction("error");
@@ -468,11 +483,23 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
         setDraft(null);
         setDraftAction("rejected");
       } else if (data.mode === "web_draft") {
-        const imgUrl2 = data.image_url ?? undefined;
-        setDraft({ postId: data.post_id, text: data.post_text, topic: data.topic, imageUrl: imgUrl2 });
-        setDraftImages(imgUrl2 ? [{ url: imgUrl2, fileId: data.file_id ?? null }] : []);
+        // Text regenerated — show new draft immediately, then load image in background
+        setDraft({ postId: data.post_id, text: data.post_text, topic: data.topic });
+        setDraftImages([]);
         setDraftAction("");
         setEditedText("");
+
+        if (data.wants_ai_image) {
+          setImageRegenLoading(true);
+          try {
+            const imgData = await callDraftAction({ action: "regen_image", post_id: data.post_id });
+            if (imgData?.ok && imgData.image_url) {
+              setDraftImages([{ url: imgData.image_url, fileId: imgData.file_id ?? null }]);
+            }
+          } finally {
+            setImageRegenLoading(false);
+          }
+        }
       }
     } catch {
       setDraftAction("error");
@@ -901,7 +928,7 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
               onClick={generatePost}
             >
             {generating ? (
-              <><span className="poster-status__spinner" /> Генерируем пост и изображение…</>
+              <><span className="poster-status__spinner" /> Генерируем пост…</>
             ) : (
               "✏️ Сгенерировать разовый пост"
             )}
