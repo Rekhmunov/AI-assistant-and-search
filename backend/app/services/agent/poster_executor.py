@@ -195,6 +195,9 @@ def update_post_status(agent: AgentInstance, post_id: str, status: str) -> None:
 # Черновик (pending draft)
 # ─────────────────────────────────────────────────────────────────────────────
 
+MAX_DRAFT_IMAGES = 4  # maximum photos per post
+
+
 def save_pending_draft(
     agent: AgentInstance,
     *,
@@ -202,15 +205,39 @@ def save_pending_draft(
     topic: str,
     text: str,
     draft_message_id: str | None = None,
+    image_file_ids: list[str] | None = None,
 ) -> None:
     cfg = _get_cfg(agent)
-    cfg[_DRAFT_PENDING_KEY] = {
+    draft: dict = {
         "post_id": post_id,
         "topic": topic,
         "text": text,
         "draft_message_id": draft_message_id,
         "awaiting_edit": False,
     }
+    if image_file_ids is not None:
+        draft["image_file_ids"] = image_file_ids[:MAX_DRAFT_IMAGES]
+    elif _DRAFT_PENDING_KEY in cfg:
+        # Preserve existing image_file_ids when updating other fields
+        draft["image_file_ids"] = cfg[_DRAFT_PENDING_KEY].get("image_file_ids", [])
+    cfg[_DRAFT_PENDING_KEY] = draft
+    _save_cfg(agent, cfg)
+
+
+def get_draft_image_file_ids(agent: AgentInstance) -> list[str]:
+    """Return list of image file IDs stored in the pending draft."""
+    draft = get_pending_draft(agent)
+    if not draft:
+        return []
+    return list(draft.get("image_file_ids") or [])
+
+
+def set_draft_image_file_ids(agent: AgentInstance, file_ids: list[str]) -> None:
+    """Update image_file_ids in pending draft without touching other fields."""
+    cfg = _get_cfg(agent)
+    draft = cfg.get(_DRAFT_PENDING_KEY, {})
+    draft["image_file_ids"] = file_ids[:MAX_DRAFT_IMAGES]
+    cfg[_DRAFT_PENDING_KEY] = draft
     _save_cfg(agent, cfg)
 
 
@@ -345,15 +372,20 @@ async def _build_draft_attachments(
     agent: AgentInstance,
     post_id: str,
     image_bytes: bytes | None = None,
+    image_bytes_list: list[bytes] | None = None,
 ) -> list:
-    """Build list of attachments: optional image + keyboard buttons."""
+    """Build list of attachments: optional image(s) + keyboard buttons."""
     attachments = []
-    if image_bytes:
+
+    all_images: list[bytes] = []
+    if image_bytes_list:
+        all_images = image_bytes_list[:MAX_DRAFT_IMAGES]
+    elif image_bytes:
+        all_images = [image_bytes]
+
+    for img in all_images:
         try:
-            from app.services.image_bytes import detect_image_mime
-            mime = detect_image_mime(image_bytes)
-            fname = "draft_image.png" if mime == "image/png" else "draft_image.jpg"
-            token = await bot.upload_media(image_bytes, fname, "image")
+            token = await _upload_image_to_max(bot, img)
             if token:
                 attachments.append({"type": "image", "payload": {"token": token}})
             else:
@@ -385,6 +417,7 @@ async def send_draft_for_approval(
     topic: str,
     text: str,
     image_bytes: bytes | None = None,
+    image_bytes_list: list[bytes] | None = None,
 ) -> str | None:
     """
     Отправляет черновик с кнопками согласования (опционально с изображением).
@@ -393,7 +426,7 @@ async def send_draft_for_approval(
     """
     header = f"📝 **Черновик поста** — тема: _{topic}_\n\n"
     full_text = header + text
-    attachments = await _build_draft_attachments(bot, agent, post_id, image_bytes)
+    attachments = await _build_draft_attachments(bot, agent, post_id, image_bytes, image_bytes_list)
 
     if approval_chat_id:
         dest_chat_id, dest_user_id = approval_chat_id, None
@@ -425,11 +458,12 @@ async def edit_draft_message(
     topic: str,
     text: str,
     image_bytes: bytes | None = None,
+    image_bytes_list: list[bytes] | None = None,
 ) -> bool:
     """Edit existing DM/group draft message with new content."""
     header = f"📝 **Черновик поста** — тема: _{topic}_\n\n"
     full_text = header + text
-    attachments = await _build_draft_attachments(bot, agent, post_id, image_bytes)
+    attachments = await _build_draft_attachments(bot, agent, post_id, image_bytes, image_bytes_list)
     return await bot.edit_message(draft_message_id, full_text, attachments=attachments)
 
 
@@ -470,47 +504,53 @@ async def send_dm_notification(
 # Публикация в канал
 # ─────────────────────────────────────────────────────────────────────────────
 
+async def _upload_image_to_max(bot: MaxBotService, image_bytes: bytes) -> str | None:
+    """Upload a single image to MAX CDN, return attachment token."""
+    from app.services.image_bytes import detect_image_mime
+    mime = detect_image_mime(image_bytes)
+    filename = "post_image.png" if mime == "image/png" else "post_image.jpg"
+    logger.warning("POSTER_UPLOAD %d bytes as %s", len(image_bytes), filename)
+    token = await bot.upload_media(image_bytes, filename, "image")
+    logger.warning("POSTER_UPLOAD token=%s", bool(token))
+    return token
+
+
 async def publish_to_channel(
     bot: MaxBotService,
     *,
     channel_id: int,
     text: str,
     image_bytes: bytes | None = None,
+    image_bytes_list: list[bytes] | None = None,
 ) -> bool:
-    """Публикует пост в канал. Возвращает True при успехе."""
+    """
+    Публикует пост в канал.
+    image_bytes — одно изображение (обратная совместимость).
+    image_bytes_list — список изображений до MAX_DRAFT_IMAGES.
+    """
     attachments = []
 
-    if image_bytes:
-        logger.info("POSTER_PUBLISH uploading image %d bytes to MAX", len(image_bytes))
+    all_images: list[bytes] = []
+    if image_bytes_list:
+        all_images = image_bytes_list[:MAX_DRAFT_IMAGES]
+    elif image_bytes:
+        all_images = [image_bytes]
+
+    for img in all_images:
         try:
-            # Detect real format from magic bytes to avoid MIME mismatch
-            from app.services.image_bytes import detect_image_mime
-            mime = detect_image_mime(image_bytes)
-            if mime == "image/png":
-                filename = "post_image.png"
-            else:
-                filename = "post_image.jpg"
-                mime = "image/jpeg"
-            logger.info("POSTER_PUBLISH detected format: %s", mime)
-            token = await bot.upload_media(image_bytes, filename, "image")
-            logger.info("POSTER_PUBLISH upload_media token=%s", bool(token))
+            token = await _upload_image_to_max(bot, img)
             if token:
                 attachments.append({"type": "image", "payload": {"token": token}})
             else:
-                logger.warning("POSTER_PUBLISH upload_media returned empty token")
+                logger.warning("POSTER_PUBLISH image upload returned empty token")
         except Exception as exc:
             logger.warning("POSTER_PUBLISH image upload failed: %s", exc)
-    else:
-        logger.info("POSTER_PUBLISH no image (text only)")
 
     result = await bot.send_message(
-        None,
-        text,
-        attachments=attachments or None,
-        chat_id=channel_id,
-        notify=True,
+        None, text, attachments=attachments or None,
+        chat_id=channel_id, notify=True,
     )
-    logger.info("POSTER_PUBLISH send_message ok=%s has_image=%s", result.ok, bool(attachments))
+    logger.warning("POSTER_PUBLISH ok=%s images=%d", result.ok, len(attachments))
     return result.ok
 
 

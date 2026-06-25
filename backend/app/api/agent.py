@@ -364,14 +364,13 @@ async def generate_poster_post(
         else:
             # Manual draft: save image as temp file for preview, return URL to frontend
             image_url: str | None = None
-            image_file_id: str | None = None
+            image_file_ids_list: list[str] = []
             if image_bytes:
                 try:
                     # Save for later use at approval time
                     from app.services.image_gen_service import persist_generated_image
                     fid, _ = await persist_generated_image(db, user, image_bytes, title=topic, ttl_hours=24)
-                    image_file_id = str(fid)
-                    # Return as base64 data URL — works without auth in <img> tag
+                    image_file_ids_list = [str(fid)]
                     import base64 as _b64
                     from app.services.image_bytes import detect_image_mime as _detect_mime
                     _mime = _detect_mime(image_bytes) or "image/jpeg"
@@ -379,15 +378,8 @@ async def generate_poster_post(
                 except Exception as img_exc:
                     logger.warning("poster draft image save failed: %s", img_exc)
 
-            save_pending_draft(agent, post_id=post_id, topic=topic, text=post_text)
-
-            # Store image_file_id in draft so it can be used at approval time
-            if image_file_id:
-                cfg = dict(agent.config or {})
-                draft_data = cfg.get("poster_pending_draft", {})
-                draft_data["image_file_id"] = image_file_id
-                cfg["poster_pending_draft"] = draft_data
-                agent.config = cfg
+            save_pending_draft(agent, post_id=post_id, topic=topic, text=post_text,
+                               image_file_ids=image_file_ids_list if image_file_ids_list else [])
 
             await db.commit()
             return {
@@ -473,8 +465,12 @@ async def poster_draft_action(
         get_poster_channel_id, publish_to_channel, generate_poster_image,
         generate_post, save_post_to_history, save_pending_draft, _pick_next_topic,
         mark_draft_message_done, edit_draft_message,
+        get_draft_image_file_ids, set_draft_image_file_ids,
+        MAX_DRAFT_IMAGES,
     )
     from app.services.bot import MaxBotService
+    from app.services.upload_storage import load_upload_bytes
+    from app.models.uploaded_file import UploadedFile as _UF
 
     draft = get_pending_draft(agent)
     if not draft or draft.get("post_id") != post_id:
@@ -490,36 +486,35 @@ async def poster_draft_action(
         draft_text = draft.get("text", "")
         draft_topic = draft.get("topic", "")
 
-        # Try to use pre-generated image from draft
-        image_bytes = None
-        image_file_id = draft.get("image_file_id")
-        logger.info("POSTER_APPROVE image_file_id=%s channel=%s", image_file_id, channel_id)
-        if image_file_id:
+        # Load all stored images for this draft
+        image_file_ids = get_draft_image_file_ids(agent)
+        logger.warning("POSTER_APPROVE image_file_ids=%s channel=%s", image_file_ids, channel_id)
+
+        images_bytes_list: list[bytes] = []
+        for fid in image_file_ids:
             try:
-                from uuid import UUID as _UUID
-                from app.models.uploaded_file import UploadedFile as _UF
-                from app.services.upload_storage import load_upload_bytes
-                _uf_result = await db.execute(
-                    select(_UF).where(_UF.id == _UUID(image_file_id))
-                )
-                _uf = _uf_result.scalar_one_or_none()
+                from uuid import UUID as _UUID2
+                _uf_res = await db.execute(select(_UF).where(_UF.id == _UUID2(fid)))
+                _uf = _uf_res.scalar_one_or_none()
                 if _uf and _uf.storage_key:
-                    image_bytes = load_upload_bytes(_uf.storage_key)
-                    logger.info("POSTER_APPROVE loaded image %d bytes from storage", len(image_bytes) if image_bytes else 0)
-                else:
-                    logger.warning("POSTER_APPROVE UploadedFile not found or no storage_key: %s", image_file_id)
+                    img = load_upload_bytes(_uf.storage_key)
+                    if img:
+                        images_bytes_list.append(img)
             except Exception as _exc:
-                logger.warning("POSTER_APPROVE image load failed: %s", _exc)
+                logger.warning("POSTER_APPROVE load image %s failed: %s", fid, _exc)
 
-        # If no pre-generated image, generate fresh
-        if not image_bytes:
-            logger.info("POSTER_APPROVE generating fresh image (poster_media=%s)",
-                        (agent.config or {}).get("poster_media"))
-            image_bytes = await generate_poster_image(agent, draft_topic, draft_text, db=db, redis_client=redis_client)
-            logger.info("POSTER_APPROVE fresh image result: %s bytes",
-                        len(image_bytes) if image_bytes else "None")
+        # If no stored images, generate fresh AI image
+        if not images_bytes_list:
+            logger.warning("POSTER_APPROVE generating fresh image (poster_media=%s)",
+                           (agent.config or {}).get("poster_media"))
+            fresh = await generate_poster_image(agent, draft_topic, draft_text, db=db, redis_client=redis_client)
+            if fresh:
+                images_bytes_list = [fresh]
 
-        ok = await publish_to_channel(bot, channel_id=channel_id, text=draft_text, image_bytes=image_bytes)
+        ok = await publish_to_channel(
+            bot, channel_id=channel_id, text=draft_text,
+            image_bytes_list=images_bytes_list if images_bytes_list else None,
+        )
         logger.info("POSTER_APPROVE publish ok=%s image=%s", ok, "yes" if image_bytes else "no")
         if ok:
             update_post_status(agent, post_id, "published")
@@ -622,6 +617,62 @@ async def poster_draft_action(
                     "topic": topic, "image_url": image_url}
         except Exception as exc:
             return {"ok": False, "error": str(exc)[:200]}
+
+    elif action == "regen_image":
+        # Regenerate AI image only (keep current text)
+        topic = draft.get("topic", "")
+        text = draft.get("text", "")
+        try:
+            new_image_bytes = await generate_poster_image(agent, topic, text, db=db, redis_client=redis_client)
+            if not new_image_bytes:
+                return {"ok": False, "error": "Не удалось сгенерировать изображение"}
+            from app.services.image_gen_service import persist_generated_image, public_file_content_url
+            import uuid as _uuid
+            fid, _ = await persist_generated_image(db, user, new_image_bytes, title=topic, ttl_hours=24)
+            # Replace all existing images with the new AI one
+            set_draft_image_file_ids(agent, [str(fid)])
+            # Return base64 for immediate preview
+            import base64 as _b64
+            from app.services.image_bytes import detect_image_mime as _det
+            _mime = _det(new_image_bytes) or "image/jpeg"
+            image_url = f"data:{_mime};base64,{_b64.b64encode(new_image_bytes).decode('ascii')}"
+            await db.commit()
+            return {"ok": True, "mode": "image_updated", "image_url": image_url, "file_id": str(fid)}
+        except Exception as exc:
+            return {"ok": False, "error": str(exc)[:200]}
+
+    elif action == "add_image":
+        # Add an uploaded image file to draft (max 4 total)
+        from uuid import UUID as _UUID3
+        new_file_id = str(body.get("file_id", "")).strip()
+        if not new_file_id:
+            return {"ok": False, "error": "file_id не указан"}
+        try:
+            _uf_r = await db.execute(select(_UF).where(_UF.id == _UUID3(new_file_id), _UF.user_id == user.id))
+            _uf = _uf_r.scalar_one_or_none()
+            if not _uf:
+                return {"ok": False, "error": "Файл не найден"}
+        except Exception:
+            return {"ok": False, "error": "Неверный file_id"}
+        current_ids = get_draft_image_file_ids(agent)
+        if new_file_id not in current_ids:
+            if len(current_ids) >= MAX_DRAFT_IMAGES:
+                return {"ok": False, "error": f"Максимум {MAX_DRAFT_IMAGES} фото на пост"}
+            current_ids.append(new_file_id)
+            set_draft_image_file_ids(agent, current_ids)
+        await db.commit()
+        return {"ok": True, "mode": "image_added", "file_ids": current_ids}
+
+    elif action == "remove_image":
+        # Remove an image from draft
+        rm_file_id = str(body.get("file_id", "")).strip()
+        if not rm_file_id:
+            return {"ok": False, "error": "file_id не указан"}
+        current_ids = get_draft_image_file_ids(agent)
+        current_ids = [fid for fid in current_ids if fid != rm_file_id]
+        set_draft_image_file_ids(agent, current_ids)
+        await db.commit()
+        return {"ok": True, "mode": "image_removed", "file_ids": current_ids}
 
     return {"ok": False, "error": f"Неизвестное действие: {action}"}
 
