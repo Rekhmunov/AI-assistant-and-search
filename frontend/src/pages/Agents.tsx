@@ -57,9 +57,9 @@ export function AgentsPage() {
 
   const isPro = user?.plan === "pro";
 
-  // Загружаем видимые шаблоны из API
+  // Загружаем видимые шаблоны из API (для всех авторизованных пользователей)
   useEffect(() => {
-    if (!isPro || !token) return;
+    if (!token) return;
     fetch("/api/agent/templates", {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       })
@@ -106,15 +106,19 @@ export function AgentsPage() {
       )}
 
       {isDesktop ? (
+        <div className="agents-catalog">
+          {visibleTemplates.map((tmpl) => (
+            <AgentTemplateCard
+              key={tmpl.id}
+              template={tmpl}
+              loading={createAgent.isPending && createAgent.variables === tmpl.id}
+              onClick={() => { createAgent.reset(); createAgent.mutate(tmpl.id); }}
+            />
+          ))}
+        </div>
+      ) : (
         <>
-          {!isPro ? (
-            <div className="agents-pro-gate">
-              <div className="agents-pro-gate-icon">🤖</div>
-              <p className="agents-pro-gate-title">Агенты доступны в тарифе Pro</p>
-              <p className="agents-pro-gate-sub">Подключите Pro чтобы автоматизировать задачи в MAX</p>
-              <button className="btn-primary" onClick={() => navigate("/profile")}>Перейти в Pro</button>
-            </div>
-          ) : (
+          <div className="agents-scroll">
             <div className="agents-catalog">
               {visibleTemplates.map((tmpl) => (
                 <AgentTemplateCard
@@ -125,30 +129,6 @@ export function AgentsPage() {
                 />
               ))}
             </div>
-          )}
-        </>
-      ) : (
-        <>
-          <div className="agents-scroll">
-            {!isPro ? (
-              <div className="agents-pro-gate">
-                <div className="agents-pro-gate-icon">🤖</div>
-                <p className="agents-pro-gate-title">Агенты доступны в тарифе Pro</p>
-                <p className="agents-pro-gate-sub">Подключите Pro чтобы автоматизировать задачи в MAX</p>
-                <button className="btn-primary" onClick={() => navigate("/profile")}>Перейти в Pro</button>
-              </div>
-            ) : (
-              <div className="agents-catalog">
-                {visibleTemplates.map((tmpl) => (
-                  <AgentTemplateCard
-                    key={tmpl.id}
-                    template={tmpl}
-                    loading={createAgent.isPending && createAgent.variables === tmpl.id}
-                    onClick={() => { createAgent.reset(); createAgent.mutate(tmpl.id); }}
-                  />
-                ))}
-              </div>
-            )}
           </div>
           <div className="mobile-new-thread-bar mobile-new-thread-bar--docked">
             <MobileNewThreadButton variant="labeled" onClick={() => navigate("/")} />

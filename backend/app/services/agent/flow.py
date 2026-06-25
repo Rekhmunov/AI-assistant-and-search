@@ -278,7 +278,9 @@ async def handle_agent_message(
 
     allowed, _used, _limit = await limiter.check_search_limit(str(user.id), user.plan)
     if not allowed:
-        raise ValueError("rate_limit")
+        # Free users get a specific code so the frontend shows the upgrade modal
+        from app.models.user import Plan as _Plan
+        raise ValueError("free_rate_limit" if user.plan != _Plan.PRO else "rate_limit")
 
     display_text = text.strip()
     user_msg = await _user_message(db, thread, display_text or "📎 Файл загружен")

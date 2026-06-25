@@ -857,6 +857,13 @@ export function Thread() {
                 };
               }
               if (code === "free_rate_limit") {
+                // In agent threads, also show the upgrade modal prominently
+                if (isAgentThread) {
+                  setProUpgradeModal({
+                    title: "Лимит запросов на сегодня исчерпан",
+                    description: "Продолжить работу с агентами можно завтра или прямо сейчас — перейдите на Pro.",
+                  });
+                }
                 return {
                   ...turn,
                   answer: "",

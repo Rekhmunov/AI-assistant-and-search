@@ -114,7 +114,7 @@ async def stream_agent_message(
                     },
                 )
                 return
-            if code == "rate_limit":
+            if code in ("rate_limit", "free_rate_limit"):
                 yield sse_event(
                     "error",
                     {"code": code, "message": "Достигнут дневной лимит сообщений."},

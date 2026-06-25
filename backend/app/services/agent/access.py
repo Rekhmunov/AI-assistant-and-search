@@ -1,4 +1,4 @@
-"""Проверки доступа к агентам: только Pro + привязанный MAX."""
+"""Проверки доступа к агентам: Free и Pro + опционально привязанный MAX."""
 
 from __future__ import annotations
 
@@ -9,20 +9,24 @@ from app.models.user import Plan, User
 
 
 def require_agent_eligible(user: User, *, require_max: bool = False) -> None:
+    """Agents are open to all registered users (Free + Pro).
+    Guests (no email, no plan) are not allowed.
+    require_max=True only for MAX-specific agent features.
+    """
+    if user.guest_key and not user.email:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "code": "agent_auth_required",
+                "message": "Зарегистрируйтесь, чтобы использовать агентов.",
+            },
+        )
     if require_max and user.max_user_id is None:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail={
                 "code": "agent_max_required",
                 "message": "Для запуска агента привяжите аккаунт MAX в профиле.",
-            },
-        )
-    if user.plan != Plan.PRO:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail={
-                "code": "agent_pro_required",
-                "message": "Режим агента доступен только в тарифе Pro.",
             },
         )
 
