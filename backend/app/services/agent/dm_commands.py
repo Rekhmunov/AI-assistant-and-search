@@ -115,6 +115,84 @@ async def list_dm_commands_for_user(db: AsyncSession, *, max_user_id: int) -> li
     return sorted(set(cmds))
 
 
+async def _handle_poster_dm_photo(
+    db: AsyncSession,
+    bot: MaxBotService,
+    agent: "AgentInstance",
+    draft: dict,
+    *,
+    max_user_id: int,
+    payload: dict[str, Any],
+) -> None:
+    """Download photo(s) from DM payload and attach them to the pending poster draft."""
+    from app.services.agent.max_media import message_attachments, _attachment_urls
+    from app.services.agent.poster_executor import (
+        get_draft_image_file_ids, set_draft_image_file_ids, MAX_DRAFT_IMAGES,
+    )
+    from app.services.file_format import sniff_ext_from_bytes
+    from app.services.upload_storage import save_upload_bytes
+    from app.models.uploaded_file import UploadedFile
+    from app.models.user import User
+    from sqlalchemy import select as _sel
+    import uuid as _uuid
+    from datetime import datetime, timezone
+
+    # Load user to get user_id for UploadedFile
+    user_res = await db.execute(_sel(User).where(User.max_user_id == max_user_id))
+    user = user_res.scalar_one_or_none()
+    if not user:
+        return
+
+    _IMAGE_TYPES = {"image", "photo"}
+    current_ids = get_draft_image_file_ids(agent)
+    added = 0
+
+    for att in message_attachments(payload):
+        if str(att.get("type") or "").lower() not in _IMAGE_TYPES:
+            continue
+        if len(current_ids) >= MAX_DRAFT_IMAGES:
+            break
+        for url in _attachment_urls(att):
+            if len(current_ids) >= MAX_DRAFT_IMAGES:
+                break
+            img_data = await bot.download_url(url)
+            if not img_data:
+                continue
+            sniffed = sniff_ext_from_bytes(img_data)
+            ext = sniffed if sniffed in ("jpg", "png", "webp") else "jpg"
+            fid = _uuid.uuid4()
+            storage_key = save_upload_bytes(user.id, fid, img_data, ext)
+            row = UploadedFile(
+                id=fid,
+                user_id=user.id,
+                filename=f"dm_photo_{fid.hex[:8]}.{ext}",
+                mime_type="image/jpeg" if ext == "jpg" else f"image/{ext}",
+                size_bytes=len(img_data),
+                media_kind="image",
+                storage_key=storage_key,
+                expires_at=datetime.now(timezone.utc).replace(year=2099),  # keep forever
+            )
+            db.add(row)
+            await db.flush()
+            current_ids.append(str(fid))
+            added += 1
+            break  # one URL per attachment is enough
+
+    if added == 0:
+        await bot.send_message(max_user_id, "⚠️ Не удалось получить фото. Попробуйте отправить ещё раз.")
+        return
+
+    set_draft_image_file_ids(agent, current_ids)
+    topic = draft.get("topic", "")
+    total = len(current_ids)
+    reply = (
+        f"📸 {'Фото добавлено' if added == 1 else f'{added} фото добавлено'} к черновику"
+        f"{f' «{topic}»' if topic else ''} ({total}/{MAX_DRAFT_IMAGES}).\n\n"
+        "Нажмите ✅ **Опубликовать** для отправки в канал."
+    )
+    await bot.send_message(max_user_id, reply)
+
+
 async def handle_dm_message(
     db: AsyncSession,
     redis_client,
@@ -151,7 +229,7 @@ async def handle_dm_message(
         await bot.send_message(max_user_id, "\n\n".join(lines) if lines else "Агенты активны.")
         return True
 
-    # Poster agent: check if awaiting text edit in DM context
+    # Poster agent: handle incoming DM messages (text edit OR photo upload)
     from sqlalchemy import select as _select
     _poster_result = await db.execute(
         _select(AgentInstance).where(
@@ -164,12 +242,15 @@ async def handle_dm_message(
         if _cfg.get("template") != "poster":
             continue
         _draft = _cfg.get("poster_pending_draft")
-        if _draft and _draft.get("awaiting_edit") and text:
+        if not _draft:
+            continue
+
+        # Case A: awaiting text edit
+        if _draft.get("awaiting_edit") and text:
             try:
                 from app.services.agent.poster_callbacks import handle_poster_edit_input
-                from app.services.agent.poster_executor import get_approval_destination, _pick_next_topic
+                from app.services.agent.poster_executor import get_approval_destination
                 dest_chat, dest_user = get_approval_destination(_poster_agent)
-                # For DM context, approval goes back to user DM
                 _handled = await handle_poster_edit_input(
                     db, _poster_agent, bot,
                     text=text,
@@ -180,6 +261,18 @@ async def handle_dm_message(
                     return True
             except Exception as _exc:
                 logger.warning("poster dm edit-input failed: %s", _exc)
+
+        # Case B: user sent a photo → attach to pending draft
+        if has_images:
+            try:
+                await _handle_poster_dm_photo(
+                    db, bot, _poster_agent, _draft,
+                    max_user_id=max_user_id, payload=payload or {},
+                )
+                await db.commit()
+                return True
+            except Exception as _exc:
+                logger.warning("poster dm photo-attach failed: %s", _exc)
 
     # Личный ассистент обрабатывается до всех других агентов
     from app.services.agent.assistant_bot_handler import handle_assistant_dm

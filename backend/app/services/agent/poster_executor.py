@@ -490,7 +490,8 @@ async def send_draft_for_approval(
     Возвращает message_id отправленного сообщения.
     """
     header = f"📝 **Черновик поста** — тема: _{topic}_\n\n"
-    full_text = header + text
+    photo_hint = "\n\n📎 _Отправьте фото в этот чат, чтобы добавить его к посту._"
+    full_text = header + text + photo_hint
     attachments = await _build_draft_attachments(bot, agent, post_id, image_bytes, image_bytes_list)
 
     if approval_chat_id:
