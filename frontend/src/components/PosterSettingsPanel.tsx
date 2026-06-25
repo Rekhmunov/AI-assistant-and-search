@@ -78,7 +78,7 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
   const [verifying, setVerifying] = useState(false);
   const [verifyStep, setVerifyStep] = useState<"channel" | "admin" | "">(""); 
   const [generating, setGenerating] = useState(false);
-  const [draft, setDraft] = useState<{ postId: string; text: string; topic: string; imageUrl?: string } | null>(null);
+  const [draft, setDraft] = useState<{ postId: string; text: string; topic: string; imageUrl?: string; fromCelery?: boolean } | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [draftAction, setDraftAction] = useState<"" | "actioning" | "editing" | "published" | "rejected" | "error">("");
   const [draftError, setDraftError] = useState("");
@@ -123,12 +123,12 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
       if (!res.ok) return;
       const data = await res.json();
       if (data.draft && (!draft || draft.postId !== data.draft.post_id)) {
-        // New draft from Celery — show in thread
-        setDraft({ postId: data.draft.post_id, text: data.draft.text, topic: data.draft.topic });
+        // New Celery draft arrived — show it (marks as fromCelery so polling can clear it)
+        setDraft({ postId: data.draft.post_id, text: data.draft.text, topic: data.draft.topic, fromCelery: true });
         setDraftAction("");
         setDraftError("");
-      } else if (!data.draft && draft && draftAction !== "published" && draftAction !== "rejected") {
-        // Draft was cleared (approved/rejected via DM)
+      } else if (!data.draft && draft?.fromCelery && draftAction !== "published" && draftAction !== "rejected") {
+        // Only clear Celery drafts via polling (not locally-generated ones — avoids race condition)
         setDraft(null);
         void loadHistory();
       }
