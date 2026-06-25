@@ -331,15 +331,32 @@ class MaxBotService:
 
         try:
             put_body = put_resp.json()
+            logger.warning("MAX upload_media CDN body keys=%s", list(put_body.keys()) if isinstance(put_body, dict) else type(put_body).__name__)
             # Token at top level (older MAX API format)
             if isinstance(put_body, dict) and put_body.get("token"):
                 return str(put_body["token"])
-            # Token nested inside photos dict: {"photos": {"<id>": {"token": "..."}}}
+            # Images: {"photos": {"<id>": {"token": "..."}}}
             if isinstance(put_body, dict) and isinstance(put_body.get("photos"), dict):
-                photos = put_body["photos"]
-                for photo_data in photos.values():
-                    if isinstance(photo_data, dict) and photo_data.get("token"):
-                        return str(photo_data["token"])
+                for item in put_body["photos"].values():
+                    if isinstance(item, dict) and item.get("token"):
+                        return str(item["token"])
+            # Videos: {"videos": {"<id>": {"token": "..."}}}
+            if isinstance(put_body, dict) and isinstance(put_body.get("videos"), dict):
+                for item in put_body["videos"].values():
+                    if isinstance(item, dict) and item.get("token"):
+                        return str(item["token"])
+            # Files: {"fileId": "...", "token": "..."} or nested
+            if isinstance(put_body, dict) and isinstance(put_body.get("files"), dict):
+                for item in put_body["files"].values():
+                    if isinstance(item, dict) and item.get("token"):
+                        return str(item["token"])
+            # Fallback: scan any top-level dict for a nested "token" key
+            if isinstance(put_body, dict):
+                for val in put_body.values():
+                    if isinstance(val, dict):
+                        for inner in val.values():
+                            if isinstance(inner, dict) and inner.get("token"):
+                                return str(inner["token"])
         except (ValueError, AttributeError):
             pass
 
