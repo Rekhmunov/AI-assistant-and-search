@@ -372,6 +372,11 @@ body:has(.page-thread) {
     min-height: 0;
   }
 
+  /* Scroll-down button: raise above the agent footer bar (not above composer) */
+  .page-thread--mobile .thread-mobile-body--agent-footer > .thread-scroll-down {
+    bottom: calc(88px + env(safe-area-inset-bottom));
+  }
+
   /* "Новый поиск +" footer bar in agent thread */
   .page-thread--mobile .thread-mobile-body--agent-footer .mobile-new-thread-bar--agent {
     flex: 0 0 auto;
@@ -380,9 +385,11 @@ body:has(.page-thread) {
     display: flex;
     justify-content: flex-end;
     align-items: center;
-    padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
+    padding: 12px 16px calc(20px + env(safe-area-inset-bottom)); /* +8px bottom raise */
     background: var(--bg);
     border-top: 1px solid var(--border-subtle);
+    pointer-events: auto;
+    z-index: 10;
   }
 
   .page-agents--mobile {
