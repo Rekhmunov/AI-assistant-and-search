@@ -361,11 +361,12 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
 
   const handleToggle = (val: boolean) => {
     onToggle(val);
+    // Always persist toggle change immediately to DB
     void persistEnabled(val);
     if (!val) {
       setActivationStatus("inactive");
       setError("");
-    } else {
+    } else if (activationStatus !== "active") {
       setActivationStatus("idle");
     }
   };
@@ -387,7 +388,7 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
     setError("");
     setActivationStatus("idle");
     try {
-      // Step 1: Save config
+      // Step 1: Save config (always include poster_enabled so toggle persists)
       const res = await fetch(`${API_BASE}/api/agent/threads/${threadId}/config`, {
         method: "PATCH",
         credentials: "include",
@@ -395,7 +396,7 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
           "Content-Type": "application/json",
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
-        body: JSON.stringify(cfg),
+        body: JSON.stringify({ ...cfg, poster_enabled: enabled }),
       });
       if (!res.ok) throw new Error("Не удалось сохранить настройки");
       setSaving(false);
