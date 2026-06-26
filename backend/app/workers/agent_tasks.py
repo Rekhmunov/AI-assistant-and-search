@@ -334,7 +334,11 @@ async def _dispatch_poster_scheduled_async() -> None:
                                 save_pending_draft(agent, post_id=post_id, topic=topic,
                                                    text=post_text, draft_message_id=msg_id)
 
-                        agent.config = cfg
+                        # DO NOT reassign agent.config = cfg here — save_pending_draft /
+                        # _save_cfg already updated agent.config with the pending draft.
+                        # Reassigning would erase the draft and break DM callback buttons.
+                        from sqlalchemy.orm.attributes import flag_modified as _fm_task
+                        _fm_task(agent, "config")
                         await db.commit()
                         logger.info(
                             "Poster scheduled: agent=%s slot=%s/%s topic=%s mode=%s",
