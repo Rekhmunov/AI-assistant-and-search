@@ -2396,6 +2396,22 @@ body:has(.page-thread) {
   align-self: flex-start;
 }
 
+/* Multi-file ZIP card */
+.generated-document-card--multi { align-items: flex-start; }
+.generated-document-card-files-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.generated-document-card-file-item {
+  font-size: 0.8rem;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 280px;
+}
+
 .doc-gen-status-line {
   margin: 0 0 20px;
 }

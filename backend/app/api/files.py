@@ -18,6 +18,7 @@ from app.api.deps import (
     set_guest_cookie,
 )
 from app.core.limiter import RateLimiter
+from app.core.config import get_settings
 from app.constants.attachments import MAX_UPLOAD_BYTES_FREE, MAX_UPLOAD_BYTES_PRO
 from app.services.upload_lifecycle import resolve_max_upload_mb_free, resolve_max_upload_mb_pro
 from app.models.uploaded_file import UploadedFile
@@ -507,4 +508,106 @@ async def upload_file(
         excerpt=excerpt,
         media_kind="document",
         has_text=bool(text.strip()),
+    )
+
+
+# ─── ZIP bundle endpoint ───────────────────────────────────────────────────────
+
+class ZipBundleIn(BaseModel):
+    file_ids: list[str] = Field(..., min_length=2, max_length=20)
+    zip_name: str | None = Field(None, max_length=200)
+
+
+class ZipBundleOut(BaseModel):
+    file_id: str
+    filename: str
+    download_url: str
+    size_bytes: int
+    ttl_hours: int
+
+
+_ZIP_TTL_HOURS = 24
+
+
+@router.post("/zip", response_model=ZipBundleOut)
+async def create_zip_bundle(
+    body: ZipBundleIn,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(get_file_access_user)],
+):
+    """Create a ZIP archive from a list of already-uploaded files (same user)."""
+    import io
+    import zipfile as _zf
+
+    settings = get_settings()
+    now = datetime.now(timezone.utc)
+
+    # Load all requested files (only files owned by this user)
+    entries: list[tuple[str, bytes]] = []
+    seen_names: dict[str, int] = {}
+    for raw_id in body.file_ids:
+        try:
+            fid = UUID(raw_id)
+        except ValueError:
+            continue
+        res = await db.execute(
+            select(UploadedFile).where(UploadedFile.id == fid, UploadedFile.user_id == user.id)
+        )
+        uf = res.scalar_one_or_none()
+        if not uf or not uf.storage_key:
+            continue
+        data = load_upload_bytes(uf.storage_key)
+        if not data:
+            continue
+        # Deduplicate filenames inside the archive
+        fname = uf.filename or f"file_{raw_id[:8]}"
+        if fname in seen_names:
+            seen_names[fname] += 1
+            base, ext = (fname.rsplit(".", 1) if "." in fname else (fname, ""))
+            fname = f"{base}_{seen_names[fname]}.{ext}" if ext else f"{base}_{seen_names[fname]}"
+        else:
+            seen_names[fname] = 0
+        entries.append((fname, data))
+
+    if not entries:
+        raise HTTPException(status_code=422, detail="Ни один из файлов не найден или недоступен")
+
+    # Build ZIP in memory
+    buf = io.BytesIO()
+    with _zf.ZipFile(buf, "w", _zf.ZIP_DEFLATED) as zf:
+        for fname, data in entries:
+            zf.writestr(fname, data)
+    zip_bytes = buf.getvalue()
+
+    # Determine archive name
+    zip_name = (body.zip_name or "archive").rstrip(".zip")
+    zip_filename = f"{zip_name}.zip"
+
+    # Persist to storage
+    new_id = uuid4()
+    storage_key = save_upload_bytes(user.id, new_id, zip_bytes, "zip")
+    expires_at = now + timedelta(hours=_ZIP_TTL_HOURS)
+    zip_row = UploadedFile(
+        id=new_id,
+        user_id=user.id,
+        filename=zip_filename,
+        mime_type="application/zip",
+        size_bytes=len(zip_bytes),
+        media_kind="compressed",
+        storage_key=storage_key,
+        extracted_text="",
+        expires_at=expires_at,
+    )
+    db.add(zip_row)
+    await db.commit()
+
+    base_url = (settings.public_web_url or "https://glosix.ru").rstrip("/")
+    download_url = f"{base_url}/api/files/{new_id}/content"
+
+    return ZipBundleOut(
+        file_id=str(new_id),
+        filename=zip_filename,
+        download_url=download_url,
+        size_bytes=len(zip_bytes),
+        ttl_hours=_ZIP_TTL_HOURS,
     )

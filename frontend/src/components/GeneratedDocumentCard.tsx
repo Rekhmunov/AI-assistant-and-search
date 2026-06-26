@@ -1,8 +1,12 @@
+import { useState } from "react";
 import type { GeneratedDocumentInfo } from "../api/client";
 import { fetchFileContent, resolveGeneratedDocumentOpenUrl } from "../api/client";
-import { FileText } from "lucide-react";
+import { FileText, Archive } from "lucide-react";
 import { t } from "../i18n";
 import { downloadRemoteFile } from "../lib/triggerBrowserDownload";
+import { useAuthStore } from "../store/authStore";
+
+const API_BASE = import.meta.env.VITE_API_URL || "";
 
 type Props = {
   document: GeneratedDocumentInfo;
@@ -47,16 +51,77 @@ function SingleDocumentRow({ doc }: { doc: GeneratedDocumentInfo }) {
 
 export function GeneratedDocumentCard({ document: doc, extraDocuments }: Props) {
   const allDocs = [doc, ...(extraDocuments ?? [])];
+  const token = useAuthStore((s) => s.token);
+  const [zipping, setZipping] = useState(false);
+  const [zipError, setZipError] = useState("");
 
   if (allDocs.length === 1) {
     return <SingleDocumentRow doc={doc} />;
   }
 
+  // Multiple files → single ZIP download
+  const handleDownloadZip = async () => {
+    setZipping(true);
+    setZipError("");
+    try {
+      const fileIds = allDocs.map((d) => d.id).filter(Boolean);
+      // Derive a common zip name from the first file (strip _compressed/_pages suffix)
+      const baseName = (allDocs[0].filename || "archive")
+        .replace(/_compressed\.pdf$/i, "")
+        .replace(/_pages\.zip$/i, "")
+        .replace(/\.[^.]+$/, "");
+      const res = await fetch(`${API_BASE}/api/files/zip`, {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ file_ids: fileIds, zip_name: baseName }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || `Ошибка ${res.status}`);
+      }
+      const data = await res.json();
+      await downloadRemoteFile(data.download_url, data.filename);
+    } catch (e: unknown) {
+      setZipError(e instanceof Error ? e.message : "Ошибка создания архива");
+    } finally {
+      setZipping(false);
+    }
+  };
+
+  const totalFiles = allDocs.length;
+
   return (
-    <div className="generated-document-cards-multi">
-      {allDocs.map((d, i) => (
-        <SingleDocumentRow key={d.id ?? i} doc={d} />
-      ))}
+    <div className="generated-document-card generated-document-card--multi">
+      <div className="generated-document-card-icon" aria-hidden>
+        <ArchiveIcon />
+      </div>
+      <div className="generated-document-card-body">
+        <span className="generated-document-card-name">
+          {totalFiles} файла готовы
+        </span>
+        <span className="generated-document-card-files-list">
+          {allDocs.map((d, i) => (
+            <span key={d.id ?? i} className="generated-document-card-file-item">
+              📄 {d.filename}
+            </span>
+          ))}
+        </span>
+        {zipError && (
+          <span className="generated-document-card-error">⚠️ {zipError}</span>
+        )}
+        <button
+          type="button"
+          className="btn btn-secondary generated-document-card-download"
+          onClick={() => void handleDownloadZip()}
+          disabled={zipping}
+        >
+          {zipping ? "Создаём архив…" : `⬇️ Скачать все (ZIP)`}
+        </button>
+      </div>
     </div>
   );
 }
@@ -99,4 +164,8 @@ export async function shareGeneratedDocument(
 
 function DocxIcon() {
   return <FileText className="generated-document-card-icon-svg" width={28} height={28} strokeWidth={1.5} />;
+}
+
+function ArchiveIcon() {
+  return <Archive className="generated-document-card-icon-svg" width={28} height={28} strokeWidth={1.5} />;
 }
