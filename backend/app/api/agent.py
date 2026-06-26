@@ -269,7 +269,9 @@ async def patch_agent_config(
                 continue  # skip invalid timezone
         if key.startswith("poster_") or key in ("support_instructions",):
             cfg[key] = value
+    from sqlalchemy.orm.attributes import flag_modified
     agent.config = cfg
+    flag_modified(agent, "config")
     await db.commit()
     return {"ok": True, "config": {k: v for k, v in cfg.items() if k.startswith("poster_")}}
 
@@ -815,7 +817,9 @@ async def verify_poster_channel(
         if probe.get("ok"):
             # Save the resolved numeric channel_id back to config
             cfg["poster_channel_id"] = str(channel_id)
+            from sqlalchemy.orm.attributes import flag_modified as _flag_mod
             agent.config = cfg
+            _flag_mod(agent, "config")
             # Activate agent so Celery picks it up for scheduled posting
             from app.models.agent import AgentStatus
             if agent.status in (AgentStatus.DRAFT.value, "draft"):
@@ -1126,7 +1130,9 @@ async def update_reminder(
         cfg["schedule_text"] = schedule_text
         cfg["recurrence_stored"] = recurrence
 
+    from sqlalchemy.orm.attributes import flag_modified as _fm
     sub_agent.config = cfg
+    _fm(sub_agent, "config")
     await db.flush()
 
     try:
