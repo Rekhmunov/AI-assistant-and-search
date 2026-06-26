@@ -4003,6 +4003,17 @@ body:has(.page-thread) {
   color: var(--text);
 }
 
+.answer-icon-btn--active {
+  color: var(--accent, #20808d);
+  background: rgba(32, 128, 141, 0.1);
+  animation: speak-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes speak-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
+}
+
 .answer-feedback-btn--active {
   color: var(--accent);
   background: var(--accent-soft, rgba(32, 128, 141, 0.12));
