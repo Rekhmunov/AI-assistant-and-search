@@ -862,10 +862,6 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
             <input type="checkbox" checked={cfg.poster_emoji} disabled={f} onChange={(e) => patch("poster_emoji", e.target.checked)} />
             <span>Эмодзи в постах</span>
           </label>
-          <label className={`poster-toggle${f ? " poster-toggle--disabled" : ""}`}>
-            <input type="checkbox" checked={cfg.poster_cta} disabled={f} onChange={(e) => patch("poster_cta", e.target.checked)} />
-            <span>Призыв к действию (CTA)</span>
-          </label>
         </div>
 
         {/* Media */}
