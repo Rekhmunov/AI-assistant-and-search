@@ -221,7 +221,6 @@ async def get_agent_activity_logs(
         select(Thread).where(
             Thread.id == thread_id,
             Thread.user_id == user.id,
-            Thread.deleted_at.is_(None),
             Thread.thread_type == ThreadType.AGENT,
             Thread.deleted_at.is_(None),
         )
@@ -264,11 +263,11 @@ async def patch_agent_config(
     # poster_channel_id → only via verify-channel (checks bot + user admin)
     # poster_pending_draft → only via generate-post / draft-action (server-controlled)
     _BLOCKED_KEYS = frozenset({
-        "poster_channel_id",
-        "poster_pending_draft",
-        "poster_post_history",  # prevent history tampering
+        "poster_channel_id",     # only via verify-channel (validates bot + user admin)
+        "poster_pending_draft",  # only via generate-post / draft-action (server-controlled)
+        "poster_history",        # only via save_post_to_history / server; was typo'd before
     })
-    _MAX_POST_TEXT_LEN = 4096  # MAX API limit
+    _MAX_POST_TEXT_LEN = 4000  # MAX API limit
 
     cfg = dict(agent.config or {})
     for key, value in body.items():
@@ -572,7 +571,7 @@ async def poster_draft_action(
     # use_as_base: create new draft from history item text (no existing draft needed)
     if action == "use_as_base":
         import uuid as _uuid_base
-        new_text = str(body.get("text") or "").strip()[:4096]  # MAX API limit
+        new_text = str(body.get("text") or "").strip()[:4000]  # MAX API limit
         new_topic = str(body.get("topic") or "").strip()[:200]
         if not new_text:
             return {"ok": False, "error": "Текст не может быть пустым"}
@@ -662,6 +661,15 @@ async def poster_draft_action(
                 )
             await db.commit()
             return {"ok": True, "mode": "published"}
+        # Publish failed — clear publishing flag so user can retry
+        _fail_cfg = dict(agent.config or {})
+        _fail_pdr = _fail_cfg.get("poster_pending_draft", {})
+        _fail_pdr.pop("publishing", None)
+        _fail_cfg["poster_pending_draft"] = _fail_pdr
+        from sqlalchemy.orm.attributes import flag_modified as _fm_fail
+        agent.config = _fail_cfg
+        _fm_fail(agent, "config")
+        await db.commit()
         return {"ok": False, "error": "Не удалось опубликовать. Проверьте права бота."}
 
     elif action == "reject":
@@ -678,7 +686,7 @@ async def poster_draft_action(
         return {"ok": True, "mode": "rejected"}
 
     elif action == "edit":
-        new_text = str(body.get("text", "")).strip()[:4096]  # MAX API limit
+        new_text = str(body.get("text", "")).strip()[:4000]  # MAX API limit
         if not new_text:
             return {"ok": False, "error": "Текст не может быть пустым"}
         topic = draft.get("topic", "")
@@ -811,11 +819,16 @@ async def poster_draft_action(
 @router.post("/threads/{thread_id}/verify-channel")
 async def verify_poster_channel(
     thread_id: UUID,
+    body: dict,
     db: Annotated[AsyncSession, Depends(get_db)],
     user: Annotated[User, Depends(get_current_user)],
     redis_client: redis.Redis = Depends(get_redis),
 ):
-    """Check if bot is admin in the configured poster channel."""
+    """Verify bot + user admin status and save poster_channel_id if OK.
+    
+    Body: {"channel_id": "@channel or numeric ID or link"} (required on first setup)
+    Falls back to stored poster_channel_id when body.channel_id is absent.
+    """
     result = await db.execute(
         select(Thread).where(
             Thread.id == thread_id,
@@ -835,7 +848,8 @@ async def verify_poster_channel(
     from app.services.bot import MaxBotService
 
     cfg = dict(agent.config or {})
-    channel_id_raw = str(cfg.get("poster_channel_id") or "").strip()
+    # Accept channel from request body (new setup / channel change), fallback to stored value
+    channel_id_raw = str(body.get("channel_id") or cfg.get("poster_channel_id") or "").strip()
     if not channel_id_raw:
         return {"ok": False, "bot_is_admin": False, "error": "Канал не указан в настройках"}
 

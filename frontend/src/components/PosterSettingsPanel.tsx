@@ -410,7 +410,12 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
       const verifyRes = await fetch(`${API_BASE}/api/agent/threads/${threadId}/verify-channel`, {
         method: "POST",
         credentials: "include",
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        // Pass channel_id in body so verify-channel can save it (PATCH blocks this key)
+        body: JSON.stringify({ channel_id: cfg.poster_channel_id }),
       });
       const verifyData = verifyRes.ok ? await verifyRes.json() : null;
       setVerifying(false);

@@ -78,11 +78,13 @@ async def handle_poster_callback(
         return True
 
     # Security: only the agent owner can act on draft buttons.
-    # clicker_user_id must match the MAX ID tied to the agent's user.
-    if clicker_user_id and agent.max_user_id:
-        if int(clicker_user_id) != int(agent.max_user_id):
-            await bot.answer_callback(callback_id, "Это действие доступно только владельцу агента.")
-            return True
+    # Fail closed: reject if clicker unknown OR agent has no MAX ID.
+    if clicker_user_id is None or not agent.max_user_id:
+        await bot.answer_callback(callback_id, "Не удалось подтвердить личность. Используйте веб-интерфейс.")
+        return True
+    if int(clicker_user_id) != int(agent.max_user_id):
+        await bot.answer_callback(callback_id, "Это действие доступно только владельцу агента.")
+        return True
 
     draft = get_pending_draft(agent)
     if not draft or draft.get("post_id") != post_id:
@@ -93,6 +95,22 @@ async def handle_poster_callback(
     draft_message_id = draft.get("draft_message_id")
 
     if action == "approve":
+        # Atomic idempotency: fail if another approve is already in progress
+        if draft.get("publishing"):
+            await bot.answer_callback(callback_id, "Пост уже публикуется, подождите.")
+            return True
+        # Mark as publishing before any async work
+        from app.services.agent.poster_executor import save_pending_draft as _spd_cb
+        _spd_cb(agent, post_id=post_id, topic=draft.get("topic", ""),
+                text=draft.get("text", ""), draft_message_id=draft_message_id)
+        _cb_cfg = dict(agent.config or {})
+        _cb_pdr = _cb_cfg.get("poster_pending_draft", {})
+        _cb_pdr["publishing"] = True
+        _cb_cfg["poster_pending_draft"] = _cb_pdr
+        from sqlalchemy.orm.attributes import flag_modified as _fm_cb
+        agent.config = _cb_cfg
+        _fm_cb(agent, "config")
+        await db.flush()
         # Answer immediately so button doesn't freeze
         await bot.answer_callback(callback_id, "⏳ Публикуем пост…")
         await _handle_approve(db, redis_client, agent, bot,
