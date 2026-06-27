@@ -297,6 +297,13 @@ async def stream_image_generation_turn(
             thread.title = display_content[:200]
         await db.commit()
 
+        # Store image context for future edits (img2img)
+        try:
+            from app.services.image_edit_flow import set_thread_image_context
+            await set_thread_image_context(redis_client, thread.id, str(_file_id))
+        except Exception as _ctx_exc:
+            logger.warning("IMGGEN_FLOW: failed storing image context: %s", _ctx_exc)
+
         logger.warning("IMGGEN_FLOW: yielding done thread=%s msg=%s", thread.id, assistant_msg.id)
         yield sse_event(
             "done",

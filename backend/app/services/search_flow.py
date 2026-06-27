@@ -335,6 +335,17 @@ class SearchFlowService:
                 yield event
             return
 
+        if flow.flow in ("image_edit", "image_compose"):
+            from app.services.image_edit_flow import stream_image_edit_turn
+            compose = flow.flow == "image_compose"
+            async for event in stream_image_edit_turn(
+                db, user, limiter, query, thread_id, redis_client,
+                attachment_ids=attachment_ids,
+                compose_mode=compose,
+            ):
+                yield event
+            return
+
         if flow.flow == "compress_pdf":
             from app.services.pdf_compress_flow import stream_pdf_compress_turn
             async for event in stream_pdf_compress_turn(
