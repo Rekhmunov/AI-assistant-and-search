@@ -40,6 +40,27 @@ def _detect_image_mime(img_bytes: bytes) -> str:
     return "image/jpeg"
 
 
+def _safe_b64decode(s: str) -> bytes:
+    """Decode base64 robustly:
+    - strips whitespace / newlines
+    - strips data-URI prefix (data:image/...;base64,)
+    - tries standard base64 first, falls back to URL-safe (-_)
+    - adds missing padding automatically
+    """
+    s = s.strip()
+    # Strip data-URI prefix if present
+    if s.startswith("data:"):
+        s = s.split(",", 1)[-1].strip()
+    # Normalise padding
+    pad = (4 - len(s) % 4) % 4
+    s_padded = s + "=" * pad
+    try:
+        return base64.b64decode(s_padded, validate=True)
+    except Exception:
+        # Fall back to URL-safe alphabet (-_)
+        return base64.urlsafe_b64decode(s_padded)
+
+
 def _extract_image_from_response(data: dict) -> tuple[str, str]:
     """
     Return (base64_data, mime_type) from any known Gemini response shape.
@@ -198,7 +219,12 @@ async def generate_nano_banana_image(
 
         assistant_text = _extract_text_from_response(data)
 
-        image_bytes = base64.b64decode(img_b64)
+        image_bytes = _safe_b64decode(img_b64)
+        # Let mime_type follow the actual bytes rather than what the API claims
+        actual_mime = _detect_image_mime(image_bytes)
+        if actual_mime != mime_type:
+            logger.info("NanaBanana: actual mime %s differs from declared %s — using actual", actual_mime, mime_type)
+            mime_type = actual_mime
         logger.info("NanaBanana: success %d bytes mime=%s", len(image_bytes), mime_type)
         return NanaBananaResult(
             image_bytes=image_bytes,
