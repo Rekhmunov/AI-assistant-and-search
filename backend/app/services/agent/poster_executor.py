@@ -85,31 +85,30 @@ def get_poster_schedule(agent: AgentInstance) -> list[dict]:
     return []
 
 
-_POST_FORMAT_MAP = {
-    "auto":     None,  # no structure constraint
-    "news":     "Структура: [Хук-заголовок] → [Факт + неочевидный вывод] → [Значение для читателя]",
-    "top5":     "Структура: [Цепляющий хук] → [5 пронумерованных пунктов] → [Краткий итог]",
-    "howto":    "Структура: [Проблема] → [Шаги 1–3 кратко] → [Результат]",
-    "question": "Структура: [Провокационный вопрос] → [2–3 предложения контекста] → [Приглашение ответить]",
-    "case":     "Структура: [Герой/компания] → [Проблема] → [Решение] → [Измеримый результат]",
-    "opinion":  "Структура: [Смелое утверждение] → [3 аргумента] → [Вывод]",
+# Maps use RUSSIAN labels — matching what ChipsField sends from the frontend.
+# Keys are the exact chip display values; values are expanded LLM instructions.
+_POST_FORMAT_MAP: dict[str, str] = {
+    "Новость + вывод":  "Структура: [Хук-заголовок] → [Факт + неочевидный вывод] → [Значение для читателя]",
+    "Топ-5 список":     "Структура: [Цепляющий хук] → [5 пронумерованных пунктов] → [Краткий итог]",
+    "How-to":           "Структура: [Проблема] → [Шаги 1–3 кратко] → [Результат]",
+    "Вопрос аудитории": "Структура: [Провокационный вопрос] → [2–3 предложения контекста] → [Приглашение ответить]",
+    "Кейс":             "Структура: [Герой/компания] → [Проблема] → [Решение] → [Измеримый результат]",
+    "Мнение":           "Структура: [Смелое утверждение] → [3 аргумента] → [Вывод]",
 }
 
-_HOOK_STYLE_MAP = {
-    "auto":     None,
-    "question": "Первая строка — вопрос, который задевает читателя и провоцирует дочитать до конца",
-    "stat":     "Первая строка — неожиданная цифра или факт (конкретный, не общеизвестный)",
-    "story":    "Первая строка — начало короткой истории (1–2 предложения, реальный сценарий)",
-    "bold":     "Первая строка — провокационное или контринтуитивное утверждение",
+_HOOK_STYLE_MAP: dict[str, str] = {
+    "Провокация":          "Первая строка — провокационное или контринтуитивное утверждение",
+    "Вопрос":              "Первая строка — вопрос, который задевает читателя и провоцирует дочитать до конца",
+    "Неожиданная цифра":   "Первая строка — неожиданная цифра или конкретный факт (не общеизвестный)",
+    "Начало истории":      "Первая строка — начало короткой истории (1–2 предложения, реальный сценарий)",
 }
 
-_CTA_TYPE_MAP = {
-    "none":      "CTA: нет",
-    "comment":   "CTA: в конце задай открытый вопрос, приглашающий оставить комментарий",
-    "save":      "CTA: в конце попроси сохранить пост, объяснив чем он полезен",
-    "share":     "CTA: в конце попроси переслать коллегам, которым это актуально",
-    "subscribe": "CTA: в конце мягко предложи подписаться, чтобы не пропустить следующее",
-    "link":      "CTA: в конце направь по ссылке (упомяни что ссылка в описании канала)",
+_CTA_TYPE_MAP: dict[str, str] = {
+    "Вопрос для комментариев": "CTA: в конце задай открытый вопрос, приглашающий оставить комментарий",
+    "Сохранить пост":          "CTA: в конце попроси сохранить пост, объяснив чем он полезен",
+    "Переслать коллегам":      "CTA: в конце попроси переслать коллегам, которым это актуально",
+    "Подписаться":             "CTA: в конце мягко предложи подписаться, чтобы не пропустить следующее",
+    "Ссылка в описании":       "CTA: в конце направь по ссылке (упомяни что ссылка в описании канала)",
 }
 
 _DEFAULT_STOPWORDS = (
@@ -144,36 +143,47 @@ def _build_style_from_config(agent: AgentInstance) -> str:
     length_map = {"short": "короткий (~500 зн.)", "medium": "средний (~1000 зн.)", "long": "длинный (~2000 зн.)"}
     parts.append(f"Длина: {length_map.get(length, length)}")
 
-    # Post format — lookup predefined or use as custom description
+    def _expand_tokens(raw: str, key_map: dict[str, str], prefix: str) -> list[str]:
+        """Split comma-separated multi-select value, expand each token through the map."""
+        result = []
+        for token in (t.strip() for t in raw.split(",") if t.strip()):
+            if token in ("auto", "none"):
+                continue
+            mapped = key_map.get(token)
+            result.append(mapped if mapped else f"{prefix}: {token}")
+        return result
+
+    # Post format — supports multiple comma-separated values
     post_format = str(cfg.get("poster_format") or "auto").strip()
     if post_format and post_format != "auto":
-        fmt_prompt = _POST_FORMAT_MAP.get(post_format)
-        if fmt_prompt:
-            parts.append(fmt_prompt)
-        else:
-            # Free-text custom format from user
-            parts.append(f"СТРУКТУРА ПОСТА: {post_format}")
+        fmt_parts = _expand_tokens(post_format, _POST_FORMAT_MAP, "СТРУКТУРА ПОСТА")
+        if len(fmt_parts) == 1:
+            parts.append(fmt_parts[0])
+        elif len(fmt_parts) > 1:
+            parts.append("ФОРМАТЫ (чередуй или сочетай):\n" + "\n".join(f"- {p}" for p in fmt_parts))
 
-    # Hook style — lookup predefined or use as custom description
+    # Hook style — supports multiple comma-separated values
     hook = str(cfg.get("poster_hook") or "auto").strip()
     if hook and hook != "auto":
-        hook_prompt = _HOOK_STYLE_MAP.get(hook)
-        if hook_prompt:
-            parts.append(hook_prompt)
-        else:
-            parts.append(f"ПЕРВАЯ СТРОКА: {hook}")
+        hook_parts = _expand_tokens(hook, _HOOK_STYLE_MAP, "ПЕРВАЯ СТРОКА")
+        if len(hook_parts) == 1:
+            parts.append(hook_parts[0])
+        elif len(hook_parts) > 1:
+            parts.append("ПЕРВАЯ СТРОКА (выбери один из стилей или сочетай):\n" + "\n".join(f"- {p}" for p in hook_parts))
 
-    # New: target audience
+    # Target audience
     audience = str(cfg.get("poster_audience") or "").strip()
     if audience:
         parts.append(f"Целевая аудитория: {audience}")
 
-    # CTA — specific type, predefined mapping or free-text, or boolean fallback
+    # CTA — supports multiple comma-separated values
     cta_type = str(cfg.get("poster_cta_type") or "none").strip()
     if cta_type and cta_type != "none":
-        parts.append(_CTA_TYPE_MAP.get(cta_type, f"CTA: {cta_type}"))
-    elif cfg.get("poster_cta"):
-        parts.append("CTA: добавь лёгкий призыв к действию в конце")
+        cta_parts = _expand_tokens(cta_type, _CTA_TYPE_MAP, "CTA")
+        if len(cta_parts) == 1:
+            parts.append(cta_parts[0])
+        elif len(cta_parts) > 1:
+            parts.append("CTA (выбери один или чередуй между постами):\n" + "\n".join(f"- {p}" for p in cta_parts))
     else:
         parts.append("CTA: нет")
 
@@ -256,10 +266,16 @@ def _clean_llm_post_output(text: str | None, *, fallback: str = "") -> str:
     return cleaned
 
 
+_POSTER_STRUCTURED_KEYS = frozenset({
+    "poster_topics", "poster_topic_list", "poster_tone", "poster_length",
+    "poster_format", "poster_hook", "poster_audience", "poster_cta_type",
+})
+
+
 def _parse_style_instructions(agent: AgentInstance) -> str:
     cfg = _get_cfg(agent)
-    # Build from structured config if any poster_* setting is present
-    if cfg.get("poster_topics") or cfg.get("poster_topic_list") or cfg.get("poster_tone"):
+    # Use structured config if ANY poster content key is present
+    if any(cfg.get(k) for k in _POSTER_STRUCTURED_KEYS):
         return _build_style_from_config(agent)
     return str(cfg.get("support_instructions") or "")
 
