@@ -90,14 +90,13 @@ async def stream_image_generation(
         async for item in stream_gigachat_image_generation(text):
             yield item
     elif provider_id == "nanab2":
-        # Nano Banana doesn't support streaming — generate and emit at once
+        # Nano Banana: no streaming — generate fully then emit same events as GigaChat
         try:
             from app.services.nano_banana import generate_nano_banana_image
             settings = get_settings()
             result = await generate_nano_banana_image(text, api_key=settings.google_api_key)
-            yield ("image", result.image_bytes.hex())
-            if result.assistant_text:
-                yield ("text", result.assistant_text)
+            yield ("image_bytes", result.image_bytes)                   # consumer expects bytes
+            yield ("done", f"\n{result.assistant_text}")                 # consumer reads line[1] as text
         except ImageGenerationError as exc:
             yield ("error", str(exc))
     else:

@@ -316,10 +316,21 @@ async def _generate_blog_image_media(
 ) -> BlogMedia:
     settings = get_settings()
     provider_id = await resolve_image_gen_provider_id(db, redis_client)
-    if provider_id != "gigachat" or not settings.gigachat_configured:
+    # Check if the selected provider is configured
+    if provider_id == "gigachat" and not settings.gigachat_configured:
         raise ImageGenerationError(
             "provider_unavailable",
-            "Генерация изображений недоступна: настройте GigaChat (GIGACHAT_CREDENTIALS) и image_gen_provider=gigachat.",
+            "Генерация изображений недоступна: настройте GigaChat (GIGACHAT_CREDENTIALS).",
+        )
+    if provider_id == "nanab2" and not settings.google_configured:
+        raise ImageGenerationError(
+            "provider_unavailable",
+            "Генерация изображений недоступна: настройте Nano Banana (GOOGLE_API_KEY).",
+        )
+    if provider_id not in ("gigachat", "nanab2"):
+        raise ImageGenerationError(
+            "provider_unavailable",
+            f"Провайдер генерации изображений '{provider_id}' не поддерживается.",
         )
     try:
         image_bytes, _ = await generate_image(prompt, provider_id)

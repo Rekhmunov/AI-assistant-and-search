@@ -78,6 +78,15 @@ async def stream_image_generation_turn(
             },
         )
         return
+    if provider_id == "nanab2" and not settings.google_configured:
+        yield sse_event(
+            "error",
+            {
+                "code": "image_gen_unavailable",
+                "message": "Nano Banana не настроен на сервере (GOOGLE_API_KEY).",
+            },
+        )
+        return
 
     allowed, used, limit = await limiter.check_image_gen_limit(user_id_str, user.plan)
     if not allowed:

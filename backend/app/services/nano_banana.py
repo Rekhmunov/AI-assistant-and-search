@@ -72,20 +72,51 @@ async def generate_nano_banana_image(
 
     try:
         data = response.json()
-        interaction = data.get("interaction") or {}
-        output_image = interaction.get("output_image") or {}
-        img_b64 = output_image.get("data") or ""
-        mime_type = output_image.get("mimeType") or "image/png"
+        # Interactions API returns the Interaction object at the TOP LEVEL (not nested).
+        # convenience property `output_image` holds the last image block.
+        # Fallback: scan steps[].content[] for type="image" blocks.
+
+        # Check for async "in_progress" status — shouldn't happen for sync requests
+        # but handle gracefully
+        if data.get("status") == "in_progress":
+            logger.warning("NanaBanana: in_progress response (unexpected for sync call)")
+            raise ImageGenerationError("empty_response", "Nano Banana не завершил генерацию")
+
+        img_b64 = ""
+        mime_type = "image/png"
         assistant_text = ""
-        # Also collect text output if any
-        for block in interaction.get("output", []):
-            if block.get("type") == "text":
-                assistant_text = str(block.get("text") or "")
-                break
+
+        # Primary: top-level output_image (convenience property)
+        output_image = data.get("output_image") or {}
+        img_b64 = str(output_image.get("data") or "")
+        mime_type = str(output_image.get("mime_type") or output_image.get("mimeType") or "image/png")
+
+        # Fallback: scan steps → content blocks
+        if not img_b64:
+            for step in (data.get("steps") or []):
+                content_list = step.get("content") or step.get("model_output", {}).get("content") or []
+                for block in content_list:
+                    if str(block.get("type") or "").lower() == "image":
+                        img_b64 = str(block.get("data") or "")
+                        mime_type = str(block.get("mime_type") or block.get("mimeType") or "image/png")
+                        break
+                if img_b64:
+                    break
 
         if not img_b64:
-            logger.warning("NanaBanana: no output_image in response: %s", str(data)[:300])
+            logger.warning("NanaBanana: no image in response: %s", str(data)[:400])
             raise ImageGenerationError("empty_response", "Nano Banana не вернул изображение")
+
+        # Collect text output from top-level output_text or steps
+        assistant_text = str(data.get("output_text") or "").strip()
+        if not assistant_text:
+            for step in (data.get("steps") or []):
+                for block in (step.get("content") or []):
+                    if str(block.get("type") or "").lower() == "text":
+                        assistant_text = str(block.get("text") or "").strip()
+                        break
+                if assistant_text:
+                    break
 
         image_bytes = base64.b64decode(img_b64)
         logger.info("NanaBanana: success %d bytes mime=%s", len(image_bytes), mime_type)
@@ -94,6 +125,9 @@ async def generate_nano_banana_image(
             mime_type=mime_type,
             assistant_text=assistant_text,
         )
-    except (KeyError, ValueError, base64.binascii.Error) as exc:
+    except (KeyError, ValueError) as exc:
         logger.warning("NanaBanana: response parse error: %s", exc)
         raise ImageGenerationError("parse_error", "Не удалось обработать ответ Nano Banana") from exc
+    except base64.binascii.Error as exc:
+        logger.warning("NanaBanana: base64 decode error: %s", exc)
+        raise ImageGenerationError("parse_error", "Не удалось декодировать изображение") from exc
