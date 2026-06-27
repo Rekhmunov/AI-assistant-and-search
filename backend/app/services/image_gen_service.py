@@ -86,11 +86,22 @@ async def stream_image_generation(
     provider_id: str,
 ) -> AsyncIterator[tuple[str, str]]:
     text = image_generation_prompt(prompt)[:MAX_IMAGE_GEN_PROMPT_LEN]
-    if provider_id != "gigachat":
+    if provider_id == "gigachat":
+        async for item in stream_gigachat_image_generation(text):
+            yield item
+    elif provider_id == "nanab2":
+        # Nano Banana doesn't support streaming — generate and emit at once
+        try:
+            from app.services.nano_banana import generate_nano_banana_image
+            settings = get_settings()
+            result = await generate_nano_banana_image(text, api_key=settings.google_api_key)
+            yield ("image", result.image_bytes.hex())
+            if result.assistant_text:
+                yield ("text", result.assistant_text)
+        except ImageGenerationError as exc:
+            yield ("error", str(exc))
+    else:
         yield ("error", "Провайдер генерации изображений не поддерживается")
-        return
-    async for item in stream_gigachat_image_generation(text):
-        yield item
 
 
 async def generate_image(
@@ -98,7 +109,12 @@ async def generate_image(
     provider_id: str,
 ) -> tuple[bytes, str]:
     text = image_generation_prompt(prompt)[:MAX_IMAGE_GEN_PROMPT_LEN]
-    if provider_id != "gigachat":
-        raise ImageGenerationError("provider_unavailable", "Провайдер не настроен")
-    result = await generate_gigachat_image(text)
-    return result.image_bytes, result.assistant_text
+    if provider_id == "gigachat":
+        result = await generate_gigachat_image(text)
+        return result.image_bytes, result.assistant_text
+    elif provider_id == "nanab2":
+        from app.services.nano_banana import generate_nano_banana_image
+        settings = get_settings()
+        result = await generate_nano_banana_image(text, api_key=settings.google_api_key)
+        return result.image_bytes, result.assistant_text
+    raise ImageGenerationError("provider_unavailable", "Провайдер не настроен")

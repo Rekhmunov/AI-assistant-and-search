@@ -104,12 +104,13 @@ VALID_FREE_LLM_IDS = frozenset({"deepseek", "gigachat"})
 VALID_AGENT_LLM_IDS = frozenset({"yandex_gpt", "anthropic_claude", "deepseek", "gigachat"})
 VALID_SEARCH_IDS = frozenset({"yandex_search", "claude_search"})
 VALID_VISION_IDS = frozenset({"anthropic_claude", "gigachat"})  # alice_vlm отключена Яндексом
-VALID_IMAGE_GEN_IDS = frozenset({"gigachat"})
+VALID_IMAGE_GEN_IDS = frozenset({"gigachat", "nanab2"})
 DEFAULT_IMAGE_GEN_PROVIDER = "gigachat"
 
 
 def list_image_gen_providers(settings: Settings) -> list[ProviderInfo]:
     giga_ok = settings.gigachat_configured
+    google_ok = settings.google_configured
     return [
         ProviderInfo(
             id="gigachat",
@@ -117,6 +118,13 @@ def list_image_gen_providers(settings: Settings) -> list[ProviderInfo]:
             kind="image_gen",
             configured=giga_ok,
             hint=None if giga_ok else "Нужен GIGACHAT_CREDENTIALS в .env",
+        ),
+        ProviderInfo(
+            id="nanab2",
+            label="Nano Banana 2 (Gemini 3.1 Flash Image)",
+            kind="image_gen",
+            configured=google_ok,
+            hint=None if google_ok else "Нужен GOOGLE_API_KEY в .env",
         ),
     ]
 

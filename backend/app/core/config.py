@@ -78,6 +78,8 @@ class Settings(BaseSettings):
     deepseek_base_url: str = "https://api.deepseek.com"
     deepseek_http_proxy: str = ""
 
+    google_api_key: str = ""  # Gemini API key for Nano Banana image generation
+
     gigachat_credentials: str = ""
     gigachat_scope: str = "GIGACHAT_API_PERS"
     gigachat_base_url: str = "https://gigachat.devices.sberbank.ru/api/v1"
@@ -158,6 +160,10 @@ class Settings(BaseSettings):
     @property
     def deepseek_configured(self) -> bool:
         return bool(self.deepseek_api_key.strip())
+
+    @property
+    def google_configured(self) -> bool:
+        return bool(self.google_api_key.strip())
 
     @property
     def gigachat_configured(self) -> bool:
