@@ -223,6 +223,7 @@ async def get_agent_activity_logs(
             Thread.user_id == user.id,
             Thread.deleted_at.is_(None),
             Thread.thread_type == ThreadType.AGENT,
+            Thread.deleted_at.is_(None),
         )
     )
     thread = result.scalar_one_or_none()
@@ -249,6 +250,7 @@ async def patch_agent_config(
             Thread.id == thread_id,
             Thread.user_id == user.id,
             Thread.thread_type == ThreadType.AGENT,
+            Thread.deleted_at.is_(None),
         )
     )
     thread = result.scalar_one_or_none()
@@ -258,22 +260,38 @@ async def patch_agent_config(
     if not agent:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Агент не найден")
 
+    # Security: these keys must ONLY be set through dedicated verified endpoints.
+    # poster_channel_id → only via verify-channel (checks bot + user admin)
+    # poster_pending_draft → only via generate-post / draft-action (server-controlled)
+    _BLOCKED_KEYS = frozenset({
+        "poster_channel_id",
+        "poster_pending_draft",
+        "poster_post_history",  # prevent history tampering
+    })
+    _MAX_POST_TEXT_LEN = 4096  # MAX API limit
+
     cfg = dict(agent.config or {})
     for key, value in body.items():
-        # poster_* and support_instructions are allowed; validate timezone
+        if key in _BLOCKED_KEYS:
+            continue  # silently ignore protected keys
+        # Validate timezone
         if key == "poster_timezone":
             import zoneinfo
             try:
                 zoneinfo.ZoneInfo(str(value))
             except Exception:
-                continue  # skip invalid timezone
+                continue
+        # Enforce text length limits
+        if key in ("poster_topics", "poster_topic_list") and isinstance(value, (str, list)):
+            if isinstance(value, str) and len(value) > _MAX_POST_TEXT_LEN:
+                value = value[:_MAX_POST_TEXT_LEN]
         if key.startswith("poster_") or key in ("support_instructions",):
             cfg[key] = value
     from sqlalchemy.orm.attributes import flag_modified
     agent.config = cfg
     flag_modified(agent, "config")
     await db.commit()
-    return {"ok": True, "config": {k: v for k, v in cfg.items() if k.startswith("poster_")}}
+    return {"ok": True, "config": {k: v for k, v in cfg.items() if k.startswith("poster_") and k not in _BLOCKED_KEYS}}
 
 
 @router.get("/threads/{thread_id}/post-history")
@@ -291,6 +309,7 @@ async def get_poster_history(
             Thread.id == thread_id,
             Thread.user_id == user.id,
             Thread.thread_type == ThreadType.AGENT,
+            Thread.deleted_at.is_(None),
         )
     )
     thread = result.scalar_one_or_none()
@@ -332,6 +351,7 @@ async def delete_poster_history_item(
             Thread.id == thread_id,
             Thread.user_id == user.id,
             Thread.thread_type == ThreadType.AGENT,
+            Thread.deleted_at.is_(None),
         )
     )
     thread = result.scalar_one_or_none()
@@ -360,6 +380,7 @@ async def clear_poster_history(
             Thread.id == thread_id,
             Thread.user_id == user.id,
             Thread.thread_type == ThreadType.AGENT,
+            Thread.deleted_at.is_(None),
         )
     )
     thread = result.scalar_one_or_none()
@@ -397,6 +418,7 @@ async def generate_poster_post(
             Thread.id == thread_id,
             Thread.user_id == user.id,
             Thread.thread_type == ThreadType.AGENT,
+            Thread.deleted_at.is_(None),
         )
     )
     thread = result.scalar_one_or_none()
@@ -479,6 +501,7 @@ async def get_pending_draft_status(
             Thread.id == thread_id,
             Thread.user_id == user.id,
             Thread.thread_type == ThreadType.AGENT,
+            Thread.deleted_at.is_(None),
         )
     )
     thread = result.scalar_one_or_none()
@@ -524,6 +547,7 @@ async def poster_draft_action(
             Thread.id == thread_id,
             Thread.user_id == user.id,
             Thread.thread_type == ThreadType.AGENT,
+            Thread.deleted_at.is_(None),
         )
     )
     thread = result.scalar_one_or_none()
@@ -548,8 +572,8 @@ async def poster_draft_action(
     # use_as_base: create new draft from history item text (no existing draft needed)
     if action == "use_as_base":
         import uuid as _uuid_base
-        new_text = str(body.get("text") or "").strip()
-        new_topic = str(body.get("topic") or "").strip()
+        new_text = str(body.get("text") or "").strip()[:4096]  # MAX API limit
+        new_topic = str(body.get("topic") or "").strip()[:200]
         if not new_text:
             return {"ok": False, "error": "Текст не может быть пустым"}
         new_id = str(_uuid_base.uuid4())
@@ -573,6 +597,24 @@ async def poster_draft_action(
         channel_id = get_poster_channel_id(agent)
         if not channel_id:
             return {"ok": False, "error": "Канал не настроен"}
+
+        # Atomic idempotency: mark draft as "publishing" before sending.
+        # If another request races in, it will see the wrong post_id and bail.
+        if draft.get("publishing"):
+            return {"ok": False, "error": "Пост уже публикуется, подождите."}
+        from app.services.agent.poster_executor import save_pending_draft as _spd
+        _spd(agent, post_id=post_id, topic=draft.get("topic", ""),
+             text=draft.get("text", ""), draft_message_id=draft_message_id)
+        # Flag draft as "publishing" so concurrent requests bail early
+        _draft_cfg = dict(agent.config or {})
+        _pdr = _draft_cfg.get("poster_pending_draft", {})
+        _pdr["publishing"] = True
+        _draft_cfg["poster_pending_draft"] = _pdr
+        from sqlalchemy.orm.attributes import flag_modified as _fm_approve
+        agent.config = _draft_cfg
+        _fm_approve(agent, "config")
+        await db.flush()
+
         draft_text = draft.get("text", "")
         draft_topic = draft.get("topic", "")
 
@@ -584,7 +626,10 @@ async def poster_draft_action(
         for fid in image_file_ids:
             try:
                 from uuid import UUID as _UUID2
-                _uf_res = await db.execute(select(_UF).where(_UF.id == _UUID2(fid)))
+                # Always enforce user_id to prevent loading another user's files
+                _uf_res = await db.execute(
+                    select(_UF).where(_UF.id == _UUID2(fid), _UF.user_id == user.id)
+                )
                 _uf = _uf_res.scalar_one_or_none()
                 if _uf and _uf.storage_key:
                     img = load_upload_bytes(_uf.storage_key)
@@ -633,7 +678,7 @@ async def poster_draft_action(
         return {"ok": True, "mode": "rejected"}
 
     elif action == "edit":
-        new_text = str(body.get("text", "")).strip()
+        new_text = str(body.get("text", "")).strip()[:4096]  # MAX API limit
         if not new_text:
             return {"ok": False, "error": "Текст не может быть пустым"}
         topic = draft.get("topic", "")
@@ -776,6 +821,7 @@ async def verify_poster_channel(
             Thread.id == thread_id,
             Thread.user_id == user.id,
             Thread.thread_type == ThreadType.AGENT,
+            Thread.deleted_at.is_(None),
         )
     )
     thread = result.scalar_one_or_none()
@@ -841,14 +887,22 @@ async def verify_poster_channel(
         # This prevents users from publishing to channels they don't control.
         user_is_admin: bool | None = None
         user_is_admin = await check_user_is_group_admin(bot, channel_id, int(user_max_id))
-        if user_is_admin is False:
+        # Fail closed: if we can't confirm the user is admin, block activation.
+        # None means the API check couldn't run (bot lacks member-read permissions
+        # or user not found in channel). Either way, we cannot verify ownership.
+        if user_is_admin is not True:
+            err_msg = (
+                "Вы не являетесь администратором этого канала. Публикация доступна только администраторам."
+                if user_is_admin is False else
+                "Не удалось проверить права администратора в канале. Убедитесь, что вы являетесь администратором, и попробуйте снова."
+            )
             return {
                 "ok": False,
                 "bot_is_admin": True,
-                "user_is_admin": False,
+                "user_is_admin": user_is_admin,
                 "chat_name": probe.get("title") or probe.get("chat_name", ""),
                 "channel_id": channel_id,
-                "error": "Вы не являетесь администратором этого канала. Публикация доступна только администраторам.",
+                "error": err_msg,
             }
 
         # Both bot and user are admins — save and activate

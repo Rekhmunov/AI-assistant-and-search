@@ -197,9 +197,10 @@ async def _dispatch_poster_scheduled_async() -> None:
         async with session_factory() as db:
             # Include ACTIVE and DRAFT poster agents (poster agents start as draft
             # until first verify-channel; also catches agents created before this fix)
+            # Only process ACTIVE agents — DRAFT agents haven't passed verify-channel
             result = await db.execute(
                 select(AgentInstance).where(
-                    AgentInstance.status.in_([AgentStatus.ACTIVE.value, "draft"])
+                    AgentInstance.status == AgentStatus.ACTIVE.value
                 )
             )
             agents = result.scalars().all()
@@ -250,12 +251,11 @@ async def _dispatch_poster_scheduled_async() -> None:
                     if abs((now_local - target).total_seconds()) > 300:
                         continue
 
-                    # Дедупликация: не публиковать дважды в один слот в один день
+                    # Atomic dedup: SET NX prevents two workers from racing.
                     dedup_key = f"poster_dispatched:{agent.id}:{current_day}:{slot_time}"
-                    already = await redis_client.get(dedup_key)
-                    if already:
-                        continue
-                    await redis_client.set(dedup_key, "1", ex=3600)  # TTL 1 час
+                    acquired = await redis_client.set(dedup_key, "1", nx=True, ex=3600)
+                    if not acquired:
+                        continue  # another worker already claimed this slot
 
                     # Генерируем пост для этого слота
                     try:

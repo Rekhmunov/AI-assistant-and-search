@@ -77,6 +77,13 @@ async def handle_poster_callback(
         await bot.answer_callback(callback_id, "Агент не найден.")
         return True
 
+    # Security: only the agent owner can act on draft buttons.
+    # clicker_user_id must match the MAX ID tied to the agent's user.
+    if clicker_user_id and agent.max_user_id:
+        if int(clicker_user_id) != int(agent.max_user_id):
+            await bot.answer_callback(callback_id, "Это действие доступно только владельцу агента.")
+            return True
+
     draft = get_pending_draft(agent)
     if not draft or draft.get("post_id") != post_id:
         await bot.answer_callback(callback_id, "Черновик устарел или уже обработан.")
@@ -98,6 +105,20 @@ async def handle_poster_callback(
                              draft=draft, draft_message_id=draft_message_id)
 
     elif action == "regen":
+        # Rate-limit DM regen the same as web regen
+        from app.core.limiter import RateLimiter
+        from app.models.user import User as _User
+        from sqlalchemy import select as _sel
+        _user_res = await db.execute(_sel(_User).where(_User.id == agent.user_id))
+        _cb_user = _user_res.scalar_one_or_none()
+        if _cb_user:
+            _cb_limiter = RateLimiter(redis_client)
+            _cb_allowed, _, _ = await _cb_limiter.check_search_limit(
+                str(_cb_user.id), _cb_user.plan, user=_cb_user
+            )
+            if not _cb_allowed:
+                await bot.answer_callback(callback_id, "Достигнут дневной лимит запросов.")
+                return True
         await bot.answer_callback(callback_id, "🔄 Генерирую новый вариант…")
         await _handle_regen(db, redis_client, agent, bot,
                             draft=draft, draft_message_id=draft_message_id)
