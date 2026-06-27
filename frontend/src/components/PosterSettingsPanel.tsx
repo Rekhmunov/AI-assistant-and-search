@@ -1265,7 +1265,7 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
                   <button
                     type="button"
                     className="poster-draft__btn poster-draft__btn--approve"
-                    disabled={draftAction === "actioning"}
+                    disabled={draftAction === "actioning" || imageRegenLoading || imageUploadLoading}
                     onClick={() => handleDraftAction("approve")}
                   >
                     {draftAction === "actioning" ? <span className="poster-status__spinner" /> : "✅"} Опубликовать
@@ -1273,15 +1273,16 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
                   <button
                     type="button"
                     className="poster-draft__btn poster-draft__btn--regen"
-                    disabled={draftAction === "actioning"}
+                    disabled={draftAction === "actioning" || imageRegenLoading || imageUploadLoading}
                     onClick={() => handleDraftAction("regen")}
+                    title={imageRegenLoading ? "Дождитесь загрузки изображения" : undefined}
                   >
                     🔄 Перегенерировать
                   </button>
                   <button
                     type="button"
                     className="poster-draft__btn poster-draft__btn--edit"
-                    disabled={draftAction === "actioning"}
+                    disabled={draftAction === "actioning" || imageRegenLoading || imageUploadLoading}
                     onClick={handleStartEdit}
                   >
                     ✏️ Редактировать
@@ -1289,7 +1290,7 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
                   <button
                     type="button"
                     className="poster-draft__btn poster-draft__btn--reject"
-                    disabled={draftAction === "actioning"}
+                    disabled={draftAction === "actioning" || imageRegenLoading || imageUploadLoading}
                     onClick={() => handleDraftAction("reject")}
                   >
                     ❌ Отклонить

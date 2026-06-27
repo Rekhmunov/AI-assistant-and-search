@@ -436,9 +436,16 @@ def get_draft_image_file_ids(agent: AgentInstance) -> list[str]:
 
 
 def set_draft_image_file_ids(agent: AgentInstance, file_ids: list[str]) -> None:
-    """Update image_file_ids in pending draft without touching other fields."""
+    """Update image_file_ids in pending draft without touching other fields.
+    Safety: if the draft has no post_id (was cleared by a concurrent regen),
+    we do NOT overwrite it to avoid corrupting the new draft's state.
+    """
     cfg = _get_cfg(agent)
     draft = cfg.get(_DRAFT_PENDING_KEY, {})
+    if not draft.get("post_id"):
+        # Draft was cleared concurrently — do not recreate a broken state
+        logger.warning("set_draft_image_file_ids: draft has no post_id, skipping (concurrent regen?)")
+        return
     draft["image_file_ids"] = file_ids[:MAX_DRAFT_IMAGES]
     cfg[_DRAFT_PENDING_KEY] = draft
     _save_cfg(agent, cfg)
