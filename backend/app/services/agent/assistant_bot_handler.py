@@ -142,6 +142,43 @@ def _convert_tables(text: str) -> str:
     return "\n".join(result)
 
 
+def _deduplicate_paragraphs(text: str, *, max_repeats: int = 2) -> str:
+    """
+    Removes repeated paragraphs caused by LLM hallucination loops.
+    Keeps each unique paragraph at most max_repeats times, then truncates.
+    Also detects repeated sentence sequences (50+ chars) and cuts there.
+    """
+    # Split into paragraphs and remove duplicates beyond threshold
+    paragraphs = [p.strip() for p in text.split("\n\n") if p.strip()]
+    seen: dict[str, int] = {}
+    result: list[str] = []
+    truncated = False
+    for para in paragraphs:
+        key = para[:80].lower()  # fingerprint on first 80 chars
+        count = seen.get(key, 0)
+        if count >= max_repeats:
+            truncated = True
+            break
+        seen[key] = count + 1
+        result.append(para)
+
+    cleaned = "\n\n".join(result)
+
+    # Secondary check: detect repeated sentence chunks (≥50 chars appearing 3+ times)
+    if not truncated:
+        import re as _re
+        # Find any sentence of 50+ chars that appears 3+ times
+        sentences = _re.findall(r".{50,}?[.!?]\s", cleaned)
+        for sent in sentences:
+            if cleaned.count(sent) >= 3:
+                idx = cleaned.rfind(sent, 0, cleaned.index(sent, cleaned.index(sent) + 1))
+                if idx > 0:
+                    cleaned = cleaned[:idx].rstrip()
+                break
+
+    return cleaned
+
+
 def _format_for_max_chat(text: str) -> str:
     """
     Адаптирует LLM-ответ для красивого отображения в MAX-чате.
@@ -152,6 +189,8 @@ def _format_for_max_chat(text: str) -> str:
     text = _CITATION_RE.sub("", text)
     text = _convert_tables(text)
     text = _MULTI_NL_RE.sub("\n\n", text)
+    # Remove LLM hallucination loops (repeated paragraphs/sentences)
+    text = _deduplicate_paragraphs(text)
     return text.strip()
 
 
@@ -284,6 +323,9 @@ async def _collect_search_result(
     answer = "".join(answer_parts).strip()
     if not answer:
         answer = "Не удалось получить ответ. Попробуйте переформулировать вопрос."
+    else:
+        # Remove LLM looping artifacts before storing in thread and sending to DM
+        answer = _deduplicate_paragraphs(answer)
 
     return answer, images, follow_ups
 
