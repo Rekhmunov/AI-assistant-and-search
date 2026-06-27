@@ -824,22 +824,32 @@ async def verify_poster_channel(
                 "error": probe.get("error", "Бот не является администратором канала"),
             }
 
-        # Check that the requesting USER is also an admin of the channel.
-        # This prevents users from publishing to channels they don't control.
+        # Require user to have a MAX account — poster agent sends via MAX bot
         from app.services.agent.max_group import check_user_is_group_admin
         user_max_id = user.max_user_id
+        if not user_max_id:
+            return {
+                "ok": False,
+                "bot_is_admin": True,
+                "user_is_admin": None,
+                "chat_name": probe.get("title") or probe.get("chat_name", ""),
+                "channel_id": channel_id,
+                "error": "Для использования агента постинга необходимо привязать аккаунт MAX в профиле.",
+            }
+
+        # Check that the requesting USER is also an admin of the channel.
+        # This prevents users from publishing to channels they don't control.
         user_is_admin: bool | None = None
-        if user_max_id:
-            user_is_admin = await check_user_is_group_admin(bot, channel_id, int(user_max_id))
-            if user_is_admin is False:
-                return {
-                    "ok": False,
-                    "bot_is_admin": True,
-                    "user_is_admin": False,
-                    "chat_name": probe.get("title") or probe.get("chat_name", ""),
-                    "channel_id": channel_id,
-                    "error": "Вы не являетесь администратором этого канала. Публикация доступна только администраторам.",
-                }
+        user_is_admin = await check_user_is_group_admin(bot, channel_id, int(user_max_id))
+        if user_is_admin is False:
+            return {
+                "ok": False,
+                "bot_is_admin": True,
+                "user_is_admin": False,
+                "chat_name": probe.get("title") or probe.get("chat_name", ""),
+                "channel_id": channel_id,
+                "error": "Вы не являетесь администратором этого канала. Публикация доступна только администраторам.",
+            }
 
         # Both bot and user are admins — save and activate
         cfg["poster_channel_id"] = str(channel_id)

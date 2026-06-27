@@ -1216,7 +1216,12 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
                           <button type="button" className="poster-history__topic" onClick={() => toggleExpand(item.id)}>
                             {item.topic}<span className="poster-history__expand-icon">{expanded ? " ▲" : " ▼"}</span>
                           </button>
-                          <span className="poster-history__date">{item.at?.slice(0, 10)}</span>
+                          <span className="poster-history__date">{
+                            item.at ? new Date(item.at).toLocaleString("ru-RU", {
+                              day: "2-digit", month: "2-digit", year: "numeric",
+                              hour: "2-digit", minute: "2-digit",
+                            }) : ""
+                          }</span>
                         </div>
                         {expanded && item.text && (
                           <div className="poster-history__text">{item.text}</div>
