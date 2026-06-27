@@ -1157,7 +1157,8 @@ export function Thread() {
         />
       )}
 
-      {isDesktop && turns.length > 0 && (
+      {/* Desktop agent threads (poster/reminder): no tab bar — form is the only content */}
+      {isDesktop && turns.length > 0 && !isAgentThread && (
         <ThreadTabsBar
           activeTab={activeTab}
           onTabChange={handleTabChange}
@@ -1495,12 +1496,12 @@ export function Thread() {
         </button>
       )}
 
-      {/* Mobile agent thread: replace composer with "Новый поиск +" footer */}
+      {/* Agent threads: no composer — mobile shows "Новый поиск +", desktop shows nothing */}
       {isAgentThread && !isDesktop ? (
         <div className="mobile-new-thread-bar mobile-new-thread-bar--docked mobile-new-thread-bar--agent">
           <MobileNewThreadButton variant="labeled" onClick={() => navigate("/")} />
         </div>
-      ) : (
+      ) : !isAgentThread ? (
         <SearchComposer
           value={composerQuery}
           onChange={setComposerQuery}
@@ -1520,7 +1521,7 @@ export function Thread() {
           agentError={agentError}
           agentMode={isAgentThread}
         />
-      )}
+      ) : null}
       </div>
     </div>
     <ProUpgradeModal
