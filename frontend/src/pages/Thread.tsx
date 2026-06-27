@@ -208,6 +208,8 @@ export function Thread() {
   const docGenActiveRef = useRef(false);
   const [docGenStatus, setDocGenStatus] = useState<string | undefined>();
   const [imageGenStatus, setImageGenStatus] = useState<string | undefined>();
+  /** true с момента image_gen_start до done/error — прямой триггер показа статус-бара */
+  const [imageGenStreaming, setImageGenStreaming] = useState(false);
   const [agentLoading, setAgentLoading] = useState(false);
   const [agentStatusText, setAgentStatusText] = useState<string | null>(null);
   // Хранит события размышлений по ключу тёрна, чтобы не пропадали при новых запросах
@@ -735,6 +737,7 @@ export function Thread() {
         onImageGenStart: (status) => {
           console.warn("[IMGGEN] onImageGenStart received status=%s ts=%d", status, Date.now());
           setSearchPhase("image_generating");
+          setImageGenStreaming(true);
           if (status?.trim()) setImageGenStatus(status.trim());
         },
         onImageGenStatus: (status) => {
@@ -805,6 +808,7 @@ export function Thread() {
           docGenActiveRef.current = false;
           setDocGenStatus(undefined);
           setImageGenStatus(undefined);
+          setImageGenStreaming(false);
           setStreaming(false);
           setSearchPhase("idle");
           answerResetPendingRef.current = 0;
@@ -841,6 +845,7 @@ export function Thread() {
           docGenActiveRef.current = false;
           setDocGenStatus(undefined);
           setImageGenStatus(undefined);
+          setImageGenStreaming(false);
           setStreaming(false);
           setSearchPhase("idle");
           if (code === "zip_size_limit") {
@@ -1230,7 +1235,14 @@ export function Thread() {
               agentLoading &&
               !answerHasText(turn.answer) &&
               !turn.errorCode;
+            // Прямая проверка: image_gen_start сработал, изображений ещё нет
+            const showImageGenStatusDirect =
+              isLastTurn &&
+              imageGenStreaming &&
+              (turn.images?.length ?? 0) === 0 &&
+              !turn.errorCode;
             const showStatus =
+              showImageGenStatusDirect ||
               showAgentStatus ||
               showPreparing ||
               (isActive &&
@@ -1292,7 +1304,12 @@ export function Thread() {
                 )}
 
                 {showStatus &&
-                  (showPreparing && preparingPhase === "image_generating" ? (
+                  (showImageGenStatusDirect ? (
+                    <ImageGenStatusLine
+                      active
+                      status={imageGenStatus ?? undefined}
+                    />
+                  ) : showPreparing && preparingPhase === "image_generating" ? (
                     <ImageGenStatusLine
                       active
                       status={imageGenStatus ?? turnAnswerStatus?.custom_status ?? undefined}
