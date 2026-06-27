@@ -57,6 +57,11 @@ type PosterConfig = {
   poster_hook: string;
   poster_audience: string;
   poster_cta_type: string;
+  // Custom chip lists per field (user can add/remove)
+  poster_format_chips: string[];
+  poster_hook_chips: string[];
+  poster_audience_chips: string[];
+  poster_cta_chips: string[];
 };
 
 const DEFAULTS: PosterConfig = {
@@ -77,6 +82,10 @@ const DEFAULTS: PosterConfig = {
   poster_hook: "auto",
   poster_audience: "",
   poster_cta_type: "none",
+  poster_format_chips: ["Новость + вывод", "Топ-5 список", "How-to", "Вопрос аудитории", "Кейс", "Мнение"],
+  poster_hook_chips: ["Провокация", "Вопрос", "Неожиданная цифра", "Начало истории"],
+  poster_audience_chips: [],
+  poster_cta_chips: ["Вопрос для комментариев", "Сохранить пост", "Переслать коллегам", "Подписаться", "Ссылка в описании"],
 };
 
 type Props = {
@@ -85,6 +94,76 @@ type Props = {
   enabled: boolean;
   onToggle: (enabled: boolean) => void;
 };
+
+// ─── Reusable multi-select chips field ──────────────────────────────────────
+function ChipsField({
+  label, value, chips, disabled, hint, onChange, onChipsChange,
+}: {
+  label: string; value: string; chips: string[]; disabled?: boolean;
+  hint?: string; onChange: (v: string) => void; onChipsChange: (chips: string[]) => void;
+}) {
+  const [addingNew, setAddingNew] = useState(false);
+  const [newChip, setNewChip] = useState("");
+  const selected = new Set(value ? value.split(",").map((v) => v.trim()).filter(Boolean) : []);
+
+  const toggleChip = (chip: string) => {
+    if (disabled) return;
+    const next = new Set(selected);
+    if (next.has(chip)) next.delete(chip); else next.add(chip);
+    onChange(Array.from(next).join(", "));
+  };
+
+  const deleteChip = (chip: string) => {
+    onChipsChange(chips.filter((c) => c !== chip));
+    const next = new Set(selected); next.delete(chip);
+    onChange(Array.from(next).join(", "));
+  };
+
+  const addChip = () => {
+    const t = newChip.trim();
+    if (!t || chips.includes(t)) { setAddingNew(false); setNewChip(""); return; }
+    onChipsChange([...chips, t]);
+    const next = new Set(selected); next.add(t);
+    onChange(Array.from(next).join(", "));
+    setNewChip(""); setAddingNew(false);
+  };
+
+  return (
+    <div className="poster-field">
+      <label className="poster-field__label">{label}</label>
+      <input className="poster-field__input" type="text" disabled={disabled}
+        placeholder="Введите значение или выберите ниже" value={value}
+        onChange={(e) => onChange(e.target.value)} />
+      <div className="poster-quick-chips">
+        {chips.map((chip) => (
+          <span key={chip} className={`poster-chip-wrap${disabled ? " poster-chip-wrap--disabled" : ""}`}>
+            <button type="button" disabled={disabled}
+              className={`poster-quick-chip${selected.has(chip) ? " poster-quick-chip--active" : ""}`}
+              onClick={() => toggleChip(chip)}>{chip}</button>
+            {!disabled && (
+              <button type="button" className="poster-chip-delete"
+                onClick={() => deleteChip(chip)} title="Удалить вариант">×</button>
+            )}
+          </span>
+        ))}
+        {!disabled && (addingNew ? (
+          <span className="poster-chip-add-form">
+            <input autoFocus className="poster-chip-add-input" type="text"
+              value={newChip} placeholder="Новый вариант"
+              onChange={(e) => setNewChip(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") addChip(); if (e.key === "Escape") { setAddingNew(false); setNewChip(""); }}} />
+            <button type="button" className="poster-chip-add-confirm" onClick={addChip}>✓</button>
+            <button type="button" className="poster-chip-add-cancel" onClick={() => { setAddingNew(false); setNewChip(""); }}>✕</button>
+          </span>
+        ) : (
+          <button type="button" className="poster-quick-chip poster-chip-add-btn"
+            onClick={() => setAddingNew(true)}>+ Добавить</button>
+        ))}
+      </div>
+      {hint && <span className="poster-field__hint">{hint}</span>}
+    </div>
+  );
+}
 
 export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle }: Props) {
   const token = useAuthStore((s) => s.token);
@@ -324,6 +403,18 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
       poster_hook: String(initialConfig.poster_hook ?? "auto"),
       poster_audience: String(initialConfig.poster_audience ?? ""),
       poster_cta_type: String(initialConfig.poster_cta_type ?? "none"),
+      poster_format_chips: Array.isArray(initialConfig.poster_format_chips)
+        ? initialConfig.poster_format_chips as string[]
+        : DEFAULTS.poster_format_chips,
+      poster_hook_chips: Array.isArray(initialConfig.poster_hook_chips)
+        ? initialConfig.poster_hook_chips as string[]
+        : DEFAULTS.poster_hook_chips,
+      poster_audience_chips: Array.isArray(initialConfig.poster_audience_chips)
+        ? initialConfig.poster_audience_chips as string[]
+        : DEFAULTS.poster_audience_chips,
+      poster_cta_chips: Array.isArray(initialConfig.poster_cta_chips)
+        ? initialConfig.poster_cta_chips as string[]
+        : DEFAULTS.poster_cta_chips,
     });
   }, [initialConfig]);
 
@@ -945,84 +1036,45 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
         )}
 
         {/* ── Качество контента ───────────────────────────────────────── */}
-        {/* Формат поста — свободный ввод + быстрые варианты */}
-        <div className="poster-field">
-          <label className="poster-field__label">Формат поста</label>
-          <input
-            className="poster-field__input"
-            type="text"
-            disabled={f}
-            placeholder="Например: Топ-5 список, Новость + вывод, Кейс..."
-            value={cfg.poster_format === "auto" ? "" : cfg.poster_format}
-            onChange={(e) => patch("poster_format", e.target.value || "auto")}
-          />
-          <div className="poster-quick-chips">
-            {["Новость + вывод", "Топ-5 список", "How-to", "Вопрос аудитории", "Кейс", "Мнение"].map((v) => (
-              <button key={v} type="button" disabled={f}
-                className={`poster-quick-chip${cfg.poster_format === v ? " poster-quick-chip--active" : ""}`}
-                onClick={() => patch("poster_format", cfg.poster_format === v ? "auto" : v)}>
-                {v}
-              </button>
-            ))}
-          </div>
-          <span className="poster-field__hint">Выберите быстрый вариант или введите свой</span>
-        </div>
+        <ChipsField
+          label="Формат поста"
+          value={cfg.poster_format === "auto" ? "" : cfg.poster_format}
+          chips={cfg.poster_format_chips}
+          disabled={f}
+          hint="Можно выбрать несколько форматов или ввести свой. Добавьте и удалите варианты."
+          onChange={(v) => patch("poster_format", v || "auto")}
+          onChipsChange={(chips) => patch("poster_format_chips", chips)}
+        />
 
-        {/* Стиль первой строки */}
-        <div className="poster-field">
-          <label className="poster-field__label">Стиль первой строки (хук)</label>
-          <input
-            className="poster-field__input"
-            type="text"
-            disabled={f}
-            placeholder="Например: Провокационное утверждение, Вопрос, Цифра..."
-            value={cfg.poster_hook === "auto" ? "" : cfg.poster_hook}
-            onChange={(e) => patch("poster_hook", e.target.value || "auto")}
-          />
-          <div className="poster-quick-chips">
-            {["Провокация", "Вопрос", "Неожиданная цифра", "Начало истории"].map((v) => (
-              <button key={v} type="button" disabled={f}
-                className={`poster-quick-chip${cfg.poster_hook === v ? " poster-quick-chip--active" : ""}`}
-                onClick={() => patch("poster_hook", cfg.poster_hook === v ? "auto" : v)}>
-                {v}
-              </button>
-            ))}
-          </div>
-          <span className="poster-field__hint">Выберите быстрый вариант или опишите своими словами</span>
-        </div>
+        <ChipsField
+          label="Стиль первой строки (хук)"
+          value={cfg.poster_hook === "auto" ? "" : cfg.poster_hook}
+          chips={cfg.poster_hook_chips}
+          disabled={f}
+          hint="Первая строка — главный крючок для читателя."
+          onChange={(v) => patch("poster_hook", v || "auto")}
+          onChipsChange={(chips) => patch("poster_hook_chips", chips)}
+        />
 
-        {/* Целевая аудитория */}
-        <div className="poster-field">
-          <label className="poster-field__label">Целевая аудитория</label>
-          <input className="poster-field__input" type="text" disabled={f}
-            placeholder="Например: предприниматели 30–50 лет, хотят автоматизировать бизнес"
-            value={cfg.poster_audience}
-            onChange={(e) => patch("poster_audience", e.target.value)} />
-          <span className="poster-field__hint">Одна строка — LLM подстраивает лексику и примеры под аудиторию</span>
-        </div>
+        <ChipsField
+          label="Целевая аудитория"
+          value={cfg.poster_audience}
+          chips={cfg.poster_audience_chips}
+          disabled={f}
+          hint="LLM подстраивает лексику и примеры под описание аудитории."
+          onChange={(v) => patch("poster_audience", v)}
+          onChipsChange={(chips) => patch("poster_audience_chips", chips)}
+        />
 
-        {/* Тип CTA */}
-        <div className="poster-field">
-          <label className="poster-field__label">Тип призыва к действию (CTA)</label>
-          <input
-            className="poster-field__input"
-            type="text"
-            disabled={f}
-            placeholder="Например: задай вопрос для комментариев, предложи переслать коллегам..."
-            value={cfg.poster_cta_type === "none" ? "" : cfg.poster_cta_type}
-            onChange={(e) => patch("poster_cta_type", e.target.value || "none")}
-          />
-          <div className="poster-quick-chips">
-            {["Вопрос для комментариев", "Сохранить пост", "Переслать коллегам", "Подписаться", "Ссылка в описании"].map((v) => (
-              <button key={v} type="button" disabled={f}
-                className={`poster-quick-chip${cfg.poster_cta_type === v ? " poster-quick-chip--active" : ""}`}
-                onClick={() => patch("poster_cta_type", cfg.poster_cta_type === v ? "none" : v)}>
-                {v}
-              </button>
-            ))}
-          </div>
-          <span className="poster-field__hint">Оставьте пустым для автоматического CTA или без него</span>
-        </div>
+        <ChipsField
+          label="Тип призыва к действию (CTA)"
+          value={cfg.poster_cta_type === "none" ? "" : cfg.poster_cta_type}
+          chips={cfg.poster_cta_chips}
+          disabled={f}
+          hint="Пусто — без CTA. Можно выбрать несколько или написать свой."
+          onChange={(v) => patch("poster_cta_type", v || "none")}
+          onChipsChange={(chips) => patch("poster_cta_chips", chips)}
+        />
 
         {/* Approval + Reflection */}
         <div className="poster-field-row">
