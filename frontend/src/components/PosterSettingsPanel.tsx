@@ -52,6 +52,12 @@ type PosterConfig = {
   poster_timezone: string;
   poster_approval: boolean;
   poster_reflection: boolean;
+  // Content quality
+  poster_format: string;
+  poster_hook: string;
+  poster_audience: string;
+  poster_cta_type: string;
+  poster_stopwords: boolean;
 };
 
 const DEFAULTS: PosterConfig = {
@@ -68,6 +74,11 @@ const DEFAULTS: PosterConfig = {
   poster_timezone: "Europe/Moscow",
   poster_approval: true,
   poster_reflection: true,
+  poster_format: "auto",
+  poster_hook: "auto",
+  poster_audience: "",
+  poster_cta_type: "none",
+  poster_stopwords: true,
 };
 
 type Props = {
@@ -311,6 +322,11 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
       poster_timezone: String(initialConfig.poster_timezone ?? "Europe/Moscow"),
       poster_approval: initialConfig.poster_approval !== false,
       poster_reflection: initialConfig.poster_reflection !== false,
+      poster_format: String(initialConfig.poster_format ?? "auto"),
+      poster_hook: String(initialConfig.poster_hook ?? "auto"),
+      poster_audience: String(initialConfig.poster_audience ?? ""),
+      poster_cta_type: String(initialConfig.poster_cta_type ?? "none"),
+      poster_stopwords: initialConfig.poster_stopwords !== false,
     });
   }, [initialConfig]);
 
@@ -934,6 +950,65 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
             <span className="poster-field__hint">Время публикации в вашем часовом поясе</span>
           </div>
         )}
+
+        {/* ── Content quality ─────────────────────────────────────────── */}
+        <div className="poster-field-row">
+          <div className="poster-field">
+            <label className="poster-field__label">Формат поста</label>
+            <select className="poster-field__select" value={cfg.poster_format} disabled={f}
+              onChange={(e) => patch("poster_format", e.target.value)}>
+              <option value="auto">Авто (без структуры)</option>
+              <option value="news">Новость + вывод</option>
+              <option value="top5">Топ-5 список</option>
+              <option value="howto">Как сделать (How-to)</option>
+              <option value="question">Вопрос аудитории</option>
+              <option value="case">Кейс / история</option>
+              <option value="opinion">Мнение / аргументы</option>
+            </select>
+          </div>
+          <div className="poster-field">
+            <label className="poster-field__label">Стиль первой строки</label>
+            <select className="poster-field__select" value={cfg.poster_hook} disabled={f}
+              onChange={(e) => patch("poster_hook", e.target.value)}>
+              <option value="auto">Авто</option>
+              <option value="bold">Провокация / смелое утверждение</option>
+              <option value="question">Вопрос</option>
+              <option value="stat">Неожиданная цифра</option>
+              <option value="story">Начало истории</option>
+            </select>
+          </div>
+        </div>
+
+        <div className="poster-field">
+          <label className="poster-field__label">Целевая аудитория</label>
+          <input className="poster-field__input" type="text" disabled={f}
+            placeholder="Например: предприниматели 30–50 лет, хотят автоматизировать бизнес"
+            value={cfg.poster_audience}
+            onChange={(e) => patch("poster_audience", e.target.value)} />
+          <span className="poster-field__hint">Одна строка — LLM подстраивает лексику и примеры</span>
+        </div>
+
+        <div className="poster-field-row">
+          <div className="poster-field">
+            <label className="poster-field__label">Тип призыва (CTA)</label>
+            <select className="poster-field__select" value={cfg.poster_cta_type} disabled={f}
+              onChange={(e) => patch("poster_cta_type", e.target.value)}>
+              <option value="none">Без CTA</option>
+              <option value="comment">Вопрос для комментариев</option>
+              <option value="save">Сохранить пост</option>
+              <option value="share">Переслать коллегам</option>
+              <option value="subscribe">Подписаться</option>
+              <option value="link">Ссылка в описании</option>
+            </select>
+          </div>
+          <div className="poster-field" style={{ justifyContent: "flex-end", paddingTop: 22 }}>
+            <label className={`poster-toggle${f ? " poster-toggle--disabled" : ""}`}>
+              <input type="checkbox" checked={cfg.poster_stopwords} disabled={f}
+                onChange={(e) => patch("poster_stopwords", e.target.checked)} />
+              <span>Блок штампов и клише</span>
+            </label>
+          </div>
+        </div>
 
         {/* Approval + Reflection */}
         <div className="poster-field-row">

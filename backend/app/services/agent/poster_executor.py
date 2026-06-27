@@ -85,6 +85,40 @@ def get_poster_schedule(agent: AgentInstance) -> list[dict]:
     return []
 
 
+_POST_FORMAT_MAP = {
+    "auto":     None,  # no structure constraint
+    "news":     "Структура: [Хук-заголовок] → [Факт + неочевидный вывод] → [Значение для читателя]",
+    "top5":     "Структура: [Цепляющий хук] → [5 пронумерованных пунктов] → [Краткий итог]",
+    "howto":    "Структура: [Проблема] → [Шаги 1–3 кратко] → [Результат]",
+    "question": "Структура: [Провокационный вопрос] → [2–3 предложения контекста] → [Приглашение ответить]",
+    "case":     "Структура: [Герой/компания] → [Проблема] → [Решение] → [Измеримый результат]",
+    "opinion":  "Структура: [Смелое утверждение] → [3 аргумента] → [Вывод]",
+}
+
+_HOOK_STYLE_MAP = {
+    "auto":     None,
+    "question": "Первая строка — вопрос, который задевает читателя и провоцирует дочитать до конца",
+    "stat":     "Первая строка — неожиданная цифра или факт (конкретный, не общеизвестный)",
+    "story":    "Первая строка — начало короткой истории (1–2 предложения, реальный сценарий)",
+    "bold":     "Первая строка — провокационное или контринтуитивное утверждение",
+}
+
+_CTA_TYPE_MAP = {
+    "none":      "CTA: нет",
+    "comment":   "CTA: в конце задай открытый вопрос, приглашающий оставить комментарий",
+    "save":      "CTA: в конце попроси сохранить пост, объяснив чем он полезен",
+    "share":     "CTA: в конце попроси переслать коллегам, которым это актуально",
+    "subscribe": "CTA: в конце мягко предложи подписаться, чтобы не пропустить следующее",
+    "link":      "CTA: в конце направь по ссылке (упомяни что ссылка в описании канала)",
+}
+
+_DEFAULT_STOPWORDS = (
+    "на сегодняшний день, в рамках, осуществляется, осуществить, данный, "
+    "является, следует отметить, в настоящее время, хочется сказать, "
+    "стоит отметить, не могу не, в заключение, подводя итог, резюмируя"
+)
+
+
 def _build_style_from_config(agent: AgentInstance) -> str:
     """Build human-readable style instructions from structured poster config keys."""
     cfg = _get_cfg(agent)
@@ -97,7 +131,11 @@ def _build_style_from_config(agent: AgentInstance) -> str:
     mode = cfg.get("poster_topic_mode", "no_repeat")
     parts.append(f"Порядок тем: {mode_labels.get(mode, mode)}")
     tone = cfg.get("poster_tone", "")
-    tone_map = {"official": "официальный", "informal": "неформальный", "expert": "экспертный", "inspiring": "вдохновляющий"}
+    tone_map = {
+        "official": "официальный", "informal": "неформальный",
+        "expert": "экспертный", "inspiring": "вдохновляющий",
+        "humorous": "лёгкий с юмором", "provocative": "провокационный",
+    }
     if tone:
         parts.append(f"Тон: {tone_map.get(tone, tone)}")
     emoji = cfg.get("poster_emoji", True)
@@ -105,8 +143,37 @@ def _build_style_from_config(agent: AgentInstance) -> str:
     length = cfg.get("poster_length", "medium")
     length_map = {"short": "короткий (~500 зн.)", "medium": "средний (~1000 зн.)", "long": "длинный (~2000 зн.)"}
     parts.append(f"Длина: {length_map.get(length, length)}")
-    cta = cfg.get("poster_cta", False)
-    parts.append(f"CTA: {'да' if cta else 'нет'}")
+
+    # New: post format / hook style
+    post_format = str(cfg.get("poster_format") or "auto")
+    fmt_prompt = _POST_FORMAT_MAP.get(post_format)
+    if fmt_prompt:
+        parts.append(fmt_prompt)
+
+    hook = str(cfg.get("poster_hook") or "auto")
+    hook_prompt = _HOOK_STYLE_MAP.get(hook)
+    if hook_prompt:
+        parts.append(hook_prompt)
+
+    # New: target audience
+    audience = str(cfg.get("poster_audience") or "").strip()
+    if audience:
+        parts.append(f"Целевая аудитория: {audience}")
+
+    # CTA — prefer specific type over boolean flag
+    cta_type = str(cfg.get("poster_cta_type") or "none")
+    if cta_type and cta_type != "none":
+        parts.append(_CTA_TYPE_MAP.get(cta_type, f"CTA: {cta_type}"))
+    elif cfg.get("poster_cta"):
+        parts.append("CTA: добавь лёгкий призыв к действию в конце")
+    else:
+        parts.append("CTA: нет")
+
+    # New: stop words
+    if cfg.get("poster_stopwords", True):
+        stopwords = str(cfg.get("poster_stopwords_custom") or _DEFAULT_STOPWORDS)
+        parts.append(f"ЗАПРЕЩЁННЫЕ СЛОВА И КЛИШЕ: {stopwords}. Никогда не используй их.")
+
     media = cfg.get("poster_media", "none")
     media_map = {"none": "без изображений", "manual": "изображение вручную", "ai": "генерация ИИ"}
     parts.append(f"Медиа: {media_map.get(media, media)}")
@@ -409,20 +476,24 @@ async def generate_poster_image(
     """
     cfg = _get_cfg(agent)
     media_mode = cfg.get("poster_media", "none")
-    logger.info("POSTER_IMG agent=%s poster_media=%s topic=%s", agent.id, media_mode, topic[:50])
+    logger.warning("POSTER_IMG agent=%s poster_media=%s topic=%s", agent.id, media_mode, topic[:50])
     if media_mode != "ai":
-        logger.info("POSTER_IMG skipped: poster_media=%s (not 'ai')", media_mode)
+        logger.warning("POSTER_IMG skipped: poster_media=%s (not 'ai')", media_mode)
         return None
     try:
         from app.services.image_gen_service import generate_image, resolve_image_gen_provider_id
+        from app.services.image_gen_service import ImageGenerationError
         provider_id = await resolve_image_gen_provider_id(db, redis_client)
-        logger.info("POSTER_IMG generating with provider=%s prompt=%s...", provider_id, topic[:40])
+        logger.warning("POSTER_IMG: provider=%s prompt_start=%r", provider_id, topic[:60])
         img_prompt = f"{topic}. {post_text[:150]}"
         image_bytes, _ = await generate_image(img_prompt, provider_id)
-        logger.info("POSTER_IMG success: %d bytes", len(image_bytes))
+        logger.warning("POSTER_IMG success: %d bytes provider=%s", len(image_bytes), provider_id)
         return image_bytes
+    except ImageGenerationError as exc:
+        logger.warning("POSTER_IMG ImageGenerationError code=%s msg=%s", exc.code if hasattr(exc, 'code') else '?', exc)
+        return None
     except Exception as exc:
-        logger.warning("POSTER_IMG FAILED (topic=%s): %s", topic, exc)
+        logger.warning("POSTER_IMG FAILED provider=%s exc_type=%s msg=%s", locals().get('provider_id', '?'), type(exc).__name__, exc)
         return None
 
 
