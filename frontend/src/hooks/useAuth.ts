@@ -155,6 +155,26 @@ async function runBackgroundAuth(cancelled: () => boolean) {
   }
 }
 
+// Proactive token refresh — runs every 50 min while app is open.
+// Access token TTL is 60 min; refreshing at 50 min prevents expiry-related
+// "limits exceeded" errors for Pro users staying in the MAX mini-app.
+const TOKEN_REFRESH_INTERVAL_MS = 50 * 60 * 1000; // 50 minutes
+
+function startTokenRefreshInterval(): () => void {
+  const id = setInterval(async () => {
+    const { token } = useAuthStore.getState();
+    if (!token) return; // not logged in — skip
+    try {
+      const { access_token } = await refreshAccessToken();
+      useAuthStore.getState().setToken(access_token);
+    } catch {
+      // Refresh failed (offline / session expired) — will retry next tick
+    }
+  }, TOKEN_REFRESH_INTERVAL_MS);
+
+  return () => clearInterval(id);
+}
+
 /** UI сразу после hydration; MAX login и refresh — в фоне. */
 export function useAuthBootstrap() {
   const [ready, setReady] = useState(false);
@@ -163,6 +183,9 @@ export function useAuthBootstrap() {
   useEffect(() => {
     let cancelled = false;
     const isCancelled = () => cancelled;
+
+    // Start proactive token refresh for long sessions (MAX mini-app)
+    const stopRefresh = startTokenRefreshInterval();
 
     async function bootstrap() {
       try {
@@ -190,6 +213,7 @@ export function useAuthBootstrap() {
     bootstrap();
     return () => {
       cancelled = true;
+      stopRefresh();
     };
   }, []);
 

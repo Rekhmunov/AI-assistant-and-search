@@ -34,7 +34,7 @@ class Settings(BaseSettings):
     max_bot_webhook_secret: str = ""
     jwt_secret: str = "change-me-in-production"
     jwt_algorithm: str = "HS256"
-    access_token_expire_minutes: int = 15
+    access_token_expire_minutes: int = 60  # raised from 15 min — mini-app sessions last longer
     refresh_token_expire_days: int = 30
     # После удаления аккаунта (deleted_at) — срок до окончательного удаления данных из БД
     deleted_account_retention_days: int = 90
