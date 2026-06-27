@@ -129,6 +129,60 @@ def _topic_text(topic) -> str:
     return str(topic or "")
 
 
+# Phrases that indicate the LLM leaked its reasoning/thinking instead of post text
+_REASONING_LEAK_PATTERNS = [
+    r"^мы должны",
+    r"^нужно проверить",
+    r"^давайте проверим",
+    r"^сначала проверим",
+    r"^анализируем",
+    r"^посчитаем",
+    r"^итак,\s*(создадим|напишем|сформируем|улучшим)",
+    r"^в данном случае",
+    r"^(черновик|текст)[:\s]",
+    r"^требования[:\s]",
+    r"^\d+\.\s*(соответствует|проверим|нужно)",
+]
+
+_THINKING_TAG_RE = re.compile(r"<thinking>.*?</thinking>", re.DOTALL | re.IGNORECASE)
+_THINK_TAG_RE = re.compile(r"<think>.*?</think>", re.DOTALL | re.IGNORECASE)
+
+
+def _clean_llm_post_output(text: str | None, *, fallback: str = "") -> str:
+    """
+    Sanitize LLM output for use as a published post:
+    1. Strip <thinking>/<think> XML tags (DeepSeek R1 / Claude CoT)
+    2. Detect if output is reasoning/analysis rather than a post → use fallback
+    3. Strip system-level artifacts if the post otherwise looks fine
+    """
+    if not text:
+        return fallback
+
+    cleaned = _THINKING_TAG_RE.sub("", text)
+    cleaned = _THINK_TAG_RE.sub("", cleaned)
+    cleaned = cleaned.strip()
+
+    if not cleaned:
+        return fallback
+
+    # Detect reasoning leak: if the output starts with typical chain-of-thought phrases
+    first_line = cleaned.split("\n")[0].strip().lower()
+    for pattern in _REASONING_LEAK_PATTERNS:
+        if re.match(pattern, first_line, re.IGNORECASE):
+            logger.warning("POSTER_REFLECTION: reasoning leak detected (starts with %r) — using original draft",
+                           first_line[:60])
+            return fallback
+
+    # If the output is very long compared to the original draft and the draft is reasonable,
+    # it may be that the model added a lot of reasoning. Use heuristic: if >3× draft length → fallback
+    if fallback and len(cleaned) > len(fallback) * 3:
+        logger.warning("POSTER_REFLECTION: output %d chars >> draft %d chars → fallback",
+                       len(cleaned), len(fallback))
+        return fallback
+
+    return cleaned
+
+
 def _parse_style_instructions(agent: AgentInstance) -> str:
     cfg = _get_cfg(agent)
     # Build from structured config if any poster_* setting is present
@@ -439,11 +493,11 @@ async def generate_post(
             current_date=today,
         )
 
-    draft = await llm.complete_text(
+    raw_draft = await llm.complete_text(
         [{"role": "user", "text": prompt_text}],
         model="pro", max_tokens=2000, temperature=0.7,
     )
-    draft = (draft or "").strip()
+    draft = _clean_llm_post_output(raw_draft)
 
     if not draft:
         return f"Пост на тему: {topic_text}\n\n[Не удалось сгенерировать контент]"
@@ -459,7 +513,7 @@ async def generate_post(
                 )}
             ]
             refined = await llm.complete_text(refl_messages, model="pro", max_tokens=2000, temperature=0.3)
-            refined = (refined or "").strip()
+            refined = _clean_llm_post_output(refined, fallback=draft)
             if refined:
                 draft = refined
         except Exception as exc:
