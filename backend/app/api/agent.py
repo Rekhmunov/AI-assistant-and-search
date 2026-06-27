@@ -1038,6 +1038,7 @@ async def _get_hub_and_reminder_agents(
         select(Thread).where(
             Thread.id == thread_id,
             Thread.user_id == user.id,
+            Thread.deleted_at.is_(None),
         )
     )
     thread = result.scalar_one_or_none()
@@ -1082,6 +1083,62 @@ def _agent_to_reminder_out(agent: "AgentInstance") -> dict:
     }
 
 
+_REMINDER_MAX_PER_USER = 20   # hard cap on active reminder sub-agents per hub
+_REMINDER_MIN_INTERVAL_MIN = 5  # minimum interval schedule in minutes
+_REMINDER_TEXT_MAX_LEN = 4000   # MAX API message limit
+
+
+async def _check_group_reminder_ownership(
+    bot: "MaxBotService", user: "User", max_chat_id: int
+) -> None:
+    """Raise HTTPException if the user is not a verified admin of the target group."""
+    if not user.max_user_id:
+        raise HTTPException(
+            status_code=422,
+            detail="Для отправки напоминаний в группу необходимо привязать аккаунт MAX в профиле.",
+        )
+    from app.services.agent.max_group import check_user_is_group_admin
+    is_admin = await check_user_is_group_admin(bot, max_chat_id, int(user.max_user_id))
+    if is_admin is not True:
+        msg = (
+            "Вы не являетесь администратором этой группы."
+            if is_admin is False else
+            "Не удалось проверить права в группе. Убедитесь, что вы администратор, и попробуйте снова."
+        )
+        raise HTTPException(status_code=403, detail=msg)
+
+
+def _parse_max_chat_id(raw) -> int | None:
+    """Parse max_chat_id safely; raise 422 on invalid input."""
+    if not raw:
+        return None
+    try:
+        return int(raw)
+    except (ValueError, TypeError):
+        raise HTTPException(status_code=422, detail="max_chat_id должен быть числом")
+
+
+def _validate_reminder_timezone(tz: str) -> str:
+    import zoneinfo
+    try:
+        zoneinfo.ZoneInfo(tz)
+        return tz
+    except Exception:
+        return "Europe/Moscow"
+
+
+def _enforce_min_interval(body: dict) -> None:
+    """Raise 422 if schedule interval is below the minimum."""
+    if str(body.get("schedule_type") or "") == "interval":
+        unit = str(body.get("interval_unit") or "minutes")
+        value = int(body.get("interval_value") or 1)
+        if unit == "minutes" and value < _REMINDER_MIN_INTERVAL_MIN:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Минимальный интервал — {_REMINDER_MIN_INTERVAL_MIN} минут.",
+            )
+
+
 @router.get("/threads/{thread_id}/reminders")
 async def list_reminders(
     thread_id: UUID,
@@ -1089,6 +1146,8 @@ async def list_reminders(
     user: Annotated[User, Depends(get_current_user)],
 ):
     """List all reminder sub-agents linked to a hub reminder thread."""
+    from app.services.agent.access import require_agent_eligible
+    require_agent_eligible(user)
     hub_agent, sub_agents = await _get_hub_and_reminder_agents(db, thread_id, user)
     return {"reminders": [_agent_to_reminder_out(a) for a in sub_agents]}
 
@@ -1104,16 +1163,37 @@ async def create_reminder(
     from app.models.agent import AgentInstance, AgentStatus
     from app.services.agent.reminders import activate_agent_direct
     from app.services.agent.schedule import parse_reminder_schedule
+    from app.services.agent.access import require_agent_eligible
+    from app.services.bot import MaxBotService
 
-    hub_agent, _ = await _get_hub_and_reminder_agents(db, thread_id, user)
+    require_agent_eligible(user)
+    hub_agent, existing = await _get_hub_and_reminder_agents(db, thread_id, user)
 
-    schedule_text = _build_schedule_text(body)
-    timezone = str(body.get("timezone") or "Europe/Moscow")
+    # Cap: max reminders per hub
+    active_count = sum(1 for a in existing if a.status not in ("cancelled", "paused"))
+    if active_count >= _REMINDER_MAX_PER_USER:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Достигнут лимит: максимум {_REMINDER_MAX_PER_USER} напоминаний.",
+        )
+
+    # Enforce minimum interval
+    _enforce_min_interval(body)
+
+    # Validate timezone
+    timezone = _validate_reminder_timezone(str(body.get("timezone") or "Europe/Moscow"))
     delivery_mode = str(body.get("delivery_mode") or "dm")
     role = "group_reminder" if delivery_mode == "group" else "personal_reminder"
-    max_chat_id_raw = body.get("max_chat_id")
-    max_chat_id = int(max_chat_id_raw) if max_chat_id_raw else None
+    max_chat_id = _parse_max_chat_id(body.get("max_chat_id"))
 
+    # Security: verify user is admin of the target group
+    if delivery_mode == "group":
+        if not max_chat_id:
+            raise HTTPException(status_code=422, detail="Укажите ID группы для группового напоминания.")
+        bot = MaxBotService()
+        await _check_group_reminder_ownership(bot, user, max_chat_id)
+
+    schedule_text = _build_schedule_text(body)
     try:
         run_at, recurrence = parse_reminder_schedule(schedule_text, tz_name=timezone)
     except ValueError as exc:
@@ -1130,11 +1210,12 @@ async def create_reminder(
     )
 
     max_uid = int(user.max_user_id) if user.max_user_id else 0
+    reminder_text = str(body.get("text") or "Напоминание")[:_REMINDER_TEXT_MAX_LEN]
     sub_cfg: dict = {
         "template": "reminder",
         "is_sub_reminder": True,
         "parent_hub_id": str(hub_agent.id),
-        "reminder_message": str(body.get("text") or "Напоминание"),
+        "reminder_message": reminder_text,
         "schedule_text": schedule_text,
         "schedule_type": str(body.get("schedule_type") or "one_time"),
         "schedule_time": str(body.get("time") or ""),
@@ -1185,6 +1266,11 @@ async def update_reminder(
     from app.models.agent import AgentStatus
     from app.services.agent.reminders import activate_agent_direct, cancel_reminders_for_agent
     from app.services.agent.schedule import parse_reminder_schedule
+    from app.services.agent.access import require_agent_eligible
+    from app.services.bot import MaxBotService
+
+    require_agent_eligible(user)
+    _enforce_min_interval(body)
 
     hub_agent, sub_agents = await _get_hub_and_reminder_agents(db, thread_id, user)
     sub_agent = next((a for a in sub_agents if a.id == reminder_agent_id), None)
@@ -1194,17 +1280,27 @@ async def update_reminder(
     cfg = dict(sub_agent.config or {})
 
     if "text" in body:
-        cfg["reminder_message"] = str(body["text"])
+        cfg["reminder_message"] = str(body["text"])[:_REMINDER_TEXT_MAX_LEN]
     if "timezone" in body:
-        cfg["timezone"] = str(body["timezone"])
+        cfg["timezone"] = _validate_reminder_timezone(str(body["timezone"]))
 
     delivery_mode = str(body.get("delivery_mode") or cfg.get("delivery_mode") or "dm")
     cfg["delivery_mode"] = delivery_mode
     sub_agent.role = "group_reminder" if delivery_mode == "group" else "personal_reminder"
 
     if "max_chat_id" in body:
-        raw = body["max_chat_id"]
-        sub_agent.max_chat_id = int(raw) if raw else None
+        new_chat_id = _parse_max_chat_id(body["max_chat_id"])
+        # Verify user is admin if switching to/staying in group mode
+        if delivery_mode == "group" and new_chat_id:
+            bot = MaxBotService()
+            await _check_group_reminder_ownership(bot, user, new_chat_id)
+        sub_agent.max_chat_id = new_chat_id
+    elif delivery_mode == "group" and sub_agent.max_chat_id:
+        # Delivery mode unchanged but still group — re-verify on mode change
+        pass
+
+    # Always refresh max_user_id from current user (handles MAX re-link)
+    sub_agent.max_user_id = int(user.max_user_id) if user.max_user_id else 0
 
     schedule_fields = {"schedule_type", "time", "weekday", "day_of_month", "date", "interval_value", "interval_unit"}
     needs_reschedule = bool(schedule_fields & set(body.keys()))

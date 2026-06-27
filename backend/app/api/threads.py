@@ -108,16 +108,19 @@ async def search_threads(
         )
     )
 
-    assistant_thread_ids_search = select(AgentInstance.thread_id).where(
+    hidden_thread_ids_search = select(AgentInstance.thread_id).where(
         AgentInstance.user_id == user.id,
-        AgentInstance.config["template"].astext == "assistant",
+        or_(
+            AgentInstance.config["template"].astext == "assistant",
+            AgentInstance.config["is_sub_reminder"].astext == "true",
+        ),
     )
     query = (
         select(Thread)
         .where(
             Thread.user_id == user.id,
             Thread.deleted_at.is_(None),
-            Thread.id.not_in(assistant_thread_ids_search),
+            Thread.id.not_in(hidden_thread_ids_search),
             or_(Thread.title.ilike(pattern), message_match),
         )
         .order_by(Thread.last_message_at.desc())
