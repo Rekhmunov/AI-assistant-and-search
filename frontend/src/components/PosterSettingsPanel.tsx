@@ -1053,9 +1053,10 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
                     <button
                       type="button"
                       className="poster-draft__media-btn"
-                      disabled={imageRegenLoading || imageUploadLoading}
-                      onClick={handleRegenImage}
-                      title="Сгенерировать новое ИИ-изображение"
+                      disabled={imageRegenLoading || imageUploadLoading || cfg.poster_media !== "ai"}
+                      onClick={cfg.poster_media === "ai" ? handleRegenImage : () => setDraftError("Для генерации ИИ-картинки выберите «ИИ-изображение» в настройках агента выше.")}
+                      title={cfg.poster_media === "ai" ? "Сгенерировать новое ИИ-изображение" : "Выберите «ИИ-изображение» в настройках"}
+                      style={cfg.poster_media !== "ai" ? { opacity: 0.4, cursor: "not-allowed" } : undefined}
                     >
                       {imageRegenLoading ? <span className="poster-status__spinner" /> : "🤖"} ИИ-картинка
                     </button>
