@@ -1484,7 +1484,7 @@ export function Thread() {
         </div>
       </div>
 
-      {showScrollDown && activeTab === "answer" && (
+      {showScrollDown && activeTab === "answer" && !(isAgentThread && isDesktop) && (
         <button
           type="button"
           className="thread-scroll-down"
