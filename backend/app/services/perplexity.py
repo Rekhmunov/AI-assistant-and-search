@@ -189,7 +189,9 @@ class PerplexityProvider(PromptedLLMMixin, LLMProvider):
             "model": model_id,
             "messages": messages,
             "stream": True,
-            "stream_mode": "full",
+            # stream_mode: "full" removed — it is non-standard and caused Perplexity to
+            # send the FULL accumulated text in every delta.content chunk instead of
+            # incremental deltas, breaking the _accumulated dedup logic.
             "return_related_questions": self.settings.perplexity_return_related_questions,
             "language_preference": "ru",
             "max_tokens": 2800,
@@ -219,7 +221,7 @@ class PerplexityProvider(PromptedLLMMixin, LLMProvider):
                             f"Perplexity недоступен (HTTP {response.status_code}): {body}",
                             response.status_code,
                         )
-                    _search_accumulated = ""
+                    _search_emitted = ""  # total text we have yielded so far
                     async for line in response.aiter_lines():
                         if not line.startswith("data:"):
                             continue
@@ -247,10 +249,20 @@ class PerplexityProvider(PromptedLLMMixin, LLMProvider):
                             yield PerplexitySearchEvent(sources=sources, model=model_id)
 
                         if text:
-                            if text == _search_accumulated:
+                            if text == _search_emitted:
+                                # Exact duplicate of full text (final chunk repeat) — skip
                                 continue
-                            _search_accumulated += text
-                            yield PerplexitySearchEvent(text=text, model=model_id)
+                            # Detect "full-text" chunk: text starts with what we already emitted
+                            # and is longer → only yield the NEW suffix
+                            if _search_emitted and text.startswith(_search_emitted):
+                                new_part = text[len(_search_emitted):]
+                                if new_part:
+                                    _search_emitted = text
+                                    yield PerplexitySearchEvent(text=new_part, model=model_id)
+                            else:
+                                # Normal incremental delta
+                                _search_emitted += text
+                                yield PerplexitySearchEvent(text=text, model=model_id)
 
         except httpx.HTTPError as e:
             logger.exception("Perplexity stream failed")
@@ -337,7 +349,7 @@ class PerplexityProvider(PromptedLLMMixin, LLMProvider):
                             f"Perplexity direct HTTP {response.status_code}: {body}",
                             response.status_code,
                         )
-                    _accumulated = ""
+                    _emitted = ""
                     async for line in response.aiter_lines():
                         if not line.startswith("data:"):
                             continue
@@ -350,12 +362,19 @@ class PerplexityProvider(PromptedLLMMixin, LLMProvider):
                             continue
                         text, _, _ = self._parse_stream_event(event)
                         if text:
-                            if text == _accumulated:
-                                # Perplexity дублирует весь ответ в финальном чанке
-                                # (message.content = весь накопленный текст).
+                            if text == _emitted:
+                                # Exact duplicate of full text — skip
                                 continue
-                            _accumulated += text
-                            yield text
+                            if _emitted and text.startswith(_emitted):
+                                # Full-text chunk: only yield the new suffix
+                                new_part = text[len(_emitted):]
+                                if new_part:
+                                    _emitted = text
+                                    yield new_part
+                            else:
+                                # Normal incremental delta
+                                _emitted += text
+                                yield text
         except httpx.HTTPError as e:
             raise YandexServiceError("perplexity", "Perplexity недоступен (сеть)") from e
 
