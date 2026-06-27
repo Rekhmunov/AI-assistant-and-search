@@ -122,10 +122,17 @@ def _build_style_from_config(agent: AgentInstance) -> str:
     return "\n".join(parts)
 
 
+def _topic_text(topic) -> str:
+    """Extract plain topic string from str | dict {text, search}."""
+    if isinstance(topic, dict):
+        return str(topic.get("text") or "")
+    return str(topic or "")
+
+
 def _parse_style_instructions(agent: AgentInstance) -> str:
     cfg = _get_cfg(agent)
-    # Prefer structured config over legacy text-based instructions
-    if cfg.get("poster_topics"):
+    # Build from structured config if any poster_* setting is present
+    if cfg.get("poster_topics") or cfg.get("poster_topic_list") or cfg.get("poster_tone"):
         return _build_style_from_config(agent)
     return str(cfg.get("support_instructions") or "")
 
@@ -401,14 +408,16 @@ async def generate_post(
     search_context = ""
     if topic_search and db is not None and redis_client is not None:
         try:
-            from app.services.yandex_search import search as yandex_search
-            results = await yandex_search(topic_text, max_results=5)
+            from app.services.yandex_search import YandexSearchService
+            _svc = YandexSearchService()
+            results = await _svc.search(topic_text, limit=5)
             if results:
                 lines = []
                 for r in results[:5]:
-                    title = r.get("title") or ""
-                    snippet = r.get("snippet") or r.get("text") or ""
-                    url = r.get("url") or ""
+                    # SearchSource is a dataclass with .title, .snippet, .url
+                    title = r.title or ""
+                    snippet = r.snippet or ""
+                    url = r.url or ""
                     lines.append(f"• {title}\n  {snippet[:300]}\n  {url}")
                 search_context = "\n\n".join(lines)
                 logger.info("POSTER_SEARCH: found %d results for topic=%s", len(results), topic_text[:50])

@@ -215,21 +215,30 @@ async def _handle_regen(
     draft_message_id: str | None,
 ) -> None:
     from app.services.providers.factory import resolve_agent_providers
+    from app.services.agent.poster_executor import _topic_text
 
-    topic = draft.get("topic", _pick_next_topic(agent))
+    # draft["topic"] is always a plain string; _pick_next_topic returns {text, search}
+    topic_raw = draft.get("topic")  # str or None
+    if topic_raw:
+        topic_obj = topic_raw  # pass string directly (search flag not restored on regen)
+        topic = topic_raw
+    else:
+        topic_obj = _pick_next_topic(agent)  # dict {text, search}
+        topic = _topic_text(topic_obj)
+
     old_post_id = draft.get("post_id", "")
     update_post_status(agent, old_post_id, "rejected")
     clear_pending_draft(agent)
 
     try:
         llm, _, _, _, _ = await resolve_agent_providers(db, redis_client)
-        new_text = await generate_post(agent, topic, llm)
+        new_text = await generate_post(agent, topic_obj, llm, db=db, redis_client=redis_client)
         new_id = str(uuid.uuid4())
 
         save_post_to_history(agent, post_id=new_id, topic=topic, text=new_text, status="draft")
         save_pending_draft(agent, post_id=new_id, topic=topic, text=new_text)
 
-        # Generate new image
+        # Generate new image (always uses string topic)
         new_image_bytes = await generate_poster_image(agent, topic, new_text, db=db, redis_client=redis_client)
 
         if draft_message_id:

@@ -764,11 +764,13 @@ async def _tool_generate_post_draft(
     )
     from app.services.providers.factory import resolve_agent_providers
 
-    topic = str(args.get("topic") or _pick_next_topic(agent))
+    from app.services.agent.poster_executor import _topic_text
+    topic_obj = args.get("topic") or _pick_next_topic(agent)
+    topic = _topic_text(topic_obj)  # always a plain string for storage/UI
 
     try:
         llm, _, _, _, _ = await resolve_agent_providers(db, redis_client)
-        post_text = await generate_post(agent, topic, llm)
+        post_text = await generate_post(agent, topic_obj, llm, db=db, redis_client=redis_client)
     except Exception as exc:
         return {"ok": False, "tool": "generate_post_draft", "error": str(exc)}
 

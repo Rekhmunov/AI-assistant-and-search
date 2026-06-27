@@ -706,13 +706,21 @@ async def poster_draft_action(
             return {"ok": False, "error": "Достигнут дневной лимит запросов. Попробуйте завтра или подключите Pro."}
 
         from app.services.providers.factory import resolve_agent_providers
+        from app.services.agent.poster_executor import _topic_text
         import uuid as _uuid
-        topic = draft.get("topic", _pick_next_topic(agent))
+        # draft["topic"] is always str; _pick_next_topic returns dict {text, search}
+        topic_raw = draft.get("topic")
+        if topic_raw:
+            topic_obj = topic_raw  # regen same topic (no search flag on regen)
+            topic = topic_raw
+        else:
+            topic_obj = _pick_next_topic(agent)
+            topic = _topic_text(topic_obj)
         update_post_status(agent, post_id, "rejected")
         clear_pending_draft(agent)
         try:
             llm, _, _, _, _ = await resolve_agent_providers(db, redis_client)
-            new_text = await generate_post(agent, topic, llm, db=db, redis_client=redis_client)
+            new_text = await generate_post(agent, topic_obj, llm, db=db, redis_client=redis_client)
             new_id = str(_uuid.uuid4())
             save_post_to_history(agent, post_id=new_id, topic=topic, text=new_text, status="draft")
             save_pending_draft(agent, post_id=new_id, topic=topic, text=new_text, image_file_ids=[])
