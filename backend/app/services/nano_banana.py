@@ -1,4 +1,12 @@
-"""Google Gemini Nano Banana 2 — image generation via Interactions API."""
+"""Google Gemini Nano Banana 2 — image generation via Interactions API.
+
+IMPORTANT: Since June 8, 2026 the Interactions API requires an explicit
+  response_format: {"type": "image"}
+in the request body.  Without it the model responds with text only and
+no image is produced.
+
+Reference: https://ai.google.dev/gemini-api/docs/interactions-breaking-changes-may-2026
+"""
 
 from __future__ import annotations
 
@@ -24,6 +32,75 @@ class NanaBananaResult:
     assistant_text: str
 
 
+def _detect_image_mime(img_bytes: bytes) -> str:
+    if img_bytes[:8] == b"\x89PNG\r\n\x1a\n":
+        return "image/png"
+    if len(img_bytes) >= 12 and img_bytes[8:12] == b"WEBP":
+        return "image/webp"
+    return "image/jpeg"
+
+
+def _extract_image_from_response(data: dict) -> tuple[str, str]:
+    """
+    Return (base64_data, mime_type) from any known Gemini response shape.
+
+    Tried in order:
+    1. output_image  — Interactions API convenience property
+    2. steps[].content[] type=image  — Interactions API steps schema
+    3. candidates[].content.parts[].inlineData  — generateContent format
+    """
+    # 1. Top-level convenience property (Interactions API)
+    output_image = data.get("output_image") or {}
+    img_b64 = str(output_image.get("data") or "")
+    mime = str(output_image.get("mime_type") or output_image.get("mimeType") or "image/jpeg")
+    if img_b64:
+        return img_b64, mime
+
+    # 2. steps[].content[] type=image  (Interactions API new schema)
+    for step in (data.get("steps") or []):
+        content_list = step.get("content") or []
+        for block in content_list:
+            if str(block.get("type") or "").lower() == "image":
+                img_b64 = str(block.get("data") or "")
+                mime = str(block.get("mime_type") or block.get("mimeType") or "image/jpeg")
+                if img_b64:
+                    return img_b64, mime
+
+    # 3. candidates[].content.parts[].inlineData  (generateContent format)
+    for candidate in (data.get("candidates") or []):
+        for part in (candidate.get("content", {}).get("parts") or []):
+            inline = part.get("inlineData") or part.get("inline_data") or {}
+            img_b64 = str(inline.get("data") or "")
+            mime = str(inline.get("mimeType") or inline.get("mime_type") or "image/jpeg")
+            if img_b64:
+                return img_b64, mime
+
+    return "", "image/jpeg"
+
+
+def _extract_text_from_response(data: dict) -> str:
+    """Collect assistant text from any known Gemini response shape."""
+    text = str(data.get("output_text") or "").strip()
+    if text:
+        return text
+
+    # steps schema
+    for step in (data.get("steps") or []):
+        for block in (step.get("content") or []):
+            if str(block.get("type") or "").lower() == "text":
+                t = str(block.get("text") or "").strip()
+                if t:
+                    return t
+
+    # candidates schema
+    for candidate in (data.get("candidates") or []):
+        for part in (candidate.get("content", {}).get("parts") or []):
+            if "text" in part and part["text"]:
+                return str(part["text"]).strip()
+
+    return ""
+
+
 async def generate_nano_banana_image(
     prompt: str,
     *,
@@ -32,7 +109,7 @@ async def generate_nano_banana_image(
     input_images: list[bytes] | None = None,
 ) -> NanaBananaResult:
     """
-    Generate or edit an image via Google Gemini Nano Banana 2.
+    Generate or edit an image via Google Gemini Nano Banana 2 Interactions API.
 
     input_images: if provided, each image is prepended before the text prompt.
       - 1 image + prompt → img2img editing (recolor, style transfer, element removal)
@@ -46,17 +123,19 @@ async def generate_nano_banana_image(
     if input_images:
         for img_bytes in input_images:
             img_b64 = base64.b64encode(img_bytes).decode("ascii")
-            mime = "image/jpeg"
-            if img_bytes[:8] == b"\x89PNG\r\n\x1a\n":
-                mime = "image/png"
-            elif len(img_bytes) >= 12 and img_bytes[8:12] == b"WEBP":
-                mime = "image/webp"
+            mime = _detect_image_mime(img_bytes)
             input_items.append({"type": "image", "data": img_b64, "mime_type": mime})
     input_items.append({"type": "text", "text": prompt})
 
+    # response_format is REQUIRED since June 8 2026 to get an image back.
+    # Without it the API returns text-only and output_image / steps are empty.
     payload = {
         "model": model,
         "input": input_items,
+        "response_format": {
+            "type": "image",
+            "mime_type": "image/jpeg",
+        },
     }
 
     from app.core.config import get_settings as _get_settings
@@ -64,8 +143,10 @@ async def generate_nano_banana_image(
     _proxy = (_settings.google_http_proxy or "").strip() or None
 
     mode = "compose" if len(input_images or []) > 1 else ("edit" if input_images else "generate")
-    logger.info("NanaBanana: %s model=%s prompt_len=%d n_input_images=%d proxy=%s",
-                mode, model, len(prompt), len(input_images or []), bool(_proxy))
+    logger.info(
+        "NanaBanana: %s model=%s prompt_len=%d n_input_images=%d proxy=%s",
+        mode, model, len(prompt), len(input_images or []), bool(_proxy),
+    )
 
     try:
         _client_kwargs: dict = {"timeout": _TIMEOUT}
@@ -89,60 +170,33 @@ async def generate_nano_banana_image(
     if response.status_code == 429:
         raise ImageGenerationError("rate_limit", "Превышен лимит запросов Nano Banana")
     if not response.is_success:
-        body = response.text[:300]
+        body = response.text[:400]
         logger.warning("NanaBanana API error %d: %s", response.status_code, body)
         raise ImageGenerationError(
             "api_error",
-            f"Nano Banana API вернул ошибку {response.status_code}",
+            f"Nano Banana API вернул ошибку {response.status_code}: {body[:120]}",
         )
 
     try:
         data = response.json()
-        # Interactions API returns the Interaction object at the TOP LEVEL (not nested).
-        # convenience property `output_image` holds the last image block.
-        # Fallback: scan steps[].content[] for type="image" blocks.
 
-        # Check for async "in_progress" status — shouldn't happen for sync requests
-        # but handle gracefully
         if data.get("status") == "in_progress":
             logger.warning("NanaBanana: in_progress response (unexpected for sync call)")
             raise ImageGenerationError("empty_response", "Nano Banana не завершил генерацию")
 
-        img_b64 = ""
-        mime_type = "image/png"
-        assistant_text = ""
-
-        # Primary: top-level output_image (convenience property)
-        output_image = data.get("output_image") or {}
-        img_b64 = str(output_image.get("data") or "")
-        mime_type = str(output_image.get("mime_type") or output_image.get("mimeType") or "image/png")
-
-        # Fallback: scan steps → content blocks
-        if not img_b64:
-            for step in (data.get("steps") or []):
-                content_list = step.get("content") or step.get("model_output", {}).get("content") or []
-                for block in content_list:
-                    if str(block.get("type") or "").lower() == "image":
-                        img_b64 = str(block.get("data") or "")
-                        mime_type = str(block.get("mime_type") or block.get("mimeType") or "image/png")
-                        break
-                if img_b64:
-                    break
+        img_b64, mime_type = _extract_image_from_response(data)
 
         if not img_b64:
-            logger.warning("NanaBanana: no image in response: %s", str(data)[:400])
+            # Log enough of the response to diagnose future API format changes
+            logger.warning(
+                "NanaBanana: no image found in response (status=%s keys=%s body=%s)",
+                data.get("status"),
+                list(data.keys()),
+                str(data)[:600],
+            )
             raise ImageGenerationError("empty_response", "Nano Banana не вернул изображение")
 
-        # Collect text output from top-level output_text or steps
-        assistant_text = str(data.get("output_text") or "").strip()
-        if not assistant_text:
-            for step in (data.get("steps") or []):
-                for block in (step.get("content") or []):
-                    if str(block.get("type") or "").lower() == "text":
-                        assistant_text = str(block.get("text") or "").strip()
-                        break
-                if assistant_text:
-                    break
+        assistant_text = _extract_text_from_response(data)
 
         image_bytes = base64.b64decode(img_b64)
         logger.info("NanaBanana: success %d bytes mime=%s", len(image_bytes), mime_type)
