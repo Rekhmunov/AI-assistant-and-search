@@ -8530,6 +8530,13 @@ a.blog-sidebar-title:hover {
 /* Free tier notice */
 .poster-free-notice { margin: 0; padding: 10px 16px; font-size: 0.83rem; color: #744210; background: #fffbeb; border-top: 1px solid #fde68a; border-bottom: 1px solid #fde68a; line-height: 1.5; }
 
+/* Quick-select chips below free-text inputs */
+.poster-quick-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.poster-quick-chip { display: inline-flex; align-items: center; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--border, #d8e0e3); background: var(--surface, #fff); color: var(--text-muted, #5c6b73); font: inherit; font-size: 0.78rem; cursor: pointer; transition: all 0.12s; white-space: nowrap; }
+.poster-quick-chip:hover:not(:disabled) { border-color: var(--accent, #20808d); color: var(--accent, #20808d); background: rgba(32,128,141,0.06); }
+.poster-quick-chip--active { border-color: var(--accent, #20808d); background: rgba(32,128,141,0.1); color: var(--accent, #20808d); font-weight: 600; }
+.poster-quick-chip:disabled { opacity: 0.45; cursor: not-allowed; }
+
 /* Approval confirmation modal — reuses app-modal + feedback-modal design tokens */
 .poster-confirm-overlay { z-index: 1000; }
 .poster-confirm-modal { max-width: 360px; }

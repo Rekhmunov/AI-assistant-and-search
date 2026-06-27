@@ -57,7 +57,6 @@ type PosterConfig = {
   poster_hook: string;
   poster_audience: string;
   poster_cta_type: string;
-  poster_stopwords: boolean;
 };
 
 const DEFAULTS: PosterConfig = {
@@ -78,7 +77,6 @@ const DEFAULTS: PosterConfig = {
   poster_hook: "auto",
   poster_audience: "",
   poster_cta_type: "none",
-  poster_stopwords: true,
 };
 
 type Props = {
@@ -326,7 +324,6 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
       poster_hook: String(initialConfig.poster_hook ?? "auto"),
       poster_audience: String(initialConfig.poster_audience ?? ""),
       poster_cta_type: String(initialConfig.poster_cta_type ?? "none"),
-      poster_stopwords: initialConfig.poster_stopwords !== false,
     });
   }, [initialConfig]);
 
@@ -951,63 +948,84 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
           </div>
         )}
 
-        {/* ── Content quality ─────────────────────────────────────────── */}
-        <div className="poster-field-row">
-          <div className="poster-field">
-            <label className="poster-field__label">Формат поста</label>
-            <select className="poster-field__select" value={cfg.poster_format} disabled={f}
-              onChange={(e) => patch("poster_format", e.target.value)}>
-              <option value="auto">Авто (без структуры)</option>
-              <option value="news">Новость + вывод</option>
-              <option value="top5">Топ-5 список</option>
-              <option value="howto">Как сделать (How-to)</option>
-              <option value="question">Вопрос аудитории</option>
-              <option value="case">Кейс / история</option>
-              <option value="opinion">Мнение / аргументы</option>
-            </select>
+        {/* ── Качество контента ───────────────────────────────────────── */}
+        {/* Формат поста — свободный ввод + быстрые варианты */}
+        <div className="poster-field">
+          <label className="poster-field__label">Формат поста</label>
+          <input
+            className="poster-field__input"
+            type="text"
+            disabled={f}
+            placeholder="Например: Топ-5 список, Новость + вывод, Кейс..."
+            value={cfg.poster_format === "auto" ? "" : cfg.poster_format}
+            onChange={(e) => patch("poster_format", e.target.value || "auto")}
+          />
+          <div className="poster-quick-chips">
+            {["Новость + вывод", "Топ-5 список", "How-to", "Вопрос аудитории", "Кейс", "Мнение"].map((v) => (
+              <button key={v} type="button" disabled={f}
+                className={`poster-quick-chip${cfg.poster_format === v ? " poster-quick-chip--active" : ""}`}
+                onClick={() => patch("poster_format", cfg.poster_format === v ? "auto" : v)}>
+                {v}
+              </button>
+            ))}
           </div>
-          <div className="poster-field">
-            <label className="poster-field__label">Стиль первой строки</label>
-            <select className="poster-field__select" value={cfg.poster_hook} disabled={f}
-              onChange={(e) => patch("poster_hook", e.target.value)}>
-              <option value="auto">Авто</option>
-              <option value="bold">Провокация / смелое утверждение</option>
-              <option value="question">Вопрос</option>
-              <option value="stat">Неожиданная цифра</option>
-              <option value="story">Начало истории</option>
-            </select>
-          </div>
+          <span className="poster-field__hint">Выберите быстрый вариант или введите свой</span>
         </div>
 
+        {/* Стиль первой строки */}
+        <div className="poster-field">
+          <label className="poster-field__label">Стиль первой строки (хук)</label>
+          <input
+            className="poster-field__input"
+            type="text"
+            disabled={f}
+            placeholder="Например: Провокационное утверждение, Вопрос, Цифра..."
+            value={cfg.poster_hook === "auto" ? "" : cfg.poster_hook}
+            onChange={(e) => patch("poster_hook", e.target.value || "auto")}
+          />
+          <div className="poster-quick-chips">
+            {["Провокация", "Вопрос", "Неожиданная цифра", "Начало истории"].map((v) => (
+              <button key={v} type="button" disabled={f}
+                className={`poster-quick-chip${cfg.poster_hook === v ? " poster-quick-chip--active" : ""}`}
+                onClick={() => patch("poster_hook", cfg.poster_hook === v ? "auto" : v)}>
+                {v}
+              </button>
+            ))}
+          </div>
+          <span className="poster-field__hint">Выберите быстрый вариант или опишите своими словами</span>
+        </div>
+
+        {/* Целевая аудитория */}
         <div className="poster-field">
           <label className="poster-field__label">Целевая аудитория</label>
           <input className="poster-field__input" type="text" disabled={f}
             placeholder="Например: предприниматели 30–50 лет, хотят автоматизировать бизнес"
             value={cfg.poster_audience}
             onChange={(e) => patch("poster_audience", e.target.value)} />
-          <span className="poster-field__hint">Одна строка — LLM подстраивает лексику и примеры</span>
+          <span className="poster-field__hint">Одна строка — LLM подстраивает лексику и примеры под аудиторию</span>
         </div>
 
-        <div className="poster-field-row">
-          <div className="poster-field">
-            <label className="poster-field__label">Тип призыва (CTA)</label>
-            <select className="poster-field__select" value={cfg.poster_cta_type} disabled={f}
-              onChange={(e) => patch("poster_cta_type", e.target.value)}>
-              <option value="none">Без CTA</option>
-              <option value="comment">Вопрос для комментариев</option>
-              <option value="save">Сохранить пост</option>
-              <option value="share">Переслать коллегам</option>
-              <option value="subscribe">Подписаться</option>
-              <option value="link">Ссылка в описании</option>
-            </select>
+        {/* Тип CTA */}
+        <div className="poster-field">
+          <label className="poster-field__label">Тип призыва к действию (CTA)</label>
+          <input
+            className="poster-field__input"
+            type="text"
+            disabled={f}
+            placeholder="Например: задай вопрос для комментариев, предложи переслать коллегам..."
+            value={cfg.poster_cta_type === "none" ? "" : cfg.poster_cta_type}
+            onChange={(e) => patch("poster_cta_type", e.target.value || "none")}
+          />
+          <div className="poster-quick-chips">
+            {["Вопрос для комментариев", "Сохранить пост", "Переслать коллегам", "Подписаться", "Ссылка в описании"].map((v) => (
+              <button key={v} type="button" disabled={f}
+                className={`poster-quick-chip${cfg.poster_cta_type === v ? " poster-quick-chip--active" : ""}`}
+                onClick={() => patch("poster_cta_type", cfg.poster_cta_type === v ? "none" : v)}>
+                {v}
+              </button>
+            ))}
           </div>
-          <div className="poster-field" style={{ justifyContent: "flex-end", paddingTop: 22 }}>
-            <label className={`poster-toggle${f ? " poster-toggle--disabled" : ""}`}>
-              <input type="checkbox" checked={cfg.poster_stopwords} disabled={f}
-                onChange={(e) => patch("poster_stopwords", e.target.checked)} />
-              <span>Блок штампов и клише</span>
-            </label>
-          </div>
+          <span className="poster-field__hint">Оставьте пустым для автоматического CTA или без него</span>
         </div>
 
         {/* Approval + Reflection */}

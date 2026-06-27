@@ -144,24 +144,32 @@ def _build_style_from_config(agent: AgentInstance) -> str:
     length_map = {"short": "короткий (~500 зн.)", "medium": "средний (~1000 зн.)", "long": "длинный (~2000 зн.)"}
     parts.append(f"Длина: {length_map.get(length, length)}")
 
-    # New: post format / hook style
-    post_format = str(cfg.get("poster_format") or "auto")
-    fmt_prompt = _POST_FORMAT_MAP.get(post_format)
-    if fmt_prompt:
-        parts.append(fmt_prompt)
+    # Post format — lookup predefined or use as custom description
+    post_format = str(cfg.get("poster_format") or "auto").strip()
+    if post_format and post_format != "auto":
+        fmt_prompt = _POST_FORMAT_MAP.get(post_format)
+        if fmt_prompt:
+            parts.append(fmt_prompt)
+        else:
+            # Free-text custom format from user
+            parts.append(f"СТРУКТУРА ПОСТА: {post_format}")
 
-    hook = str(cfg.get("poster_hook") or "auto")
-    hook_prompt = _HOOK_STYLE_MAP.get(hook)
-    if hook_prompt:
-        parts.append(hook_prompt)
+    # Hook style — lookup predefined or use as custom description
+    hook = str(cfg.get("poster_hook") or "auto").strip()
+    if hook and hook != "auto":
+        hook_prompt = _HOOK_STYLE_MAP.get(hook)
+        if hook_prompt:
+            parts.append(hook_prompt)
+        else:
+            parts.append(f"ПЕРВАЯ СТРОКА: {hook}")
 
     # New: target audience
     audience = str(cfg.get("poster_audience") or "").strip()
     if audience:
         parts.append(f"Целевая аудитория: {audience}")
 
-    # CTA — prefer specific type over boolean flag
-    cta_type = str(cfg.get("poster_cta_type") or "none")
+    # CTA — specific type, predefined mapping or free-text, or boolean fallback
+    cta_type = str(cfg.get("poster_cta_type") or "none").strip()
     if cta_type and cta_type != "none":
         parts.append(_CTA_TYPE_MAP.get(cta_type, f"CTA: {cta_type}"))
     elif cfg.get("poster_cta"):
@@ -169,10 +177,8 @@ def _build_style_from_config(agent: AgentInstance) -> str:
     else:
         parts.append("CTA: нет")
 
-    # New: stop words
-    if cfg.get("poster_stopwords", True):
-        stopwords = str(cfg.get("poster_stopwords_custom") or _DEFAULT_STOPWORDS)
-        parts.append(f"ЗАПРЕЩЁННЫЕ СЛОВА И КЛИШЕ: {stopwords}. Никогда не используй их.")
+    # Stop words always applied — no UI toggle needed
+    parts.append(f"ЗАПРЕЩЁННЫЕ СЛОВА И КЛИШЕ: {_DEFAULT_STOPWORDS}. Никогда не используй их.")
 
     media = cfg.get("poster_media", "none")
     media_map = {"none": "без изображений", "manual": "изображение вручную", "ai": "генерация ИИ"}
