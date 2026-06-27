@@ -444,9 +444,10 @@ async def generate_poster_post(
         from app.services.bot import MaxBotService
         import uuid as _uuid
 
-        topic = _pick_next_topic(agent)
+        topic_obj = _pick_next_topic(agent)
+        topic = topic_obj["text"] if isinstance(topic_obj, dict) else str(topic_obj)
         llm, _, _, _, _ = await resolve_agent_providers(db, redis_client)
-        post_text = await generate_post(agent, topic, llm)
+        post_text = await generate_post(agent, topic_obj, llm, db=db, redis_client=redis_client)
         post_id = str(_uuid.uuid4())
 
         save_post_to_history(agent, post_id=post_id, topic=topic, text=post_text, status="draft")
@@ -711,7 +712,7 @@ async def poster_draft_action(
         clear_pending_draft(agent)
         try:
             llm, _, _, _, _ = await resolve_agent_providers(db, redis_client)
-            new_text = await generate_post(agent, topic, llm)
+            new_text = await generate_post(agent, topic, llm, db=db, redis_client=redis_client)
             new_id = str(_uuid.uuid4())
             save_post_to_history(agent, post_id=new_id, topic=topic, text=new_text, status="draft")
             save_pending_draft(agent, post_id=new_id, topic=topic, text=new_text, image_file_ids=[])

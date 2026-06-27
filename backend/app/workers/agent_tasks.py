@@ -292,9 +292,10 @@ async def _dispatch_poster_scheduled_async() -> None:
                                 )
                                 continue
 
-                        topic = _pick_next_topic(agent)
+                        topic_obj = _pick_next_topic(agent)
+                        topic = topic_obj["text"] if isinstance(topic_obj, dict) else str(topic_obj)
                         llm, _, _, _, _ = await resolve_agent_providers(db, redis_client)
-                        post_text = await generate_post(agent, topic, llm)
+                        post_text = await generate_post(agent, topic_obj, llm, db=db, redis_client=redis_client)
                         post_id = str(_uuid.uuid4())
 
                         save_post_to_history(agent, post_id=post_id, topic=topic, text=post_text, status="draft")

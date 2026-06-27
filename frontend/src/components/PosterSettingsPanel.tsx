@@ -41,7 +41,7 @@ type ScheduleSlot = { day: string; time: string };
 type PosterConfig = {
   poster_channel_id: string;
   poster_topics: string;        // legacy fallback
-  poster_topic_list: string[];  // new: individual topic fields
+  poster_topic_list: { text: string; search: boolean }[];  // {text, search} per topic
   poster_topic_mode: string;    // "random" | "no_repeat" | "sequential" | "priority"
   poster_tone: string;
   poster_emoji: boolean;
@@ -57,7 +57,7 @@ type PosterConfig = {
 const DEFAULTS: PosterConfig = {
   poster_channel_id: "",
   poster_topics: "",
-  poster_topic_list: [""],
+  poster_topic_list: [{ text: "", search: false }],
   poster_topic_mode: "no_repeat",
   poster_tone: "official",
   poster_emoji: true,
@@ -281,14 +281,21 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
       schedule = (initialConfig.poster_days as string[]).map((day) => ({ day, time }));
     }
 
-    // Load topic list: prefer new poster_topic_list, fall back to legacy poster_topics string
-    let topicList: string[] = [];
-    if (Array.isArray(initialConfig.poster_topic_list) && (initialConfig.poster_topic_list as string[]).length > 0) {
-      topicList = (initialConfig.poster_topic_list as string[]).filter(Boolean);
+    // Load topic list: support {text,search} objects, plain strings, and legacy
+    type TopicObj = { text: string; search: boolean };
+    let topicList: TopicObj[] = [];
+    const rawList = initialConfig.poster_topic_list as unknown[];
+    if (Array.isArray(rawList) && rawList.length > 0) {
+      topicList = rawList.map((t) => {
+        if (t && typeof t === "object" && "text" in t) {
+          return { text: String((t as { text: string }).text || ""), search: Boolean((t as { search?: boolean }).search) };
+        }
+        return { text: String(t || "").trim(), search: false };
+      }).filter((t) => t.text);
     } else if (initialConfig.poster_topics) {
-      topicList = String(initialConfig.poster_topics).split(/[;,\n]/).map((t) => t.trim()).filter(Boolean);
+      topicList = String(initialConfig.poster_topics).split(/[;,\n]/).map((t) => ({ text: t.trim(), search: false })).filter((t) => t.text);
     }
-    if (topicList.length === 0) topicList = [""];
+    if (topicList.length === 0) topicList = [{ text: "", search: false }];
 
     setCfg({
       poster_channel_id: String(initialConfig.poster_channel_id ?? ""),
@@ -314,15 +321,19 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
   // Topic list operations
   const addTopic = () => {
     if (cfg.poster_topic_list.length >= 20) return;
-    patch("poster_topic_list", [...cfg.poster_topic_list, ""]);
+    patch("poster_topic_list", [...cfg.poster_topic_list, { text: "", search: false }]);
   };
-  const updateTopic = (idx: number, val: string) => {
-    const list = cfg.poster_topic_list.map((t, i) => (i === idx ? val : t));
+  const updateTopic = (idx: number, text: string) => {
+    const list = cfg.poster_topic_list.map((t, i) => i === idx ? { ...t, text } : t);
+    patch("poster_topic_list", list);
+  };
+  const toggleTopicSearch = (idx: number) => {
+    const list = cfg.poster_topic_list.map((t, i) => i === idx ? { ...t, search: !t.search } : t);
     patch("poster_topic_list", list);
   };
   const removeTopic = (idx: number) => {
     const list = cfg.poster_topic_list.filter((_, i) => i !== idx);
-    patch("poster_topic_list", list.length > 0 ? list : [""]);
+    patch("poster_topic_list", list.length > 0 ? list : [{ text: "", search: false }]);
   };
   const moveTopic = (idx: number, dir: -1 | 1) => {
     const list = [...cfg.poster_topic_list];
@@ -373,7 +384,7 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
 
   // Validation
   const channelOk = cfg.poster_channel_id.trim() !== "";
-  const topicsOk = cfg.poster_topic_list.some((t) => t.trim() !== "");
+  const topicsOk = cfg.poster_topic_list.some((t) => t.text.trim() !== "");
   const canSave = enabled && channelOk && topicsOk && !saving;
 
   const validationHint = !enabled ? ""
@@ -746,14 +757,32 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
                   <button type="button" className="poster-topic-arrow" disabled={f || idx === cfg.poster_topic_list.length - 1}
                     onClick={() => moveTopic(idx, 1)} title="Вниз">↓</button>
                 </div>
-                <input
-                  className={`poster-field__input poster-topic-input${!topic.trim() && enabled ? " poster-field__input--error" : ""}`}
-                  type="text"
+                <textarea
+                  className={`poster-field__input poster-topic-input poster-topic-textarea${!topic.text.trim() && enabled ? " poster-field__input--error" : ""}`}
                   placeholder={`Тема ${idx + 1}`}
-                  value={topic}
+                  value={topic.text}
                   disabled={f}
-                  onChange={(e) => updateTopic(idx, e.target.value)}
+                  rows={1}
+                  onChange={(e) => {
+                    updateTopic(idx, e.target.value);
+                    // Auto-grow: reset then set to scrollHeight
+                    e.target.style.height = "auto";
+                    e.target.style.height = `${Math.min(e.target.scrollHeight, 120)}px`;
+                  }}
+                  onFocus={(e) => {
+                    e.target.style.height = "auto";
+                    e.target.style.height = `${Math.min(e.target.scrollHeight, 120)}px`;
+                  }}
                 />
+                <button
+                  type="button"
+                  className={`poster-topic-search-btn${topic.search ? " poster-topic-search-btn--active" : ""}`}
+                  disabled={f}
+                  onClick={() => toggleTopicSearch(idx)}
+                  title={topic.search ? "Поиск Яндекс включён — при генерации поста выполнится поиск актуальных данных" : "Включить поиск Яндекс для этой темы"}
+                >
+                  🔍
+                </button>
                 {cfg.poster_topic_list.length > 1 && !f && (
                   <button type="button" className="poster-topic-remove" onClick={() => removeTopic(idx)}
                     title="Удалить тему" aria-label="Удалить">×</button>

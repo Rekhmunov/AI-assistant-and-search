@@ -91,7 +91,7 @@ def _build_style_from_config(agent: AgentInstance) -> str:
     parts = []
     topic_list = _get_topic_list(agent)
     if topic_list:
-        parts.append(f"Темы: {'; '.join(topic_list)}")
+        parts.append(f"Темы: {'; '.join(t['text'] for t in topic_list)}")
     mode_labels = {"random": "случайный", "no_repeat": "случайный без повторов",
                    "sequential": "по очереди", "priority": "приоритетный"}
     mode = cfg.get("poster_topic_mode", "no_repeat")
@@ -130,16 +130,23 @@ def _parse_style_instructions(agent: AgentInstance) -> str:
     return str(cfg.get("support_instructions") or "")
 
 
-def _get_topic_list(agent: AgentInstance) -> list[str]:
-    """Return list of topics, supporting both new (poster_topic_list) and legacy (poster_topics) formats."""
+def _get_topic_list(agent: AgentInstance) -> list[dict]:
+    """Return list of topics as dicts {text, search}.
+    Supports new {text, search} format, plain string list, and legacy string."""
     cfg = _get_cfg(agent)
 
-    # New format: structured list
     topic_list = cfg.get("poster_topic_list")
-    if isinstance(topic_list, list):
-        topics = [str(t).strip() for t in topic_list if str(t).strip()]
-        if topics:
-            return topics
+    if isinstance(topic_list, list) and topic_list:
+        result = []
+        for t in topic_list:
+            if isinstance(t, dict):
+                text = str(t.get("text") or "").strip()
+                if text:
+                    result.append({"text": text, "search": bool(t.get("search", False))})
+            elif str(t).strip():
+                result.append({"text": str(t).strip(), "search": False})
+        if result:
+            return result
 
     # Legacy: semicolon-separated string
     topics_raw = cfg.get("poster_topics", "")
@@ -149,13 +156,15 @@ def _get_topic_list(agent: AgentInstance) -> list[str]:
         topics_raw = m.group(1) if m else ""
 
     if topics_raw:
-        return [t.strip() for t in re.split(r"[;,\n]", topics_raw) if t.strip()]
+        return [{"text": t.strip(), "search": False}
+                for t in re.split(r"[;,\n]", topics_raw) if t.strip()]
     return []
 
 
-def _pick_next_topic(agent: AgentInstance) -> str:
+def _pick_next_topic(agent: AgentInstance) -> dict:
     """
     Выбирает следующую тему согласно настроенному режиму ротации.
+    Возвращает dict {text: str, search: bool}.
 
     Режимы (poster_topic_mode):
       random      — полностью случайный
@@ -169,7 +178,7 @@ def _pick_next_topic(agent: AgentInstance) -> str:
     topics = _get_topic_list(agent)
 
     if not topics:
-        return "общая тема канала"
+        return {"text": "общая тема канала", "search": False}
     if len(topics) == 1:
         return topics[0]
 
@@ -178,18 +187,13 @@ def _pick_next_topic(agent: AgentInstance) -> str:
 
     if mode == "random":
         idx = _random.randrange(len(topics))
-
     elif mode == "sequential":
         idx = (last_idx + 1) % len(topics)
-
     elif mode == "priority":
-        # Descending weights: topic 0 gets weight N, topic N-1 gets weight 1
         n = len(topics)
         weights = [n - i for i in range(n)]
         idx = _random.choices(range(n), weights=weights, k=1)[0]
-
-    else:  # "no_repeat" (default)
-        # Pick randomly from all except the last-used topic
+    else:  # "no_repeat"
         candidates = [i for i in range(len(topics)) if i != last_idx]
         idx = _random.choice(candidates) if candidates else _random.randrange(len(topics))
 
@@ -363,41 +367,84 @@ async def generate_poster_image(
 
 async def generate_post(
     agent: AgentInstance,
-    topic: str,
+    topic,  # str | dict {text, search}
     llm,
+    *,
+    db=None,
+    redis_client=None,
 ) -> str:
     """
-    Генерирует пост с одним кругом рефлексии (если включена).
-    Возвращает финальный текст поста.
+    Генерирует пост. Если у темы установлен флаг search=True, сначала
+    выполняется поиск Яндекс, и результаты передаются в LLM как контекст.
+    Рефлексия применяется если включена в настройках.
+
+    topic может быть строкой (обратная совместимость) или dict {text, search}.
     """
     from app.services.agent.templates.poster import (
         POSTER_GENERATION_PROMPT,
+        POSTER_GENERATION_PROMPT_WITH_SEARCH,
         POSTER_REFLECTION_PROMPT,
     )
+
+    # Normalize topic
+    if isinstance(topic, dict):
+        topic_text = str(topic.get("text") or "")
+        topic_search = bool(topic.get("search", False))
+    else:
+        topic_text = str(topic)
+        topic_search = False
 
     style = _parse_style_instructions(agent)
     today = datetime.now(timezone.utc).strftime("%d.%m.%Y")
 
-    # Шаг 1: Генерация черновика
-    gen_messages = [
-        {"role": "user", "text": POSTER_GENERATION_PROMPT.format(
-            topic=topic,
+    # Шаг 1 (опциональный): Поиск актуальных данных Яндекс
+    search_context = ""
+    if topic_search and db is not None and redis_client is not None:
+        try:
+            from app.services.yandex_search import search as yandex_search
+            results = await yandex_search(topic_text, max_results=5)
+            if results:
+                lines = []
+                for r in results[:5]:
+                    title = r.get("title") or ""
+                    snippet = r.get("snippet") or r.get("text") or ""
+                    url = r.get("url") or ""
+                    lines.append(f"• {title}\n  {snippet[:300]}\n  {url}")
+                search_context = "\n\n".join(lines)
+                logger.info("POSTER_SEARCH: found %d results for topic=%s", len(results), topic_text[:50])
+        except Exception as exc:
+            logger.warning("POSTER_SEARCH failed (topic=%s): %s", topic_text[:50], exc)
+
+    # Шаг 2: Генерация черновика
+    if search_context:
+        prompt_text = POSTER_GENERATION_PROMPT_WITH_SEARCH.format(
+            topic=topic_text,
             style_instructions=style[:1500],
             current_date=today,
-        )}
-    ]
-    draft = await llm.complete_text(gen_messages, model="pro", max_tokens=2000, temperature=0.7)
+            search_results=search_context[:3000],
+        )
+    else:
+        prompt_text = POSTER_GENERATION_PROMPT.format(
+            topic=topic_text,
+            style_instructions=style[:1500],
+            current_date=today,
+        )
+
+    draft = await llm.complete_text(
+        [{"role": "user", "text": prompt_text}],
+        model="pro", max_tokens=2000, temperature=0.7,
+    )
     draft = (draft or "").strip()
 
     if not draft:
-        return f"Пост на тему: {topic}\n\n[Не удалось сгенерировать контент]"
+        return f"Пост на тему: {topic_text}\n\n[Не удалось сгенерировать контент]"
 
-    # Шаг 2: Рефлексия (если включена)
+    # Шаг 3: Рефлексия (если включена)
     if get_reflection_enabled(agent):
         try:
             refl_messages = [
                 {"role": "user", "text": POSTER_REFLECTION_PROMPT.format(
-                    topic=topic,
+                    topic=topic_text,
                     style_instructions=style[:1500],
                     draft=draft,
                 )}
