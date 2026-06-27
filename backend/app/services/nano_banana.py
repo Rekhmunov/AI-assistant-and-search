@@ -42,10 +42,18 @@ async def generate_nano_banana_image(
         "input": [{"type": "text", "text": prompt}],
     }
 
-    logger.info("NanaBanana: generating image model=%s prompt_len=%d", model, len(prompt))
+    from app.core.config import get_settings as _get_settings
+    _settings = _get_settings()
+    _proxy = (_settings.google_http_proxy or "").strip() or None
+
+    logger.info("NanaBanana: generating image model=%s prompt_len=%d proxy=%s",
+                model, len(prompt), bool(_proxy))
 
     try:
-        async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
+        _client_kwargs: dict = {"timeout": _TIMEOUT}
+        if _proxy:
+            _client_kwargs["proxy"] = _proxy
+        async with httpx.AsyncClient(**_client_kwargs) as client:
             response = await client.post(
                 _API_URL,
                 headers={

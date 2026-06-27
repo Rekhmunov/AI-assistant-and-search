@@ -79,6 +79,9 @@ class Settings(BaseSettings):
     deepseek_http_proxy: str = ""
 
     google_api_key: str = ""  # Gemini API key for Nano Banana image generation
+    # HTTP(S) proxy for Google Gemini API — needed if server IP is in a geo-restricted region (e.g. RU)
+    # Same pattern as anthropic_http_proxy. Example: http://user:pass@proxy-host:3128
+    google_http_proxy: str = ""
 
     gigachat_credentials: str = ""
     gigachat_scope: str = "GIGACHAT_API_PERS"
