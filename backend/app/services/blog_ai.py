@@ -314,6 +314,28 @@ async def generate_blog_article(
     }
 
 
+_COVER_PROMPT_SUFFIX = (
+    ", профессиональная обложка для блога, яркие насыщенные цвета, "
+    "детальная иллюстрация, современный стиль, без текста, без надписей"
+)
+_INLINE_PROMPT_SUFFIX = (
+    ", иллюстрация для статьи блога, яркие цвета, детальная, без текста"
+)
+
+
+def _build_blog_image_prompt(user_prompt: str, purpose: str) -> str:
+    """
+    Enrich the user-supplied prompt so NanaBanana / GigaChat generate a
+    visually rich image rather than a plain or washed-out composition.
+    """
+    text = (user_prompt or "").strip()
+    suffix = _COVER_PROMPT_SUFFIX if purpose == "cover" else _INLINE_PROMPT_SUFFIX
+    # Avoid double-appending if the user already added detailed instructions
+    if any(kw in text.lower() for kw in ("насыщен", "яркий", "детальн", "иллюстрац")):
+        return text
+    return text + suffix
+
+
 async def _generate_blog_image_media(
     db: AsyncSession,
     redis_client,
@@ -341,8 +363,10 @@ async def _generate_blog_image_media(
             "provider_unavailable",
             f"Провайдер генерации изображений '{provider_id}' не поддерживается.",
         )
+    enriched_prompt = _build_blog_image_prompt(prompt, purpose)
+    logger.info("Blog image prompt: %r → %r (provider=%s)", prompt[:80], enriched_prompt[:120], provider_id)
     try:
-        image_bytes, _ = await generate_image(prompt, provider_id)
+        image_bytes, _ = await generate_image(enriched_prompt, provider_id)
     except ImageGenerationError:
         raise
     except Exception as exc:
