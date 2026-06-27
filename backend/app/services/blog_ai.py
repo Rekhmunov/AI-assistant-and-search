@@ -44,9 +44,18 @@ _BLOG_SYSTEM = f"""Ты редактор блога Glosix — ИИ-поиска
 
 
 async def _admin_pro_llm(db: AsyncSession, redis_client):
+    """Return an LLM that supports complete_text (needed for blog generation).
+
+    Perplexity does not implement complete_text, so if it is the current Pro
+    provider we transparently fall back to the agent provider instead.
+    """
     settings = get_settings()
     prompt_store = PromptStore(db, redis_client)
     llm_id = await resolve_llm_provider_id(db, redis_client)
+    if llm_id == "perplexity":
+        from app.services.providers.factory import resolve_agent_llm_provider_id
+        llm_id = await resolve_agent_llm_provider_id(db, redis_client, settings)
+        logger.info("blog_ai: Perplexity selected as Pro LLM — using agent provider %r instead", llm_id)
     return create_llm_provider(llm_id, settings, prompt_store)
 
 
