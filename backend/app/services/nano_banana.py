@@ -29,25 +29,43 @@ async def generate_nano_banana_image(
     *,
     api_key: str,
     model: str = _MODEL,
+    input_images: list[bytes] | None = None,
 ) -> NanaBananaResult:
     """
-    Generate an image via Google Gemini Nano Banana 2 (Interactions API).
-    Returns image bytes as PNG/JPEG.
+    Generate or edit an image via Google Gemini Nano Banana 2.
+
+    input_images: if provided, each image is prepended before the text prompt.
+      - 1 image + prompt → img2img editing (recolor, style transfer, element removal)
+      - 2+ images + prompt → image composition (combine photos)
     """
     if not api_key:
         raise ImageGenerationError("provider_unavailable", "GOOGLE_API_KEY не настроен")
 
+    # Build input list: images first, then text instruction
+    input_items: list[dict] = []
+    if input_images:
+        for img_bytes in input_images:
+            img_b64 = base64.b64encode(img_bytes).decode("ascii")
+            mime = "image/jpeg"
+            if img_bytes[:8] == b"\x89PNG\r\n\x1a\n":
+                mime = "image/png"
+            elif len(img_bytes) >= 12 and img_bytes[8:12] == b"WEBP":
+                mime = "image/webp"
+            input_items.append({"type": "image", "data": img_b64, "mime_type": mime})
+    input_items.append({"type": "text", "text": prompt})
+
     payload = {
         "model": model,
-        "input": [{"type": "text", "text": prompt}],
+        "input": input_items,
     }
 
     from app.core.config import get_settings as _get_settings
     _settings = _get_settings()
     _proxy = (_settings.google_http_proxy or "").strip() or None
 
-    logger.info("NanaBanana: generating image model=%s prompt_len=%d proxy=%s",
-                model, len(prompt), bool(_proxy))
+    mode = "compose" if len(input_images or []) > 1 else ("edit" if input_images else "generate")
+    logger.info("NanaBanana: %s model=%s prompt_len=%d n_input_images=%d proxy=%s",
+                mode, model, len(prompt), len(input_images or []), bool(_proxy))
 
     try:
         _client_kwargs: dict = {"timeout": _TIMEOUT}

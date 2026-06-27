@@ -249,7 +249,7 @@ async def stream_image_generation_turn(
                 redis_client,
                 service="image_gen",
                 kind="invalid_image",
-                message="Пустое или повреждённое изображение от GigaChat",
+                message=f"Пустое или повреждённое изображение от {provider_id}",
             )
             await limiter.release_image_gen(user_id_str)
             await clear_search_pending(redis_client, thread.id)
@@ -296,6 +296,13 @@ async def stream_image_generation_turn(
         if not thread_id:
             thread.title = display_content[:200]
         await db.commit()
+
+        # Store image context for future edits (img2img)
+        try:
+            from app.services.image_edit_flow import set_thread_image_context
+            await set_thread_image_context(redis_client, thread.id, str(_file_id))
+        except Exception as _ctx_exc:
+            logger.warning("IMGGEN_FLOW: failed storing image context: %s", _ctx_exc)
 
         logger.warning("IMGGEN_FLOW: yielding done thread=%s msg=%s", thread.id, assistant_msg.id)
         yield sse_event(
