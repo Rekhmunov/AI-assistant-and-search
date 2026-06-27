@@ -662,7 +662,12 @@ export function Thread() {
           const isDocGen = route.intent === "generate_document";
           const isExportMd = route.intent === "export_chat_document";
           const isImageGen =
-            route.intent === "image_generate" || route.reason === "image_generation";
+            route.intent === "image_generate" ||
+            route.intent === "image_edit" ||
+            route.intent === "image_compose" ||
+            route.reason === "image_generation" ||
+            route.reason === "image_edit" ||
+            route.reason === "image_compose";
           console.warn("[IMGGEN] onRoute intent=%s reason=%s isImageGen=%s ts=%d", route.intent, route.reason, isImageGen, Date.now());
           docGenActiveRef.current = isDocGen;
           imageGenActiveRef.current = isImageGen;

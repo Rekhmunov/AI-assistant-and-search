@@ -249,7 +249,7 @@ async def stream_image_generation_turn(
                 redis_client,
                 service="image_gen",
                 kind="invalid_image",
-                message="Пустое или повреждённое изображение от GigaChat",
+                message=f"Пустое или повреждённое изображение от {provider_id}",
             )
             await limiter.release_image_gen(user_id_str)
             await clear_search_pending(redis_client, thread.id)

@@ -10,7 +10,6 @@ import logging
 import uuid
 from collections.abc import AsyncIterator
 from datetime import datetime, timezone
-from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -19,9 +18,10 @@ from app.core.config import get_settings
 from app.core.limiter import RateLimiter
 from app.models.message import Message, MessageRole
 from app.models.thread import Thread, ThreadType
-from app.models.user import User
+from app.models.user import Plan, User
 from app.services.image_gen_service import persist_generated_image, resolve_image_gen_provider_id
 from app.services.image_bytes import is_valid_image_bytes
+from app.services.message_images_column import messages_have_images_column
 from app.services.upload_storage import load_upload_bytes
 from app.services.search_pending import clear_search_pending, set_search_pending, update_search_pending
 from app.services.service_incidents import record_service_incident
@@ -67,14 +67,24 @@ async def stream_image_edit_turn(
     """
     settings = get_settings()
     user_id_str = str(user.id)
+    intent = "image_compose" if compose_mode else "image_edit"
+
+    # ── Pro plan required ──
+    if user.plan != Plan.PRO:
+        yield sse_event("error", {
+            "code": "free_image_gen_pro",
+            "message": "Генерация и редактирование изображений доступны только в тарифе Pro. "
+                       "Оформите подписку в профиле.",
+        })
+        return
 
     # ── Check provider ──
     provider_id = await resolve_image_gen_provider_id(db, redis_client)
     if provider_id != "nanab2":
         yield sse_event("error", {
             "code": "image_gen_unavailable",
-            "message": "Редактирование изображений доступно только с провайдером Nano Banana 2."
-                       " В настройках выберите Nano Banana 2.",
+            "message": "Редактирование изображений доступно только с провайдером Nano Banana 2. "
+                       "В настройках администратора выберите Nano Banana 2.",
         })
         return
 
@@ -94,41 +104,58 @@ async def stream_image_edit_turn(
         })
         return
 
-    # ── Create or find thread ──
+    # ── Find or create thread ──
     if thread_id:
         res = await db.execute(
-            select(Thread).where(Thread.id == thread_id, Thread.user_id == user.id,
-                                 Thread.deleted_at.is_(None))
+            select(Thread).where(
+                Thread.id == thread_id,
+                Thread.user_id == user.id,
+                Thread.deleted_at.is_(None),
+            )
         )
         thread = res.scalar_one_or_none()
         if not thread:
+            await limiter.release_image_gen(user_id_str)
             yield sse_event("error", {"code": "not_found", "message": "Тред не найден"})
             return
+        if thread.thread_type != ThreadType.SEARCH:
+            await limiter.release_image_gen(user_id_str)
+            yield sse_event("error", {"code": "wrong_thread_type",
+                                      "message": "Этот диалог — настройка агента, не поиск."})
+            return
     else:
-        thread = Thread(user_id=user.id,
-                        title=(query[:60] or "Редактирование изображения"),
-                        thread_type=ThreadType.SEARCH)
+        thread = Thread(
+            user_id=user.id,
+            title=(query[:60] or ("Компоновка изображений" if compose_mode else "Редактирование изображения")),
+            thread_type=ThreadType.SEARCH,
+        )
         db.add(thread)
         await db.flush()
 
     # ── Save user message ──
-    display_content = (query or "").strip() or ("Объедини изображения" if compose_mode else "Отредактируй изображение")
+    display_content = (query or "").strip() or (
+        "Объедини изображения" if compose_mode else "Отредактируй изображение"
+    )
     user_msg = Message(thread_id=thread.id, role=MessageRole.USER, content=display_content)
     db.add(user_msg)
     await db.flush()
     await db.commit()
 
-    await set_search_pending(redis_client, thread.id, user_message_id=user_msg.id,
-                             phase="image_generating", needs_search=False,
-                             intent="image_edit" if not compose_mode else "image_compose",
-                             custom_status=STATUS_MESSAGES[0])
+    await set_search_pending(
+        redis_client, thread.id,
+        user_message_id=user_msg.id,
+        phase="image_generating",
+        needs_search=False,
+        intent=intent,
+        custom_status=STATUS_MESSAGES[0],
+    )
 
     yield sse_event("thread", {"thread_id": str(thread.id)})
     yield sse_event("route", {
         "needs_search": False,
         "answer_model": "pro",
-        "reason": "image_compose" if compose_mode else "image_edit",
-        "intent": "image_compose" if compose_mode else "image_edit",
+        "reason": intent,
+        "intent": intent,
         "policy_version": "v1",
     })
     yield sse_event("image_gen_start", {"status": STATUS_MESSAGES[0]})
@@ -141,7 +168,10 @@ async def stream_image_edit_turn(
         from app.models.uploaded_file import UploadedFile
         for fid in attachment_ids:
             res = await db.execute(
-                select(UploadedFile).where(UploadedFile.id == fid, UploadedFile.user_id == user.id)
+                select(UploadedFile).where(
+                    UploadedFile.id == fid,
+                    UploadedFile.user_id == user.id,
+                )
             )
             uf = res.scalar_one_or_none()
             if uf and uf.storage_key:
@@ -149,28 +179,35 @@ async def stream_image_edit_turn(
                 if img:
                     input_images.append(img)
         if not input_images:
-            yield sse_event("error", {"code": "image_edit_failed",
-                                      "message": "Не удалось загрузить прикреплённые изображения."})
             await limiter.release_image_gen(user_id_str)
             await clear_search_pending(redis_client, thread.id)
+            yield sse_event("error", {
+                "code": "image_edit_failed",
+                "message": "Не удалось загрузить прикреплённые изображения.",
+            })
             return
     else:
         # Edit: load last generated image from thread context
         prev_file_id = await get_thread_image_context(redis_client, thread.id)
         if not prev_file_id:
+            await limiter.release_image_gen(user_id_str)
+            await clear_search_pending(redis_client, thread.id)
             yield sse_event("error", {
                 "code": "image_edit_failed",
                 "message": "В этом треде нет сгенерированного изображения для редактирования. "
-                           "Сначала сгенерируйте изображение.",
+                           "Сначала сгенерируйте изображение командой «нарисуй …».",
             })
-            await limiter.release_image_gen(user_id_str)
-            await clear_search_pending(redis_client, thread.id)
             return
 
         from app.models.uploaded_file import UploadedFile
+        from uuid import UUID as _UUID
         try:
-            from uuid import UUID as _UUID
-            res = await db.execute(select(UploadedFile).where(UploadedFile.id == _UUID(prev_file_id)))
+            res = await db.execute(
+                select(UploadedFile).where(
+                    UploadedFile.id == _UUID(prev_file_id),
+                    UploadedFile.user_id == user.id,
+                )
+            )
             uf = res.scalar_one_or_none()
             if uf and uf.storage_key:
                 img = load_upload_bytes(uf.storage_key)
@@ -180,14 +217,17 @@ async def stream_image_edit_turn(
             logger.warning("image_edit: failed loading context image %s: %s", prev_file_id, exc)
 
         if not input_images:
-            yield sse_event("error", {"code": "image_edit_failed",
-                                      "message": "Не удалось загрузить исходное изображение."})
             await limiter.release_image_gen(user_id_str)
             await clear_search_pending(redis_client, thread.id)
+            yield sse_event("error", {
+                "code": "image_edit_failed",
+                "message": "Не удалось загрузить исходное изображение. Попробуйте сгенерировать заново.",
+            })
             return
 
     # ── Run generation in background, send status updates ──
     from app.services.nano_banana import generate_nano_banana_image, NanaBananaResult
+
     gen_result: list[NanaBananaResult] = []
     gen_exception: list[BaseException] = []
     gen_done = asyncio.Event()
@@ -200,7 +240,7 @@ async def stream_image_edit_turn(
                 input_images=input_images,
             )
             gen_result.append(result)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             gen_exception.append(exc)
         finally:
             gen_done.set()
@@ -223,40 +263,53 @@ async def stream_image_edit_turn(
     if gen_exception:
         exc = gen_exception[0]
         await record_service_incident(redis_client, service="image_gen",
-                                       kind="edit_failed", message=str(exc))
+                                      kind="edit_failed", message=str(exc))
         await limiter.release_image_gen(user_id_str)
-        yield sse_event("error", {"code": "image_gen_failed",
-                                   "message": f"Не удалось отредактировать изображение: {exc}"})
         await clear_search_pending(redis_client, thread.id)
+        yield sse_event("error", {
+            "code": "image_gen_failed",
+            "message": f"Не удалось {'объединить' if compose_mode else 'отредактировать'} изображение: {exc}",
+        })
         return
 
     if not gen_result or not gen_result[0].image_bytes:
         await limiter.release_image_gen(user_id_str)
-        yield sse_event("error", {"code": "image_gen_failed",
-                                   "message": "Пустой результат от Nano Banana."})
         await clear_search_pending(redis_client, thread.id)
+        yield sse_event("error", {"code": "image_gen_failed",
+                                  "message": "Пустой результат от Nano Banana."})
         return
 
     image_bytes = gen_result[0].image_bytes
     if not is_valid_image_bytes(image_bytes):
         await limiter.release_image_gen(user_id_str)
-        yield sse_event("error", {"code": "image_gen_failed",
-                                   "message": "Повреждённое изображение от Nano Banana."})
         await clear_search_pending(redis_client, thread.id)
+        yield sse_event("error", {"code": "image_gen_failed",
+                                  "message": "Повреждённое изображение от Nano Banana."})
         return
 
     # ── Persist result ──
     ttl_hours = await resolve_generated_image_ttl_hours(db, redis_client)
-    file_id, images_json = await persist_generated_image(db, user, image_bytes,
-                                                          title=query[:200], ttl_hours=ttl_hours)
+    file_id, images_json = await persist_generated_image(
+        db, user, image_bytes,
+        title=display_content[:200],
+        ttl_hours=ttl_hours,
+    )
 
     verb = "объединены" if compose_mode else "отредактировано"
-    assistant_text = f"Готово — изображение {verb}."
+    assistant_text = gen_result[0].assistant_text.strip() or f"Готово — изображение {verb}."
+
+    chunk_size = 24
+    for i in range(0, len(assistant_text), chunk_size):
+        yield sse_event("token", {"text": assistant_text[i: i + chunk_size]})
+
+    yield sse_event("images", {"images": images_json})
+
+    images_payload = images_json if await messages_have_images_column(db) else None
     assistant_msg = Message(
         thread_id=thread.id,
         role=MessageRole.ASSISTANT,
         content=assistant_text,
-        images=images_json,
+        images=images_payload,
     )
     db.add(assistant_msg)
     thread.message_count = (thread.message_count or 0) + 2
@@ -266,10 +319,6 @@ async def stream_image_edit_turn(
     # Update thread image context for future edits
     await set_thread_image_context(redis_client, thread.id, str(file_id))
 
-    yield sse_event("image_ready", {
-        "file_id": str(file_id),
-        "images": images_json,
-    })
     yield sse_event("done", {
         "message_id": str(assistant_msg.id),
         "needs_search": False,
