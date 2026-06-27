@@ -814,27 +814,53 @@ async def verify_poster_channel(
 
     try:
         probe = await probe_max_chat(bot, channel_id)
-        if probe.get("ok"):
-            # Save the resolved numeric channel_id back to config
-            cfg["poster_channel_id"] = str(channel_id)
-            from sqlalchemy.orm.attributes import flag_modified as _flag_mod
-            agent.config = cfg
-            _flag_mod(agent, "config")
-            # Activate agent so Celery picks it up for scheduled posting
-            from app.models.agent import AgentStatus
-            if agent.status in (AgentStatus.DRAFT.value, "draft"):
-                agent.status = AgentStatus.ACTIVE.value
-            await db.commit()
+        if not probe.get("ok"):
+            return {
+                "ok": False,
+                "bot_is_admin": False,
+                "user_is_admin": None,
+                "chat_name": "",
+                "channel_id": channel_id,
+                "error": probe.get("error", "Бот не является администратором канала"),
+            }
+
+        # Check that the requesting USER is also an admin of the channel.
+        # This prevents users from publishing to channels they don't control.
+        from app.services.agent.max_group import check_user_is_group_admin
+        user_max_id = user.max_user_id
+        user_is_admin: bool | None = None
+        if user_max_id:
+            user_is_admin = await check_user_is_group_admin(bot, channel_id, int(user_max_id))
+            if user_is_admin is False:
+                return {
+                    "ok": False,
+                    "bot_is_admin": True,
+                    "user_is_admin": False,
+                    "chat_name": probe.get("title") or probe.get("chat_name", ""),
+                    "channel_id": channel_id,
+                    "error": "Вы не являетесь администратором этого канала. Публикация доступна только администраторам.",
+                }
+
+        # Both bot and user are admins — save and activate
+        cfg["poster_channel_id"] = str(channel_id)
+        from sqlalchemy.orm.attributes import flag_modified as _flag_mod
+        agent.config = cfg
+        _flag_mod(agent, "config")
+        from app.models.agent import AgentStatus
+        if agent.status in (AgentStatus.DRAFT.value, "draft"):
+            agent.status = AgentStatus.ACTIVE.value
+        await db.commit()
 
         return {
-            "ok": probe.get("ok", False),
-            "bot_is_admin": probe.get("bot_is_admin", False),
+            "ok": True,
+            "bot_is_admin": True,
+            "user_is_admin": user_is_admin,  # True or None (couldn't check)
             "chat_name": probe.get("title") or probe.get("chat_name", ""),
             "channel_id": channel_id,
-            "error": probe.get("error", "") if not probe.get("ok") else "",
+            "error": "",
         }
     except Exception as exc:
-        return {"ok": False, "bot_is_admin": False, "error": str(exc)[:200]}
+        return {"ok": False, "bot_is_admin": False, "user_is_admin": None, "error": str(exc)[:200]}
 
 
 # ─────────────────────────────────────────────────────────────────────────────
