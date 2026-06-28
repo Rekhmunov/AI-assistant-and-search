@@ -446,7 +446,7 @@ async def generate_poster_post(
 
         topic_obj = _pick_next_topic(agent)
         topic = topic_obj["text"] if isinstance(topic_obj, dict) else str(topic_obj)
-        llm, _, _, _, _ = await resolve_agent_providers(db, redis_client)
+        llm, _, _, _, _ = await resolve_agent_providers(db, redis_client, user=user)
         post_text = await generate_post(agent, topic_obj, llm, db=db, redis_client=redis_client)
         post_id = str(_uuid.uuid4())
 
@@ -719,7 +719,7 @@ async def poster_draft_action(
         update_post_status(agent, post_id, "rejected")
         clear_pending_draft(agent)
         try:
-            llm, _, _, _, _ = await resolve_agent_providers(db, redis_client)
+            llm, _, _, _, _ = await resolve_agent_providers(db, redis_client, user=user)
             new_text = await generate_post(agent, topic_obj, llm, db=db, redis_client=redis_client)
             new_id = str(_uuid.uuid4())
             save_post_to_history(agent, post_id=new_id, topic=topic, text=new_text, status="draft")
@@ -758,7 +758,15 @@ async def poster_draft_action(
         try:
             new_image_bytes = await generate_poster_image(agent, topic, text, db=db, redis_client=redis_client)
             if not new_image_bytes:
-                return {"ok": False, "error": "Не удалось сгенерировать изображение"}
+                # Image generation failed but draft text is intact — allow post without image
+                await db.commit()
+                return {
+                    "ok": True,
+                    "mode": "image_skipped",
+                    "image_url": None,
+                    "file_id": None,
+                    "warning": "Не удалось сгенерировать изображение. Пост можно опубликовать без картинки.",
+                }
             from app.services.image_gen_service import persist_generated_image, public_file_content_url
             import uuid as _uuid
             fid, _ = await persist_generated_image(db, user, new_image_bytes, title=topic, ttl_hours=24)

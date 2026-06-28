@@ -310,6 +310,13 @@ async def _collect_search_result(
                         "Сейчас распознавание фотографий временно недоступно — мы уже разбираемся. "
                         "Попробуйте повторить через несколько минут."
                     )
+                elif code in ("image_gen_failed", "image_gen_unavailable", "image_gen_rate_limit"):
+                    if code == "image_gen_rate_limit":
+                        error_msg = "❌ Достигнут дневной лимит генерации изображений. Попробуйте завтра."
+                    elif code == "image_gen_unavailable":
+                        error_msg = "❌ Генерация изображений временно недоступна. Попробуйте позже."
+                    else:
+                        error_msg = "❌ Не удалось сгенерировать изображение. Попробуйте ещё раз."
                 else:
                     error_msg = data.get("message") or "❌ Не удалось обработать запрос."
                 break
