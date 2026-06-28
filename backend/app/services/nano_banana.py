@@ -122,24 +122,17 @@ def _extract_text_from_response(data: dict) -> str:
     return ""
 
 
-async def generate_nano_banana_image(
+async def _generate_nano_banana_once(
     prompt: str,
     *,
     api_key: str,
-    model: str = _MODEL,
-    input_images: list[bytes] | None = None,
+    model: str,
+    input_images: list[bytes] | None,
 ) -> NanaBananaResult:
-    """
-    Generate or edit an image via Google Gemini Nano Banana 2 Interactions API.
-
-    input_images: if provided, each image is prepended before the text prompt.
-      - 1 image + prompt → img2img editing (recolor, style transfer, element removal)
-      - 2+ images + prompt → image composition (combine photos)
-    """
+    """Single attempt at image generation (no retry logic here)."""
     if not api_key:
         raise ImageGenerationError("provider_unavailable", "GOOGLE_API_KEY не настроен")
 
-    # Build input list: images first, then text instruction
     input_items: list[dict] = []
     if input_images:
         for img_bytes in input_images:
@@ -148,8 +141,6 @@ async def generate_nano_banana_image(
             input_items.append({"type": "image", "data": img_b64, "mime_type": mime})
     input_items.append({"type": "text", "text": prompt})
 
-    # response_format is REQUIRED since June 8 2026 to get an image back.
-    # Without it the API returns text-only and output_image / steps are empty.
     payload = {
         "model": model,
         "input": input_items,
@@ -208,19 +199,17 @@ async def generate_nano_banana_image(
         img_b64, mime_type = _extract_image_from_response(data)
 
         if not img_b64:
-            # Log enough of the response to diagnose future API format changes
             logger.warning(
-                "NanaBanana: no image found in response (status=%s keys=%s body=%s)",
+                "NanaBanana: no image found in response (status=%s keys=%s body=%.600s)",
                 data.get("status"),
                 list(data.keys()),
-                str(data)[:600],
+                str(data),
             )
             raise ImageGenerationError("empty_response", "Nano Banana не вернул изображение")
 
         assistant_text = _extract_text_from_response(data)
 
         image_bytes = _safe_b64decode(img_b64)
-        # Let mime_type follow the actual bytes rather than what the API claims
         actual_mime = _detect_image_mime(image_bytes)
         if actual_mime != mime_type:
             logger.info("NanaBanana: actual mime %s differs from declared %s — using actual", actual_mime, mime_type)
@@ -237,3 +226,38 @@ async def generate_nano_banana_image(
     except base64.binascii.Error as exc:
         logger.warning("NanaBanana: base64 decode error: %s", exc)
         raise ImageGenerationError("parse_error", "Не удалось декодировать изображение") from exc
+
+
+async def generate_nano_banana_image(
+    prompt: str,
+    *,
+    api_key: str,
+    model: str = _MODEL,
+    input_images: list[bytes] | None = None,
+) -> NanaBananaResult:
+    """
+    Generate or edit an image via Google Gemini Nano Banana 2 Interactions API.
+
+    input_images: if provided, each image is prepended before the text prompt.
+      - 1 image + prompt → img2img editing (recolor, style transfer, element removal)
+      - 2+ images + prompt → image composition (combine photos)
+
+    Automatically retries once when the API returns a 200 response but with no
+    image data (empty_response).  Transient model-side refusals are the most
+    common cause of empty responses; a single retry resolves them in practice.
+    """
+    for attempt in range(2):
+        try:
+            return await _generate_nano_banana_once(
+                prompt,
+                api_key=api_key,
+                model=model,
+                input_images=input_images,
+            )
+        except ImageGenerationError as exc:
+            # Only retry on empty_response — other errors are deterministic
+            if exc.code != "empty_response" or attempt >= 1:
+                raise
+            logger.warning("NanaBanana: empty_response on attempt %d, retrying…", attempt + 1)
+    # Unreachable: the loop always raises on attempt=1; satisfy type checker
+    raise ImageGenerationError("empty_response", "Nano Banana не вернул изображение")
