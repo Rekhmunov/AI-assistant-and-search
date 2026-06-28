@@ -718,9 +718,13 @@ async def handle_assistant_dm(
         last_attachments = image_attachments + [keyboard]
 
         if image_attachments:
-            # Картинки только через send_message → статус убираем в ✅ (неизбежно)
+            # edit_message не поддерживает вложения — удаляем статусное сообщение,
+            # чтобы оно не оставалось висеть отдельной галочкой.
             if status_mid:
-                await bot.edit_message(status_mid, "✅")
+                try:
+                    await bot.delete_message(status_mid)
+                except Exception:
+                    pass
             for part in parts[:-1]:
                 await bot.send_message(max_user_id, part)
             await bot.send_message(max_user_id, parts[-1], attachments=last_attachments)

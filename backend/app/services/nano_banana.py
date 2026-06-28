@@ -99,25 +99,45 @@ def _extract_image_from_response(data: dict) -> tuple[str, str]:
     return "", "image/jpeg"
 
 
+import re as _re
+
+# Gemini interleaved-output placeholders that reference generated images inline.
+# Strip them so plain text descriptions don't contain "{image}" or similar.
+_IMAGE_PLACEHOLDER_RE = _re.compile(
+    r"\{image\d*\}|\[image\d*\]|\[изображение\d*\]|\{img\d*\}",
+    _re.IGNORECASE,
+)
+
+
+def _strip_image_placeholders(text: str) -> str:
+    cleaned = _IMAGE_PLACEHOLDER_RE.sub("", text)
+    # Collapse multiple blank lines left by removed placeholders
+    cleaned = _re.sub(r"\n{3,}", "\n\n", cleaned)
+    return cleaned.strip()
+
+
 def _extract_text_from_response(data: dict) -> str:
     """Collect assistant text from any known Gemini response shape."""
     text = str(data.get("output_text") or "").strip()
     if text:
-        return text
+        return _strip_image_placeholders(text)
 
-    # steps schema
+    # steps schema — collect text blocks from ALL model_output steps
+    parts: list[str] = []
     for step in (data.get("steps") or []):
         for block in (step.get("content") or []):
             if str(block.get("type") or "").lower() == "text":
                 t = str(block.get("text") or "").strip()
                 if t:
-                    return t
+                    parts.append(t)
+    if parts:
+        return _strip_image_placeholders(" ".join(parts))
 
     # candidates schema
     for candidate in (data.get("candidates") or []):
         for part in (candidate.get("content", {}).get("parts") or []):
             if "text" in part and part["text"]:
-                return str(part["text"]).strip()
+                return _strip_image_placeholders(str(part["text"]).strip())
 
     return ""
 
