@@ -16,10 +16,12 @@ from app.models.message import Message, MessageRole
 from app.models.thread import Thread, ThreadType
 from app.models.uploaded_file import UploadedFile
 from app.models.user import User
+from app.models.user import Plan
 from app.services.pdf_compress import format_size
 from app.services.pdf_split import build_split_zip, detect_split_params, split_pdf_bytes
 from app.services.search_pending import clear_search_pending, set_search_pending
 from app.services.sse import sse_event
+from app.services.upload_lifecycle import resolve_max_upload_mb_free, resolve_max_upload_mb_pro
 from app.services.upload_storage import load_upload_bytes, save_upload_bytes
 
 logger = logging.getLogger(__name__)
@@ -193,6 +195,34 @@ async def stream_pdf_split_turn(
         thread.last_message_at = datetime.now(timezone.utc)
         await db.commit()
         for chunk in _chunks(answer_text, 30):
+            yield sse_event("token", {"text": chunk})
+        yield sse_event(
+            "done",
+            {"message_id": str(assistant_msg.id), "needs_search": False, "answer_model": "lite"},
+        )
+        await clear_search_pending(redis_client, thread.id)
+        return
+
+    # ── Проверка размера входного PDF по тарифу ──
+    max_mb = (
+        await resolve_max_upload_mb_pro(db, redis_client)
+        if user.plan == Plan.PRO
+        else await resolve_max_upload_mb_free(db, redis_client)
+    )
+    max_bytes = max_mb * 1024 * 1024
+    if pdf_file.size_bytes and pdf_file.size_bytes > max_bytes:
+        answer_text = (
+            f"PDF слишком большой для разбивки: {format_size(pdf_file.size_bytes)}. "
+            f"Максимальный размер для вашего тарифа — {max_mb} МБ."
+        )
+        assistant_msg = Message(
+            thread_id=thread.id, role=MessageRole.ASSISTANT, content=answer_text
+        )
+        db.add(assistant_msg)
+        thread.message_count = (thread.message_count or 0) + 2
+        thread.last_message_at = datetime.now(timezone.utc)
+        await db.commit()
+        for chunk in _chunks(answer_text, 50):
             yield sse_event("token", {"text": chunk})
         yield sse_event(
             "done",
