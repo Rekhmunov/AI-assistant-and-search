@@ -28,6 +28,7 @@ ServiceFlow = Literal[
     "convert_pdf",
     "compress_image",
     "image_to_pdf",
+    "split_pdf",
 ]
 
 _FLOW_JSON_RE = re.compile(r"\{[\s\S]*\}")
@@ -46,7 +47,7 @@ _ROUTER_SYSTEM = """Ты маршрутизатор запросов в Glosix (
 
 Верни ТОЛЬКО JSON без markdown:
 {
-  "flow": "search_rag" | "chat" | "image_generate" | "image_edit" | "image_compose" | "export_chat_document" | "compress_pdf" | "convert_pdf" | "compress_image" | "image_to_pdf",
+  "flow": "search_rag" | "chat" | "image_generate" | "image_edit" | "image_compose" | "export_chat_document" | "compress_pdf" | "convert_pdf" | "compress_image" | "image_to_pdf" | "split_pdf",
   "needs_search": true/false,
   "answer_model": "lite" | "pro",
   "reason": "кратко по-русски",
@@ -113,6 +114,9 @@ force_yandex = false:
 - image_to_pdf — пользователь просит конвертировать изображение(я) в PDF.
   Маркеры: «сделай PDF из фото», «конвертируй фото в PDF», «объедини фото в PDF», «скан в PDF», «фото в PDF».
   ТОЛЬКО если прикреплено одно или несколько изображений или они есть в треде. НЕ использовать если это вопрос о возможностях.
+- split_pdf — пользователь просит разбить, разделить или нарезать PDF на части/файлы.
+  Маркеры: «разбей на части», «раздели PDF», «по 10 страниц», «нарежь на файлы», «каждые N страниц», «разбить пополам», «на отдельные страницы».
+  ТОЛЬКО если прикреплён PDF или он есть в треде. НЕ использовать если это вопрос о возможностях.
 
 ВАЖНО — вопросы о возможностях сервиса → chat:
 - «ты умеешь X», «можешь ли ты X», «что ты умеешь», «умеешь сжимать», «умеешь конвертировать»
@@ -196,6 +200,7 @@ def _parse_flow_response(raw: str) -> LlmFlowDecision | None:
         "convert_pdf",
         "compress_image",
         "image_to_pdf",
+        "split_pdf",
     ):
         return None
     needs_search = bool(data.get("needs_search"))
