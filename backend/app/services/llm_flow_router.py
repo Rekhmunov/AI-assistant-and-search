@@ -26,6 +26,8 @@ ServiceFlow = Literal[
     "export_chat_document",
     "compress_pdf",
     "convert_pdf",
+    "compress_image",
+    "image_to_pdf",
 ]
 
 _FLOW_JSON_RE = re.compile(r"\{[\s\S]*\}")
@@ -44,7 +46,7 @@ _ROUTER_SYSTEM = """Ты маршрутизатор запросов в Glosix (
 
 Верни ТОЛЬКО JSON без markdown:
 {
-  "flow": "search_rag" | "chat" | "image_generate" | "image_edit" | "image_compose" | "export_chat_document" | "compress_pdf" | "convert_pdf",
+  "flow": "search_rag" | "chat" | "image_generate" | "image_edit" | "image_compose" | "export_chat_document" | "compress_pdf" | "convert_pdf" | "compress_image" | "image_to_pdf",
   "needs_search": true/false,
   "answer_model": "lite" | "pro",
   "reason": "кратко по-русски",
@@ -105,6 +107,12 @@ force_yandex = false:
 - export_chat_document — оформить УЖЕ написанный в переписке текст (ответ выше, текст выше, преобразуй в markdown). Не переписывать содержание.
 - compress_pdf — пользователь ЯВНО просит сжать конкретный PDF-файл (прикреплён или упомянут). НЕ использовать если это вопрос о возможностях («умеешь ли», «можешь ли», «что умеешь»).
 - convert_pdf — пользователь ЯВНО просит конвертировать конкретный PDF в JPG. НЕ использовать если это вопрос о возможностях.
+- compress_image — пользователь просит сжать, уменьшить размер или оптимизировать изображение/фото.
+  Маркеры: «сожми фото», «уменьши размер картинки», «сделай файл легче», «оптимизируй фото», «для сайта», «для соцсетей».
+  ТОЛЬКО если прикреплено изображение (jpg/png/webp/heic) или оно есть в треде. НЕ использовать если это вопрос о возможностях.
+- image_to_pdf — пользователь просит конвертировать изображение(я) в PDF.
+  Маркеры: «сделай PDF из фото», «конвертируй фото в PDF», «объедини фото в PDF», «скан в PDF», «фото в PDF».
+  ТОЛЬКО если прикреплено одно или несколько изображений или они есть в треде. НЕ использовать если это вопрос о возможностях.
 
 ВАЖНО — вопросы о возможностях сервиса → chat:
 - «ты умеешь X», «можешь ли ты X», «что ты умеешь», «умеешь сжимать», «умеешь конвертировать»
@@ -186,6 +194,8 @@ def _parse_flow_response(raw: str) -> LlmFlowDecision | None:
         "export_chat_document",
         "compress_pdf",
         "convert_pdf",
+        "compress_image",
+        "image_to_pdf",
     ):
         return None
     needs_search = bool(data.get("needs_search"))
