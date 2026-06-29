@@ -432,6 +432,26 @@ class SearchFlowService:
         has_attachments = bool(attachment_ids)
         needs_vision = bundle.needs_vision
         free_vision_blocked = user.plan == Plan.FREE and needs_vision
+
+        # Perplexity Sonar — поисковая модель, не аналитическая: при наличии
+        # текстового документа во вложении она его не читает, а ищет в интернете.
+        # Переключаем на агентский LLM (настраивается в админке).
+        if llm_provider_id == PERPLEXITY_PROVIDER_ID and bundle.has_document_text:
+            from app.services.providers.factory import (
+                resolve_agent_llm_provider_id,
+                create_llm_provider,
+                _wrap_llm_fallback,
+            )
+            _doc_settings = get_settings()
+            _doc_llm_id = await resolve_agent_llm_provider_id(db, redis_client, _doc_settings)
+            _doc_llm = create_llm_provider(_doc_llm_id, _doc_settings, _prompt_store)
+            _doc_llm = _wrap_llm_fallback(_doc_llm_id, _doc_llm, _doc_settings, _prompt_store)
+            llm = _doc_llm
+            llm_provider_id = _doc_llm_id
+            logger.info(
+                "PERPLEXITY_DOC_OVERRIDE: switching to agent LLM %s for document analysis",
+                _doc_llm_id,
+            )
         if free_vision_blocked:
             needs_vision = False
         hybrid_vision_search = needs_vision and wants_web_search_with_vision(user_text)
