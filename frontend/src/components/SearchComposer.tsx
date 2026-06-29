@@ -816,12 +816,6 @@ export function SearchComposer({
                     requestAnimationFrame(adjustTextareaHeight);
                   }}
                   onPaste={handlePaste}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && !e.shiftKey) {
-                      e.preventDefault();
-                      if (canSend) handleSubmit(e as unknown as FormEvent);
-                    }
-                  }}
                 />
               </div>
               {showInlineMic && renderMicButton(false)}
