@@ -27,29 +27,26 @@ export function ProtectedGeneratedImage({ image, className, loading = "lazy", on
       const safe = raw.replace(/[<>:"/\\|?*\x00-\x1f]/g, "_").slice(0, 80) || "image";
       const filename = safe.endsWith(".jpg") || safe.endsWith(".png") ? safe : `${safe}.jpg`;
 
-      // На мобильных/WebView (iOS WKWebView не поддерживает <a download>) используем
-      // navigator.share() с File-объектом — это открывает нативный диалог «Поделиться/Сохранить».
-      const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-      if (isMobile && typeof navigator.share === "function") {
+      // src уже является blob URL (из useProtectedImageSrc) — используем напрямую.
+      // Если по какой-то причине это не blob URL — фетчим и создаём blob.
+      let downloadUrl = src;
+      let blobCreated = false;
+      if (!src.startsWith("blob:")) {
         try {
-          const response = await fetch(src);
-          const blob = await response.blob();
-          const file = new File([blob], filename, { type: blob.type || "image/jpeg" });
-          if (typeof navigator.canShare === "function" && navigator.canShare({ files: [file] })) {
-            await navigator.share({ files: [file], title: filename });
-            return;
-          }
-        } catch {
-          // fallback to anchor download
-        }
+          const resp = await fetch(src);
+          const blob = await resp.blob();
+          downloadUrl = URL.createObjectURL(blob);
+          blobCreated = true;
+        } catch { return; }
       }
 
       const a = document.createElement("a");
-      a.href = src;
+      a.href = downloadUrl;
       a.download = filename;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
+      if (blobCreated) setTimeout(() => URL.revokeObjectURL(downloadUrl), 10_000);
     },
     [src, image.title],
   );

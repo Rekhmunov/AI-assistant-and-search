@@ -2953,37 +2953,69 @@ body:has(.page-thread) {
   margin-left: 2px;
 }
 
+/* ── Lightbox toolbar (zoom + download + close) ── */
+.image-lightbox-toolbar {
+  position: fixed;
+  top: calc(env(safe-area-inset-top, 0px));
+  left: 0; right: 0;
+  z-index: 1202;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 8px 12px;
+  background: rgba(15, 15, 15, 0.82);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+.image-lightbox-toolbar-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 38px; height: 38px;
+  border-radius: 8px; border: none;
+  background: transparent; color: #fff;
+  cursor: pointer; transition: background 0.12s;
+  -webkit-tap-highlight-color: transparent;
+}
+.image-lightbox-toolbar-btn:hover:not(:disabled) { background: rgba(255,255,255,0.15); }
+.image-lightbox-toolbar-btn:disabled { opacity: 0.3; cursor: default; }
+.image-lightbox-toolbar-btn.image-lightbox-toolbar-close { margin-left: 4px; }
+.image-lightbox-toolbar-link { text-decoration: none; font-size: 1.1rem; }
+.image-lightbox-zoom-label {
+  min-width: 42px; text-align: center;
+  font-size: 0.8rem; font-weight: 600; color: rgba(255,255,255,0.75);
+  user-select: none;
+}
+.image-lightbox-toolbar-sep {
+  width: 1px; height: 22px;
+  background: rgba(255,255,255,0.2);
+  margin: 0 4px;
+}
+
 .image-lightbox-overlay {
   position: fixed;
   inset: 0;
   z-index: 1200;
-  background: rgba(0, 0, 0, 0.72);
+  background: rgba(0, 0, 0, 0.82);
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: calc(52px + env(safe-area-inset-top, 0px)) 16px 24px;
+  padding: calc(58px + env(safe-area-inset-top, 0px)) 16px 24px;
   touch-action: manipulation;
 }
 
+/* .image-lightbox-close — replaced by toolbar button; kept for legacy consumers */
 .image-lightbox-close {
   position: fixed;
   top: calc(12px + env(safe-area-inset-top, 0px));
   right: calc(12px + env(safe-area-inset-right, 0px));
   z-index: 1202;
-  width: 44px;
-  height: 44px;
-  border-radius: 50%;
-  border: none;
-  background: rgba(255, 255, 255, 0.96);
-  color: #1a1a1a;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  cursor: pointer;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.35);
+  width: 44px; height: 44px;
+  border-radius: 50%; border: none;
+  background: rgba(255,255,255,0.96); color: #1a1a1a;
+  display: inline-flex; align-items: center; justify-content: center;
+  padding: 0; cursor: pointer;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.35);
   -webkit-tap-highlight-color: transparent;
-  pointer-events: auto;
 }
 
 .image-lightbox {
