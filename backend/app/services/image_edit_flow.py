@@ -187,41 +187,62 @@ async def stream_image_edit_turn(
             })
             return
     else:
-        # Edit: load last generated image from thread context
-        prev_file_id = await get_thread_image_context(redis_client, thread.id)
-        if not prev_file_id:
-            await limiter.release_search(user_id_str, user, cost=3)
-            await clear_search_pending(redis_client, thread.id)
-            yield sse_event("error", {
-                "code": "image_edit_failed",
-                "message": "В этом треде нет сгенерированного изображения для редактирования. "
-                           "Сначала сгенерируйте изображение командой «нарисуй …».",
-            })
-            return
-
+        # Edit: prefer attached image, then fall back to last generated image in thread
         from app.models.uploaded_file import UploadedFile
         from uuid import UUID as _UUID
-        try:
-            res = await db.execute(
-                select(UploadedFile).where(
-                    UploadedFile.id == _UUID(prev_file_id),
-                    UploadedFile.user_id == user.id,
+
+        # 1. Try attached images first (user uploaded their own photo to edit)
+        if attachment_ids:
+            for fid in attachment_ids:
+                try:
+                    res = await db.execute(
+                        select(UploadedFile).where(
+                            UploadedFile.id == fid,
+                            UploadedFile.user_id == user.id,
+                        )
+                    )
+                    uf = res.scalar_one_or_none()
+                    if uf and uf.storage_key:
+                        from app.services.image_bytes import is_valid_image_bytes
+                        img = load_upload_bytes(uf.storage_key)
+                        if img:
+                            input_images.append(img)
+                except Exception as exc:
+                    logger.warning("image_edit: failed loading attachment %s: %s", fid, exc)
+
+        # 2. Fall back to last generated image stored in Redis thread context
+        if not input_images:
+            prev_file_id = await get_thread_image_context(redis_client, thread.id)
+            if not prev_file_id:
+                await limiter.release_search(user_id_str, user, cost=3)
+                await clear_search_pending(redis_client, thread.id)
+                yield sse_event("error", {
+                    "code": "image_edit_failed",
+                    "message": "Прикрепите фото к сообщению или сначала сгенерируйте изображение командой «нарисуй …».",
+                })
+                return
+
+            try:
+                res = await db.execute(
+                    select(UploadedFile).where(
+                        UploadedFile.id == _UUID(prev_file_id),
+                        UploadedFile.user_id == user.id,
+                    )
                 )
-            )
-            uf = res.scalar_one_or_none()
-            if uf and uf.storage_key:
-                img = load_upload_bytes(uf.storage_key)
-                if img:
-                    input_images.append(img)
-        except Exception as exc:
-            logger.warning("image_edit: failed loading context image %s: %s", prev_file_id, exc)
+                uf = res.scalar_one_or_none()
+                if uf and uf.storage_key:
+                    img = load_upload_bytes(uf.storage_key)
+                    if img:
+                        input_images.append(img)
+            except Exception as exc:
+                logger.warning("image_edit: failed loading context image %s: %s", prev_file_id, exc)
 
         if not input_images:
             await limiter.release_search(user_id_str, user, cost=3)
             await clear_search_pending(redis_client, thread.id)
             yield sse_event("error", {
                 "code": "image_edit_failed",
-                "message": "Не удалось загрузить исходное изображение. Попробуйте сгенерировать заново.",
+                "message": "Не удалось загрузить исходное изображение. Попробуйте ещё раз.",
             })
             return
 
