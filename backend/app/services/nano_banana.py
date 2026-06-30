@@ -21,7 +21,8 @@ from app.services.gigachat_image_gen import ImageGenerationError
 logger = logging.getLogger(__name__)
 
 _API_URL = "https://generativelanguage.googleapis.com/v1beta/interactions"
-_MODEL = "gemini-3.1-flash-image"
+_MODEL    = "gemini-3.1-flash-image"   # дефолт — 1K, быстрый, дешёвый
+_MODEL_HQ = "gemini-3-pro-image"       # high_quality — 2K/4K, дороже
 _TIMEOUT = 90.0
 
 
@@ -162,18 +163,22 @@ async def _generate_nano_banana_once(
             input_items.append({"type": "image", "data": img_b64, "mime_type": mime})
     input_items.append({"type": "text", "text": prompt})
 
-    # image_size не передаём — gemini-3.1-flash-image не поддерживает этот параметр
-    # и при его наличии возвращает текст вместо изображения.
-    # TODO: включить когда подключим gemini-3-pro-image (поддерживает до 4K).
+    # gemini-3.1-flash-image не поддерживает image_size и при его передаче
+    # возвращает текст вместо изображения.
+    # Для 2K автоматически переключаемся на gemini-3-pro-image.
+    response_format: dict = {
+        "type": "image",
+        "mime_type": "image/jpeg",
+    }
+    if image_size and image_size != "1K":
+        model = _MODEL_HQ
+        response_format["image_size"] = image_size
+
     payload = {
         "model": model,
         "input": input_items,
-        "response_format": {
-            "type": "image",
-            "mime_type": "image/jpeg",
-        },
+        "response_format": response_format,
     }
-    _ = image_size  # зарезервировано для будущего Pro-модели
 
     from app.core.config import get_settings as _get_settings
     _settings = _get_settings()
