@@ -571,6 +571,40 @@ export function SettingsPage() {
           )}
         </section>
 
+        {/* ── Справочная таблица стоимости операций ── */}
+        <section className="settings-section">
+          <p className="settings-subgroup-title">Стоимость операций в кредитах (справка)</p>
+          <p style={{ fontSize: "0.82rem", color: "#5c6b73", marginBottom: 8 }}>
+            При лимите <strong>Pro поисков / день</strong> — столько кредитов тратит каждая операция:
+          </p>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.85rem" }}>
+            <thead>
+              <tr style={{ background: "#f5f5f5" }}>
+                <th style={{ textAlign: "left", padding: "6px 10px", border: "1px solid #e0e0e0" }}>Операция</th>
+                <th style={{ textAlign: "center", padding: "6px 10px", border: "1px solid #e0e0e0" }}>Кредитов</th>
+                <th style={{ textAlign: "center", padding: "6px 10px", border: "1px solid #e0e0e0" }}>При лимите 100/день</th>
+              </tr>
+            </thead>
+            <tbody>
+              {[
+                ["Обычный поиск", "1", "100 запросов"],
+                ["Прямой ответ ИИ (без поиска)", "1", "100 запросов"],
+                ["Анализ документа / файла", "2", "50 документов"],
+                ["Генерация изображения 1K", "3", "33 картинки"],
+                ["Генерация изображения 2K", "8", "12 картинок"],
+                ["Редактирование / компоновка изображений", "3", "33 раза"],
+                ["Сжатие / конвертация файлов", "1", "100 раз"],
+              ].map(([op, cost, per100]) => (
+                <tr key={op}>
+                  <td style={{ padding: "5px 10px", border: "1px solid #e0e0e0" }}>{op}</td>
+                  <td style={{ padding: "5px 10px", border: "1px solid #e0e0e0", textAlign: "center", fontWeight: 600 }}>{cost}</td>
+                  <td style={{ padding: "5px 10px", border: "1px solid #e0e0e0", textAlign: "center", color: "#5c6b73" }}>{per100}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </section>
+
         {can("settings:write") && (
           <button type="submit" className="btn-primary">
             Сохранить
