@@ -126,14 +126,12 @@ async def handle_group_interactive(
                     if exec_result.xlsx_data:
                         # Генерируем Excel напрямую из данных — без LLM
                         try:
-                            from app.services.xlsx_builder import build_report_xlsx_bytes
+                            from app.services.xlsx_builder import build_secretary_report_xlsx
                             xd = exec_result.xlsx_data
                             title = xd.get("title", "Отчёт")
-                            columns = xd.get("columns", ["Категория", "Затрата", "Примечание"])
                             records_data = xd.get("records", [])
-                            field_keys = ["category", "amount", "note"]
-                            rows = [[str(r.get(k, "")) for k in field_keys] for r in records_data]
-                            xlsx_bytes = build_report_xlsx_bytes(columns, rows, sheet_name=title[:31])
+                            period_lbl = xd.get("period_label") or title
+                            xlsx_bytes = build_secretary_report_xlsx(records_data, period_lbl)
                             safe_title = re.sub(r"[^\w\-]", "_", title)[:40]
                             filename = f"{safe_title}.xlsx"
                             token = await bot.upload_media(xlsx_bytes, filename, "file")
@@ -284,10 +282,9 @@ async def _handle_pending_date_report(
     field_keys = ["category", "amount", "note"]
 
     try:
-        from app.services.xlsx_builder import build_report_xlsx_bytes
+        from app.services.xlsx_builder import build_secretary_report_xlsx
 
-        rows = [[str(r.get(k, "")) for k in field_keys] for r in filtered]
-        xlsx_bytes = build_report_xlsx_bytes(columns, rows, sheet_name=label[:31])
+        xlsx_bytes = build_secretary_report_xlsx(filtered, label)
         safe_title = re.sub(r"[^\w\-]", "_", title)[:40]
         filename = f"{safe_title}.xlsx"
 
