@@ -959,6 +959,223 @@ async def verify_poster_channel(
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Secretary agent endpoints
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+@router.post("/threads/{thread_id}/verify-group")
+async def verify_secretary_group(
+    thread_id: UUID,
+    body: dict,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+    redis_client: redis.Redis = Depends(get_redis),
+):
+    """Verify bot presence in MAX group and save max_chat_id for secretary agent.
+
+    Body: {"group_id": "@group or numeric ID or link"} (required on first setup)
+    Falls back to stored max_chat_id when body.group_id is absent.
+    Also recompiles secretary rules when support_instructions is set.
+    """
+    result = await db.execute(
+        select(Thread).where(
+            Thread.id == thread_id,
+            Thread.user_id == user.id,
+            Thread.thread_type == ThreadType.AGENT,
+            Thread.deleted_at.is_(None),
+        )
+    )
+    thread = result.scalar_one_or_none()
+    if not thread:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Тред не найден")
+    agent = await get_agent_for_thread(db, thread.id)
+    if not agent:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Агент не найден")
+
+    from app.services.agent.max_probe import probe_max_chat, resolve_channel_link
+    from app.services.bot import MaxBotService
+
+    cfg = dict(agent.config or {})
+    group_id_raw = str(
+        body.get("group_id") or body.get("channel_id") or
+        cfg.get("max_chat_id") or agent.max_chat_id or ""
+    ).strip()
+    if not group_id_raw:
+        return {"ok": False, "error": "ID группы не указан"}
+
+    bot = MaxBotService()
+    raw_clean = group_id_raw.lstrip("@").replace("https://max.ru/", "").strip("/")
+    try:
+        group_id: int | None = int(raw_clean)
+    except ValueError:
+        group_id = None
+
+    if not group_id:
+        try:
+            resolved = await resolve_channel_link(bot, group_id_raw)
+            if not resolved.get("ok") or not resolved.get("chat_id"):
+                return {"ok": False, "error": f"Не удалось найти группу «{group_id_raw}». Проверьте ID или ссылку."}
+            group_id = int(resolved["chat_id"])
+        except Exception as exc:
+            return {"ok": False, "error": str(exc)[:200]}
+
+    try:
+        probe = await probe_max_chat(bot, group_id, send_test=False)
+        if not probe.get("ok"):
+            return {
+                "ok": False,
+                "bot_is_admin": False,
+                "chat_name": "",
+                "group_id": group_id,
+                "error": probe.get("error", "Бот не может подключиться к группе. Убедитесь что бот добавлен в группу."),
+            }
+
+        # Save group to config and agent.max_chat_id
+        cfg["max_chat_id"] = group_id
+        cfg["task_mode"] = "secretary"
+        cfg["role"] = "dm_assistant"
+        cfg["scope"] = "group"
+        cfg["interaction_mode"] = "support"
+        cfg["delivery_mode"] = "group"
+        from sqlalchemy.orm.attributes import flag_modified as _fm_sec
+        agent.config = cfg
+        agent.max_chat_id = group_id
+        _fm_sec(agent, "config")
+
+        # Activate agent if still in DRAFT/COLLECTING
+        from app.models.agent import AgentStatus as _AS
+        if agent.status in (_AS.DRAFT.value, "draft", _AS.COLLECTING.value, "collecting"):
+            agent.status = _AS.ACTIVE.value
+
+        # Recompile rules if categories are configured
+        support_instructions = str(cfg.get("support_instructions") or "").strip()
+        compiled_ok = False
+        if support_instructions:
+            try:
+                from app.services.providers.factory import resolve_agent_providers
+                from app.services.agent.secretary_compiler import compile_secretary_rules
+                llm, _, _, _, _ = await resolve_agent_providers(db, redis_client, user=user)
+                rules = await compile_secretary_rules(llm, support_instructions)
+                if rules:
+                    cfg["compiled_rules"] = rules
+                    agent.config = cfg
+                    _fm_sec(agent, "config")
+                    compiled_ok = True
+            except Exception as _ce:
+                logger.warning("verify-group: rule compile failed: %s", _ce)
+
+        await db.commit()
+        return {
+            "ok": True,
+            "bot_is_admin": bool(probe.get("bot_is_admin")),
+            "chat_name": probe.get("title") or probe.get("chat_name", ""),
+            "group_id": group_id,
+            "compiled_rules": compiled_ok,
+            "error": "",
+        }
+    except Exception as exc:
+        return {"ok": False, "bot_is_admin": False, "error": str(exc)[:200]}
+
+
+@router.get("/threads/{thread_id}/records")
+async def get_secretary_records(
+    thread_id: UUID,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+    limit: int = 50,
+    offset: int = 0,
+):
+    """Return expense records for secretary agent (paginated, newest first)."""
+    result = await db.execute(
+        select(Thread).where(
+            Thread.id == thread_id,
+            Thread.user_id == user.id,
+            Thread.thread_type == ThreadType.AGENT,
+            Thread.deleted_at.is_(None),
+        )
+    )
+    thread = result.scalar_one_or_none()
+    if not thread:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Тред не найден")
+    agent = await get_agent_for_thread(db, thread.id)
+    if not agent:
+        return {"records": [], "total": 0}
+
+    cfg = dict(agent.config or {})
+    raw = cfg.get("agent_records") or {}
+    records: list[dict] = []
+    if isinstance(raw, dict):
+        records = list(raw.get("records") or [])
+    # Newest first
+    records = list(reversed(records))
+    total = len(records)
+    page = records[offset: offset + limit]
+    return {"records": page, "total": total}
+
+
+@router.delete("/threads/{thread_id}/records/{record_id}")
+async def delete_secretary_record(
+    thread_id: UUID,
+    record_id: str,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+):
+    """Delete a single expense record by _id."""
+    result = await db.execute(
+        select(Thread).where(
+            Thread.id == thread_id,
+            Thread.user_id == user.id,
+            Thread.thread_type == ThreadType.AGENT,
+            Thread.deleted_at.is_(None),
+        )
+    )
+    thread = result.scalar_one_or_none()
+    if not thread:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Тред не найден")
+    agent = await get_agent_for_thread(db, thread.id)
+    if not agent:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Агент не найден")
+
+    from app.services.agent.agent_records import delete_record_by_id
+    from sqlalchemy.orm.attributes import flag_modified as _fm_del
+    deleted = delete_record_by_id(agent, "records", record_id)
+    _fm_del(agent, "config")
+    await db.commit()
+    return {"ok": deleted, "record_id": record_id}
+
+
+@router.post("/threads/{thread_id}/records/clear")
+async def clear_secretary_records(
+    thread_id: UUID,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+):
+    """Clear all expense records for secretary agent."""
+    result = await db.execute(
+        select(Thread).where(
+            Thread.id == thread_id,
+            Thread.user_id == user.id,
+            Thread.thread_type == ThreadType.AGENT,
+            Thread.deleted_at.is_(None),
+        )
+    )
+    thread = result.scalar_one_or_none()
+    if not thread:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Тред не найден")
+    agent = await get_agent_for_thread(db, thread.id)
+    if not agent:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Агент не найден")
+
+    from sqlalchemy.orm.attributes import flag_modified as _fm_clr
+    cfg = dict(agent.config or {})
+    cfg["agent_records"] = {"records": []}
+    agent.config = cfg
+    _fm_clr(agent, "config")
+    await db.commit()
+    return {"ok": True}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Reminder management endpoints
 # ─────────────────────────────────────────────────────────────────────────────
 

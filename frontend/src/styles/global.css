@@ -8613,3 +8613,57 @@ input[type="date"].rm-input { appearance: auto; -webkit-appearance: auto; }
 .rm-radio input { accent-color: var(--accent, #20808d); }
 .rm-schedule-fields { display: flex; flex-direction: column; gap: 0; }
 .rm-form-actions { display: flex; gap: 10px; margin-top: 16px; }
+
+/* ── Secretary / shared agent panel utilities ── */
+.poster-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; background: var(--surface-hover, #f7fafb); border-bottom: 1px solid var(--border-subtle, #e8edf0); }
+.poster-header__left { display: flex; align-items: center; gap: 10px; }
+.poster-header__title { font-weight: 700; font-size: 0.95rem; color: var(--text, #1a2328); }
+.poster-header__status { padding: 2px 9px; border-radius: 20px; font-size: 0.75rem; font-weight: 600; background: var(--border, #d8e0e3); color: var(--text-muted, #5c6b73); }
+.poster-header__status--active { background: #c6f6d5; color: #276749; }
+.poster-toggle__slider { position: relative; display: inline-block; width: 42px; height: 24px; background: var(--border, #d8e0e3); border-radius: 999px; transition: background 0.2s; cursor: pointer; }
+.poster-toggle input:checked ~ .poster-toggle__slider { background: var(--accent, #20808d); }
+.poster-toggle__slider::after { content: ""; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: #fff; box-shadow: 0 1px 4px rgba(0,0,0,0.2); transition: transform 0.2s; }
+.poster-toggle input:checked ~ .poster-toggle__slider::after { transform: translateX(18px); }
+.poster-toggle input { position: absolute; opacity: 0; width: 0; height: 0; }
+.poster-section { padding: 16px; border-bottom: 1px solid var(--border-subtle, #e8edf0); display: flex; flex-direction: column; gap: 10px; }
+.poster-section:last-child { border-bottom: none; }
+.poster-section__title { font-size: 0.82rem; font-weight: 700; color: var(--text-muted, #5c6b73); text-transform: uppercase; letter-spacing: 0.05em; display: flex; align-items: center; gap: 8px; }
+.poster-badge { display: inline-flex; align-items: center; justify-content: center; min-width: 20px; height: 18px; padding: 0 6px; border-radius: 20px; background: var(--accent, #20808d); color: #fff; font-size: 0.72rem; font-weight: 700; }
+.poster-hint { font-size: 0.8rem; color: var(--text-muted, #8fa0a8); line-height: 1.5; }
+.poster-input { width: 100%; padding: 9px 12px; border: 1px solid var(--border, #d8e0e3); border-radius: 8px; font: inherit; font-size: 0.9rem; background: var(--surface, #fff); box-sizing: border-box; }
+.poster-input:focus { outline: none; border-color: var(--accent, #20808d); box-shadow: 0 0 0 3px rgba(32,128,141,0.12); }
+.poster-textarea { width: 100%; padding: 9px 12px; border: 1px solid var(--border, #d8e0e3); border-radius: 8px; font: inherit; font-size: 0.9rem; background: var(--surface, #fff); resize: vertical; box-sizing: border-box; }
+.poster-textarea:focus { outline: none; border-color: var(--accent, #20808d); box-shadow: 0 0 0 3px rgba(32,128,141,0.12); }
+.poster-channel-row { display: flex; gap: 8px; align-items: flex-start; }
+.poster-channel-row .poster-input { flex: 1; }
+.poster-channel-status { font-size: 0.85rem; font-weight: 500; padding: 6px 10px; border-radius: 7px; }
+.poster-channel-status--ok { background: #f0fff4; color: #276749; border: 1px solid #c6f6d5; }
+.poster-channel-status--warn { background: #fffbeb; color: #744210; border: 1px solid #fbd38d; }
+.poster-error { font-size: 0.82rem; color: #e53e3e; }
+.poster-actions-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.poster-save-ok { font-size: 0.85rem; color: #276749; font-weight: 500; }
+.poster-btn { padding: 8px 16px; border-radius: 8px; border: 1px solid var(--border, #d8e0e3); background: var(--surface, #fff); color: var(--text, #1a2328); font: inherit; font-size: 0.875rem; font-weight: 600; cursor: pointer; transition: all 0.15s; white-space: nowrap; }
+.poster-btn:hover:not(:disabled) { background: var(--surface-hover, #f0f4f5); }
+.poster-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.poster-btn--primary { background: var(--accent, #20808d); border-color: var(--accent, #20808d); color: #fff; }
+.poster-btn--primary:hover:not(:disabled) { background: #196f7a; border-color: #196f7a; }
+.poster-btn--danger { background: #e53e3e; border-color: #e53e3e; color: #fff; }
+.poster-btn--danger:hover:not(:disabled) { background: #c53030; border-color: #c53030; }
+
+/* Secretary records table */
+.secretary-records-table { width: 100%; display: flex; flex-direction: column; gap: 0; font-size: 0.85rem; border: 1px solid var(--border, #d8e0e3); border-radius: 8px; overflow: hidden; }
+.secretary-records-table__header,.secretary-records-table__row { display: grid; grid-template-columns: 70px 1fr 80px 1fr 28px; align-items: center; gap: 8px; padding: 7px 10px; }
+.secretary-records-table__header { background: var(--surface-hover, #f7fafb); font-size: 0.75rem; font-weight: 700; color: var(--text-muted, #5c6b73); text-transform: uppercase; letter-spacing: 0.04em; border-bottom: 1px solid var(--border, #d8e0e3); }
+.secretary-records-table__row { border-bottom: 1px solid var(--border-subtle, #e8edf0); }
+.secretary-records-table__row:last-child { border-bottom: none; }
+.secretary-records-table__row:hover { background: var(--surface-hover, #f7fafb); }
+.secretary-records-table__date { color: var(--text-muted, #8fa0a8); }
+.secretary-records-table__category { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.secretary-records-table__amount { font-weight: 600; color: var(--accent, #20808d); text-align: right; }
+.secretary-records-table__note { color: var(--text-muted, #5c6b73); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.secretary-records-table__del { background: none; border: none; cursor: pointer; color: var(--text-muted, #8fa0a8); font-size: 0.8rem; padding: 2px 4px; border-radius: 4px; line-height: 1; transition: all 0.12s; }
+.secretary-records-table__del:hover { background: #fff5f5; color: #e53e3e; }
+@media (max-width: 480px) {
+  .secretary-records-table__header,.secretary-records-table__row { grid-template-columns: 60px 1fr 70px 28px; }
+  .secretary-records-table__note { display: none; }
+}

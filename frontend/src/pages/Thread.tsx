@@ -25,6 +25,7 @@ import { DocGenStatusLine } from "../components/DocGenStatusLine";
 import { AgentActivityLogPanel } from "../components/AgentActivityLogPanel";
 import { PosterSettingsPanel } from "../components/PosterSettingsPanel";
 import { ReminderSettingsPanel } from "../components/ReminderSettingsPanel";
+import { SecretarySettingsPanel } from "../components/SecretarySettingsPanel";
 import { AgentThinkingPanel } from "../components/AgentThinkingPanel";
 import type { AgentThinkingEvent } from "../api/client";
 import { CollapsibleMarkdownDocument } from "../components/CollapsibleMarkdownDocument";
@@ -1206,6 +1207,16 @@ export function Thread() {
             </div>
           )}
 
+          {/* Secretary agent: show expense tracking form */}
+          {isAgentThread && threadId && thread?.title?.startsWith("Учет затрат") && (
+            <div className="poster-settings-wrap">
+              <SecretarySettingsPanel
+                threadId={threadId}
+                initialConfig={thread?.agent_config ?? {}}
+              />
+            </div>
+          )}
+
           {turns.map((turn, index) => {
             const isActive = turn.streaming;
             const sources = turn.sources ?? [];
@@ -1281,7 +1292,9 @@ export function Thread() {
               !isActive;
 
             // Poster: skip empty welcome turn (POSTER_WELCOME is "")
-            if (turn.agentWelcome && !answerHasText(turn.answer) && thread?.title?.startsWith("Постинг")) {
+            if (turn.agentWelcome && !answerHasText(turn.answer) && (
+              thread?.title?.startsWith("Постинг") || thread?.title?.startsWith("Учет затрат")
+            )) {
               return null;
             }
 

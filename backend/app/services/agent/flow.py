@@ -256,8 +256,9 @@ async def handle_agent_message(
         and not agent_cfg.get("parent_hub_id")
     )
     is_poster_hub = _template == "poster"
+    is_secretary_hub = _template == "secretary"
 
-    if is_reminder_hub or is_poster_hub:
+    if is_reminder_hub or is_poster_hub or is_secretary_hub:
         display_text = text.strip()
         user_msg = await _user_message(db, thread, display_text or "📎")
         if is_poster_hub:
@@ -265,6 +266,12 @@ async def handle_agent_message(
                 "Управление постингом доступно через форму выше ⬆️\n\n"
                 "Используйте кнопку **✏️ Сгенерировать разовый пост** "
                 "или настройте автоматическое расписание в блоке настроек."
+            )
+        elif is_secretary_hub:
+            reply_text = (
+                "Управление агентом доступно через форму выше ⬆️\n\n"
+                "Задайте категории затрат и подключите группу в настройках. "
+                "Чтобы получить отчёт — напишите «отчёт» прямо в группе."
             )
         else:
             reply_text = (

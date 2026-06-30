@@ -332,8 +332,22 @@ async def get_thread(
             agent = await get_agent_for_thread(db, thread.id)
             if agent and agent.config:
                 cfg = dict(agent.config)
-                # Only expose poster_* fields (safe subset of agent config)
-                agent_config = {k: v for k, v in cfg.items() if k.startswith("poster_") or k == "template"}
+                template = cfg.get("template", "")
+                if template == "secretary":
+                    # Secretary: expose categories, group info, enabled flag
+                    _SECRETARY_SAFE = frozenset({
+                        "template", "support_instructions", "max_chat_id",
+                        "task_mode", "secretary_enabled", "timezone",
+                        "bot_is_group_admin", "bot_can_read_messages",
+                    })
+                    agent_config = {k: v for k, v in cfg.items() if k in _SECRETARY_SAFE}
+                    # Also expose agent.max_chat_id from DB field (set by onboarding)
+                    if agent.max_chat_id and not agent_config.get("max_chat_id"):
+                        agent_config["max_chat_id"] = agent.max_chat_id
+                    agent_config["agent_status"] = agent.status
+                else:
+                    # Only expose poster_* fields (safe subset of agent config)
+                    agent_config = {k: v for k, v in cfg.items() if k.startswith("poster_") or k == "template"}
         except Exception:
             pass
 
