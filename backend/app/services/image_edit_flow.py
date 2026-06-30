@@ -203,7 +203,6 @@ async def stream_image_edit_turn(
                     )
                     uf = res.scalar_one_or_none()
                     if uf and uf.storage_key:
-                        from app.services.image_bytes import is_valid_image_bytes
                         img = load_upload_bytes(uf.storage_key)
                         if img:
                             input_images.append(img)
