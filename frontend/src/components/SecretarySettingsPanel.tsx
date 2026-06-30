@@ -12,14 +12,6 @@ type RecordItem = {
   author?: string;
 };
 
-type SecretaryConfig = {
-  support_instructions: string;
-  max_chat_id: string;
-  secretary_enabled: boolean;
-  bot_is_group_admin?: boolean;
-  agent_status?: string;
-};
-
 type Props = {
   threadId: string;
   initialConfig?: Record<string, unknown>;
@@ -28,13 +20,9 @@ type Props = {
 function formatDate(iso: string): string {
   try {
     return new Date(iso).toLocaleDateString("ru-RU", {
-      day: "2-digit",
-      month: "2-digit",
-      year: "2-digit",
+      day: "2-digit", month: "2-digit", year: "2-digit",
     });
-  } catch {
-    return iso.slice(0, 10);
-  }
+  } catch { return iso.slice(0, 10); }
 }
 
 function formatAmount(n: number): string {
@@ -44,59 +32,42 @@ function formatAmount(n: number): string {
 export function SecretarySettingsPanel({ threadId, initialConfig }: Props) {
   const token = useAuthStore((s) => s.token);
 
-  const [config, setConfig] = useState<SecretaryConfig>({
-    support_instructions: "",
-    max_chat_id: "",
-    secretary_enabled: true,
-    bot_is_group_admin: undefined,
-    agent_status: "",
-  });
-  const [initDone, setInitDone] = useState(false);
+  // ── Config state ─────────────────────────────────────────────────────────
+  const [enabled, setEnabled]           = useState(true);
+  const [groupInput, setGroupInput]     = useState("");
+  const [categories, setCategories]     = useState("");
+  const [catDirty, setCatDirty]         = useState(false);
 
-  // Group verification state
-  const [groupInput, setGroupInput] = useState("");
+  // Group status
   const [verifyLoading, setVerifyLoading] = useState(false);
-  const [verifyResult, setVerifyResult] = useState<{
+  const [verifyResult, setVerifyResult]   = useState<{
     ok: boolean; chat_name?: string; error?: string; group_id?: number;
   } | null>(null);
 
-  // Categories save state
-  const [categoriesDirty, setCategoriesDirty] = useState(false);
-  const [saveLoading, setSaveLoading] = useState(false);
-  const [saveResult, setSaveResult] = useState<string | null>(null);
+  // Save status
+  const [saving, setSaving]     = useState(false);
+  const [saveOk, setSaveOk]     = useState(false);
+  const [saveError, setSaveError] = useState("");
 
-  // Records state
-  const [records, setRecords] = useState<RecordItem[]>([]);
+  // Records
+  const [records, setRecords]           = useState<RecordItem[]>([]);
   const [recordsTotal, setRecordsTotal] = useState(0);
-  const [recordsLoading, setRecordsLoading] = useState(false);
+  const [recLoading, setRecLoading]     = useState(false);
   const [clearConfirm, setClearConfirm] = useState(false);
 
-  // Init from backend config
-  useEffect(() => {
-    if (initDone || !initialConfig) return;
-    setInitDone(true);
-    const c = initialConfig as Record<string, unknown>;
-    const instructions = String(c.support_instructions || "");
-    const chatId = c.max_chat_id ? String(c.max_chat_id) : "";
-    setConfig({
-      support_instructions: instructions,
-      max_chat_id: chatId,
-      secretary_enabled: c.secretary_enabled !== false,
-      bot_is_group_admin: c.bot_is_group_admin as boolean | undefined,
-      agent_status: String(c.agent_status || ""),
-    });
-    setGroupInput(chatId);
-    if (chatId) {
-      setVerifyResult({ ok: true, chat_name: chatId });
-    }
-  }, [initialConfig, initDone]);
 
-  // Reset when navigating to another thread
+  // ── Init from backend config ──────────────────────────────────────────────
   useEffect(() => {
-    setInitDone(false);
-    setVerifyResult(null);
-    setCategoriesDirty(false);
-    setSaveResult(null);
+    if (!initialConfig) return;
+    const c = initialConfig as Record<string, unknown>;
+    const raw = String(c.support_instructions || "");
+    const cats = raw.replace(/^категории затрат:\s*/i, "").split(/;|\n/).map(s => s.trim()).filter(Boolean);
+    setCategories(cats.join("\n"));
+    const chatId = c.max_chat_id ? String(c.max_chat_id) : "";
+    setGroupInput(chatId);
+    if (chatId) setVerifyResult({ ok: true, chat_name: chatId });
+    setEnabled(c.secretary_enabled !== false);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [threadId]);
 
   const headers = useCallback((): HeadersInit => ({
@@ -104,313 +75,265 @@ export function SecretarySettingsPanel({ threadId, initialConfig }: Props) {
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
   }), [token]);
 
-  // Load records
+  // ── Load records ──────────────────────────────────────────────────────────
   const loadRecords = useCallback(async () => {
-    setRecordsLoading(true);
+    setRecLoading(true);
     try {
       const res = await fetch(
         `${API_BASE}/api/agent/threads/${threadId}/records?limit=50`,
         { headers: headers() }
       );
       if (res.ok) {
-        const data = await res.json();
-        setRecords(data.records || []);
-        setRecordsTotal(data.total || 0);
+        const d = await res.json();
+        setRecords(d.records || []);
+        setRecordsTotal(d.total || 0);
       }
-    } catch {
-      // non-fatal
-    } finally {
-      setRecordsLoading(false);
-    }
+    } catch { /* silent */ } finally { setRecLoading(false); }
   }, [threadId, headers]);
 
-  useEffect(() => {
-    loadRecords();
-  }, [loadRecords]);
+  useEffect(() => { void loadRecords(); }, [loadRecords]);
 
-  // Toggle enabled
-  async function toggleEnabled(val: boolean) {
-    setConfig((c) => ({ ...c, secretary_enabled: val }));
-    try {
-      await fetch(`${API_BASE}/api/agent/threads/${threadId}/config`, {
-        method: "PATCH",
-        headers: headers(),
-        body: JSON.stringify({ secretary_enabled: val }),
-      });
-    } catch {
-      // non-fatal
-    }
+  // ── Toggle enabled ────────────────────────────────────────────────────────
+  async function handleToggle(val: boolean) {
+    setEnabled(val);
+    await fetch(`${API_BASE}/api/agent/threads/${threadId}/config`, {
+      method: "PATCH", headers: headers(),
+      body: JSON.stringify({ secretary_enabled: val }),
+    }).catch(() => null);
   }
 
-  // Save categories
+  // ── Save categories ───────────────────────────────────────────────────────
   async function saveCategories() {
-    setSaveLoading(true);
-    setSaveResult(null);
+    setSaving(true); setSaveOk(false); setSaveError("");
     try {
-      const cats = config.support_instructions.trim();
-      // Format as the LLM onboarding would: "Категории затрат: A; B; C"
-      let instructions = cats;
-      if (cats && !cats.toLowerCase().startsWith("категории затрат:")) {
-        instructions = `Категории затрат: ${cats.replace(/\n+/g, "; ").replace(/;+/g, ";").replace(/;\s*;/g, ";")}`;
-      }
+      const cats = categories.trim();
+      const instructions = cats.toLowerCase().startsWith("категории затрат:")
+        ? cats
+        : `Категории затрат: ${cats.replace(/\n+/g, "; ").replace(/;+/g, ";").replace(/;\s*;/g, ";")}`;
       const res = await fetch(`${API_BASE}/api/agent/threads/${threadId}/config`, {
-        method: "PATCH",
-        headers: headers(),
+        method: "PATCH", headers: headers(),
         body: JSON.stringify({ support_instructions: instructions }),
       });
-      if (res.ok) {
-        setConfig((c) => ({ ...c, support_instructions: instructions }));
-        setSaveResult("ok");
-        setCategoriesDirty(false);
-      } else {
-        setSaveResult("error");
-      }
-    } catch {
-      setSaveResult("error");
-    } finally {
-      setSaveLoading(false);
-      setTimeout(() => setSaveResult(null), 3000);
-    }
+      if (res.ok) { setSaveOk(true); setCatDirty(false); setTimeout(() => setSaveOk(false), 3000); }
+      else setSaveError("Ошибка сохранения");
+    } catch { setSaveError("Ошибка соединения"); }
+    finally { setSaving(false); }
   }
 
-  // Verify group
+  // ── Verify group ──────────────────────────────────────────────────────────
   async function verifyGroup() {
-    const raw = groupInput.trim();
-    if (!raw) return;
-    setVerifyLoading(true);
-    setVerifyResult(null);
+    if (!groupInput.trim()) return;
+    setVerifyLoading(true); setVerifyResult(null);
     try {
-      const res = await fetch(
-        `${API_BASE}/api/agent/threads/${threadId}/verify-group`,
-        {
-          method: "POST",
-          headers: headers(),
-          body: JSON.stringify({ group_id: raw }),
-        }
-      );
-      const data = await res.json();
-      setVerifyResult(data);
-      if (data.ok) {
-        setConfig((c) => ({ ...c, max_chat_id: String(data.group_id || raw) }));
-      }
-    } catch (e) {
-      setVerifyResult({ ok: false, error: "Ошибка соединения" });
-    } finally {
-      setVerifyLoading(false);
-    }
+      const res = await fetch(`${API_BASE}/api/agent/threads/${threadId}/verify-group`, {
+        method: "POST", headers: headers(),
+        body: JSON.stringify({ group_id: groupInput.trim() }),
+      });
+      const d = await res.json();
+      setVerifyResult(d);
+      if (d.ok) setGroupInput(String(d.group_id || groupInput.trim()));
+    } catch { setVerifyResult({ ok: false, error: "Ошибка соединения" }); }
+    finally { setVerifyLoading(false); }
   }
 
-  // Delete record
+  // ── Delete record ─────────────────────────────────────────────────────────
   async function deleteRecord(id: string) {
-    try {
-      await fetch(`${API_BASE}/api/agent/threads/${threadId}/records/${id}`, {
-        method: "DELETE",
-        headers: headers(),
-      });
-      setRecords((r) => r.filter((x) => x._id !== id));
-      setRecordsTotal((t) => Math.max(0, t - 1));
-    } catch {
-      // non-fatal
-    }
+    await fetch(`${API_BASE}/api/agent/threads/${threadId}/records/${id}`, {
+      method: "DELETE", headers: headers(),
+    }).catch(() => null);
+    setRecords(r => r.filter(x => x._id !== id));
+    setRecordsTotal(t => Math.max(0, t - 1));
   }
 
-  // Clear all records
-  async function clearAllRecords() {
-    try {
-      await fetch(`${API_BASE}/api/agent/threads/${threadId}/records/clear`, {
-        method: "POST",
-        headers: headers(),
-      });
-      setRecords([]);
-      setRecordsTotal(0);
-      setClearConfirm(false);
-    } catch {
-      setClearConfirm(false);
-    }
+  // ── Clear all records ─────────────────────────────────────────────────────
+  async function clearAll() {
+    await fetch(`${API_BASE}/api/agent/threads/${threadId}/records/clear`, {
+      method: "POST", headers: headers(),
+    }).catch(() => null);
+    setRecords([]); setRecordsTotal(0); setClearConfirm(false);
   }
 
-  const isActive = config.agent_status === "active";
-  const groupConnected = verifyResult?.ok || Boolean(config.max_chat_id);
-  const groupName = verifyResult?.chat_name || config.max_chat_id || "";
-
-  // Parse categories for display
-  const categoriesRaw = config.support_instructions || "";
-  const categoriesDisplay = categoriesRaw
-    .replace(/^категории затрат:\s*/i, "")
-    .split(/;|\n/)
-    .map((s) => s.trim())
-    .filter(Boolean);
+  const f = !enabled;
+  const groupOk = verifyResult?.ok;
+  const groupName = verifyResult?.chat_name || "";
 
   return (
-    <div className="poster-settings-wrap">
-      {/* ── Заголовок + тогл ── */}
-      <div className="poster-header">
-        <div className="poster-header__left">
-          <span className="poster-header__title">Учёт затрат</span>
-          <span
-            className={`poster-header__status ${isActive ? "poster-header__status--active" : ""}`}
-          >
-            {isActive ? "Активен" : "Настройка"}
+    <div className={`poster-settings${f ? " poster-settings--disabled" : ""}`}>
+
+      {/* ── Header + toggle ─────────────────────────────────────────────── */}
+      <div className="poster-settings__header">
+        <span className="poster-settings__title">Учёт затрат</span>
+        <label className="poster-settings__toggle">
+          <input type="checkbox" checked={enabled} onChange={e => handleToggle(e.target.checked)} />
+          <span className="poster-settings__toggle-track">
+            <span className="poster-settings__toggle-thumb" />
           </span>
-        </div>
-        <label className="poster-toggle">
-          <input
-            type="checkbox"
-            checked={config.secretary_enabled}
-            onChange={(e) => toggleEnabled(e.target.checked)}
-          />
-          <span className="poster-toggle__slider" />
+          <span className="poster-settings__toggle-label">
+            {enabled ? "Включён" : "Выключен"}
+          </span>
         </label>
       </div>
 
-      {/* ── Блок: Группа ── */}
-      <div className="poster-section">
-        <div className="poster-section__title">Группа MAX</div>
-        {groupConnected ? (
-          <div className="poster-channel-status poster-channel-status--ok">
-            ✅ Группа подключена{groupName ? `: ${groupName}` : ""}
-          </div>
-        ) : (
-          <div className="poster-channel-status poster-channel-status--warn">
-            ⚠️ Группа не подключена
-          </div>
-        )}
-        <div className="poster-channel-row">
+      <div className="poster-settings__body">
+
+        {/* ── Группа MAX ─────────────────────────────────────────────────── */}
+        <div className="poster-field">
+          <label className="poster-field__label">
+            Группа MAX <span className="poster-field__required">*</span>
+          </label>
           <input
-            className="poster-input"
-            placeholder="Ссылка, @username или ID группы"
+            className={`poster-field__input${!groupOk && enabled ? " poster-field__input--error" : ""}`}
+            type="text"
+            placeholder="@mygroup или -123456789"
             value={groupInput}
-            onChange={(e) => setGroupInput(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter") verifyGroup(); }}
+            disabled={f}
+            onChange={e => setGroupInput(e.target.value)}
+            onKeyDown={e => { if (e.key === "Enter") void verifyGroup(); }}
           />
-          <button
-            className="poster-btn poster-btn--primary"
-            onClick={verifyGroup}
-            disabled={verifyLoading || !groupInput.trim()}
-          >
-            {verifyLoading ? "Проверка…" : groupConnected ? "Переподключить" : "Подключить"}
-          </button>
+          <span className="poster-field__hint">
+            Ссылка или ID группы, куда добавлен бот
+          </span>
+          {groupOk ? (
+            <span style={{ fontSize: "0.82rem", color: "#276749" }}>
+              ✅ Подключено{groupName ? `: ${groupName}` : ""}
+            </span>
+          ) : verifyResult && !verifyResult.ok ? (
+            <span className="poster-settings__error">
+              {verifyResult.error || "Не удалось подключить группу"}
+            </span>
+          ) : null}
+          <div style={{ marginTop: 6 }}>
+            <button
+              type="button"
+              className="poster-settings__save"
+              disabled={f || verifyLoading || !groupInput.trim()}
+              onClick={verifyGroup}
+            >
+              {verifyLoading ? "Проверка…" : groupOk ? "Переподключить" : "Подключить группу"}
+            </button>
+          </div>
         </div>
-        {verifyResult && !verifyResult.ok && (
-          <div className="poster-error">{verifyResult.error || "Не удалось подключить группу"}</div>
-        )}
-        <div className="poster-hint">
-          Бот должен быть добавлен в группу. Для чтения всех сообщений — назначьте его администратором.
-        </div>
-      </div>
 
-      {/* ── Блок: Категории ── */}
-      <div className="poster-section">
-        <div className="poster-section__title">Категории затрат</div>
-        <div className="poster-hint">
-          Каждая категория с новой строки или через «;»
+        {/* ── Категории затрат ────────────────────────────────────────────── */}
+        <div className="poster-field">
+          <label className="poster-field__label">
+            Категории затрат <span className="poster-field__required">*</span>
+          </label>
+          <textarea
+            className="poster-field__textarea"
+            rows={6}
+            placeholder={"Аренда\nЗарплата\nТранспорт\nМатериалы\nРеклама"}
+            value={categories}
+            disabled={f}
+            onChange={e => { setCategories(e.target.value); setCatDirty(true); setSaveError(""); }}
+          />
+          <span className="poster-field__hint">
+            Каждая категория с новой строки или через «;»
+          </span>
+          {saveError && <span className="poster-settings__error">{saveError}</span>}
         </div>
-        <textarea
-          className="poster-textarea"
-          rows={6}
-          placeholder={"Аренда\nЗарплата\nТранспорт\nМатериалы"}
-          value={categoriesDisplay.join("\n")}
-          onChange={(e) => {
-            setConfig((c) => ({ ...c, support_instructions: e.target.value }));
-            setCategoriesDirty(true);
-            setSaveResult(null);
-          }}
-        />
-        <div className="poster-actions-row">
+
+        {/* ── Footer: Save ─────────────────────────────────────────────────── */}
+        <div className="poster-settings__footer">
+          {saveOk && (
+            <span style={{ fontSize: "0.85rem", color: "#276749", flex: 1 }}>
+              ✅ Сохранено
+            </span>
+          )}
           <button
-            className="poster-btn poster-btn--primary"
+            type="button"
+            className="poster-settings__save"
+            disabled={f || saving || !catDirty}
             onClick={saveCategories}
-            disabled={saveLoading || !categoriesDirty}
           >
-            {saveLoading ? "Сохранение…" : "Сохранить категории"}
+            {saving ? "Сохранение…" : "Сохранить"}
           </button>
-          {saveResult === "ok" && (
-            <span className="poster-save-ok">✅ Сохранено</span>
-          )}
-          {saveResult === "error" && (
-            <span className="poster-error">Ошибка сохранения</span>
-          )}
-        </div>
-      </div>
-
-      {/* ── Блок: Записи ── */}
-      <div className="poster-section">
-        <div className="poster-section__title">
-          Записи о затратах
-          {recordsTotal > 0 && (
-            <span className="poster-badge">{recordsTotal}</span>
-          )}
         </div>
 
-        {recordsLoading ? (
-          <div className="poster-hint">Загрузка…</div>
-        ) : records.length === 0 ? (
-          <div className="poster-hint">Записей пока нет</div>
-        ) : (
-          <>
-            <div className="secretary-records-table">
-              <div className="secretary-records-table__header">
-                <span>Дата</span>
-                <span>Категория</span>
-                <span>Сумма</span>
-                <span>Примечание</span>
-                <span />
-              </div>
-              {records.map((r) => (
-                <div key={r._id} className="secretary-records-table__row">
-                  <span className="secretary-records-table__date">
-                    {formatDate(r.at)}
-                  </span>
-                  <span className="secretary-records-table__category">
-                    {r.category}
-                  </span>
-                  <span className="secretary-records-table__amount">
-                    {formatAmount(r.amount)}
-                  </span>
-                  <span className="secretary-records-table__note">
-                    {r.note || "—"}
-                  </span>
-                  <button
-                    className="secretary-records-table__del"
-                    onClick={() => deleteRecord(r._id)}
-                    title="Удалить запись"
-                  >
-                    ✕
-                  </button>
+        {/* ── Записи о затратах ────────────────────────────────────────────── */}
+        <div className="poster-field">
+          <label className="poster-field__label">
+            Записи о затратах
+            {recordsTotal > 0 && (
+              <span style={{
+                marginLeft: 8, padding: "1px 8px", borderRadius: 20,
+                background: "var(--accent,#20808d)", color: "#fff",
+                fontSize: "0.72rem", fontWeight: 700,
+              }}>{recordsTotal}</span>
+            )}
+          </label>
+
+          {recLoading ? (
+            <span className="poster-field__hint">Загрузка…</span>
+          ) : records.length === 0 ? (
+            <span className="poster-field__hint">Записей пока нет</span>
+          ) : (
+            <>
+              <div className="secretary-records-table">
+                <div className="secretary-records-table__header">
+                  <span>Дата</span>
+                  <span>Категория</span>
+                  <span>Сумма</span>
+                  <span>Примечание</span>
+                  <span />
                 </div>
-              ))}
-            </div>
-            <div className="poster-actions-row" style={{ marginTop: 8 }}>
-              {!clearConfirm ? (
-                <button
-                  className="poster-btn poster-btn--danger"
-                  onClick={() => setClearConfirm(true)}
-                >
-                  Очистить все записи
-                </button>
-              ) : (
-                <>
-                  <span className="poster-hint">Удалить все {recordsTotal} записей?</span>
-                  <button className="poster-btn poster-btn--danger" onClick={clearAllRecords}>
-                    Да, удалить
-                  </button>
-                  <button className="poster-btn" onClick={() => setClearConfirm(false)}>
-                    Отмена
-                  </button>
-                </>
-              )}
-            </div>
-          </>
-        )}
-      </div>
+                {records.map(r => (
+                  <div key={r._id} className="secretary-records-table__row">
+                    <span className="secretary-records-table__date">{formatDate(r.at)}</span>
+                    <span className="secretary-records-table__category">{r.category}</span>
+                    <span className="secretary-records-table__amount">{formatAmount(r.amount)}</span>
+                    <span className="secretary-records-table__note">{r.note || "—"}</span>
+                    <button
+                      className="secretary-records-table__del"
+                      onClick={() => void deleteRecord(r._id)}
+                      title="Удалить"
+                    >✕</button>
+                  </div>
+                ))}
+              </div>
 
-      {/* ── Блок: Отчёты ── */}
-      <div className="poster-section">
-        <div className="poster-section__title">Отчёты</div>
-        <div className="poster-hint">
-          Для получения отчёта напишите <strong>«отчёт»</strong> в подключённой группе —
-          бот спросит период и пришлёт Excel-файл прямо в чат.
+              <div style={{ marginTop: 8 }}>
+                {!clearConfirm ? (
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    style={{ fontSize: "0.82rem", color: "#e53e3e", border: "1px solid #e53e3e" }}
+                    onClick={() => setClearConfirm(true)}
+                  >
+                    Очистить все записи
+                  </button>
+                ) : (
+                  <span style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                    <span className="poster-field__hint">
+                      Удалить все {recordsTotal} записей?
+                    </span>
+                    <button
+                      type="button"
+                      className="poster-settings__save"
+                      style={{ background: "#e53e3e" }}
+                      onClick={clearAll}
+                    >Да, удалить</button>
+                    <button
+                      type="button"
+                      className="btn-secondary"
+                      onClick={() => setClearConfirm(false)}
+                    >Отмена</button>
+                  </span>
+                )}
+              </div>
+            </>
+          )}
         </div>
+
+        {/* ── Отчёты ──────────────────────────────────────────────────────── */}
+        <div className="poster-field">
+          <label className="poster-field__label">Отчёты</label>
+          <span className="poster-field__hint">
+            Для получения отчёта напишите <strong>«отчёт»</strong> в подключённой группе —
+            бот спросит период и пришлёт Excel-файл с диаграммой прямо в чат.
+          </span>
+        </div>
+
       </div>
     </div>
   );

@@ -1292,8 +1292,9 @@ export function Thread() {
               !isActive;
 
             // Poster: skip empty welcome turn (POSTER_WELCOME is "")
-            if (turn.agentWelcome && !answerHasText(turn.answer) && (
-              thread?.title?.startsWith("Постинг") || thread?.title?.startsWith("Учет затрат")
+            if (turn.agentWelcome && (
+              (thread?.title?.startsWith("Постинг") && !answerHasText(turn.answer)) ||
+              thread?.title?.startsWith("Учет затрат")
             )) {
               return null;
             }
