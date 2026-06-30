@@ -11,8 +11,8 @@ from typing import Sequence, Union
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "033_offer_pro_999_credits"
-down_revision: Union[str, None] = "032_blog_tags_publish_at"
+revision: str = "033"
+down_revision: Union[str, None] = "032"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
