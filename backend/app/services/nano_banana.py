@@ -162,18 +162,18 @@ async def _generate_nano_banana_once(
             input_items.append({"type": "image", "data": img_b64, "mime_type": mime})
     input_items.append({"type": "text", "text": prompt})
 
-    response_format: dict = {
-        "type": "image",
-        "mime_type": "image/jpeg",
-    }
-    if image_size and image_size != "1K":
-        response_format["image_size"] = image_size
-
+    # image_size не передаём — gemini-3.1-flash-image не поддерживает этот параметр
+    # и при его наличии возвращает текст вместо изображения.
+    # TODO: включить когда подключим gemini-3-pro-image (поддерживает до 4K).
     payload = {
         "model": model,
         "input": input_items,
-        "response_format": response_format,
+        "response_format": {
+            "type": "image",
+            "mime_type": "image/jpeg",
+        },
     }
+    _ = image_size  # зарезервировано для будущего Pro-модели
 
     from app.core.config import get_settings as _get_settings
     _settings = _get_settings()
