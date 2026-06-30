@@ -42,6 +42,7 @@ class LlmFlowDecision:
     reason: str
     force_yandex: bool = False
     high_quality: bool = False
+    intent: str = "factual_current"
 
 
 _ROUTER_SYSTEM = """Ты маршрутизатор запросов в Glosix (умный ассистент с веб-поиском и файлами).
@@ -53,8 +54,17 @@ _ROUTER_SYSTEM = """Ты маршрутизатор запросов в Glosix (
   "answer_model": "lite" | "pro",
   "reason": "кратко по-русски",
   "force_yandex": true/false,
-  "high_quality": true/false
+  "high_quality": true/false,
+  "intent": "factual_current" | "howto" | "document" | "edit_prior" | "compare_analyze" | "chitchat"
 }
+
+intent — тип запроса для выбора глубины ответа:
+- factual_current — обычный факт, событие, определение, поиск в интернете
+- howto — «как сделать», «как настроить», «как установить», пошаговые инструкции
+- document — к сообщению прикреплён файл/документ, пользователь просит его проанализировать
+- edit_prior — правка предыдущего ответа в треде: «перефразируй», «сократи», «переведи», «перепиши», «резюмируй», «добавь раздел». Только если тред уже содержит историю.
+- compare_analyze — сравнение, анализ, оценка: «сравни X и Y», «проанализируй», «плюсы и минусы», «подробный разбор»
+- chitchat — светская беседа, приветствие, «спасибо», «кто ты», «что умеешь»
 
 high_quality = true — только для flow=image_generate, когда пользователь явно просит высокое качество или 2K:
 - Слова-маркеры: «2к», «2K», «в 2к», «высокое качество», «лучшее качество», «максимальное качество», «HD», «высокое разрешение», «большое разрешение».
@@ -216,6 +226,12 @@ def _parse_flow_response(raw: str) -> LlmFlowDecision | None:
     reason = str(data.get("reason") or "llm_router")[:200]
     force_yandex = bool(data.get("force_yandex", False))
     high_quality = bool(data.get("high_quality", False))
+    _valid_intents = frozenset({
+        "factual_current", "howto", "document",
+        "edit_prior", "compare_analyze", "chitchat",
+    })
+    raw_intent = str(data.get("intent") or "factual_current").strip()
+    intent = raw_intent if raw_intent in _valid_intents else "factual_current"
     return LlmFlowDecision(
         flow=flow,  # type: ignore[arg-type]
         needs_search=needs_search,
@@ -223,6 +239,7 @@ def _parse_flow_response(raw: str) -> LlmFlowDecision | None:
         reason=reason,
         force_yandex=force_yandex,
         high_quality=high_quality,
+        intent=intent,
     )
 
 

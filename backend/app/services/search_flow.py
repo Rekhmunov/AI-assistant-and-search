@@ -580,6 +580,11 @@ class SearchFlowService:
 
         thread_ctx = build_thread_context(prior_messages)
         route = await self.router.route(llm_query, thread_ctx, has_attachments, user.plan)
+        # Всегда берём intent от LLM-роутера (он точнее правил)
+        if flow.intent and flow.intent != "factual_current":
+            route.intent = flow.intent  # type: ignore[assignment]
+        elif flow.intent == "factual_current" and has_attachments:
+            route.intent = "document"  # type: ignore[assignment]
         if not vision_only_answer and not hybrid_vision_search and not image_display_request:
             if flow.flow == "chat":
                 # Галерея сущностей (Yandex Image) грузится только при needs_search.
