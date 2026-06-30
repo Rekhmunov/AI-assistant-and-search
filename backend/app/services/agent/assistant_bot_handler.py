@@ -232,6 +232,7 @@ async def _collect_search_result(
     thread_id: uuid.UUID,
     attachment_file_ids: list[uuid.UUID] | None = None,
     on_status=None,  # async callable(str) для обновления статуса в боте
+    max_user_id: int | None = None,  # для отправки файлов в DM
 ) -> tuple[str, list[dict], list[str]]:
     """
     Запускает SearchFlowService и собирает ответ + изображения + follow-up вопросы.
@@ -250,6 +251,7 @@ async def _collect_search_result(
     follow_ups: list[str] = []
     error_msg: str | None = None
     _answer_started = False
+    _doc_ready_events: list[dict] = []  # document_ready events to send as files
 
     async def _update_status(text: str) -> None:
         if on_status:
@@ -296,6 +298,10 @@ async def _collect_search_result(
                 qs = data.get("questions")
                 if isinstance(qs, list):
                     follow_ups = [str(q) for q in qs if q][:3]
+            elif event_type == "document_ready":
+                # PDF/image tools send files via this event — collect for sending to MAX
+                if data.get("file_id") and data.get("filename"):
+                    _doc_ready_events.append(data)
             elif event_type == "error":
                 code = data.get("code", "")
                 if code in ("rate_limit", "free_rate_limit", "guest_rate_limit"):
@@ -333,6 +339,37 @@ async def _collect_search_result(
     else:
         # Remove LLM looping artifacts before storing in thread and sending to DM
         answer = _deduplicate_paragraphs(answer)
+
+    # Send files to DM if document_ready events were collected
+    if _doc_ready_events:
+        from app.services.upload_storage import load_upload_bytes
+        from app.services.agent.file_delivery import upload_bytes_to_max
+        from app.core.config import get_settings as _get_settings
+        from sqlalchemy import select as _select
+        from app.models.uploaded_file import UploadedFile as _UF
+        _settings = _get_settings()
+        for doc in _doc_ready_events:
+            try:
+                fid_str = doc.get("file_id", "")
+                filename = doc.get("filename", "file")
+                if not fid_str:
+                    continue
+                import uuid as _uuid
+                fid = _uuid.UUID(fid_str)
+                _uf_res = await db.execute(_select(_UF).where(_UF.id == fid))
+                _uf = _uf_res.scalar_one_or_none()
+                if not _uf or not _uf.storage_key:
+                    continue
+                file_bytes = load_upload_bytes(_uf.storage_key)
+                if not file_bytes:
+                    continue
+                _token, attachments = await upload_bytes_to_max(file_bytes, filename)
+                if attachments:
+                    from app.services.bot import MaxBotService as _Bot
+                    _bot = _Bot()
+                    await _bot.send_message(max_user_id, "", attachments=attachments)
+            except Exception as _fe:
+                logger.warning("DM file send failed for %s: %s", doc.get("filename"), _fe)
 
     return answer, images, follow_ups
 
@@ -680,6 +717,7 @@ async def handle_assistant_dm(
                 db, user, redis_client, llm_query, thread.id,
                 on_status=_on_status,
                 attachment_file_ids=_attachment_file_ids if _attachment_file_ids else None,
+                max_user_id=max_user_id,
             )
         except Exception as search_exc:
             logger.warning("assistant_bot: search with attachment failed, retrying without: %s", search_exc)
@@ -687,6 +725,7 @@ async def handle_assistant_dm(
             answer, images, follow_ups = await _collect_search_result(
                 db, user, redis_client, llm_query, thread.id,
                 on_status=_on_status,
+                max_user_id=max_user_id,
             )
 
         # ── Обновляем TTL сессии в Redis ──
