@@ -41,6 +41,7 @@ class LlmFlowDecision:
     answer_model: Literal["lite", "pro"]
     reason: str
     force_yandex: bool = False
+    high_quality: bool = False
 
 
 _ROUTER_SYSTEM = """Ты маршрутизатор запросов в Glosix (умный ассистент с веб-поиском и файлами).
@@ -51,8 +52,13 @@ _ROUTER_SYSTEM = """Ты маршрутизатор запросов в Glosix (
   "needs_search": true/false,
   "answer_model": "lite" | "pro",
   "reason": "кратко по-русски",
-  "force_yandex": true/false
+  "force_yandex": true/false,
+  "high_quality": true/false
 }
+
+high_quality = true — только для flow=image_generate, когда пользователь явно просит высокое качество или 2K:
+- Слова-маркеры: «2к», «2K», «в 2к», «высокое качество», «лучшее качество», «максимальное качество», «HD», «высокое разрешение», «большое разрешение».
+- По умолчанию false. Не ставить true если пользователь просто просит «нарисуй» без уточнения качества.
 
 answer_model = "pro" — запрос требует глубокого анализа или синтеза нескольких источников:
 - Сравнение с оценкой: «сравни X и Y», «что лучше A или B», «чем отличается» (с просьбой оценить)
@@ -209,12 +215,14 @@ def _parse_flow_response(raw: str) -> LlmFlowDecision | None:
         model = "lite"
     reason = str(data.get("reason") or "llm_router")[:200]
     force_yandex = bool(data.get("force_yandex", False))
+    high_quality = bool(data.get("high_quality", False))
     return LlmFlowDecision(
         flow=flow,  # type: ignore[arg-type]
         needs_search=needs_search,
         answer_model=model,  # type: ignore[arg-type]
         reason=reason,
         force_yandex=force_yandex,
+        high_quality=high_quality,
     )
 
 

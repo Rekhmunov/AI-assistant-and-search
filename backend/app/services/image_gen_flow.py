@@ -50,12 +50,13 @@ async def stream_image_generation_turn(
     query: str,
     thread_id: uuid.UUID | None,
     redis_client,
+    *,
+    high_quality: bool = False,
 ) -> AsyncIterator[str]:
-    from app.services.image_gen_routing import wants_high_quality
     settings = get_settings()
     user_id_str = str(user.id)
     display_content = normalize_user_query(query).strip()
-    image_size = "2K" if wants_high_quality(query) else "1K"
+    image_size = "2K" if high_quality else "1K"
 
     if user.plan != Plan.PRO:
         yield sse_event(

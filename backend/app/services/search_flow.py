@@ -333,6 +333,7 @@ class SearchFlowService:
                 query,
                 thread_id,
                 redis_client,
+                high_quality=flow.high_quality,
             ):
                 yield event
             return
