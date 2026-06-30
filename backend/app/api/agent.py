@@ -1298,6 +1298,7 @@ def _agent_to_reminder_out(agent: "AgentInstance") -> dict:
     return {
         "id": str(agent.id),
         "thread_id": str(agent.thread_id),
+        "name": cfg.get("reminder_name", ""),
         "text": cfg.get("reminder_message", ""),
         "schedule_text": cfg.get("schedule_text", ""),
         "schedule_type": cfg.get("schedule_type", "one_time"),
@@ -1445,10 +1446,12 @@ async def create_reminder(
 
     max_uid = int(user.max_user_id) if user.max_user_id else 0
     reminder_text = str(body.get("text") or "Напоминание")[:_REMINDER_TEXT_MAX_LEN]
+    reminder_name = str(body.get("name") or "").strip()[:60]
     sub_cfg: dict = {
         "template": "reminder",
         "is_sub_reminder": True,
         "parent_hub_id": str(hub_agent.id),
+        "reminder_name": reminder_name,
         "reminder_message": reminder_text,
         "schedule_text": schedule_text,
         "schedule_type": str(body.get("schedule_type") or "one_time"),
@@ -1513,6 +1516,8 @@ async def update_reminder(
 
     cfg = dict(sub_agent.config or {})
 
+    if "name" in body:
+        cfg["reminder_name"] = str(body.get("name") or "").strip()[:60]
     if "text" in body:
         cfg["reminder_message"] = str(body["text"])[:_REMINDER_TEXT_MAX_LEN]
     if "timezone" in body:

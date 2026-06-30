@@ -40,6 +40,7 @@ const SCHEDULE_TYPES = [
 
 type ReminderItem = {
   id: string;
+  name: string;
   text: string;
   schedule_text: string;
   schedule_type: string;
@@ -59,6 +60,7 @@ type ReminderItem = {
 };
 
 type FormState = {
+  name: string;
   text: string;
   schedule_type: string;
   time: string;
@@ -79,6 +81,7 @@ function tomorrowDate(): string {
 }
 
 const defaultForm = (): FormState => ({
+  name: "",
   text: "",
   schedule_type: "one_time",
   time: "09:00",
@@ -263,6 +266,20 @@ function ReminderForm({
   return (
     <div className="rm-form-card">
       <div className="rm-field">
+        <label className="rm-label">
+          Название{" "}
+          <span style={{ color: "#8fa0a8", fontWeight: 400, fontSize: "0.8em" }}>(необязательно)</span>
+        </label>
+        <input
+          type="text"
+          className="rm-input"
+          placeholder="Например: Звонок клиенту, Оплата счёта..."
+          value={form.name}
+          onChange={(e) => patch({ name: e.target.value })}
+          maxLength={60}
+        />
+      </div>
+      <div className="rm-field">
         <label className="rm-label">Текст напоминания *</label>
         <textarea
           className="rm-textarea"
@@ -367,7 +384,13 @@ function ReminderCard({
       <div className="rm-card-header">
         <span className="rm-card-status">{statusIcon}</span>
         <div className="rm-card-info">
-          <div className="rm-card-text">{item.text || "—"}</div>
+          <div className="rm-card-text">
+            {item.name
+              ? item.name
+              : item.text
+                ? (item.text.length > 30 ? item.text.slice(0, 30) + "…" : item.text)
+                : "—"}
+          </div>
           <div className="rm-card-meta">
             <span className="rm-tag">{item.recurrence_label}</span>
             {item.schedule_text && (
@@ -462,6 +485,7 @@ export function ReminderSettingsPanel({ threadId }: { threadId: string }) {
     setActionError("");
     try {
       const body = {
+        name: form.name.trim() || null,
         text: form.text,
         schedule_type: form.schedule_type,
         time: form.time,
@@ -538,6 +562,7 @@ export function ReminderSettingsPanel({ threadId }: { threadId: string }) {
   const editingItem = editingId ? reminders.find((r) => r.id === editingId) : null;
   const editingInitial: Partial<FormState> | undefined = editingItem
     ? {
+        name: editingItem.name || "",
         text: editingItem.text,
         schedule_type: editingItem.schedule_type || "one_time",
         time: editingItem.time || "09:00",
@@ -547,7 +572,8 @@ export function ReminderSettingsPanel({ threadId }: { threadId: string }) {
         interval_value: editingItem.interval_value ?? 30,
         interval_unit: editingItem.interval_unit || "minutes",
         delivery_mode: editingItem.delivery_mode || "dm",
-        max_chat_id: editingItem.max_chat_id ? String(editingItem.max_chat_id) : "",
+        // Всегда передаём max_chat_id — иначе при редактировании группового напоминания поле пустое
+        max_chat_id: editingItem.max_chat_id != null ? String(editingItem.max_chat_id) : "",
         timezone: editingItem.timezone || "Europe/Moscow",
       }
     : undefined;
