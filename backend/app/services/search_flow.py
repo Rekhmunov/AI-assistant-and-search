@@ -323,7 +323,9 @@ class SearchFlowService:
                 yield event
             return
 
-        if not attachment_ids and flow.flow == "image_generate":
+        if flow.flow == "image_generate":
+            # Генерация нового изображения — вложения игнорируются (не редактирование).
+            # Раньше блокировалось при наличии attachment_ids → запрос уходил в vision-анализ.
             async for event in stream_image_generation_turn(
                 db,
                 user,
