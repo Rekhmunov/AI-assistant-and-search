@@ -4,6 +4,7 @@ import { X, ZoomIn, ZoomOut, Maximize2, ArrowDownToLine } from "lucide-react";
 import { useBodyScrollLock } from "../hooks/useBodyScrollLock";
 import { useProtectedImageSrc } from "../hooks/useProtectedImageSrc";
 import { t } from "../i18n";
+import { downloadImageBlob, buildImageFilename } from "../lib/downloadImage";
 
 type Props = {
   url: string;
@@ -34,31 +35,12 @@ export function ImageLightboxOverlay({ url, title, onClose, pageUrl }: Props) {
     return () => globalThis.removeEventListener("keydown", onKey);
   }, [onClose]);
 
-  // Download: src is already a blob URL → use directly
   const handleDownload = useCallback(async (e: React.MouseEvent) => {
     e.stopPropagation();
     if (!src) return;
-    const raw = (title || "image").trim();
-    const safe = raw.replace(/[<>:"/\\|?*\x00-\x1f]/g, "_").slice(0, 80) || "image";
-    const filename = safe.endsWith(".jpg") || safe.endsWith(".png") ? safe : `${safe}.jpg`;
-
-    let downloadUrl = src;
-    let blobCreated = false;
-    if (!src.startsWith("blob:")) {
-      try {
-        const resp = await fetch(src);
-        const blob = await resp.blob();
-        downloadUrl = URL.createObjectURL(blob);
-        blobCreated = true;
-      } catch { return; }
-    }
-    const a = document.createElement("a");
-    a.href = downloadUrl;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    if (blobCreated) setTimeout(() => URL.revokeObjectURL(downloadUrl), 10_000);
+    try {
+      await downloadImageBlob(src, buildImageFilename(title));
+    } catch { /* silent */ }
   }, [src, title]);
 
   const canZoomIn  = scaleIdx < SCALES.length - 1;

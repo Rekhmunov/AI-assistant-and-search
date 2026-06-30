@@ -3,6 +3,7 @@ import { ArrowDownToLine } from "lucide-react";
 import type { EntityImage } from "../api/client";
 import { useProtectedImageSrc } from "../hooks/useProtectedImageSrc";
 import { isGeneratedImageUrl } from "../lib/generatedImageUrl";
+import { downloadImageBlob, buildImageFilename } from "../lib/downloadImage";
 
 type Props = {
   image: EntityImage;
@@ -22,31 +23,9 @@ export function ProtectedGeneratedImage({ image, className, loading = "lazy", on
       e.preventDefault();
       e.stopPropagation();
       if (!src) return;
-
-      const raw = (image.title || "generated-image").trim();
-      const safe = raw.replace(/[<>:"/\\|?*\x00-\x1f]/g, "_").slice(0, 80) || "image";
-      const filename = safe.endsWith(".jpg") || safe.endsWith(".png") ? safe : `${safe}.jpg`;
-
-      // src уже является blob URL (из useProtectedImageSrc) — используем напрямую.
-      // Если по какой-то причине это не blob URL — фетчим и создаём blob.
-      let downloadUrl = src;
-      let blobCreated = false;
-      if (!src.startsWith("blob:")) {
-        try {
-          const resp = await fetch(src);
-          const blob = await resp.blob();
-          downloadUrl = URL.createObjectURL(blob);
-          blobCreated = true;
-        } catch { return; }
-      }
-
-      const a = document.createElement("a");
-      a.href = downloadUrl;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      if (blobCreated) setTimeout(() => URL.revokeObjectURL(downloadUrl), 10_000);
+      try {
+        await downloadImageBlob(src, buildImageFilename(image.title));
+      } catch { /* silent */ }
     },
     [src, image.title],
   );
