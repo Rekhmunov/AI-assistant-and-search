@@ -763,6 +763,7 @@ export function SearchComposer({
                   value={value}
                   placeholder={textareaPlaceholder}
                   disabled={disabled}
+                  enterKeyHint="enter"
                   onFocus={handleInputFocus}
                   onBlur={handleInputBlur}
                   onChange={(e) => {
