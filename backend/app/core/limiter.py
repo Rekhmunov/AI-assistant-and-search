@@ -157,13 +157,21 @@ class RateLimiter:
         return True, new_count, limit
 
     async def release_search(self, user_id: str, user: User | None = None, cost: int = 1) -> None:
-        if self._is_guest_user(user):
-            key = self._guest_search_key(user_id)
-        else:
-            key = _day_key("search", user_id)
-        val = await self.redis.get(key)
+        # Не обращаемся к user.guest_key — это вызывает lazy load на expired объекте
+        # вне DB-сессии (MissingGreenlet в SSE event_generator).
+        # Гостевой ключ определяем через Redis: пробуем оба ключа, уменьшаем тот где есть значение.
+        guest_key = self._guest_search_key(user_id)
+        day_key = _day_key("search", user_id)
+        cost_val = max(1, cost)
+
+        guest_val = await self.redis.get(guest_key)
+        if guest_val and int(guest_val) > 0:
+            await self.redis.decrby(guest_key, cost_val)
+            return
+
+        val = await self.redis.get(day_key)
         if val and int(val) > 0:
-            await self.redis.decrby(key, max(1, cost))
+            await self.redis.decrby(day_key, cost_val)
 
     async def get_search_usage(self, user_id: str, user: User | None = None) -> int:
         if self._is_guest_user(user):
