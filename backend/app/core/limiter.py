@@ -110,7 +110,17 @@ class RateLimiter:
         user: User | None = None,
         *,
         client_ip: str | None = None,
+        cost: int = 1,
     ) -> tuple[bool, int, int]:
+        """
+        cost — сколько кредитов списать:
+          1  — обычный поиск / прямой LLM-ответ
+          2  — анализ документа / файловые инструменты с Vision
+          3  — генерация изображения 1K
+          8  — генерация изображения 2K (gemini-3-pro-image)
+        """
+        cost = max(1, int(cost))
+
         if user is not None:
             limit = await self._limit_for_user(user)
         else:
@@ -118,40 +128,42 @@ class RateLimiter:
 
         if self._is_guest_user(user):
             key = self._guest_search_key(user_id)
-            count = await self.redis.incr(key)
-            if count > limit:
-                await self.redis.decr(key)
-                return False, max(0, count - 1), limit
+            # Атомарно увеличиваем на cost
+            new_count = await self.redis.incrby(key, cost)
+            if new_count > limit:
+                await self.redis.decrby(key, cost)
+                return False, max(0, new_count - cost), limit
 
             if client_ip:
                 ip_ok, ip_used, ip_limit = await self._check_guest_ip_search_limit(client_ip, limit)
                 if not ip_ok:
-                    await self.redis.decr(key)
+                    await self.redis.decrby(key, cost)
                     return False, ip_used, ip_limit
 
-            return True, count, limit
+            return True, new_count, limit
 
         key = _day_key("search", user_id)
-        count = await self.redis.incr(key)
-        if count == 1:
+        new_count = await self.redis.incrby(key, cost)
+        if new_count == cost:
+            # Первая запись сегодня — устанавливаем TTL до полуночи
             now = datetime.now(MSK)
             midnight = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
             await self.redis.expireat(key, int(midnight.timestamp()))
 
-        if count > limit:
-            await self.redis.decr(key)
-            return False, limit - max(0, count - 1), limit
+        if new_count > limit:
+            await self.redis.decrby(key, cost)
+            return False, max(0, new_count - cost), limit
 
-        return True, count, limit
+        return True, new_count, limit
 
-    async def release_search(self, user_id: str, user: User | None = None) -> None:
+    async def release_search(self, user_id: str, user: User | None = None, cost: int = 1) -> None:
         if self._is_guest_user(user):
             key = self._guest_search_key(user_id)
         else:
             key = _day_key("search", user_id)
         val = await self.redis.get(key)
         if val and int(val) > 0:
-            await self.redis.decr(key)
+            await self.redis.decrby(key, max(1, cost))
 
     async def get_search_usage(self, user_id: str, user: User | None = None) -> int:
         if self._is_guest_user(user):

@@ -91,13 +91,16 @@ async def stream_image_generation_turn(
         )
         return
 
-    allowed, used, limit = await limiter.check_image_gen_limit(user_id_str, user.plan)
+    img_cost = 8 if high_quality else 3
+    allowed, used, limit = await limiter.check_search_limit(
+        user_id_str, user.plan, user=user, cost=img_cost
+    )
     if not allowed:
         yield sse_event(
             "error",
             {
                 "code": "image_gen_rate_limit",
-                "message": f"Лимит генераций изображений: {limit} в день. Попробуйте завтра.",
+                "message": f"Недостаточно кредитов: генерация {'2K' if high_quality else '1K'} стоит {img_cost} кредита. Осталось {limit - used}.",
             },
         )
         return
@@ -112,11 +115,11 @@ async def stream_image_generation_turn(
         )
         thread = result.scalar_one_or_none()
         if not thread:
-            await limiter.release_image_gen(user_id_str)
+            await limiter.release_search(user_id_str, user, cost=img_cost)
             yield sse_event("error", {"code": "not_found", "message": "Тред не найден"})
             return
         if thread.thread_type != ThreadType.SEARCH:
-            await limiter.release_image_gen(user_id_str)
+            await limiter.release_search(user_id_str, user, cost=img_cost)
             yield sse_event(
                 "error",
                 {
@@ -217,7 +220,7 @@ async def stream_image_generation_turn(
                     kind="generation_failed",
                     message=str(payload),
                 )
-                await limiter.release_image_gen(user_id_str)
+                await limiter.release_search(user_id_str, user, cost=img_cost)
                 yield sse_event(
                     "error",
                     {"code": "image_gen_failed", "message": payload},
@@ -235,7 +238,7 @@ async def stream_image_generation_turn(
             kind="exception",
             message=str(exc),
         )
-        await limiter.release_image_gen(user_id_str)
+        await limiter.release_search(user_id_str, user, cost=img_cost)
         await clear_search_pending(redis_client, thread.id)
         yield sse_event(
             "error",
@@ -256,7 +259,7 @@ async def stream_image_generation_turn(
                 kind="invalid_image",
                 message=f"Пустое или повреждённое изображение от {provider_id}",
             )
-            await limiter.release_image_gen(user_id_str)
+            await limiter.release_search(user_id_str, user, cost=img_cost)
             await clear_search_pending(redis_client, thread.id)
             yield sse_event(
                 "error",

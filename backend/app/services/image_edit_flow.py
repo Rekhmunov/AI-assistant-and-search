@@ -96,7 +96,7 @@ async def stream_image_edit_turn(
         return
 
     # ── Rate limit ──
-    allowed, _used, _limit = await limiter.check_image_gen_limit(user_id_str, user.plan)
+    allowed, _used, _limit = await limiter.check_search_limit(user_id_str, user.plan, user=user, cost=3)
     if not allowed:
         yield sse_event("error", {
             "code": "image_gen_rate_limit",
@@ -115,11 +115,11 @@ async def stream_image_edit_turn(
         )
         thread = res.scalar_one_or_none()
         if not thread:
-            await limiter.release_image_gen(user_id_str)
+            await limiter.release_search(user_id_str, user, cost=3)
             yield sse_event("error", {"code": "not_found", "message": "Тред не найден"})
             return
         if thread.thread_type != ThreadType.SEARCH:
-            await limiter.release_image_gen(user_id_str)
+            await limiter.release_search(user_id_str, user, cost=3)
             yield sse_event("error", {"code": "wrong_thread_type",
                                       "message": "Этот диалог — настройка агента, не поиск."})
             return
@@ -179,7 +179,7 @@ async def stream_image_edit_turn(
                 if img:
                     input_images.append(img)
         if not input_images:
-            await limiter.release_image_gen(user_id_str)
+            await limiter.release_search(user_id_str, user, cost=3)
             await clear_search_pending(redis_client, thread.id)
             yield sse_event("error", {
                 "code": "image_edit_failed",
@@ -190,7 +190,7 @@ async def stream_image_edit_turn(
         # Edit: load last generated image from thread context
         prev_file_id = await get_thread_image_context(redis_client, thread.id)
         if not prev_file_id:
-            await limiter.release_image_gen(user_id_str)
+            await limiter.release_search(user_id_str, user, cost=3)
             await clear_search_pending(redis_client, thread.id)
             yield sse_event("error", {
                 "code": "image_edit_failed",
@@ -217,7 +217,7 @@ async def stream_image_edit_turn(
             logger.warning("image_edit: failed loading context image %s: %s", prev_file_id, exc)
 
         if not input_images:
-            await limiter.release_image_gen(user_id_str)
+            await limiter.release_search(user_id_str, user, cost=3)
             await clear_search_pending(redis_client, thread.id)
             yield sse_event("error", {
                 "code": "image_edit_failed",
@@ -264,7 +264,7 @@ async def stream_image_edit_turn(
         exc = gen_exception[0]
         await record_service_incident(redis_client, service="image_gen",
                                       kind="edit_failed", message=str(exc))
-        await limiter.release_image_gen(user_id_str)
+        await limiter.release_search(user_id_str, user, cost=3)
         await clear_search_pending(redis_client, thread.id)
         yield sse_event("error", {
             "code": "image_gen_failed",
@@ -273,7 +273,7 @@ async def stream_image_edit_turn(
         return
 
     if not gen_result or not gen_result[0].image_bytes:
-        await limiter.release_image_gen(user_id_str)
+        await limiter.release_search(user_id_str, user, cost=3)
         await clear_search_pending(redis_client, thread.id)
         yield sse_event("error", {"code": "image_gen_failed",
                                   "message": "Пустой результат от Nano Banana."})
@@ -281,7 +281,7 @@ async def stream_image_edit_turn(
 
     image_bytes = gen_result[0].image_bytes
     if not is_valid_image_bytes(image_bytes):
-        await limiter.release_image_gen(user_id_str)
+        await limiter.release_search(user_id_str, user, cost=3)
         await clear_search_pending(redis_client, thread.id)
         yield sse_event("error", {"code": "image_gen_failed",
                                   "message": "Повреждённое изображение от Nano Banana."})

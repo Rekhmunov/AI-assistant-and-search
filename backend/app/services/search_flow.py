@@ -394,8 +394,11 @@ class SearchFlowService:
                 yield event
             return
 
+        # cost зависит от типа операции
+        _has_doc = bool(attachment_ids) and bundle.has_document_text
+        _search_cost = 2 if _has_doc else 1
         allowed, used, limit = await limiter.check_search_limit(
-            user_id_str, user.plan, user, client_ip=client_ip
+            user_id_str, user.plan, user, client_ip=client_ip, cost=_search_cost
         )
         if not allowed:
             if self._is_guest(user):
@@ -430,7 +433,7 @@ class SearchFlowService:
 
         if llm_provider_id != PERPLEXITY_PROVIDER_ID and not _is_claude_search:
             if not await limiter.check_global_yandex_limit():
-                await limiter.release_search(user_id_str)
+                await limiter.release_search(user_id_str, user, cost=_search_cost)
                 yield sse_event("error", {"code": "global_limit", "message": "Сервис временно перегружен"})
                 return
 
@@ -720,7 +723,7 @@ class SearchFlowService:
                             )
                     except VisionNotSupportedError as e:
                         await db.rollback()
-                        await limiter.release_search(user_id_str)
+                        await limiter.release_search(user_id_str, user, cost=_search_cost)
                         yield sse_event("error", {"code": "vision_unavailable", "message": str(e)})
                         return
 
@@ -1095,7 +1098,7 @@ class SearchFlowService:
                             yield sse_event("token", {"text": chunk})
                     except VisionNotSupportedError as e:
                         await db.rollback()
-                        await limiter.release_search(user_id_str)
+                        await limiter.release_search(user_id_str, user, cost=_search_cost)
                         yield sse_event("error", {"code": "vision_unavailable", "message": str(e)})
                         return
                 elif route.needs_search and llm_provider_id != PERPLEXITY_PROVIDER_ID and not _is_claude_search:
@@ -1218,7 +1221,7 @@ class SearchFlowService:
                         yield sse_event("token", {"text": chunk})
                 else:
                     await db.rollback()
-                    await limiter.release_search(user_id_str)
+                    await limiter.release_search(user_id_str, user, cost=_search_cost)
                     yield sse_event(
                         "error",
                         {"code": "yandex_error", "message": str(e)},
@@ -1341,7 +1344,7 @@ class SearchFlowService:
                 except Exception:
                     logger.exception("Search finalize minimal persist failed")
                     await db.rollback()
-                    await limiter.release_search(user_id_str)
+                    await limiter.release_search(user_id_str, user, cost=_search_cost)
                     if full_answer.strip():
                         search_completed = True
                         yield sse_event(
