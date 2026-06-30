@@ -84,19 +84,22 @@ async def persist_generated_image(
 async def stream_image_generation(
     prompt: str,
     provider_id: str,
+    *,
+    image_size: str = "1K",
 ) -> AsyncIterator[tuple[str, str]]:
     text = image_generation_prompt(prompt)[:MAX_IMAGE_GEN_PROMPT_LEN]
     if provider_id == "gigachat":
         async for item in stream_gigachat_image_generation(text):
             yield item
     elif provider_id == "nanab2":
-        # Nano Banana: no streaming — generate fully then emit same events as GigaChat
         try:
             from app.services.nano_banana import generate_nano_banana_image
             settings = get_settings()
-            result = await generate_nano_banana_image(text, api_key=settings.google_api_key)
-            yield ("image_bytes", result.image_bytes)                   # consumer expects bytes
-            yield ("done", f"\n{result.assistant_text}")                 # consumer reads line[1] as text
+            result = await generate_nano_banana_image(
+                text, api_key=settings.google_api_key, image_size=image_size
+            )
+            yield ("image_bytes", result.image_bytes)
+            yield ("done", f"\n{result.assistant_text}")
         except ImageGenerationError as exc:
             yield ("error", str(exc))
     else:
@@ -106,6 +109,8 @@ async def stream_image_generation(
 async def generate_image(
     prompt: str,
     provider_id: str,
+    *,
+    image_size: str = "1K",
 ) -> tuple[bytes, str]:
     text = image_generation_prompt(prompt)[:MAX_IMAGE_GEN_PROMPT_LEN]
     if provider_id == "gigachat":
@@ -114,6 +119,8 @@ async def generate_image(
     elif provider_id == "nanab2":
         from app.services.nano_banana import generate_nano_banana_image
         settings = get_settings()
-        result = await generate_nano_banana_image(text, api_key=settings.google_api_key)
+        result = await generate_nano_banana_image(
+            text, api_key=settings.google_api_key, image_size=image_size
+        )
         return result.image_bytes, result.assistant_text
     raise ImageGenerationError("provider_unavailable", "Провайдер не настроен")

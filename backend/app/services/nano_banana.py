@@ -148,6 +148,7 @@ async def _generate_nano_banana_once(
     api_key: str,
     model: str,
     input_images: list[bytes] | None,
+    image_size: str = "1K",
 ) -> NanaBananaResult:
     """Single attempt at image generation (no retry logic here)."""
     if not api_key:
@@ -161,13 +162,17 @@ async def _generate_nano_banana_once(
             input_items.append({"type": "image", "data": img_b64, "mime_type": mime})
     input_items.append({"type": "text", "text": prompt})
 
+    response_format: dict = {
+        "type": "image",
+        "mime_type": "image/jpeg",
+    }
+    if image_size and image_size != "1K":
+        response_format["image_size"] = image_size
+
     payload = {
         "model": model,
         "input": input_items,
-        "response_format": {
-            "type": "image",
-            "mime_type": "image/jpeg",
-        },
+        "response_format": response_format,
     }
 
     from app.core.config import get_settings as _get_settings
@@ -254,6 +259,7 @@ async def generate_nano_banana_image(
     api_key: str,
     model: str = _MODEL,
     input_images: list[bytes] | None = None,
+    image_size: str = "1K",
 ) -> NanaBananaResult:
     """
     Generate or edit an image via Google Gemini Nano Banana 2 Interactions API.
@@ -273,6 +279,7 @@ async def generate_nano_banana_image(
                 api_key=api_key,
                 model=model,
                 input_images=input_images,
+                image_size=image_size,
             )
         except ImageGenerationError as exc:
             # Only retry on empty_response — other errors are deterministic

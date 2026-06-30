@@ -51,9 +51,11 @@ async def stream_image_generation_turn(
     thread_id: uuid.UUID | None,
     redis_client,
 ) -> AsyncIterator[str]:
+    from app.services.image_gen_routing import wants_high_quality
     settings = get_settings()
     user_id_str = str(user.id)
     display_content = normalize_user_query(query).strip()
+    image_size = "2K" if wants_high_quality(query) else "1K"
 
     if user.plan != Plan.PRO:
         yield sse_event(
@@ -170,7 +172,9 @@ async def stream_image_generation_turn(
 
     async def _run_generation() -> None:
         try:
-            async for event_type, payload in stream_image_generation(display_content, provider_id):
+            async for event_type, payload in stream_image_generation(
+                display_content, provider_id, image_size=image_size
+            ):
                 gen_events.append((event_type, payload))
         except Exception as exc:  # noqa: BLE001
             gen_exception.append(exc)

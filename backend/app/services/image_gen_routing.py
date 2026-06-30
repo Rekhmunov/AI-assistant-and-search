@@ -49,3 +49,21 @@ def image_generation_prompt(query: str) -> str:
     if _GEN_VERB_PREFIX_RE.search(text):
         return _GEN_VERB_PREFIX_RE.sub("Нарисуй", text, count=1)
     return f"Нарисуй: {text}"
+
+
+_HQ_RE = re.compile(
+    r"(?i)"
+    r"2[kк]\b|"
+    r"высок[оое][\s-]*качеств|"
+    r"лучш[еея][\s-]*качеств|"
+    r"максимальн[оое][\s-]*качеств|"
+    r"hd\b|hq\b|high[\s-]*quality|"
+    r"высо[кч][оа][еёй]?\s+разрешени|"
+    r"большо[ей]\s+разрешени|"
+    r"4[kк]\b"
+)
+
+
+def wants_high_quality(query: str) -> bool:
+    """True если пользователь явно просит 2K / высокое качество / высокое разрешение."""
+    return bool(_HQ_RE.search((query or "").strip()))
