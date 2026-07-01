@@ -565,6 +565,15 @@ async def generate_post(
     style = _parse_style_instructions(agent)
     today = datetime.now(timezone.utc).strftime("%d.%m.%Y")
 
+    # Формируем блок недавних постов чтобы LLM не повторял темы/примеры
+    recent_history = get_post_history(agent)
+    published = [r for r in recent_history if r.get("status") == "published"][-5:]
+    if published:
+        lines = [f"- {r.get('topic', '?')}: {str(r.get('text', ''))[:80]}..." for r in published]
+        recent_posts_block = "НЕДАВНИЕ ПОСТЫ (не повторяй темы и примеры):\n" + "\n".join(lines) + "\n\n"
+    else:
+        recent_posts_block = ""
+
     # Шаг 1 (опциональный): Поиск актуальных данных Яндекс
     search_context = ""
     if topic_search and db is not None and redis_client is not None:
@@ -592,12 +601,14 @@ async def generate_post(
             style_instructions=style[:1500],
             current_date=today,
             search_results=search_context[:3000],
+            recent_posts_block=recent_posts_block,
         )
     else:
         prompt_text = POSTER_GENERATION_PROMPT.format(
             topic=topic_text,
             style_instructions=style[:1500],
             current_date=today,
+            recent_posts_block=recent_posts_block,
         )
 
     raw_draft = await llm.complete_text(
