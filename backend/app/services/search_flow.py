@@ -47,9 +47,7 @@ from app.services.document_answer_enforce import (
     document_request_prompt_addon,
     edit_document_prompt_addon,
     ensure_markdown_document_answer,
-    get_legal_search_queries,
     has_markdown_document_fence,
-    needs_data_clarification,
 )
 from app.services.llm_flow_router import resolve_service_flow
 from app.services.history_summarizer import summarize_history_if_needed
@@ -678,68 +676,13 @@ class SearchFlowService:
 
         # Флаг от LLM-роутера — юридический/деловой документ
         _is_legal_doc = flow.legal_document
-        _answer_had_loop = False  # инициализируем заранее на случай раннего выхода
+        _answer_had_loop = False  # используется для DEDUP-детекции
 
         doc_prompt_addon = document_request_prompt_addon(user_text, is_legal_doc=_is_legal_doc)
         if route.intent == "edit_prior":
             doc_prompt_addon += edit_document_prompt_addon(user_text)
         if doc_prompt_addon:
             llm_query = f"{llm_query}{doc_prompt_addon}"
-
-        # ── Уточняющий вопрос для юридических документов ──────────────────────
-        # ВАЖНО: проверяем ДО списания 2 кредитов — документ ещё не создан.
-        if needs_data_clarification(user_text, is_legal_doc=_is_legal_doc) and not prior_messages:
-            _clarify_q = (
-                "Чтобы подготовить документ с вашими данными, уточните:\n"
-                "• Кто стороны (ИП/ООО/физлицо — название, ИНН если есть)?\n"
-                "• Ключевые условия (срок, сумма, предмет)?\n\n"
-                "Или напишите «болванку» — и я создам шаблон с плейсхолдерами."
-            )
-            yield sse_event("thread", {"thread_id": str(thread.id)})
-            yield sse_event("route", {
-                "needs_search": False, "answer_model": "lite",
-                "reason": "doc_clarification", "intent": "generate_document",
-                "policy_version": "v1",
-            })
-            # attachments_payload ещё не определён — определяем здесь локально
-            _clarify_attachments = None
-            if has_attachments and bundle.uploaded_files:
-                from app.services.attachment_bundle import attachments_json_from_files as _atj
-                _clarify_attachments = _atj(bundle.uploaded_files)
-            user_msg = Message(
-                thread_id=thread.id, role=MessageRole.USER, content=display_content,
-                attachments=_clarify_attachments,
-            )
-            db.add(user_msg)
-            await db.flush()
-            for _chunk in [_clarify_q[i:i+40] for i in range(0, len(_clarify_q), 40)]:
-                yield sse_event("token", {"text": _chunk})
-            assistant_msg = Message(
-                thread_id=thread.id, role=MessageRole.ASSISTANT, content=_clarify_q,
-            )
-            db.add(assistant_msg)
-            thread.message_count = (thread.message_count or 0) + 2
-            thread.last_message_at = datetime.now(timezone.utc)
-            await db.commit()
-            yield sse_event("done", {
-                "message_id": str(assistant_msg.id), "needs_search": False, "answer_model": "lite",
-            })
-            await clear_search_pending(redis_client, thread.id)
-            return
-
-        # ── Тарификация: юридический документ стоит 2 кредита ────────────────
-        if _is_legal_doc and _search_cost < 2:
-            await limiter.release_search(user_id_str, user, cost=_search_cost)
-            _search_cost = 2
-            allowed2, used, limit = await limiter.check_search_limit(
-                user_id_str, user.plan, user, cost=_search_cost
-            )
-            if not allowed2:
-                yield sse_event("error", {
-                    "code": "rate_limit",
-                    "message": f"Недостаточно кредитов: генерация документа стоит {_search_cost} кредита.",
-                })
-                return
 
         # ── Фикс: для документов не использовать Perplexity как LLM ──────────
         # Perplexity — поисковая модель, плохо генерирует структурированные документы.
@@ -759,10 +702,7 @@ class SearchFlowService:
             route.answer_model = "pro" if user.plan == Plan.PRO else "lite"
             logger.info("DOC_LLM_OVERRIDE: switched from Perplexity to %s for document generation", _doc_llm_id)
 
-        # ── Поиск законодательства для юридических документов ─────────────────
-        # Добавляем специальные запросы к стандартному поиску чтобы LLM
-        # получил актуальные нормы и мог ссылаться на конкретные статьи.
-        _legal_search_queries = get_legal_search_queries(user_text, is_legal_doc=_is_legal_doc)
+        _legal_search_queries: list[str] = []  # спец.запросы законов убраны
 
         attachments_payload = None
         if has_attachments and bundle.uploaded_files:
@@ -1402,58 +1342,6 @@ class SearchFlowService:
                 full_answer = deduped
                 yield sse_event("reset_answer", {})
                 yield sse_event("token", {"text": full_answer})
-
-            # ── Рефлексия для юридических документов (Pro-пользователи) ──────
-            # Только для Pro, только если документ достаточно большой И не был обрезан DEDUP.
-            # Таймаут 20 сек — не блокируем ответ при медленном LLM.
-            # Не запускаем рефлексию если ответ был зациклен (DEDUP его обрезал)
-            _doc_was_deduped = _answer_had_loop
-            if (
-                user.plan == Plan.PRO
-                and _is_legal_doc
-                and has_markdown_document_fence(full_answer)
-                and len(full_answer) > 1000
-                and not _doc_was_deduped  # зациклившийся документ не отправляем на рефлексию
-            ):
-                try:
-                    _reflection_prompt = (
-                        f"Ты юрист. Проверь следующий документ на предмет:\n"
-                        f"1. Все ли обязательные разделы присутствуют?\n"
-                        f"2. Есть ли юридические ошибки по законодательству РФ?\n"
-                        f"3. Достаточно ли детально прописаны условия?\n\n"
-                        f"Если документ полный и корректный — ответь только 'ОК'.\n"
-                        f"Если есть проблемы — перепиши документ с исправлениями в блоке ```markdown.\n\n"
-                        f"Документ:\n{full_answer[:4000]}"
-                    )
-                    _reflection_result = await asyncio.wait_for(
-                        llm.complete_text(
-                            [{"role": "user", "text": _reflection_prompt}],
-                            model="pro",
-                            max_tokens=3000,
-                            temperature=0.1,
-                        ),
-                        timeout=20.0,
-                    )
-                    _ref = (_reflection_result or "").strip()
-                    # Принимаем рефлексию только если она НЕ короче оригинала более чем на 20%.
-                    # Короткий ответ — значит модель обрезала документ вместо исправления.
-                    _min_acceptable_len = int(len(full_answer) * 0.8)
-                    if (
-                        _ref
-                        and _ref.upper() != "ОК"
-                        and len(_ref) >= _min_acceptable_len
-                        and "```markdown" in _ref
-                    ):
-                        logger.info("DOC_REFLECTION: improved document (before=%d after=%d)", len(full_answer), len(_ref))
-                        full_answer = _ref
-                        yield sse_event("reset_answer", {})
-                        yield sse_event("token", {"text": full_answer})
-                    elif _ref and len(_ref) < _min_acceptable_len and _ref.upper() != "ОК":
-                        logger.warning("DOC_REFLECTION: result too short (%d < %d), keeping original", len(_ref), _min_acceptable_len)
-                except asyncio.TimeoutError:
-                    logger.warning("DOC_REFLECTION: timeout (20s) — skipping, returning original")
-                except Exception as _ref_exc:
-                    logger.warning("DOC_REFLECTION failed (non-fatal): %s", _ref_exc)
 
             settings = get_settings()
             follow_ups: list[str] = []
