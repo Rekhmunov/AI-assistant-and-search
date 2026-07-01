@@ -58,6 +58,15 @@ _ROUTER_SYSTEM = """Ты маршрутизатор запросов в Glosix (
   "intent": "factual_current" | "howto" | "document" | "edit_prior" | "compare_analyze" | "chitchat"
 }
 
+БЫСТРЫЙ ВЫБОР FLOW (детали — в блоках ниже):
+- нет файла, вопрос о мире/фактах → search_rag
+- нет файла, создание текста/кода → chat
+- нет файла, нарисуй/сгенерируй картинку → image_generate
+- нет файла, оформи ответ выше → export_chat_document
+- прикреплён PDF → compress_pdf / convert_pdf / split_pdf / search_rag (по запросу)
+- прикреплено изображение, сожми/в PDF → compress_image / image_to_pdf
+- прикреплено изображение, трансформируй/анализируй → image_edit / image_compose / search_rag
+
 intent — тип запроса для выбора глубины ответа:
 - factual_current — обычный факт, событие, определение, поиск в интернете
 - howto — «как сделать», «как настроить», «как установить», пошаговые инструкции
