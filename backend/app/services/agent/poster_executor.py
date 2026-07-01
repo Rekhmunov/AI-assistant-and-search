@@ -514,7 +514,12 @@ async def generate_poster_image(
         from app.services.image_gen_service import ImageGenerationError
         provider_id = await resolve_image_gen_provider_id(db, redis_client)
         logger.warning("POSTER_IMG: provider=%s prompt_start=%r", provider_id, topic[:60])
-        img_prompt = f"{topic}. {post_text[:150]}"
+        # Используем только тему — короткий визуальный промпт.
+        # Полный текст поста делает промпт похожим на текстовую инструкцию:
+        # модель генерирует текст вместо картинки.
+        # image_generation_prompt() добавит «Нарисуй: » если нужно.
+        _clean_topic = topic.split(".")[0].split(":")[0].strip()[:120]
+        img_prompt = _clean_topic or topic[:120]
         image_bytes, _ = await generate_image(img_prompt, provider_id)
         logger.warning("POSTER_IMG success: %d bytes provider=%s", len(image_bytes), provider_id)
         return image_bytes
