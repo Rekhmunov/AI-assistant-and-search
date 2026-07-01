@@ -514,12 +514,13 @@ async def generate_poster_image(
         from app.services.image_gen_service import ImageGenerationError
         provider_id = await resolve_image_gen_provider_id(db, redis_client)
         logger.warning("POSTER_IMG: provider=%s prompt_start=%r", provider_id, topic[:60])
-        # Используем только тему — короткий визуальный промпт.
-        # Полный текст поста делает промпт похожим на текстовую инструкцию:
-        # модель генерирует текст вместо картинки.
-        # image_generation_prompt() добавит «Нарисуй: » если нужно.
-        _clean_topic = topic.split(".")[0].split(":")[0].strip()[:120]
-        img_prompt = _clean_topic or topic[:120]
+        # Тема может содержать структурные инструкции для текстового LLM
+        # (например «Структура: описание блюда...»). Для модели картинок
+        # берём только название темы — до первого «.» или «:».
+        # Текст поста (первые 200 символов) даёт визуальный контекст.
+        _clean_topic = topic.split(".")[0].split(":")[0].strip()[:100]
+        _post_preview = post_text[:200].strip() if post_text else ""
+        img_prompt = f"{_clean_topic}. {_post_preview}" if _post_preview else _clean_topic
         image_bytes, _ = await generate_image(img_prompt, provider_id)
         logger.warning("POSTER_IMG success: %d bytes provider=%s", len(image_bytes), provider_id)
         return image_bytes
