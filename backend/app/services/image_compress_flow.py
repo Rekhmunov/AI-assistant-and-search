@@ -184,10 +184,8 @@ async def stream_image_compress_turn(
         },
     )
 
-    # Если нет вложений — ищем в истории треда
-    if not image_files:
-        image_files = await _find_images_in_thread(db, thread.id, user.id)
-
+    # Сжимаем только явно прикреплённые изображения.
+    # Fallback по истории треда убран — он случайно захватывал старые сгенерированные картинки.
     if not image_files:
         answer_text = (
             "Не нашёл изображение в этом диалоге. "
