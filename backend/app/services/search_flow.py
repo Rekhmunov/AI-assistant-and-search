@@ -47,6 +47,11 @@ from app.services.document_answer_enforce import (
     document_request_prompt_addon,
     edit_document_prompt_addon,
     ensure_markdown_document_answer,
+    get_legal_search_queries,
+    has_markdown_document_fence,
+    is_legal_document_request,
+    needs_data_clarification,
+    is_template_request,
 )
 from app.services.llm_flow_router import resolve_service_flow
 from app.services.history_summarizer import summarize_history_if_needed
@@ -674,6 +679,66 @@ class SearchFlowService:
         if doc_prompt_addon:
             llm_query = f"{llm_query}{doc_prompt_addon}"
 
+        # ── Уточняющий вопрос для юридических документов ──────────────────────
+        # Если запрос на конкретный документ без данных сторон и не болванка —
+        # задаём один уточняющий вопрос вместо генерации с пустыми плейсхолдерами.
+        if needs_data_clarification(user_text) and not prior_messages:
+            _clarify_q = (
+                "Чтобы подготовить документ с вашими данными, уточните:\n"
+                "• Кто стороны (ИП/ООО/физлицо — название, ИНН если есть)?\n"
+                "• Ключевые условия (срок, сумма, предмет)?\n\n"
+                "Или напишите «болванку» — и я создам шаблон с плейсхолдерами."
+            )
+            yield sse_event("thread", {"thread_id": str(thread.id)})
+            yield sse_event("route", {
+                "needs_search": False, "answer_model": "lite",
+                "reason": "doc_clarification", "intent": "generate_document",
+                "policy_version": "v1",
+            })
+            user_msg = Message(
+                thread_id=thread.id, role=MessageRole.USER, content=display_content,
+                attachments=attachments_payload,
+            )
+            db.add(user_msg)
+            await db.flush()
+            for _chunk in [_clarify_q[i:i+40] for i in range(0, len(_clarify_q), 40)]:
+                yield sse_event("token", {"text": _chunk})
+            assistant_msg = Message(
+                thread_id=thread.id, role=MessageRole.ASSISTANT, content=_clarify_q,
+            )
+            db.add(assistant_msg)
+            thread.message_count = (thread.message_count or 0) + 2
+            thread.last_message_at = datetime.now(timezone.utc)
+            await db.commit()
+            yield sse_event("done", {
+                "message_id": str(assistant_msg.id), "needs_search": False, "answer_model": "lite",
+            })
+            await clear_search_pending(redis_client, thread.id)
+            return
+
+        # ── Фикс: для документов не использовать Perplexity как LLM ──────────
+        # Perplexity — поисковая модель, плохо генерирует структурированные документы.
+        # Переключаем на agent_llm_provider (DeepSeek/Claude/Yandex).
+        if is_legal_document_request(user_text) and llm_provider_id == PERPLEXITY_PROVIDER_ID:
+            from app.services.providers.factory import (
+                resolve_agent_llm_provider_id,
+                create_llm_provider,
+                _wrap_llm_fallback,
+            )
+            _doc_settings = get_settings()
+            _doc_llm_id = await resolve_agent_llm_provider_id(db, redis_client, _doc_settings)
+            _doc_llm = create_llm_provider(_doc_llm_id, _doc_settings, _prompt_store)
+            _doc_llm = _wrap_llm_fallback(_doc_llm_id, _doc_llm, _doc_settings, _prompt_store)
+            llm = _doc_llm
+            llm_provider_id = _doc_llm_id
+            route.answer_model = "pro" if user.plan == Plan.PRO else "lite"
+            logger.info("DOC_LLM_OVERRIDE: switched from Perplexity to %s for document generation", _doc_llm_id)
+
+        # ── Поиск законодательства для юридических документов ─────────────────
+        # Добавляем специальные запросы к стандартному поиску чтобы LLM
+        # получил актуальные нормы и мог ссылаться на конкретные статьи.
+        _legal_search_queries = get_legal_search_queries(user_text) if is_legal_document_request(user_text) else []
+
         attachments_payload = None
         if has_attachments and bundle.uploaded_files:
             attachments_payload = attachments_json_from_files(bundle.uploaded_files)
@@ -955,6 +1020,11 @@ class SearchFlowService:
                         hint_clarify = rewrite.clarification_question
 
                     queries = list(rewrite.search_queries or [normalize_user_query(route.search_query)])
+                    # Добавляем запросы для поиска законодательства если это юридический документ
+                    if _legal_search_queries:
+                        for _lq in _legal_search_queries:
+                            if _lq not in queries:
+                                queries.append(_lq)
                     howto = rewrite.intent == "howto"
                     if howto or "course_program" in fact_slots:
                         route.answer_model = "pro"
@@ -1292,7 +1362,6 @@ class SearchFlowService:
                 full_answer = sanitized
 
             # Дедупликация: убираем зациклившиеся повторяющиеся абзацы
-            # (LLM иногда генерирует один и тот же блок 3–5 раз подряд)
             deduped = _deduplicate_answer(full_answer)
             if deduped != full_answer:
                 logger.warning(
@@ -1302,6 +1371,42 @@ class SearchFlowService:
                 full_answer = deduped
                 yield sse_event("reset_answer", {})
                 yield sse_event("token", {"text": full_answer})
+
+            # ── Рефлексия для юридических документов (Pro-пользователи) ──────
+            # Отдельный LLM-вызов проверяет полноту и корректность документа.
+            # Только для Pro, только для юридических документов, только если
+            # ответ достаточно большой (есть что проверять).
+            if (
+                user.plan == Plan.PRO
+                and is_legal_document_request(user_text)
+                and has_markdown_document_fence(full_answer)
+                and len(full_answer) > 500
+            ):
+                try:
+                    _reflection_prompt = (
+                        f"Ты юрист. Проверь следующий документ на предмет:\n"
+                        f"1. Все ли обязательные разделы присутствуют?\n"
+                        f"2. Есть ли юридические ошибки или противоречия по законодательству РФ?\n"
+                        f"3. Достаточно ли детально прописаны условия?\n\n"
+                        f"Если документ полный и корректный — ответь только 'ОК'.\n"
+                        f"Если есть проблемы — перепиши документ целиком с исправлениями.\n"
+                        f"Формат ответа такой же: весь текст в блоке ```markdown.\n\n"
+                        f"Документ:\n{full_answer[:6000]}"
+                    )
+                    _reflection_result = await llm.complete_text(
+                        [{"role": "user", "text": _reflection_prompt}],
+                        model="pro",
+                        max_tokens=4096,
+                        temperature=0.1,
+                    )
+                    _ref = (_reflection_result or "").strip()
+                    if _ref and _ref.upper() != "ОК" and len(_ref) > 100 and "```markdown" in _ref:
+                        logger.info("DOC_REFLECTION: improved document (before=%d after=%d)", len(full_answer), len(_ref))
+                        full_answer = _ref
+                        yield sse_event("reset_answer", {})
+                        yield sse_event("token", {"text": full_answer})
+                except Exception as _ref_exc:
+                    logger.warning("DOC_REFLECTION failed (non-fatal): %s", _ref_exc)
 
             settings = get_settings()
             follow_ups: list[str] = []
