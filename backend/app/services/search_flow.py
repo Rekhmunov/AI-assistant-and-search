@@ -695,9 +695,14 @@ class SearchFlowService:
                 "reason": "doc_clarification", "intent": "generate_document",
                 "policy_version": "v1",
             })
+            # attachments_payload ещё не определён — определяем здесь локально
+            _clarify_attachments = None
+            if has_attachments and bundle.uploaded_files:
+                from app.services.attachment_bundle import attachments_json_from_files as _atj
+                _clarify_attachments = _atj(bundle.uploaded_files)
             user_msg = Message(
                 thread_id=thread.id, role=MessageRole.USER, content=display_content,
-                attachments=attachments_payload,
+                attachments=_clarify_attachments,
             )
             db.add(user_msg)
             await db.flush()

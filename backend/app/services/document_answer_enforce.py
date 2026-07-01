@@ -40,8 +40,11 @@ def has_parties_data(query: str) -> bool:
 def needs_data_clarification(query: str) -> bool:
     """
     Нужен ли уточняющий вопрос перед генерацией.
-    Не нужен если: это болванка/шаблон, или данные уже есть в запросе.
+    Не нужен если: это не запрос на документ, болванка/шаблон, или данные уже есть.
     """
+    # Только для явных запросов на создание документа (не поисковых вопросов об аренде и т.п.)
+    if not wants_document_generation(query):
+        return False
     if not is_legal_document_request(query):
         return False
     if is_template_request(query):
