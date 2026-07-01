@@ -673,6 +673,21 @@ class SearchFlowService:
 
         # Флаг от LLM-роутера — юридический/деловой документ
         _is_legal_doc = flow.legal_document
+
+        # Юридический документ стоит 2 кредита (рефлексия + поиск законов)
+        if _is_legal_doc and _search_cost < 2:
+            # Возвращаем 1 уже списанный и списываем 2
+            await limiter.release_search(user_id_str, user, cost=_search_cost)
+            _search_cost = 2
+            allowed2, used, limit = await limiter.check_search_limit(
+                user_id_str, user.plan, user, cost=_search_cost
+            )
+            if not allowed2:
+                yield sse_event("error", {
+                    "code": "rate_limit",
+                    "message": f"Недостаточно кредитов: генерация документа стоит {_search_cost} кредита.",
+                })
+                return
         doc_prompt_addon = document_request_prompt_addon(user_text, is_legal_doc=_is_legal_doc)
         if route.intent == "edit_prior":
             doc_prompt_addon += edit_document_prompt_addon(user_text)
