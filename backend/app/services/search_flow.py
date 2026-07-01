@@ -641,15 +641,20 @@ class SearchFlowService:
             route.intent = "document"  # type: ignore[assignment]
         if not vision_only_answer and not hybrid_vision_search and not image_display_request:
             if flow.flow == "chat":
+                # Юридические документы всегда требуют поиска — нужны актуальные нормы.
+                if flow.legal_document:
+                    route.needs_search = True
+                    route.reason = f"llm_flow:{flow.reason}+legal_doc_search"
                 # Галерея сущностей (Yandex Image) грузится только при needs_search.
-                if not has_attachments and wants_entity_images(
+                elif not has_attachments and wants_entity_images(
                     user_text, intent=str(route.intent)
                 ):
                     route.needs_search = flow.needs_search or True
+                    route.reason = f"llm_flow:{flow.reason}"
                 else:
                     route.needs_search = flow.needs_search
+                    route.reason = f"llm_flow:{flow.reason}"
                 route.answer_model = flow.answer_model
-                route.reason = f"llm_flow:{flow.reason}"
             elif flow.flow == "search_rag":
                 route.needs_search = flow.needs_search
                 route.answer_model = flow.answer_model
