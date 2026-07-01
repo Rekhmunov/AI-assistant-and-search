@@ -49,9 +49,7 @@ from app.services.document_answer_enforce import (
     ensure_markdown_document_answer,
     get_legal_search_queries,
     has_markdown_document_fence,
-    is_legal_document_request,
     needs_data_clarification,
-    is_template_request,
 )
 from app.services.llm_flow_router import resolve_service_flow
 from app.services.history_summarizer import summarize_history_if_needed
@@ -673,16 +671,16 @@ class SearchFlowService:
         if user.plan != Plan.PRO:
             route.answer_model = "lite"
 
-        doc_prompt_addon = document_request_prompt_addon(user_text)
+        # Флаг от LLM-роутера — юридический/деловой документ
+        _is_legal_doc = flow.legal_document
+        doc_prompt_addon = document_request_prompt_addon(user_text, is_legal_doc=_is_legal_doc)
         if route.intent == "edit_prior":
             doc_prompt_addon += edit_document_prompt_addon(user_text)
         if doc_prompt_addon:
             llm_query = f"{llm_query}{doc_prompt_addon}"
 
         # ── Уточняющий вопрос для юридических документов ──────────────────────
-        # Если запрос на конкретный документ без данных сторон и не болванка —
-        # задаём один уточняющий вопрос вместо генерации с пустыми плейсхолдерами.
-        if needs_data_clarification(user_text) and not prior_messages:
+        if needs_data_clarification(user_text, is_legal_doc=_is_legal_doc) and not prior_messages:
             _clarify_q = (
                 "Чтобы подготовить документ с вашими данными, уточните:\n"
                 "• Кто стороны (ИП/ООО/физлицо — название, ИНН если есть)?\n"
@@ -724,7 +722,7 @@ class SearchFlowService:
         # ── Фикс: для документов не использовать Perplexity как LLM ──────────
         # Perplexity — поисковая модель, плохо генерирует структурированные документы.
         # Переключаем на agent_llm_provider (DeepSeek/Claude/Yandex).
-        if is_legal_document_request(user_text) and llm_provider_id == PERPLEXITY_PROVIDER_ID:
+        if _is_legal_doc and llm_provider_id == PERPLEXITY_PROVIDER_ID:
             from app.services.providers.factory import (
                 resolve_agent_llm_provider_id,
                 create_llm_provider,
@@ -742,7 +740,7 @@ class SearchFlowService:
         # ── Поиск законодательства для юридических документов ─────────────────
         # Добавляем специальные запросы к стандартному поиску чтобы LLM
         # получил актуальные нормы и мог ссылаться на конкретные статьи.
-        _legal_search_queries = get_legal_search_queries(user_text) if is_legal_document_request(user_text) else []
+        _legal_search_queries = get_legal_search_queries(user_text, is_legal_doc=_is_legal_doc)
 
         attachments_payload = None
         if has_attachments and bundle.uploaded_files:
@@ -1383,7 +1381,7 @@ class SearchFlowService:
             # ответ достаточно большой (есть что проверять).
             if (
                 user.plan == Plan.PRO
-                and is_legal_document_request(user_text)
+                and _is_legal_doc
                 and has_markdown_document_fence(full_answer)
                 and len(full_answer) > 500
             ):

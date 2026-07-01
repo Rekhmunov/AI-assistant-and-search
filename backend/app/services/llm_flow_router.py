@@ -43,6 +43,7 @@ class LlmFlowDecision:
     force_yandex: bool = False
     high_quality: bool = False
     intent: str = "factual_current"
+    legal_document: bool = False
 
 
 _ROUTER_SYSTEM = """Ты маршрутизатор запросов в Glosix (умный ассистент с веб-поиском и файлами).
@@ -55,8 +56,16 @@ _ROUTER_SYSTEM = """Ты маршрутизатор запросов в Glosix (
   "reason": "кратко по-русски",
   "force_yandex": true/false,
   "high_quality": true/false,
-  "intent": "factual_current" | "howto" | "document" | "edit_prior" | "compare_analyze" | "chitchat"
+  "intent": "factual_current" | "howto" | "document" | "edit_prior" | "compare_analyze" | "chitchat",
+  "legal_document": true/false
 }
+
+legal_document = true — пользователь просит создать юридический или деловой документ:
+- Договоры: аренды, поставки, услуг, подряда, трудовой, купли-продажи и др.
+- Корпоративные документы: устав, регламент, приказ, политика
+- Публичная оферта, пользовательское соглашение
+- Заявления, акты, соглашения, претензии
+- По умолчанию false. Не ставить true для поисковых вопросов об этих документах («что такое договор аренды») — только для явных запросов создать/составить/написать документ.
 
 БЫСТРЫЙ ВЫБОР FLOW (детали — в блоках ниже):
 - нет файла, вопрос о мире/фактах → search_rag
@@ -252,6 +261,7 @@ def _parse_flow_response(raw: str) -> LlmFlowDecision | None:
     reason = str(data.get("reason") or "llm_router")[:200]
     force_yandex = bool(data.get("force_yandex", False))
     high_quality = bool(data.get("high_quality", False))
+    legal_document = bool(data.get("legal_document", False))
     _valid_intents = frozenset({
         "factual_current", "howto", "document",
         "edit_prior", "compare_analyze", "chitchat",
@@ -266,6 +276,7 @@ def _parse_flow_response(raw: str) -> LlmFlowDecision | None:
         force_yandex=force_yandex,
         high_quality=high_quality,
         intent=intent,
+        legal_document=legal_document,
     )
 
 

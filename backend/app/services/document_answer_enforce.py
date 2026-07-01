@@ -7,13 +7,9 @@ import re
 from app.services.doc_gen_routing import wants_document_generation
 
 _MD_FENCE_RE = re.compile(r"```(?:markdown|md)\b", re.I)
-_LEGAL_DOC_RE = re.compile(
-    r"(?i)(?:оферт|договор|соглашен|заявлен|политик|регламент|устав|приказ|трудов|аренд|поставк|услуг|подряд)",
-)
 _TEMPLATE_RE = re.compile(
     r"(?i)(?:болванк|шаблон|образец|типовой|пример\s+договор|пример\s+документ)",
 )
-# Данные которые уже содержатся в запросе — нет нужды уточнять
 _HAS_PARTIES_RE = re.compile(
     r"(?i)(?:ооо|ип|ао|пао|зао|нко|физлицо)\s+[\w\u00ab\u00bb\u201c\u201d]|между\s+\w|\bстороны\b.{0,30}\bдоговор",
 )
@@ -21,10 +17,6 @@ _HAS_PARTIES_RE = re.compile(
 
 def has_markdown_document_fence(text: str) -> bool:
     return bool(_MD_FENCE_RE.search(text or ""))
-
-
-def is_legal_document_request(query: str) -> bool:
-    return bool(_LEGAL_DOC_RE.search(query or ""))
 
 
 def is_template_request(query: str) -> bool:
@@ -37,15 +29,14 @@ def has_parties_data(query: str) -> bool:
     return bool(_HAS_PARTIES_RE.search(query or ""))
 
 
-def needs_data_clarification(query: str) -> bool:
+def needs_data_clarification(query: str, *, is_legal_doc: bool = False) -> bool:
     """
     Нужен ли уточняющий вопрос перед генерацией.
-    Не нужен если: это не запрос на документ, болванка/шаблон, или данные уже есть.
+    is_legal_doc приходит от LLM-роутера (flow.legal_document).
     """
-    # Только для явных запросов на создание документа (не поисковых вопросов об аренде и т.п.)
     if not wants_document_generation(query):
         return False
-    if not is_legal_document_request(query):
+    if not is_legal_doc:
         return False
     if is_template_request(query):
         return False
@@ -87,21 +78,23 @@ _DOC_SEARCH_HINTS: list[tuple[re.Pattern[str], list[str]]] = [
 ]
 
 
-def get_legal_search_queries(query: str) -> list[str]:
-    """Возвращает поисковые запросы для поиска правовой базы по типу документа."""
+def get_legal_search_queries(query: str, *, is_legal_doc: bool = False) -> list[str]:
+    """Возвращает поисковые запросы для поиска правовой базы по типу документа.
+    is_legal_doc приходит от LLM-роутера (flow.legal_document).
+    """
+    if not is_legal_doc:
+        return []
     for pattern, queries in _DOC_SEARCH_HINTS:
         if pattern.search(query or ""):
             return queries
-    if is_legal_document_request(query):
-        # Общий запрос для неизвестного типа документа
-        return [f"{query.strip()[:80]} требования законодательство РФ 2026 обязательные условия"]
-    return []
+    # Общий запрос если тип документа не распознан по паттернам
+    return [f"{query.strip()[:80]} требования законодательство РФ 2026 обязательные условия"]
 
 
-def document_request_prompt_addon(query: str) -> str:
+def document_request_prompt_addon(query: str, *, is_legal_doc: bool = False) -> str:
     if not wants_document_generation(query):
         return ""
-    legal = is_legal_document_request(query)
+    legal = is_legal_doc
     is_template = is_template_request(query)
 
     lines = [
