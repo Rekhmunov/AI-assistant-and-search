@@ -1386,7 +1386,8 @@ class SearchFlowService:
 
             # Дедупликация: убираем зациклившиеся повторяющиеся абзацы
             deduped = _deduplicate_answer(full_answer)
-            if deduped != full_answer:
+            _answer_had_loop = deduped != full_answer
+            if _answer_had_loop:
                 logger.warning(
                     "DEDUP: removed loop in answer (before=%d chars, after=%d chars)",
                     len(full_answer), len(deduped),
@@ -1396,31 +1397,35 @@ class SearchFlowService:
                 yield sse_event("token", {"text": full_answer})
 
             # ── Рефлексия для юридических документов (Pro-пользователи) ──────
-            # Отдельный LLM-вызов проверяет полноту и корректность документа.
-            # Только для Pro, только для юридических документов, только если
-            # ответ достаточно большой (есть что проверять).
+            # Только для Pro, только если документ достаточно большой И не был обрезан DEDUP.
+            # Таймаут 20 сек — не блокируем ответ при медленном LLM.
+            # Не запускаем рефлексию если ответ был зациклен (DEDUP его обрезал)
+            _doc_was_deduped = _answer_had_loop
             if (
                 user.plan == Plan.PRO
                 and _is_legal_doc
                 and has_markdown_document_fence(full_answer)
-                and len(full_answer) > 500
+                and len(full_answer) > 1000
+                and not _doc_was_deduped  # зациклившийся документ не отправляем на рефлексию
             ):
                 try:
                     _reflection_prompt = (
                         f"Ты юрист. Проверь следующий документ на предмет:\n"
                         f"1. Все ли обязательные разделы присутствуют?\n"
-                        f"2. Есть ли юридические ошибки или противоречия по законодательству РФ?\n"
+                        f"2. Есть ли юридические ошибки по законодательству РФ?\n"
                         f"3. Достаточно ли детально прописаны условия?\n\n"
                         f"Если документ полный и корректный — ответь только 'ОК'.\n"
-                        f"Если есть проблемы — перепиши документ целиком с исправлениями.\n"
-                        f"Формат ответа такой же: весь текст в блоке ```markdown.\n\n"
-                        f"Документ:\n{full_answer[:6000]}"
+                        f"Если есть проблемы — перепиши документ с исправлениями в блоке ```markdown.\n\n"
+                        f"Документ:\n{full_answer[:4000]}"
                     )
-                    _reflection_result = await llm.complete_text(
-                        [{"role": "user", "text": _reflection_prompt}],
-                        model="pro",
-                        max_tokens=4096,
-                        temperature=0.1,
+                    _reflection_result = await asyncio.wait_for(
+                        llm.complete_text(
+                            [{"role": "user", "text": _reflection_prompt}],
+                            model="pro",
+                            max_tokens=3000,
+                            temperature=0.1,
+                        ),
+                        timeout=20.0,
                     )
                     _ref = (_reflection_result or "").strip()
                     if _ref and _ref.upper() != "ОК" and len(_ref) > 100 and "```markdown" in _ref:
@@ -1428,6 +1433,8 @@ class SearchFlowService:
                         full_answer = _ref
                         yield sse_event("reset_answer", {})
                         yield sse_event("token", {"text": full_answer})
+                except asyncio.TimeoutError:
+                    logger.warning("DOC_REFLECTION: timeout (20s) — skipping, returning original")
                 except Exception as _ref_exc:
                     logger.warning("DOC_REFLECTION failed (non-fatal): %s", _ref_exc)
 
