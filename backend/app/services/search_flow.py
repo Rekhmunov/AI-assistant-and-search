@@ -412,9 +412,7 @@ class SearchFlowService:
                 yield event
             return
 
-        # cost зависит от типа операции
-        _has_doc = bool(attachment_ids) and bundle.has_document_text
-        _search_cost = 2 if _has_doc else 1
+        _search_cost = 1  # будет уточнён после resolve_attachment_bundle
         allowed, used, limit = await limiter.check_search_limit(
             user_id_str, user.plan, user, client_ip=client_ip, cost=_search_cost
         )
@@ -483,6 +481,10 @@ class SearchFlowService:
         has_attachments = bool(attachment_ids)
         needs_vision = bundle.needs_vision
         free_vision_blocked = user.plan == Plan.FREE and needs_vision
+
+        # Уточняем стоимость запроса — документ стоит 2 кредита, обычный запрос 1
+        if bundle.has_document_text:
+            _search_cost = 2
 
         # Perplexity Sonar — поисковая модель, не аналитическая: при наличии
         # текстового документа во вложении она его не читает, а ищет в интернете.
