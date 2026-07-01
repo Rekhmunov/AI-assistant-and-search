@@ -33,10 +33,7 @@ def build_secretary_report_xlsx(
     - Круговая диаграмма по категориям правее таблицы
     - Список категорий с итогами правее диаграммы
     """
-    from openpyxl.chart import PieChart, Reference
-    from openpyxl.chart.series import DataPoint
-    from openpyxl.drawing.fill import PatternFillProperties
-    from openpyxl.drawing.spreadsheet_drawing import SpreadsheetDrawing
+    # openpyxl chart imports are done inline where used below
 
     wb = Workbook()
     ws = wb.active
@@ -126,49 +123,63 @@ def build_secretary_report_xlsx(
     ws.column_dimensions["F"].width = 25
     ws.column_dimensions["G"].width = 12
 
-    # ── 3. Круговая диаграмма (якорь H1) ─────────────────────────────────────
+    # ── 3. Горизонтальная столбчатая диаграмма (якорь H1) ────────────────────
+    # BarChart вместо PieChart: категории на оси Y не накладываются,
+    # текст всегда читаем независимо от количества категорий.
     if cats_sorted:
-        pie = PieChart()
-        pie.title = f"Структура затрат — {period_label}"
-        pie.style = 10          # цветовая схема Office
-        pie.width  = 14         # cm ≈ 7 столбцов
-        pie.height = 14         # cm ≈ 20 строк
+        from openpyxl.chart import BarChart, Reference
+        from openpyxl.chart.series import DataPoint
+        from openpyxl.chart.label import DataLabelList
 
+        bar = BarChart()
+        bar.type = "bar"          # горизонтальные полосы
+        bar.grouping = "clustered"
+        bar.title = f"Затраты по категориям — {period_label}"
+        bar.style = 10
+        bar.width  = 16           # cm — достаточно для подписей
+        bar.height = max(8, min(len(cats_sorted) * 1.2 + 2, 18))  # высота под кол-во категорий
+
+        # Данные берём из уже заполненных ячеек F–G (cat, amount)
+        # Порядок: самая большая категория — вверху (cats_sorted уже отсортирован desc)
         data_ref = Reference(
             ws,
             min_col=CHART_DATA_COL_AMT,
-            min_row=ROW_HDR,          # включаем заголовок → titles_from_data=True
+            min_row=ROW_HDR,
             max_row=chart_data_end_row,
         )
-        labels_ref = Reference(
+        cats_ref = Reference(
             ws,
             min_col=CHART_DATA_COL_CAT,
             min_row=ROW_HDR + 1,
             max_row=chart_data_end_row,
         )
-        pie.add_data(data_ref, titles_from_data=True)
-        pie.set_categories(labels_ref)
+        bar.add_data(data_ref, titles_from_data=True)
+        bar.set_categories(cats_ref)
 
-        # Цвета секторов
-        for idx in range(len(cats_sorted)):
-            pt = DataPoint(idx=idx)
-            color_hex = _PIE_COLORS[idx % len(_PIE_COLORS)]
-            pt.graphicalProperties.solidFill = color_hex
-            pie.series[0].dPt.append(pt)
-
-        # Подписи: проценты (DataLabelList для series.dLbls)
-        from openpyxl.chart.label import DataLabelList
+        # Подписи значений на полосах — только сумма, без переполнения
         dlbls = DataLabelList()
-        dlbls.showPercent = True
-        dlbls.showVal = False
+        dlbls.showVal = True
         dlbls.showCatName = False
+        dlbls.showPercent = False
         dlbls.showLegendKey = False
-        pie.series[0].dLbls = dlbls
+        bar.series[0].dLbls = dlbls
 
-        ws.add_chart(pie, "H1")
+        # Цвет всех полос — единый фирменный (проще и не перегружает восприятие)
+        bar.series[0].graphicalProperties.solidFill = "2E75B6"
+        bar.series[0].graphicalProperties.line.solidFill = "1A4F82"
 
-    # ── 4. Итоговый список правее диаграммы (P–Q) ────────────────────────────
-    # Диаграмма 14 см ≈ 7 колонок → якорь H + 7 = O → начинаем с P (col 16)
+        # Убираем легенду серий — она не нужна для одной серии
+        bar.legend = None
+
+        # Подписи осей
+        bar.y_axis.title = "Категория"
+        bar.x_axis.title = "Сумма (руб.)"
+        bar.x_axis.numFmt = '# ##0'
+
+        ws.add_chart(bar, "H1")
+
+    # ── 4. Итоговая таблица правее диаграммы (P–R) ───────────────────────────
+    # Диаграмма ~16 см ≈ 8 столбцов → якорь H + 8 = P (col 16)
     LEGEND_COL_CAT = 16   # P
     LEGEND_COL_AMT = 17   # Q
     LEGEND_COL_PCT = 18   # R
@@ -180,7 +191,6 @@ def build_secretary_report_xlsx(
     for i, (cat, total) in enumerate(cats_sorted, 2):
         color_hex = _PIE_COLORS[(i - 2) % len(_PIE_COLORS)]
         cat_cell = _cell(ws, i, LEGEND_COL_CAT, cat)
-        # Цветная ячейка-маркер совпадает с цветом сектора
         cat_cell.fill = PatternFill("solid", fgColor=color_hex)
         cat_cell.font = Font(color="FFFFFF", bold=True, size=10)
         _cell(ws, i, LEGEND_COL_AMT, total, align="right", num_format='# ##0')
@@ -191,16 +201,18 @@ def build_secretary_report_xlsx(
     if cats_sorted:
         total_row = len(cats_sorted) + 2
         c = ws.cell(row=total_row, column=LEGEND_COL_CAT, value="ИТОГО")
-        c.font = Font(bold=True, size=10)
-        c.border = border_thin
         c.fill = PatternFill("solid", fgColor="2E75B6")
         c.font = Font(bold=True, color="FFFFFF", size=10)
+        c.border = border_thin
         amt_c = ws.cell(row=total_row, column=LEGEND_COL_AMT, value=total_all)
         amt_c.font = Font(bold=True, size=10)
         amt_c.border = border_thin
         amt_c.number_format = '# ##0'
         amt_c.alignment = Alignment(horizontal="right")
-        ws.cell(row=total_row, column=LEGEND_COL_PCT, value="100%").border = border_thin
+        pct_c = ws.cell(row=total_row, column=LEGEND_COL_PCT, value="100%")
+        pct_c.border = border_thin
+        pct_c.font = Font(bold=True, size=10)
+        pct_c.alignment = Alignment(horizontal="center")
 
     ws.column_dimensions[get_column_letter(LEGEND_COL_CAT)].width = 25
     ws.column_dimensions[get_column_letter(LEGEND_COL_AMT)].width = 12
