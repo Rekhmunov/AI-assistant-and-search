@@ -567,7 +567,7 @@ async def generate_post(
 
     # Формируем блок недавних постов чтобы LLM не повторял темы/примеры
     recent_history = get_post_history(agent)
-    published = [r for r in recent_history if r.get("status") == "published"][-5:]
+    published = [r for r in recent_history if r.get("status") == "published"][-15:]
     if published:
         lines = [f"- {r.get('topic', '?')}: {str(r.get('text', ''))[:80]}..." for r in published]
         recent_posts_block = "НЕДАВНИЕ ПОСТЫ (не повторяй темы и примеры):\n" + "\n".join(lines) + "\n\n"
