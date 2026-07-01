@@ -115,6 +115,24 @@ def _strip_sources_block(text: str) -> str:
     return _SOURCES_BLOCK_RE.sub("", text).rstrip()
 
 
+def _deduplicate_answer(text: str, *, max_repeats: int = 2) -> str:
+    """
+    Удаляет повторяющиеся абзацы в ответе LLM (цикличная генерация).
+    Каждый уникальный абзац встречается не более max_repeats раз.
+    """
+    paragraphs = [p.strip() for p in text.split("\n\n") if p.strip()]
+    seen: dict[str, int] = {}
+    result: list[str] = []
+    for para in paragraphs:
+        key = para[:100].lower()
+        count = seen.get(key, 0)
+        if count >= max_repeats:
+            break
+        seen[key] = count + 1
+        result.append(para)
+    return "\n\n".join(result)
+
+
 async def _generate_refined_search_answer(
     llm,
     *,
@@ -1242,6 +1260,18 @@ class SearchFlowService:
             sanitized = strip_trailing_empty_code_fences(full_answer)
             if sanitized != full_answer:
                 full_answer = sanitized
+
+            # Дедупликация: убираем зациклившиеся повторяющиеся абзацы
+            # (LLM иногда генерирует один и тот же блок 3–5 раз подряд)
+            deduped = _deduplicate_answer(full_answer)
+            if deduped != full_answer:
+                logger.warning(
+                    "DEDUP: removed loop in answer (before=%d chars, after=%d chars)",
+                    len(full_answer), len(deduped),
+                )
+                full_answer = deduped
+                yield sse_event("reset_answer", {})
+                yield sse_event("token", {"text": full_answer})
 
             settings = get_settings()
             follow_ups: list[str] = []
