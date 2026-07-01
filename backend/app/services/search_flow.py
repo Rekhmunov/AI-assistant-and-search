@@ -787,9 +787,14 @@ class SearchFlowService:
             # Сохраняем тред до долгого поиска: при сбое rollback не должен «стирать» уже отданный thread_id.
             await db.commit()
 
+        # Сохраняем thread.id как plain UUID — после долгих async операций
+        # (рефлексия, поиск) ORM-объект thread может быть expired и thread.id
+        # вызывает lazy load → MissingGreenlet вне DB-сессии.
+        _thread_id_val = thread.id
+
         await set_search_pending(
             redis_client,
-            thread.id,
+            _thread_id_val,
             user_message_id=user_msg.id,
             phase="routing",
             needs_search=route.needs_search,
@@ -823,7 +828,7 @@ class SearchFlowService:
             # Суммаризуем длинную историю через Lite LLM (порог: 8 сообщений)
             if llm_history:
                 llm_history = await summarize_history_if_needed(
-                    llm_history, llm_lite, redis_client, thread.id
+                    llm_history, llm_lite, redis_client, _thread_id_val
                 )
             prior_sources_block = format_sources_for_prompt(thread_ctx.last_assistant_sources)
 
@@ -919,7 +924,7 @@ class SearchFlowService:
                             yield sse_event("claude_search_step", {"step": "reading"})
                         elif event_type == "text":
                             if not _answer_phase_set:
-                                await update_search_pending(redis_client, thread.id, phase="answering")
+                                await update_search_pending(redis_client, _thread_id_val, phase="answering")
                                 yield sse_event("claude_search_step", {"step": "composing"})
                                 _answer_phase_set = True
                             full_answer += payload
@@ -995,7 +1000,7 @@ class SearchFlowService:
                                 sources_json = sources_to_json(sources)
                                 if sources_json:
                                     await update_search_pending(
-                                        redis_client, thread.id, phase="answering"
+                                        redis_client, _thread_id_val, phase="answering"
                                     )
                                     yield sse_event("sources", {"sources": sources_json})
                             if event.text:
@@ -1198,7 +1203,7 @@ class SearchFlowService:
 
                     sources_json = sources_to_json(sources)
                     if sources_json:
-                        await update_search_pending(redis_client, thread.id, phase="answering")
+                        await update_search_pending(redis_client, _thread_id_val, phase="answering")
                         yield sse_event("sources", {"sources": sources_json})
 
                 gpt_preview: list[dict[str, str]] = []
@@ -1430,11 +1435,21 @@ class SearchFlowService:
                         timeout=20.0,
                     )
                     _ref = (_reflection_result or "").strip()
-                    if _ref and _ref.upper() != "ОК" and len(_ref) > 100 and "```markdown" in _ref:
+                    # Принимаем рефлексию только если она НЕ короче оригинала более чем на 20%.
+                    # Короткий ответ — значит модель обрезала документ вместо исправления.
+                    _min_acceptable_len = int(len(full_answer) * 0.8)
+                    if (
+                        _ref
+                        and _ref.upper() != "ОК"
+                        and len(_ref) >= _min_acceptable_len
+                        and "```markdown" in _ref
+                    ):
                         logger.info("DOC_REFLECTION: improved document (before=%d after=%d)", len(full_answer), len(_ref))
                         full_answer = _ref
                         yield sse_event("reset_answer", {})
                         yield sse_event("token", {"text": full_answer})
+                    elif _ref and len(_ref) < _min_acceptable_len and _ref.upper() != "ОК":
+                        logger.warning("DOC_REFLECTION: result too short (%d < %d), keeping original", len(_ref), _min_acceptable_len)
                 except asyncio.TimeoutError:
                     logger.warning("DOC_REFLECTION: timeout (20s) — skipping, returning original")
                 except Exception as _ref_exc:
@@ -1614,4 +1629,4 @@ class SearchFlowService:
                     kind="interrupted",
                     message=f"Поиск не завершён (thread={thread.id}, query={preview!r})",
                 )
-            await clear_search_pending(redis_client, thread.id)
+            await clear_search_pending(redis_client, _thread_id_val)
