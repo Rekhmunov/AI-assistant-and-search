@@ -286,12 +286,40 @@ class SearchFlowService:
             early_prior = list(msgs_result.scalars().all())
 
         flow_ctx = build_thread_context(early_prior)
+
+        # Определяем типы вложений для точного роутинга ДО вызова LLM-роутера.
+        # Без этого роутер видит «файлы/фото» и угадывает — PDF часто путается с изображением.
+        _attachment_types: list[str] | None = None
+        if attachment_ids:
+            from app.models.uploaded_file import UploadedFile as _UF_pre
+            _att_types: list[str] = []
+            for _fid in attachment_ids:
+                _uf_res = await db.execute(
+                    select(_UF_pre).where(_UF_pre.id == _fid, _UF_pre.user_id == user.id)
+                )
+                _uf_pre = _uf_res.scalar_one_or_none()
+                if _uf_pre:
+                    _mime = (_uf_pre.mime_type or "").lower()
+                    if "pdf" in _mime or (_uf_pre.filename or "").lower().endswith(".pdf"):
+                        _att_types.append("PDF")
+                    elif _mime.startswith("image/"):
+                        _att_types.append("изображение")
+                    elif "word" in _mime or "docx" in _mime or (_uf_pre.filename or "").lower().endswith(".docx"):
+                        _att_types.append("DOCX")
+                    elif "excel" in _mime or "xlsx" in _mime:
+                        _att_types.append("XLSX")
+                    else:
+                        _att_types.append("файл")
+            if _att_types:
+                _attachment_types = _att_types
+
         flow = await resolve_service_flow(
             llm_lite,
             user_text_preview,
             flow_ctx,
             has_attachments=bool(attachment_ids),
             user_plan=user.plan,
+            attachment_types=_attachment_types,
         )
 
         # Perplexity + свежий/новостной запрос → переключаем на Yandex Search + agent LLM.

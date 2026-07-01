@@ -293,6 +293,7 @@ async def resolve_service_flow(
     *,
     has_attachments: bool,
     user_plan: Plan,
+    attachment_types: list[str] | None = None,  # ["pdf", "image", "docx", ...]
 ) -> LlmFlowDecision:
     """LLM выбирает поток; при ошибке — безопасный search_rag."""
     q = normalize_user_query(query)
@@ -300,7 +301,12 @@ async def resolve_service_flow(
     history = format_history_compact(ctx.history, max_turns=3, max_chars=400)
     user_block = f"Запрос пользователя:\n{q}"
     if has_attachments:
-        user_block += "\n[К сообщению прикреплены файлы/фото]"
+        if attachment_types:
+            # Передаём точные типы файлов — роутер сможет выбрать правильный флоу
+            types_str = ", ".join(attachment_types)
+            user_block += f"\n[К сообщению прикреплены файлы: {types_str}]"
+        else:
+            user_block += "\n[К сообщению прикреплены файлы/фото]"
     if history:
         user_block += f"\n\nКонтекст треда:\n{history}"
     if ctx.is_continuation:
