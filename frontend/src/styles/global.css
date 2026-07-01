@@ -8656,7 +8656,8 @@ input[type="date"].rm-input { appearance: auto; -webkit-appearance: auto; }
 .poster-toggle input:checked ~ .poster-toggle__slider { background: var(--accent, #20808d); }
 .poster-toggle__slider::after { content: ""; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: #fff; box-shadow: 0 1px 4px rgba(0,0,0,0.2); transition: transform 0.2s; }
 .poster-toggle input:checked ~ .poster-toggle__slider::after { transform: translateX(18px); }
-.poster-toggle input { position: absolute; opacity: 0; width: 0; height: 0; }
+/* Скрываем input только когда рядом есть слайдер (toggle-переключатель), не обычный checkbox */
+.poster-toggle:has(.poster-toggle__slider) input { position: absolute; opacity: 0; width: 0; height: 0; }
 .poster-section { padding: 16px; border-bottom: 1px solid var(--border-subtle, #e8edf0); display: flex; flex-direction: column; gap: 10px; }
 .poster-section:last-child { border-bottom: none; }
 .poster-section__title { font-size: 0.82rem; font-weight: 700; color: var(--text-muted, #5c6b73); text-transform: uppercase; letter-spacing: 0.05em; display: flex; align-items: center; gap: 8px; }
