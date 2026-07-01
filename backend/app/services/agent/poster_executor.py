@@ -520,7 +520,8 @@ async def generate_poster_image(
         # Текст поста (первые 200 символов) даёт визуальный контекст.
         _clean_topic = topic.split(".")[0].split(":")[0].strip()[:100]
         _post_preview = post_text[:200].strip() if post_text else ""
-        img_prompt = f"{_clean_topic}. {_post_preview}" if _post_preview else _clean_topic
+        _content = f"{_clean_topic}. {_post_preview}" if _post_preview else _clean_topic
+        img_prompt = f"Нарисуй картинку к посту: {_content}"
         image_bytes, _ = await generate_image(img_prompt, provider_id)
         logger.warning("POSTER_IMG success: %d bytes provider=%s", len(image_bytes), provider_id)
         return image_bytes
