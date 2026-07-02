@@ -119,23 +119,15 @@ def _strip_sources_block(text: str) -> str:
 def _deduplicate_answer(text: str, *, max_repeats: int = 2) -> str:
     """
     Удаляет повторяющиеся абзацы в ответе LLM (цикличная генерация).
-    Для длинных ответов (документы) использует более длинный отпечаток
-    и допускает больше повторов — в юридических документах многие абзацы
-    начинаются одинаково («Настоящая оферта...», «1.1.»...), что не является петлёй.
+    Сравнивает весь абзац целиком — не только начало.
     """
     paragraphs = [p.strip() for p in text.split("\n\n") if p.strip()]
-
-    # Для длинных документов: более длинный отпечаток + допускаем 3 повтора
-    is_long_doc = len(text) > 3000
-    fingerprint_len = 200 if is_long_doc else 100
-    effective_max_repeats = 3 if is_long_doc else max_repeats
-
     seen: dict[str, int] = {}
     result: list[str] = []
     for para in paragraphs:
-        key = para[:fingerprint_len].lower()
+        key = para.lower()  # весь абзац, не только первые N символов
         count = seen.get(key, 0)
-        if count >= effective_max_repeats:
+        if count >= max_repeats:
             break
         seen[key] = count + 1
         result.append(para)
