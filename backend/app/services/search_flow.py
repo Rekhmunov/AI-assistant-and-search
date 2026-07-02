@@ -1331,6 +1331,10 @@ class SearchFlowService:
             if sanitized != full_answer:
                 full_answer = sanitized
 
+            # Убираем невалидные Unicode символы (нулевые байты и др.)
+            # которые PostgreSQL не принимает → UntranslatableCharacterError
+            full_answer = full_answer.replace("\x00", "").replace("\u0000", "")
+
             # Дедупликация: убираем зациклившиеся повторяющиеся абзацы
             deduped = _deduplicate_answer(full_answer)
             _answer_had_loop = deduped != full_answer
