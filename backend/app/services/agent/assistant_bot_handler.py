@@ -619,7 +619,67 @@ async def handle_assistant_dm(
         return True
 
 
-    if not effective_text and not _has_images(payload):
+    # ── Файловые вложения из MAX DM (PDF, docx и т.д.) ──────────────────────
+    # В MAX файл и текст — два разных сообщения. Сохраняем file_id в Redis
+    # чтобы следующее текстовое сообщение могло его использовать.
+    _PENDING_FILE_KEY = f"dm_pending_file:{max_user_id}"
+    _PENDING_FILE_TTL = 300  # 5 минут
+
+    from app.services.agent.max_media import message_has_files, extract_file_attachments
+
+    _dm_file_ids: list = []
+    if message_has_files(payload):
+        file_atts = extract_file_attachments(payload)
+        for fa in file_atts[:2]:
+            try:
+                from app.services.upload_storage import save_upload_bytes
+                from app.models.uploaded_file import UploadedFile as _UF
+                from app.services.file_parser import extract_text
+                from datetime import datetime, timezone as _tz, timedelta
+                import uuid as _uuid
+                _file_bytes = await bot.download_url(fa["url"])
+                if not _file_bytes:
+                    continue
+                _fname = fa["filename"]
+                _ext = _fname.rsplit(".", 1)[-1].lower() if "." in _fname else "bin"
+                _mime = "application/pdf" if _ext == "pdf" else f"application/{_ext}"
+                _fid = _uuid.uuid4()
+                _key = save_upload_bytes(user.id, _fid, _file_bytes, _ext)
+                try:
+                    _extracted = extract_text(_fname, _file_bytes)
+                except Exception:
+                    _extracted = ""
+                _ufo = _UF(
+                    id=_fid, user_id=user.id, filename=_fname,
+                    mime_type=_mime, size_bytes=len(_file_bytes),
+                    media_kind="document", storage_key=_key,
+                    extracted_text=_extracted,
+                    expires_at=datetime.now(_tz.utc) + timedelta(hours=24),
+                )
+                db.add(_ufo)
+                await db.flush()
+                _dm_file_ids.append(str(_fid))
+                logger.info("assistant_bot: DM file saved fid=%s name=%s", _fid, _fname)
+            except Exception as _fe:
+                logger.warning("assistant_bot: DM file save failed: %s", _fe)
+        if _dm_file_ids:
+            import json as _json
+            await redis_client.setex(_PENDING_FILE_KEY, _PENDING_FILE_TTL, _json.dumps(_dm_file_ids))
+
+    # Подтягиваем файл из Redis если он был прислан предыдущим сообщением
+    _pending_raw = await redis_client.get(_PENDING_FILE_KEY)
+    _pending_file_ids: list = []
+    if _pending_raw and effective_text:
+        try:
+            import json as _json
+            import uuid as _uuid2
+            _pending_file_ids = [_uuid2.UUID(x) for x in _json.loads(_pending_raw)]
+            await redis_client.delete(_PENDING_FILE_KEY)
+            logger.info("assistant_bot: using %d pending DM file(s)", len(_pending_file_ids))
+        except Exception:
+            pass
+
+    if not effective_text and not _has_images(payload) and not _dm_file_ids:
         return False
 
     # ── Немедленный отбойник — сохраняем message_id для редактирования ──
@@ -689,7 +749,10 @@ async def handle_assistant_dm(
             except Exception as vis_exc:
                 logger.warning("assistant_bot: image load failed: %s", vis_exc)
 
-        if not query and not _attachment_file_ids:
+        # Объединяем вложения: из текущего сообщения + из Redis (файл из предыдущего сообщения)
+        _all_attachment_ids = list(_attachment_file_ids) + list(_pending_file_ids)
+
+        if not query and not _all_attachment_ids:
             await bot.send_message(max_user_id, "Пожалуйста, добавьте текст к сообщению.")
             return True
 
@@ -716,7 +779,7 @@ async def handle_assistant_dm(
             answer, images, follow_ups = await _collect_search_result(
                 db, user, redis_client, llm_query, thread.id,
                 on_status=_on_status,
-                attachment_file_ids=_attachment_file_ids if _attachment_file_ids else None,
+                attachment_file_ids=_all_attachment_ids if _all_attachment_ids else None,
                 max_user_id=max_user_id,
             )
         except Exception as search_exc:

@@ -13,6 +13,7 @@ logger = logging.getLogger(__name__)
 
 _IMAGE_TYPES = frozenset({"image", "photo"})
 _VOICE_TYPES = frozenset({"audio_msg", "voice", "audio"})
+_FILE_TYPES = frozenset({"file", "document"})
 
 
 def _message_obj(payload: dict[str, Any]) -> dict[str, Any] | None:
@@ -52,6 +53,46 @@ def _attachment_urls(att: dict[str, Any]) -> list[str]:
                         if isinstance(u, str) and u.startswith("http"):
                             urls.append(u)
     return urls
+
+
+def message_has_files(payload: dict[str, Any]) -> bool:
+    """True если в сообщении есть файловые вложения (PDF, docx и т.д.)."""
+    for att in message_attachments(payload):
+        att_type = str(att.get("type") or "").lower()
+        if att_type in _FILE_TYPES:
+            return True
+    return False
+
+
+def extract_file_attachments(payload: dict[str, Any]) -> list[dict[str, str]]:
+    """
+    Извлекает файловые вложения из MAX-сообщения.
+    Возвращает список {"url": ..., "filename": ...}.
+    """
+    result: list[dict[str, str]] = []
+    for att in message_attachments(payload):
+        att_type = str(att.get("type") or "").lower()
+        if att_type not in _FILE_TYPES:
+            continue
+        att_payload = att.get("payload")
+        if not isinstance(att_payload, dict):
+            continue
+        url = None
+        for key in ("url", "link", "download_url"):
+            u = att_payload.get(key)
+            if isinstance(u, str) and u.startswith("http"):
+                url = u
+                break
+        if not url:
+            continue
+        filename = (
+            att_payload.get("name")
+            or att_payload.get("filename")
+            or att.get("name")
+            or "document"
+        )
+        result.append({"url": url, "filename": str(filename)})
+    return result
 
 
 def message_has_images(payload: dict[str, Any]) -> bool:
