@@ -76,6 +76,41 @@ def normalize_for_gigachat(vi: "VisionImage") -> "VisionImage":
     )
 
 
+def _pdf_pages_to_vision_images(
+    filename: str,
+    pdf_bytes: bytes | None,
+    *,
+    max_pages: int = 3,
+    dpi: int = 150,
+) -> list[VisionImage]:
+    """
+    Конвертирует первые max_pages страниц PDF в JPEG-изображения для Vision.
+    Используется когда pypdf не смог извлечь текст (скан/изображение в PDF).
+    """
+    if not pdf_bytes:
+        return []
+    try:
+        import fitz  # PyMuPDF
+        doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+        matrix = fitz.Matrix(dpi / 72, dpi / 72)
+        result: list[VisionImage] = []
+        for page_num in range(min(max_pages, len(doc))):
+            page = doc[page_num]
+            pix = page.get_pixmap(matrix=matrix, colorspace=fitz.csRGB)
+            jpg_bytes = pix.tobytes(output="jpeg", jpg_quality=85)
+            img_b64 = base64.standard_b64encode(jpg_bytes).decode("ascii")
+            page_name = f"{filename}_page{page_num + 1}.jpg"
+            result.append(VisionImage(
+                filename=page_name,
+                media_type="image/jpeg",
+                data_base64=img_b64,
+            ))
+        return result
+    except Exception as exc:
+        logger.warning("_pdf_pages_to_vision_images failed for %s: %s", filename, exc)
+        return []
+
+
 def _is_image_row(row: UploadedFile) -> bool:
     if (row.media_kind or "").lower() == "image":
         return True
@@ -152,7 +187,18 @@ async def resolve_attachment_bundle(
             if budget <= 0:
                 break
         elif not is_image:
-            raise ValueError("attachment_empty")
+            # Текст не извлечён — возможно скан-PDF.
+            # Конвертируем первые 3 страницы в изображения и прогоняем через Vision.
+            raw = load_upload_bytes(f.storage_key)
+            _pdf_images = _pdf_pages_to_vision_images(f.filename, raw, max_pages=3)
+            if _pdf_images:
+                vision_images.extend(_pdf_images)
+                logger.info(
+                    "attachment_bundle: scanned PDF %s → %d vision images",
+                    f.filename, len(_pdf_images),
+                )
+            else:
+                raise ValueError("attachment_empty")
 
     llm_query = "\n".join(parts)
     # В UI имена файлов показываются чипами вложений; в текст вопроса маркер не дублируем.
