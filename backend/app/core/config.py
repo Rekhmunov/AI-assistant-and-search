@@ -83,6 +83,9 @@ class Settings(BaseSettings):
     # Same pattern as anthropic_http_proxy. Example: http://user:pass@proxy-host:3128
     google_http_proxy: str = ""
 
+    byteplus_api_key: str = ""  # BytePlus ModelArk — Seedance 2.0 video generation
+    byteplus_base_url: str = "https://ark.ap-southeast.bytepluses.com/api/v3"
+
     gigachat_credentials: str = ""
     gigachat_scope: str = "GIGACHAT_API_PERS"
     gigachat_base_url: str = "https://gigachat.devices.sberbank.ru/api/v1"
@@ -167,6 +170,10 @@ class Settings(BaseSettings):
     @property
     def google_configured(self) -> bool:
         return bool(self.google_api_key.strip())
+
+    @property
+    def byteplus_configured(self) -> bool:
+        return bool(self.byteplus_api_key.strip())
 
     @property
     def gigachat_configured(self) -> bool:

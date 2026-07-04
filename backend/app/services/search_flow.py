@@ -40,6 +40,7 @@ from app.services.entity_image import entity_images_to_json
 from app.services.message_images_column import messages_have_images_column
 from app.services.entity_image_routing import resolve_entity_image_query, wants_entity_images
 from app.services.image_gen_flow import stream_image_generation_turn
+from app.services.video_gen_flow import stream_video_generation_turn
 from app.services.message_attachments import attachments_json_from_files
 from app.services.export_chat_document_flow import stream_export_chat_document_turn
 from app.services.answer_sanitize import strip_trailing_empty_code_fences
@@ -47,7 +48,6 @@ from app.services.document_answer_enforce import (
     document_request_prompt_addon,
     edit_document_prompt_addon,
     ensure_markdown_document_answer,
-    has_markdown_document_fence,
 )
 from app.services.llm_flow_router import resolve_service_flow
 from app.services.history_summarizer import summarize_history_if_needed
@@ -114,24 +114,6 @@ _SOURCES_BLOCK_RE = _re.compile(
 def _strip_sources_block(text: str) -> str:
     """Убирает блок «Источники:» из ответа Claude — они показываются в отдельной панели."""
     return _SOURCES_BLOCK_RE.sub("", text).rstrip()
-
-
-def _deduplicate_answer(text: str, *, max_repeats: int = 2) -> str:
-    """
-    Удаляет повторяющиеся абзацы в ответе LLM (цикличная генерация).
-    Сравнивает весь абзац целиком — не только начало.
-    """
-    paragraphs = [p.strip() for p in text.split("\n\n") if p.strip()]
-    seen: dict[str, int] = {}
-    result: list[str] = []
-    for para in paragraphs:
-        key = para.lower()  # весь абзац, не только первые N символов
-        count = seen.get(key, 0)
-        if count >= max_repeats:
-            break
-        seen[key] = count + 1
-        result.append(para)
-    return "\n\n".join(result)
 
 
 async def _generate_refined_search_answer(
@@ -287,40 +269,12 @@ class SearchFlowService:
             early_prior = list(msgs_result.scalars().all())
 
         flow_ctx = build_thread_context(early_prior)
-
-        # Определяем типы вложений для точного роутинга ДО вызова LLM-роутера.
-        # Без этого роутер видит «файлы/фото» и угадывает — PDF часто путается с изображением.
-        _attachment_types: list[str] | None = None
-        if attachment_ids:
-            from app.models.uploaded_file import UploadedFile as _UF_pre
-            _att_types: list[str] = []
-            for _fid in attachment_ids:
-                _uf_res = await db.execute(
-                    select(_UF_pre).where(_UF_pre.id == _fid, _UF_pre.user_id == user.id)
-                )
-                _uf_pre = _uf_res.scalar_one_or_none()
-                if _uf_pre:
-                    _mime = (_uf_pre.mime_type or "").lower()
-                    if "pdf" in _mime or (_uf_pre.filename or "").lower().endswith(".pdf"):
-                        _att_types.append("PDF")
-                    elif _mime.startswith("image/"):
-                        _att_types.append("изображение")
-                    elif "word" in _mime or "docx" in _mime or (_uf_pre.filename or "").lower().endswith(".docx"):
-                        _att_types.append("DOCX")
-                    elif "excel" in _mime or "xlsx" in _mime:
-                        _att_types.append("XLSX")
-                    else:
-                        _att_types.append("файл")
-            if _att_types:
-                _attachment_types = _att_types
-
         flow = await resolve_service_flow(
             llm_lite,
             user_text_preview,
             flow_ctx,
             has_attachments=bool(attachment_ids),
             user_plan=user.plan,
-            attachment_types=_attachment_types,
         )
 
         # Perplexity + свежий/новостной запрос → переключаем на Yandex Search + agent LLM.
@@ -370,9 +324,14 @@ class SearchFlowService:
                 yield event
             return
 
-        if flow.flow == "image_generate":
-            # Генерация нового изображения — вложения игнорируются (не редактирование).
-            # Раньше блокировалось при наличии attachment_ids → запрос уходил в vision-анализ.
+        if flow.flow == "video_generate":
+            async for event in stream_video_generation_turn(
+                db, user, limiter, query, thread_id, redis_client,
+            ):
+                yield event
+            return
+
+        if not attachment_ids and flow.flow == "image_generate":
             async for event in stream_image_generation_turn(
                 db,
                 user,
@@ -380,7 +339,6 @@ class SearchFlowService:
                 query,
                 thread_id,
                 redis_client,
-                high_quality=flow.high_quality,
             ):
                 yield event
             return
@@ -414,36 +372,8 @@ class SearchFlowService:
                 yield event
             return
 
-        if flow.flow == "split_pdf":
-            from app.services.pdf_split_flow import stream_pdf_split_turn
-            async for event in stream_pdf_split_turn(
-                db, user, limiter, query, thread_id, redis_client,
-                attachment_ids=attachment_ids,
-            ):
-                yield event
-            return
-
-        if flow.flow == "compress_image":
-            from app.services.image_compress_flow import stream_image_compress_turn
-            async for event in stream_image_compress_turn(
-                db, user, limiter, query, thread_id, redis_client,
-                attachment_ids=attachment_ids,
-            ):
-                yield event
-            return
-
-        if flow.flow == "image_to_pdf":
-            from app.services.image_to_pdf_flow import stream_image_to_pdf_turn
-            async for event in stream_image_to_pdf_turn(
-                db, user, limiter, query, thread_id, redis_client,
-                attachment_ids=attachment_ids,
-            ):
-                yield event
-            return
-
-        _search_cost = 1  # будет уточнён после resolve_attachment_bundle
         allowed, used, limit = await limiter.check_search_limit(
-            user_id_str, user.plan, user, client_ip=client_ip, cost=_search_cost
+            user_id_str, user.plan, user, client_ip=client_ip
         )
         if not allowed:
             if self._is_guest(user):
@@ -478,7 +408,7 @@ class SearchFlowService:
 
         if llm_provider_id != PERPLEXITY_PROVIDER_ID and not _is_claude_search:
             if not await limiter.check_global_yandex_limit():
-                await limiter.release_search(user_id_str, user, cost=_search_cost)
+                await limiter.release_search(user_id_str)
                 yield sse_event("error", {"code": "global_limit", "message": "Сервис временно перегружен"})
                 return
 
@@ -510,30 +440,6 @@ class SearchFlowService:
         has_attachments = bool(attachment_ids)
         needs_vision = bundle.needs_vision
         free_vision_blocked = user.plan == Plan.FREE and needs_vision
-
-        # Уточняем стоимость запроса — документ стоит 2 кредита, обычный запрос 1
-        if bundle.has_document_text:
-            _search_cost = 2
-
-        # Perplexity Sonar — поисковая модель, не аналитическая: при наличии
-        # текстового документа во вложении она его не читает, а ищет в интернете.
-        # Переключаем на агентский LLM (настраивается в админке).
-        if llm_provider_id == PERPLEXITY_PROVIDER_ID and bundle.has_document_text:
-            from app.services.providers.factory import (
-                resolve_agent_llm_provider_id,
-                create_llm_provider,
-                _wrap_llm_fallback,
-            )
-            _doc_settings = get_settings()
-            _doc_llm_id = await resolve_agent_llm_provider_id(db, redis_client, _doc_settings)
-            _doc_llm = create_llm_provider(_doc_llm_id, _doc_settings, _prompt_store)
-            _doc_llm = _wrap_llm_fallback(_doc_llm_id, _doc_llm, _doc_settings, _prompt_store)
-            llm = _doc_llm
-            llm_provider_id = _doc_llm_id
-            logger.info(
-                "PERPLEXITY_DOC_OVERRIDE: switching to agent LLM %s for document analysis",
-                _doc_llm_id,
-            )
         if free_vision_blocked:
             needs_vision = False
         hybrid_vision_search = needs_vision and wants_web_search_with_vision(user_text)
@@ -632,27 +538,17 @@ class SearchFlowService:
 
         thread_ctx = build_thread_context(prior_messages)
         route = await self.router.route(llm_query, thread_ctx, has_attachments, user.plan)
-        # Всегда берём intent от LLM-роутера (он точнее правил)
-        if flow.intent and flow.intent != "factual_current":
-            route.intent = flow.intent  # type: ignore[assignment]
-        elif flow.intent == "factual_current" and has_attachments:
-            route.intent = "document"  # type: ignore[assignment]
         if not vision_only_answer and not hybrid_vision_search and not image_display_request:
             if flow.flow == "chat":
-                # Юридические документы всегда требуют поиска — нужны актуальные нормы.
-                if flow.legal_document:
-                    route.needs_search = True
-                    route.reason = f"llm_flow:{flow.reason}+legal_doc_search"
                 # Галерея сущностей (Yandex Image) грузится только при needs_search.
-                elif not has_attachments and wants_entity_images(
+                if not has_attachments and wants_entity_images(
                     user_text, intent=str(route.intent)
                 ):
                     route.needs_search = flow.needs_search or True
-                    route.reason = f"llm_flow:{flow.reason}"
                 else:
                     route.needs_search = flow.needs_search
-                    route.reason = f"llm_flow:{flow.reason}"
                 route.answer_model = flow.answer_model
+                route.reason = f"llm_flow:{flow.reason}"
             elif flow.flow == "search_rag":
                 route.needs_search = flow.needs_search
                 route.answer_model = flow.answer_model
@@ -674,35 +570,11 @@ class SearchFlowService:
         if user.plan != Plan.PRO:
             route.answer_model = "lite"
 
-        # Флаг от LLM-роутера — юридический/деловой документ
-        _is_legal_doc = flow.legal_document
-        _answer_had_loop = False  # используется для DEDUP-детекции
-
-        doc_prompt_addon = document_request_prompt_addon(user_text, is_legal_doc=_is_legal_doc)
+        doc_prompt_addon = document_request_prompt_addon(user_text)
         if route.intent == "edit_prior":
             doc_prompt_addon += edit_document_prompt_addon(user_text)
         if doc_prompt_addon:
             llm_query = f"{llm_query}{doc_prompt_addon}"
-
-        # ── Фикс: для документов не использовать Perplexity как LLM ──────────
-        # Perplexity — поисковая модель, плохо генерирует структурированные документы.
-        # Переключаем на agent_llm_provider (DeepSeek/Claude/Yandex).
-        if _is_legal_doc and llm_provider_id == PERPLEXITY_PROVIDER_ID:
-            from app.services.providers.factory import (
-                resolve_agent_llm_provider_id,
-                create_llm_provider,
-                _wrap_llm_fallback,
-            )
-            _doc_settings = get_settings()
-            _doc_llm_id = await resolve_agent_llm_provider_id(db, redis_client, _doc_settings)
-            _doc_llm = create_llm_provider(_doc_llm_id, _doc_settings, _prompt_store)
-            _doc_llm = _wrap_llm_fallback(_doc_llm_id, _doc_llm, _doc_settings, _prompt_store)
-            llm = _doc_llm
-            llm_provider_id = _doc_llm_id
-            route.answer_model = "pro" if user.plan == Plan.PRO else "lite"
-            logger.info("DOC_LLM_OVERRIDE: switched from Perplexity to %s for document generation", _doc_llm_id)
-
-        _legal_search_queries: list[str] = []  # спец.запросы законов убраны
 
         attachments_payload = None
         if has_attachments and bundle.uploaded_files:
@@ -727,14 +599,9 @@ class SearchFlowService:
             # Сохраняем тред до долгого поиска: при сбое rollback не должен «стирать» уже отданный thread_id.
             await db.commit()
 
-        # Сохраняем thread.id как plain UUID — после долгих async операций
-        # (рефлексия, поиск) ORM-объект thread может быть expired и thread.id
-        # вызывает lazy load → MissingGreenlet вне DB-сессии.
-        _thread_id_val = thread.id
-
         await set_search_pending(
             redis_client,
-            _thread_id_val,
+            thread.id,
             user_message_id=user_msg.id,
             phase="routing",
             needs_search=route.needs_search,
@@ -768,7 +635,7 @@ class SearchFlowService:
             # Суммаризуем длинную историю через Lite LLM (порог: 8 сообщений)
             if llm_history:
                 llm_history = await summarize_history_if_needed(
-                    llm_history, llm_lite, redis_client, _thread_id_val
+                    llm_history, llm_lite, redis_client, thread.id
                 )
             prior_sources_block = format_sources_for_prompt(thread_ctx.last_assistant_sources)
 
@@ -806,7 +673,7 @@ class SearchFlowService:
                             )
                     except VisionNotSupportedError as e:
                         await db.rollback()
-                        await limiter.release_search(user_id_str, user, cost=_search_cost)
+                        await limiter.release_search(user_id_str)
                         yield sse_event("error", {"code": "vision_unavailable", "message": str(e)})
                         return
 
@@ -864,7 +731,7 @@ class SearchFlowService:
                             yield sse_event("claude_search_step", {"step": "reading"})
                         elif event_type == "text":
                             if not _answer_phase_set:
-                                await update_search_pending(redis_client, _thread_id_val, phase="answering")
+                                await update_search_pending(redis_client, thread.id, phase="answering")
                                 yield sse_event("claude_search_step", {"step": "composing"})
                                 _answer_phase_set = True
                             full_answer += payload
@@ -940,7 +807,7 @@ class SearchFlowService:
                                 sources_json = sources_to_json(sources)
                                 if sources_json:
                                     await update_search_pending(
-                                        redis_client, _thread_id_val, phase="answering"
+                                        redis_client, thread.id, phase="answering"
                                     )
                                     yield sse_event("sources", {"sources": sources_json})
                             if event.text:
@@ -990,11 +857,6 @@ class SearchFlowService:
                         hint_clarify = rewrite.clarification_question
 
                     queries = list(rewrite.search_queries or [normalize_user_query(route.search_query)])
-                    # Добавляем запросы для поиска законодательства если это юридический документ
-                    if _legal_search_queries:
-                        for _lq in _legal_search_queries:
-                            if _lq not in queries:
-                                queries.append(_lq)
                     howto = rewrite.intent == "howto"
                     if howto or "course_program" in fact_slots:
                         route.answer_model = "pro"
@@ -1143,7 +1005,7 @@ class SearchFlowService:
 
                     sources_json = sources_to_json(sources)
                     if sources_json:
-                        await update_search_pending(redis_client, _thread_id_val, phase="answering")
+                        await update_search_pending(redis_client, thread.id, phase="answering")
                         yield sse_event("sources", {"sources": sources_json})
 
                 gpt_preview: list[dict[str, str]] = []
@@ -1186,7 +1048,7 @@ class SearchFlowService:
                             yield sse_event("token", {"text": chunk})
                     except VisionNotSupportedError as e:
                         await db.rollback()
-                        await limiter.release_search(user_id_str, user, cost=_search_cost)
+                        await limiter.release_search(user_id_str)
                         yield sse_event("error", {"code": "vision_unavailable", "message": str(e)})
                         return
                 elif route.needs_search and llm_provider_id != PERPLEXITY_PROVIDER_ID and not _is_claude_search:
@@ -1309,7 +1171,7 @@ class SearchFlowService:
                         yield sse_event("token", {"text": chunk})
                 else:
                     await db.rollback()
-                    await limiter.release_search(user_id_str, user, cost=_search_cost)
+                    await limiter.release_search(user_id_str)
                     yield sse_event(
                         "error",
                         {"code": "yandex_error", "message": str(e)},
@@ -1330,22 +1192,6 @@ class SearchFlowService:
             sanitized = strip_trailing_empty_code_fences(full_answer)
             if sanitized != full_answer:
                 full_answer = sanitized
-
-            # Убираем невалидные Unicode символы (нулевые байты и др.)
-            # которые PostgreSQL не принимает → UntranslatableCharacterError
-            full_answer = full_answer.replace("\x00", "").replace("\u0000", "")
-
-            # Дедупликация: убираем зациклившиеся повторяющиеся абзацы
-            deduped = _deduplicate_answer(full_answer)
-            _answer_had_loop = deduped != full_answer
-            if _answer_had_loop:
-                logger.warning(
-                    "DEDUP: removed loop in answer (before=%d chars, after=%d chars)",
-                    len(full_answer), len(deduped),
-                )
-                full_answer = deduped
-                yield sse_event("reset_answer", {})
-                yield sse_event("token", {"text": full_answer})
 
             settings = get_settings()
             follow_ups: list[str] = []
@@ -1448,7 +1294,7 @@ class SearchFlowService:
                 except Exception:
                     logger.exception("Search finalize minimal persist failed")
                     await db.rollback()
-                    await limiter.release_search(user_id_str, user, cost=_search_cost)
+                    await limiter.release_search(user_id_str)
                     if full_answer.strip():
                         search_completed = True
                         yield sse_event(
@@ -1521,4 +1367,4 @@ class SearchFlowService:
                     kind="interrupted",
                     message=f"Поиск не завершён (thread={thread.id}, query={preview!r})",
                 )
-            await clear_search_pending(redis_client, _thread_id_val)
+            await clear_search_pending(redis_client, thread.id)

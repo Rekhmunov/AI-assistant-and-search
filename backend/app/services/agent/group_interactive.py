@@ -130,7 +130,8 @@ async def handle_group_interactive(
                             xd = exec_result.xlsx_data
                             title = xd.get("title", "Отчёт")
                             records_data = xd.get("records", [])
-                            period_lbl = xd.get("period_label") or title
+                            # Извлекаем period_label из заголовка (после «за »)
+                            period_lbl = title.replace("Отчёт за ", "").replace("Отчёт ", "") or "Отчёт"
                             xlsx_bytes = build_secretary_report_xlsx(records_data, period_lbl)
                             safe_title = re.sub(r"[^\w\-]", "_", title)[:40]
                             filename = f"{safe_title}.xlsx"
@@ -278,8 +279,6 @@ async def _handle_pending_date_report(
         return True
 
     title = f"Отчёт за {label}"
-    columns = ["Категория", "Затрата", "Примечание"]
-    field_keys = ["category", "amount", "note"]
 
     try:
         from app.services.xlsx_builder import build_secretary_report_xlsx

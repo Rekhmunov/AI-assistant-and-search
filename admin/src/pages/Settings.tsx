@@ -43,6 +43,7 @@ type SettingsBundle = {
   search_providers: ProviderOption[];
   vision_providers?: ProviderOption[];
   image_gen_providers?: ProviderOption[];
+  video_gen_providers?: ProviderOption[];
   prompts: PromptField[];
 };
 
@@ -55,6 +56,7 @@ export function SettingsPage() {
   const [searchProviders, setSearchProviders] = useState<ProviderOption[]>([]);
   const [visionProviders, setVisionProviders] = useState<ProviderOption[]>([]);
   const [imageGenProviders, setImageGenProviders] = useState<ProviderOption[]>([]);
+  const [videoGenProviders, setVideoGenProviders] = useState<ProviderOption[]>([]);
   const [prompts, setPrompts] = useState<PromptField[]>([]);
   const [msg, setMsg] = useState("");
   const [llmRuntime, setLlmRuntime] = useState<LlmRuntime | null>(null);
@@ -73,6 +75,7 @@ export function SettingsPage() {
       setSearchProviders(r.search_providers);
       setVisionProviders(r.vision_providers ?? []);
       setImageGenProviders(r.image_gen_providers ?? []);
+      setVideoGenProviders(r.video_gen_providers ?? []);
       setPrompts(r.prompts);
     });
   }, []);
@@ -87,6 +90,7 @@ export function SettingsPage() {
   const searchProvider = String(settings.search_provider ?? "yandex_search");
   const visionProvider = String(settings.vision_provider ?? "alice_vlm");
   const imageGenProvider = String(settings.image_gen_provider ?? "gigachat");
+  const videoGenProvider = String(settings.video_gen_provider ?? "seedance2");
 
   const visiblePrompts = useMemo(
     () => prompts.filter((p) => p.provider === llmProvider),
@@ -131,6 +135,7 @@ export function SettingsPage() {
       search_provider: searchProvider,
       vision_provider: visionProvider,
       image_gen_provider: imageGenProvider,
+      video_gen_provider: videoGenProvider,
       free_image_gens_per_day: Number(settings.free_image_gens_per_day),
       pro_image_gens_per_day: Number(settings.pro_image_gens_per_day),
       max_upload_mb_free: Number(settings.max_upload_mb_free) || 8,
@@ -158,6 +163,7 @@ export function SettingsPage() {
       if (updated.search_providers?.length) setSearchProviders(updated.search_providers);
       if (updated.vision_providers?.length) setVisionProviders(updated.vision_providers);
       if (updated.image_gen_providers?.length) setImageGenProviders(updated.image_gen_providers);
+      if (updated.video_gen_providers?.length) setVideoGenProviders(updated.video_gen_providers);
       if (updated.prompts?.length) setPrompts(updated.prompts);
       setMsg("Сохранено");
     } catch (err) {
@@ -308,6 +314,33 @@ export function SettingsPage() {
                 )}
                 <span className="hint-inline">
                   Триггер в чате: «нарисуй», «сгенерируй картинку» и т.п. Только тариф Pro.
+                </span>
+              </label>
+
+              <label>
+                Генерация видео
+                <select
+                  value={videoGenProvider}
+                  onChange={(e) => setSettings({ ...settings, video_gen_provider: e.target.value })}
+                  disabled={!can("settings:write")}
+                >
+                  {(videoGenProviders.length
+                    ? videoGenProviders
+                    : [{ id: "seedance2", label: "Seedance 2.0 (BytePlus, Standard)", configured: false }]
+                  ).map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.label}
+                      {!p.configured ? " (не настроен)" : ""}
+                    </option>
+                  ))}
+                </select>
+                {videoGenProviders.find((p) => p.id === videoGenProvider)?.hint && (
+                  <span className="hint-inline">
+                    {videoGenProviders.find((p) => p.id === videoGenProvider)?.hint}
+                  </span>
+                )}
+                <span className="hint-inline">
+                  Триггер в чате: «сгенерируй видео», «создай видеоролик» и т.п. Только тариф Pro. Требует BYTEPLUS_API_KEY.
                 </span>
               </label>
             </div>
