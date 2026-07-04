@@ -81,7 +81,7 @@ def build_secretary_report_xlsx(
             amount_val = int(r.get("amount") or 0)
         except (TypeError, ValueError):
             amount_val = 0
-        _cell(i, 3, amount_val, align="right", num_format="# ##0")
+        _cell(i, 3, amount_val, align="right", num_format="#,##0")
         _cell(i, 4, str(r.get("note") or r.get("description") or ""))
 
     ws.column_dimensions["A"].width = 13
@@ -97,7 +97,7 @@ def build_secretary_report_xlsx(
 
     for i, (cat, total) in enumerate(cats_sorted, 2):
         _cell(i, CATS_COL, cat)
-        _cell(i, AMT_COL, total, align="right", num_format="# ##0")
+        _cell(i, AMT_COL, total, align="right", num_format="#,##0")
 
     # Строка «ИТОГО»
     if cats_sorted:
@@ -109,7 +109,7 @@ def build_secretary_report_xlsx(
         amt_c = ws.cell(row=total_row, column=AMT_COL, value=total_all)
         amt_c.font = Font(bold=True, size=10)
         amt_c.border = border_thin
-        amt_c.number_format = "# ##0"
+        amt_c.number_format = "#,##0"
         amt_c.alignment = Alignment(horizontal="right")
 
     ws.column_dimensions[get_column_letter(CATS_COL)].width = 25
