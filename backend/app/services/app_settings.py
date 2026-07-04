@@ -16,11 +16,13 @@ from app.services.prompts.defaults import (
 from app.services.llm_runtime import fetch_llm_runtime_status
 from app.services.providers.registry import (
     DEFAULT_IMAGE_GEN_PROVIDER,
+    DEFAULT_VIDEO_GEN_PROVIDER,
     list_agent_llm_providers,
     list_free_llm_providers,
     list_image_gen_providers,
     list_llm_providers,
     list_search_providers,
+    list_video_gen_providers,
     list_vision_providers,
 )
 from app.services.prompts.defaults import DEFAULT_VISION_PROVIDER
@@ -44,6 +46,7 @@ BASE_SETTING_KEYS: dict[str, type] = {
     "search_provider": str,
     "vision_provider": str,
     "image_gen_provider": str,
+    "video_gen_provider": str,
     "free_image_gens_per_day": int,
     "pro_image_gens_per_day": int,
     "guest_doc_gens_lifetime": int,
@@ -135,6 +138,8 @@ def default_for_key(key: str, settings: Settings | None = None) -> Any:
         return DEFAULT_VISION_PROVIDER
     if key == "image_gen_provider":
         return DEFAULT_IMAGE_GEN_PROVIDER
+    if key == "video_gen_provider":
+        return DEFAULT_VIDEO_GEN_PROVIDER
     env_attr = ENV_DEFAULTS.get(key)
     if env_attr and hasattr(settings, env_attr):
         return getattr(settings, env_attr)
@@ -280,6 +285,10 @@ async def list_settings_bundle(db: AsyncSession, redis_client: redis.Redis) -> d
         "image_gen_providers": [
             {"id": x.id, "label": x.label, "configured": x.configured, "hint": x.hint}
             for x in list_image_gen_providers(settings)
+        ],
+        "video_gen_providers": [
+            {"id": x.id, "label": x.label, "configured": x.configured, "hint": x.hint}
+            for x in list_video_gen_providers(settings)
         ],
         "agent_llm_providers": [
             {"id": x.id, "label": x.label, "configured": x.configured, "hint": x.hint}

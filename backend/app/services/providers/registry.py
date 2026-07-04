@@ -107,6 +107,9 @@ VALID_VISION_IDS = frozenset({"anthropic_claude", "gigachat"})  # alice_vlm от
 VALID_IMAGE_GEN_IDS = frozenset({"gigachat", "nanab2"})
 DEFAULT_IMAGE_GEN_PROVIDER = "gigachat"
 
+VALID_VIDEO_GEN_IDS = frozenset({"seedance2", "seedance2_fast"})
+DEFAULT_VIDEO_GEN_PROVIDER = "seedance2"
+
 
 def list_image_gen_providers(settings: Settings) -> list[ProviderInfo]:
     giga_ok = settings.gigachat_configured
@@ -184,5 +187,25 @@ def list_vision_providers(settings: Settings) -> list[ProviderInfo]:
             kind="vision",
             configured=claude_ok,
             hint=None if claude_ok else "Нужен ANTHROPIC_API_KEY в .env",
+        ),
+    ]
+
+
+def list_video_gen_providers(settings: Settings) -> list[ProviderInfo]:
+    bp_ok = settings.byteplus_configured
+    return [
+        ProviderInfo(
+            id="seedance2",
+            label="Seedance 2.0 (BytePlus, Standard)",
+            kind="video_gen",
+            configured=bp_ok,
+            hint=None if bp_ok else "Нужен BYTEPLUS_API_KEY в .env",
+        ),
+        ProviderInfo(
+            id="seedance2_fast",
+            label="Seedance 2.0 Fast (BytePlus, быстрый)",
+            kind="video_gen",
+            configured=bp_ok,
+            hint=None if bp_ok else "Нужен BYTEPLUS_API_KEY в .env",
         ),
     ]

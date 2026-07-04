@@ -147,6 +147,18 @@ async def update_settings(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Неизвестный провайдер генерации изображений",
             )
+        if key == "video_gen_provider":
+            from app.services.providers.registry import VALID_VIDEO_GEN_IDS
+            if str(value) not in VALID_VIDEO_GEN_IDS:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Неизвестный провайдер генерации видео",
+                )
+            if not env.byteplus_configured:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="BYTEPLUS_API_KEY не настроен — генерация видео недоступна.",
+                )
         if key == "image_gen_provider" and str(value) == "gigachat":
             if not env.gigachat_configured:
                 raise HTTPException(

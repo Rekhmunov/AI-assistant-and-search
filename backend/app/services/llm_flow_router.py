@@ -26,6 +26,10 @@ ServiceFlow = Literal[
     "export_chat_document",
     "compress_pdf",
     "convert_pdf",
+    "compress_image",
+    "image_to_pdf",
+    "split_pdf",
+    "video_generate",
 ]
 
 _FLOW_JSON_RE = re.compile(r"\{[\s\S]*\}")
@@ -44,7 +48,7 @@ _ROUTER_SYSTEM = """Ты маршрутизатор запросов в Glosix (
 
 Верни ТОЛЬКО JSON без markdown:
 {
-  "flow": "search_rag" | "chat" | "image_generate" | "image_edit" | "image_compose" | "export_chat_document",
+  "flow": "search_rag" | "chat" | "image_generate" | "image_edit" | "image_compose" | "export_chat_document" | "compress_pdf" | "convert_pdf" | "compress_image" | "image_to_pdf" | "split_pdf" | "video_generate",
   "needs_search": true/false,
   "answer_model": "lite" | "pro",
   "reason": "кратко по-русски",
@@ -102,6 +106,10 @@ force_yandex = false:
 - export_chat_document — оформить УЖЕ написанный в переписке текст (ответ выше, текст выше, преобразуй в markdown). Не переписывать содержание.
 - compress_pdf — пользователь ЯВНО просит сжать конкретный PDF-файл (прикреплён или упомянут). НЕ использовать если это вопрос о возможностях («умеешь ли», «можешь ли», «что умеешь»).
 - convert_pdf — пользователь ЯВНО просит конвертировать конкретный PDF в JPG. НЕ использовать если это вопрос о возможностях.
+- video_generate — пользователь просит создать/сгенерировать ВИДЕО, видеоролик, видеоклип, анимацию.
+  Явные маркеры: «сгенерируй видео», «создай видеоролик», «сделай видео», «видеоклип», «анимацию».
+  НЕ использовать для изображений (→ image_generate) или вопросов о видео (→ search_rag).
+  compress_pdf, convert_pdf, split_pdf, compress_image, image_to_pdf — файловые операции. Правила выбора — в блоке «ФАЙЛОВЫЕ ОПЕРАЦИИ» ниже.
 
 ВАЖНО — вопросы о возможностях сервиса → chat:
 - «ты умеешь X», «можешь ли ты X», «что ты умеешь», «умеешь сжимать», «умеешь конвертировать»
@@ -182,6 +190,10 @@ def _parse_flow_response(raw: str) -> LlmFlowDecision | None:
         "export_chat_document",
         "compress_pdf",
         "convert_pdf",
+        "compress_image",
+        "image_to_pdf",
+        "split_pdf",
+        "video_generate",
     ):
         return None
     needs_search = bool(data.get("needs_search"))
