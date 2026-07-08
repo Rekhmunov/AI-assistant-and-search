@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useAuthStore } from "../store/authStore";
 import { ProUpgradeModal } from "./ProUpgradeModal";
+import { useTouchThread } from "../hooks/useTouchThread";
 
 const API_BASE = import.meta.env.VITE_API_URL || "";
 
@@ -169,6 +170,7 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
   const token = useAuthStore((s) => s.token);
   const user = useAuthStore((s) => s.user);
   const isFree = !user || user.plan !== "pro";
+  const touchThread = useTouchThread(threadId, token);
   const [imageLimitModal, setImageLimitModal] = useState(false);
   const [approvalConfirmModal, setApprovalConfirmModal] = useState(false);
   const [cfg, setCfg] = useState<PosterConfig>({ ...DEFAULTS });
@@ -418,8 +420,10 @@ export function PosterSettingsPanel({ threadId, initialConfig, enabled, onToggle
     });
   }, [initialConfig]);
 
-  const patch = <K extends keyof PosterConfig>(key: K, value: PosterConfig[K]) =>
+  const patch = <K extends keyof PosterConfig>(key: K, value: PosterConfig[K]) => {
+    void touchThread();
     setCfg((c) => ({ ...c, [key]: value }));
+  };
 
   // Schedule slot operations
   // Topic list operations

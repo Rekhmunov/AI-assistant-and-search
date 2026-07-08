@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useAuthStore } from "../store/authStore";
+import { useTouchThread } from "../hooks/useTouchThread";
 
 const API_BASE = import.meta.env.VITE_API_URL || "";
 
@@ -31,6 +32,7 @@ function formatAmount(n: number): string {
 
 export function SecretarySettingsPanel({ threadId, initialConfig }: Props) {
   const token = useAuthStore((s) => s.token);
+  const touchThread = useTouchThread(threadId, token);
 
   // ── Config state ─────────────────────────────────────────────────────────
   const [enabled, setEnabled]           = useState(true);
@@ -187,7 +189,7 @@ export function SecretarySettingsPanel({ threadId, initialConfig }: Props) {
             placeholder="@mygroup или -123456789"
             value={groupInput}
             disabled={f}
-            onChange={e => setGroupInput(e.target.value)}
+            onChange={e => { void touchThread(); setGroupInput(e.target.value); }}
             onKeyDown={e => { if (e.key === "Enter") void verifyGroup(); }}
           />
           <span className="poster-field__hint">
@@ -225,7 +227,7 @@ export function SecretarySettingsPanel({ threadId, initialConfig }: Props) {
             placeholder={"Аренда\nЗарплата\nТранспорт\nМатериалы\nРеклама"}
             value={categories}
             disabled={f}
-            onChange={e => { setCategories(e.target.value); setCatDirty(true); setSaveError(""); }}
+            onChange={e => { void touchThread(); setCategories(e.target.value); setCatDirty(true); setSaveError(""); }}
           />
           <span className="poster-field__hint">
             Каждая категория с новой строки или через «;»

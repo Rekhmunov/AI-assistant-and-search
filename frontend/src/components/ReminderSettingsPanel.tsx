@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useAuthStore } from "../store/authStore";
+import { useTouchThread } from "../hooks/useTouchThread";
 
 const API_BASE = import.meta.env.VITE_API_URL || "";
 
@@ -450,6 +451,7 @@ function ReminderCard({
 
 export function ReminderSettingsPanel({ threadId }: { threadId: string }) {
   const token = useAuthStore((s) => s.token);
+  const touchThread = useTouchThread(threadId, token);
   const [reminders, setReminders] = useState<ReminderItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -585,7 +587,7 @@ export function ReminderSettingsPanel({ threadId }: { threadId: string }) {
         {!showForm && (
           <button
             className="rm-btn rm-btn--primary"
-            onClick={() => { setShowForm(true); setEditingId(null); setActionError(""); }}
+            onClick={() => { void touchThread(); setShowForm(true); setEditingId(null); setActionError(""); }}
           >
             + Добавить
           </button>

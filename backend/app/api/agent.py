@@ -236,6 +236,35 @@ async def get_agent_activity_logs(
     return AgentActivityLogsOut(items=[AgentActivityLogOut.model_validate(r) for r in rows])
 
 
+@router.post("/threads/{thread_id}/touch")
+async def touch_agent_thread(
+    thread_id: UUID,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+):
+    """Снять флаг is_new при первом изменении формы (черновик → виден в истории)."""
+    result = await db.execute(
+        select(Thread).where(
+            Thread.id == thread_id,
+            Thread.user_id == user.id,
+            Thread.thread_type == ThreadType.AGENT,
+            Thread.deleted_at.is_(None),
+        )
+    )
+    thread = result.scalar_one_or_none()
+    if not thread:
+        raise HTTPException(status_code=404, detail="Тред не найден")
+    agent = await get_agent_for_thread(db, thread.id)
+    if agent and agent.config and agent.config.get("is_new"):
+        from sqlalchemy.orm.attributes import flag_modified as _fm
+        cfg = dict(agent.config)
+        cfg.pop("is_new", None)
+        agent.config = cfg
+        _fm(agent, "config")
+        await db.commit()
+    return {"ok": True}
+
+
 @router.patch("/threads/{thread_id}/config")
 async def patch_agent_config(
     thread_id: UUID,
