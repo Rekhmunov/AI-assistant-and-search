@@ -1287,6 +1287,7 @@ async def _get_hub_and_reminder_agents(
         select(AgentInstance).where(
             AgentInstance.user_id == user.id,
             AgentInstance.config["parent_hub_id"].astext == str(hub_agent.id),
+            AgentInstance.status != "cancelled",
         ).order_by(AgentInstance.created_at.asc())
     )
     sub_agents = list(sub_result.scalars().all())
@@ -1611,8 +1612,8 @@ async def delete_reminder(
         raise HTTPException(status_code=404, detail="Напоминание не найдено")
 
     await cancel_reminders_for_agent(db, sub_agent.id)
-    sub_agent.status = AgentStatus.CANCELLED.value
 
+    # Удаляем sub-thread напоминания
     sub_thread_result = await db.execute(
         select(Thread).where(Thread.id == sub_agent.thread_id)
     )
@@ -1620,5 +1621,7 @@ async def delete_reminder(
     if sub_thread:
         sub_thread.deleted_at = datetime.now(_tz.utc)
 
+    # Hard delete самого агента — восстановление не нужно
+    await db.delete(sub_agent)
     await db.commit()
     return {"ok": True}
