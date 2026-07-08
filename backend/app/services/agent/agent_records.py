@@ -6,6 +6,8 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
+from sqlalchemy.orm.attributes import flag_modified
+
 from app.models.agent import AgentInstance
 
 MAX_RECORDS_PER_TABLE = 5000
@@ -14,6 +16,11 @@ MAX_RECORDS_PER_TABLE = 5000
 def _tables(cfg: dict) -> dict[str, list]:
     raw = cfg.get("agent_records")
     return dict(raw) if isinstance(raw, dict) else {}
+
+
+def _mark_dirty(agent: AgentInstance) -> None:
+    """Помечает JSON-поле config как изменённое для SQLAlchemy."""
+    flag_modified(agent, "config")
 
 
 def store_record(
@@ -39,6 +46,7 @@ def store_record(
     tables[name] = rows[-MAX_RECORDS_PER_TABLE:]
     cfg["agent_records"] = tables
     agent.config = cfg
+    _mark_dirty(agent)
     return entry
 
 
@@ -76,6 +84,7 @@ def patch_record_field(
             tables[name] = rows
             cfg["agent_records"] = tables
             agent.config = cfg
+            _mark_dirty(agent)
             return True
     return False
 
@@ -96,6 +105,7 @@ def delete_record_by_id(
     tables[name] = new_rows
     cfg["agent_records"] = tables
     agent.config = cfg
+    _mark_dirty(agent)
     return True
 
 
@@ -137,4 +147,5 @@ def delete_record(
     tables[name] = rows
     cfg["agent_records"] = tables
     agent.config = cfg
+    _mark_dirty(agent)
     return {"deleted": deleted, "remaining": len(rows)}
