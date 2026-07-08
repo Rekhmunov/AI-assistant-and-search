@@ -606,8 +606,9 @@ export function SearchComposer({
     onAgentClick();
   };
 
+  // На десктопе иконка робота есть в левом меню — в поле ввода не дублируем
   const agentButton =
-    !agentMode && onAgentClick ? (
+    !agentMode && onAgentClick && !isDesktop ? (
       <button
         type="button"
         className="composer-icon"
