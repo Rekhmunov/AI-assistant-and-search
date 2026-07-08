@@ -441,7 +441,17 @@ class SearchFlowService:
         needs_vision = bundle.needs_vision
         free_vision_blocked = user.plan == Plan.FREE and needs_vision
         if free_vision_blocked:
-            needs_vision = False
+            # Для Free-пользователей анализ/генерация с изображением недоступны.
+            # Прерываем сразу — не идём в поиск и не отдаём «умный» ответ с подсказкой в конце.
+            yield sse_event("error", {
+                "code": "free_image_gen_pro",
+                "message": (
+                    "Анализ изображений и генерация картинок доступны только в тарифе Pro. "
+                    "Перейдите на Pro для работы с фото."
+                ),
+            })
+            return
+        needs_vision = bundle.needs_vision
         hybrid_vision_search = needs_vision and wants_web_search_with_vision(user_text)
         vision_only_answer = needs_vision and not hybrid_vision_search
         image_display_request = not has_attachments and is_image_display_request(user_text)
@@ -1028,8 +1038,6 @@ class SearchFlowService:
                 if llm_provider_id != PERPLEXITY_PROVIDER_ID and not _is_claude_search:
                     full_answer = ""
                 answer_hint = hint_clarify
-                if free_vision_blocked:
-                    answer_hint = f"{answer_hint or ''}{free_vision_pro_addon()}"
                 if image_display_request:
                     answer_hint = f"{answer_hint or ''}{image_display_answer_addon()}"
                 if vision_only_answer:
