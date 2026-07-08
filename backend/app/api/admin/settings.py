@@ -311,19 +311,33 @@ async def probe_yandex_api(
 async def probe_google_api(
     _admin=Depends(require_permission("settings:read")),
 ):
-    """Тестовый запрос к Google Gemini (Nano Banana)."""
+    """Тестовый запрос к Google Gemini (Nano Banana), с прокси если настроен."""
     from app.core.config import get_settings as _gs
     settings = _gs()
     if not settings.google_configured:
         return {"ok": False, "error": "GOOGLE_API_KEY не настроен"}
+    proxy = settings.google_http_proxy.strip() or None
     try:
         import httpx
-        async with httpx.AsyncClient(timeout=15.0) as client:
+        client_kwargs: dict = {"timeout": 15.0}
+        if proxy:
+            client_kwargs["proxy"] = proxy
+        async with httpx.AsyncClient(**client_kwargs) as client:
             resp = await client.get(
                 f"https://generativelanguage.googleapis.com/v1beta/models?key={settings.google_api_key}"
             )
         if resp.is_success:
-            return {"ok": True, "status_code": resp.status_code}
-        return {"ok": False, "status_code": resp.status_code, "error": resp.text[:200]}
+            hint = " (через прокси)" if proxy else ""
+            return {"ok": True, "status_code": resp.status_code, "note": f"Доступен{hint}"}
+        body = resp.text[:300]
+        if "User location is not supported" in body or resp.status_code == 400:
+            geo_hint = (
+                "Geo-ограничение: Google API недоступен с этого IP. "
+                + ("Прокси настроен, но не помог — проверьте GOOGLE_HTTP_PROXY в .env."
+                   if proxy else
+                   "Настройте GOOGLE_HTTP_PROXY в .env для работы через прокси.")
+            )
+            return {"ok": False, "status_code": resp.status_code, "error": geo_hint}
+        return {"ok": False, "status_code": resp.status_code, "error": body}
     except Exception as e:
         return {"ok": False, "error": str(e)[:200]}
