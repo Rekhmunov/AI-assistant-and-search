@@ -9,8 +9,6 @@ from datetime import datetime, timedelta, timezone
 
 import redis.asyncio as redis
 
-from app.core.config import get_settings
-
 logger = logging.getLogger(__name__)
 
 # Дебаунс: не отправлять email чаще чем раз в N секунд для одного сервиса
@@ -266,8 +264,17 @@ async def get_incidents_dashboard(
             }
         )
 
-    for item in recent:
-        services_seen.add(item["service"])
+    # Также включаем сервисы у которых есть дневные счётчики за последние 24ч
+    # (могут отсутствовать в recent-списке если были давно)
+    now_dt = datetime.now(timezone.utc)
+    today_str = _day_str(now_dt)
+    try:
+        day_keys = await redis_client.keys(f"{_PREFIX}count:*:{today_str}")
+        for dk in day_keys:
+            svc_from_key = str(dk).replace(f"{_PREFIX}count:", "").replace(f":{today_str}", "")
+            services_seen.add(svc_from_key)
+    except Exception:
+        pass
 
     by_service: list[dict] = []
     for svc in sorted(services_seen):

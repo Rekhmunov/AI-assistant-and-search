@@ -82,8 +82,11 @@ class ServiceIncidentRecentItem(BaseModel):
     service: str
     service_label: str
     kind: str = ""
+    kind_label: str = ""
     message: str = ""
     status_code: int | None = None
+    provider: str | None = None
+    provider_label: str | None = None
     at: str | None = None
 
 

@@ -297,7 +297,14 @@ async def probe_yandex_api(
 ):
     """Тестовый запрос к Yandex Search + YandexGPT."""
     from app.services.yandex_probe import probe_yandex
-    return await probe_yandex()
+    from app.core.config import get_settings as _gs
+    if not _gs().yandex_configured:
+        return {"ok": False, "error": "YANDEX_FOLDER_ID / YANDEX_API_KEY не настроены"}
+    result = await probe_yandex()
+    # probe_yandex возвращает dict с полем configured; нормализуем к ok
+    if "ok" not in result:
+        result["ok"] = result.get("configured", False)
+    return result
 
 
 @router.post("/probe-google")
@@ -311,9 +318,10 @@ async def probe_google_api(
         return {"ok": False, "error": "GOOGLE_API_KEY не настроен"}
     try:
         import httpx
-        resp = await httpx.AsyncClient(timeout=15.0).get(
-            f"https://generativelanguage.googleapis.com/v1beta/models?key={settings.google_api_key}"
-        )
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.get(
+                f"https://generativelanguage.googleapis.com/v1beta/models?key={settings.google_api_key}"
+            )
         if resp.is_success:
             return {"ok": True, "status_code": resp.status_code}
         return {"ok": False, "status_code": resp.status_code, "error": resp.text[:200]}

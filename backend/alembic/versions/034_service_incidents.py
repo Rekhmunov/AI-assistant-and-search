@@ -4,8 +4,8 @@ Revision ID: 034_service_incidents
 Revises: 033_offer_pro_999_credits
 """
 
-revision = "034_service_incidents"
-down_revision = "033_offer_pro_999_credits"
+revision = "034"
+down_revision = "033"
 branch_labels = None
 depends_on = None
 
