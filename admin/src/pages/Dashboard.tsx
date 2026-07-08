@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { apiFetch } from "../api";
 
@@ -47,6 +47,19 @@ interface ServiceIncidentService {
 interface ServiceIncidentsDashboard {
   totals_24h: number;
   by_service: ServiceIncidentService[];
+  recent?: RecentIncident[];
+}
+
+interface RecentIncident {
+  service: string;
+  service_label: string;
+  kind: string;
+  kind_label: string;
+  message: string;
+  status_code?: number | null;
+  provider?: string | null;
+  provider_label?: string | null;
+  at: string;
 }
 
 interface DashboardMetrics {
@@ -58,7 +71,19 @@ interface DashboardMetrics {
   messages_today: number;
   searches_today_estimate: number;
   answer_feedback: FeedbackDashboardBlock;
+  redis_ok?: boolean;
+  yandex_configured?: boolean;
+  maintenance_mode?: boolean;
 }
+
+const PROBE_PROVIDERS = [
+  { key: "anthropic", label: "Claude" },
+  { key: "deepseek",  label: "DeepSeek" },
+  { key: "gigachat",  label: "GigaChat" },
+  { key: "perplexity",label: "Perplexity" },
+  { key: "yandex",    label: "Яндекс" },
+  { key: "google",    label: "Google" },
+];
 
 const RECENT_PAGE_SIZE = 30;
 
@@ -85,6 +110,9 @@ export function DashboardPage() {
   const [recentData, setRecentData] = useState<FeedbackRecentPage | null>(null);
   const [recentLoading, setRecentLoading] = useState(false);
   const [recentError, setRecentError] = useState("");
+  const [probeResults, setProbeResults] = useState<Record<string, { ok: boolean; error?: string; loading?: boolean }>>({});
+  const probeInFlight = useRef<Set<string>>(new Set());
+  const [incidentsOpen, setIncidentsOpen] = useState(false);
   useEffect(() => {
     apiFetch<ServiceIncidentsDashboard>("/api/admin/audit/service-incidents")
       .then(setIncidents)
@@ -118,6 +146,27 @@ export function DashboardPage() {
       })
       .finally(() => setRecentLoading(false));
   }, [recentOpen, recentPage]);
+
+  const reloadIncidents = () => {
+    apiFetch<ServiceIncidentsDashboard>("/api/admin/audit/service-incidents")
+      .then(setIncidents)
+      .catch(() => {});
+  };
+
+  const runProbe = async (key: string) => {
+    if (probeInFlight.current.has(key)) return;
+    probeInFlight.current.add(key);
+    setProbeResults((p) => ({ ...p, [key]: { ok: false, loading: true } }));
+    try {
+      const res = await apiFetch<{ ok: boolean; error?: string }>(`/api/admin/settings/probe-${key}`, { method: "POST" });
+      setProbeResults((p) => ({ ...p, [key]: { ok: res.ok, error: res.ok ? undefined : (res.error || "Ошибка") } }));
+      reloadIncidents();
+    } catch (e) {
+      setProbeResults((p) => ({ ...p, [key]: { ok: false, error: e instanceof Error ? e.message : "Ошибка" } }));
+    } finally {
+      probeInFlight.current.delete(key);
+    }
+  };
 
   const toggleRecent = () => {
     setRecentOpen((open) => {
@@ -171,6 +220,56 @@ export function DashboardPage() {
         </div>
       </div>
 
+      {/* ── Инфраструктура ── */}
+      {data && (data.redis_ok !== undefined || data.yandex_configured !== undefined) && (
+        <section className="card incidents-dashboard">
+          <h2>Инфраструктура</h2>
+          <div className="infra-status-row">
+            {data.redis_ok !== undefined && (
+              <span className={`infra-badge${data.redis_ok ? " infra-badge--ok" : " infra-badge--err"}`}>
+                {data.redis_ok ? "✅ Redis" : "❌ Redis недоступен"}
+              </span>
+            )}
+            {data.yandex_configured !== undefined && (
+              <span className={`infra-badge${data.yandex_configured ? " infra-badge--ok" : " infra-badge--warn"}`}>
+                {data.yandex_configured ? "✅ Яндекс настроен" : "⚠️ Яндекс не настроен"}
+              </span>
+            )}
+            {data.maintenance_mode && (
+              <span className="infra-badge infra-badge--warn">🔧 Режим обслуживания</span>
+            )}
+          </div>
+        </section>
+      )}
+
+      {/* ── Проверка провайдеров ── */}
+      <section className="card incidents-dashboard">
+        <h2>Проверка провайдеров</h2>
+        <p className="admin-page-subtitle">Ручная проверка доступности API</p>
+        <div className="probe-grid">
+          {PROBE_PROVIDERS.map(({ key, label }) => {
+            const r = probeResults[key];
+            return (
+              <div key={key} className="probe-item">
+                <button
+                  className="btn-secondary btn-secondary--compact"
+                  onClick={() => runProbe(key)}
+                  disabled={r?.loading}
+                >
+                  {r?.loading ? "…" : `Проверить ${label}`}
+                </button>
+                {r && !r.loading && (
+                  <span className={`probe-result${r.ok ? " probe-result--ok" : " probe-result--err"}`}>
+                    {r.ok ? "✅ OK" : `❌ ${r.error || "Ошибка"}`}
+                  </span>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </section>
+
+      {/* ── Сбои провайдеров ── */}
       {incidents && (
         <section className="card incidents-dashboard" aria-labelledby="incidents-title">
           <div className="incidents-header">
@@ -178,9 +277,14 @@ export function DashboardPage() {
               <h2 id="incidents-title">Сбои провайдеров</h2>
               <p className="admin-page-subtitle">За последние 24 часа</p>
             </div>
-            <Link to="/audit" className="btn-secondary btn-secondary--compact">
-              Все инциденты
-            </Link>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button className="btn-secondary btn-secondary--compact" onClick={reloadIncidents}>
+                Обновить
+              </button>
+              <Link to="/audit" className="btn-secondary btn-secondary--compact">
+                Все инциденты
+              </Link>
+            </div>
           </div>
           {incidents.totals_24h === 0 ? (
             <p className="incidents-ok">✅ Сбоев не зафиксировано</p>
@@ -204,6 +308,47 @@ export function DashboardPage() {
                   </div>
                 </div>
               ))}
+            </div>
+          )}
+          {/* Последние инциденты */}
+          {incidents.recent && incidents.recent.length > 0 && (
+            <div style={{ marginTop: 12 }}>
+              <button
+                className="feedback-recent-toggle"
+                onClick={() => setIncidentsOpen((o) => !o)}
+                aria-expanded={incidentsOpen}
+              >
+                <span className={`feedback-recent-chevron${incidentsOpen ? " feedback-recent-chevron--open" : ""}`} aria-hidden>▶</span>
+                <span className="feedback-recent-toggle-title">Последние события</span>
+                <span className="feedback-recent-toggle-count">{incidents.recent.length}</span>
+              </button>
+              {incidentsOpen && (
+                <table className="admin-table" style={{ marginTop: 8, fontSize: 13 }}>
+                  <thead>
+                    <tr>
+                      <th>Время</th>
+                      <th>Сервис</th>
+                      <th>Тип</th>
+                      <th>Сообщение</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {incidents.recent.map((inc, i) => (
+                      <tr key={i} className={inc.kind === "billing" ? "incidents-row--billing" : inc.kind === "technical" ? "incidents-row--alert" : ""}>
+                        <td style={{ whiteSpace: "nowrap" }}>{formatDate(inc.at)}</td>
+                        <td>
+                          {inc.service_label}
+                          {inc.provider_label && inc.provider_label !== inc.service_label && (
+                            <span style={{ color: "#888", marginLeft: 4 }}>({inc.provider_label})</span>
+                          )}
+                        </td>
+                        <td>{inc.kind_label || inc.kind}</td>
+                        <td style={{ maxWidth: 320, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{inc.message}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
             </div>
           )}
         </section>

@@ -289,3 +289,33 @@ async def probe_perplexity_api(
 ):
     """Тестовый запрос к Perplexity Sonar (disable_search) с ключом из .env."""
     return await probe_perplexity()
+
+
+@router.post("/probe-yandex")
+async def probe_yandex_api(
+    _admin=Depends(require_permission("settings:read")),
+):
+    """Тестовый запрос к Yandex Search + YandexGPT."""
+    from app.services.yandex_probe import probe_yandex
+    return await probe_yandex()
+
+
+@router.post("/probe-google")
+async def probe_google_api(
+    _admin=Depends(require_permission("settings:read")),
+):
+    """Тестовый запрос к Google Gemini (Nano Banana)."""
+    from app.core.config import get_settings as _gs
+    settings = _gs()
+    if not settings.google_configured:
+        return {"ok": False, "error": "GOOGLE_API_KEY не настроен"}
+    try:
+        import httpx
+        resp = await httpx.AsyncClient(timeout=15.0).get(
+            f"https://generativelanguage.googleapis.com/v1beta/models?key={settings.google_api_key}"
+        )
+        if resp.is_success:
+            return {"ok": True, "status_code": resp.status_code}
+        return {"ok": False, "status_code": resp.status_code, "error": resp.text[:200]}
+    except Exception as e:
+        return {"ok": False, "error": str(e)[:200]}

@@ -9,6 +9,31 @@ from app.core.config import Settings, get_settings
 from app.services.bot_message_format import prepare_max_message
 from app.services.bot_rate_limit import throttle_max_api
 
+
+def _record_bot_incident(status_code: int, message: str) -> None:
+    """Пишет инцидент MAX Bot API в фоне через Redis (fire-and-forget)."""
+    async def _do() -> None:
+        try:
+            import redis.asyncio as aioredis
+            from app.core.config import get_settings as _gs
+            redis_client = aioredis.from_url(_gs().redis_url, decode_responses=True)
+            from app.services.service_incidents import record_service_incident, incident_kind_for_status
+            await record_service_incident(
+                redis_client,
+                service="max_bot",
+                kind=incident_kind_for_status(status_code, "api_error"),
+                message=message,
+                status_code=status_code,
+            )
+            await redis_client.aclose()
+        except Exception:
+            pass  # non-critical
+    try:
+        loop = asyncio.get_running_loop()
+        loop.create_task(_do())
+    except RuntimeError:
+        pass
+
 logger = logging.getLogger(__name__)
 
 # https://dev.max.ru/docs-api — platform-api.max.ru, Authorization header, 30 rps
@@ -137,6 +162,8 @@ class MaxBotService:
                 response.status_code,
                 detail,
             )
+            # Фиксируем сбой MAX API в системе инцидентов (не блокируем отправку)
+            _record_bot_incident(response.status_code, f"send_message HTTP {response.status_code}: {detail[:200]}")
             if "attachment.not.ready" in detail.lower() and attempt + 1 < max_attempts:
                 await asyncio.sleep(2.0 * (attempt + 1))
                 continue

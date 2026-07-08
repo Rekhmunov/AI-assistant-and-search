@@ -200,6 +200,15 @@ async def create_pro_payment(
         )
     except YooKassaError as e:
         await db.rollback()
+        # Фиксируем сбой YooKassa в системе инцидентов
+        try:
+            from app.services.service_incidents import record_service_incident
+            await record_service_incident(
+                redis_client, service="yookassa", kind="api_error",
+                message=f"create_payment failed: {str(e)[:200]}",
+            )
+        except Exception:
+            pass
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=format_yookassa_error(str(e)),

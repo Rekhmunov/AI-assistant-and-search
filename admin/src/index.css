@@ -1097,6 +1097,45 @@ pre.small {
   opacity: 0.7;
 }
 
+/* Строки инцидентов по типу */
+.incidents-row--billing td { background: #fff8e1; }
+
+/* Инфраструктура */
+.infra-status-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
+}
+.infra-badge {
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 500;
+}
+.infra-badge--ok   { background: #e8f5e9; color: #2e7d32; }
+.infra-badge--warn { background: #fff8e1; color: #f57c00; }
+.infra-badge--err  { background: #ffebee; color: #c62828; }
+
+/* Probe-кнопки */
+.probe-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 8px;
+}
+.probe-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.probe-result {
+  font-size: 13px;
+  font-weight: 500;
+}
+.probe-result--ok  { color: #2e7d32; }
+.probe-result--err { color: #c62828; }
+
 .feedback-dashboard {
   margin-bottom: 28px;
 }

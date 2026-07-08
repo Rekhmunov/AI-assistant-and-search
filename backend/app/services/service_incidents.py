@@ -22,14 +22,39 @@ _RECENT_MAX = 200
 _DAY_TTL_SEC = 8 * 86400
 
 SERVICE_LABELS: dict[str, str] = {
+    # Поиск
     "search": "Yandex Search",
     "glosix_search": "Поиск Glosix",
-    "image_search": "Поиск картинок",
-    "image_gen": "GigaChat (картинки)",
+    "image_search": "Поиск картинок (Яндекс)",
+    # LLM — общий ключ (legacy) + по провайдерам
     "gpt": "LLM (ответ)",
+    "yandex_gpt": "YandexGPT",
+    "anthropic": "Claude (Anthropic)",
+    "deepseek": "DeepSeek",
+    "gigachat_llm": "GigaChat LLM",
     "perplexity": "Perplexity",
+    # Vision
     "vision": "Vision (анализ фото)",
+    # Генерация
+    "image_gen": "Генерация картинок",
+    "nanab2": "Nano Banana (Google Gemini)",
+    "video_gen": "Генерация видео (BytePlus)",
+    # Инфраструктура
+    "max_bot": "MAX Bot API",
+    "yookassa": "YooKassa (платежи)",
 }
+
+# HTTP-коды, которые означают проблему с деньгами/лимитами, не технический сбой
+BILLING_STATUS_CODES = frozenset({402, 429})
+
+
+def incident_kind_for_status(status_code: int | None, fallback_kind: str = "error") -> str:
+    """Определяет тип инцидента по HTTP-коду: billing (деньги/лимиты) или technical (сбой)."""
+    if status_code in BILLING_STATUS_CODES:
+        return "billing"
+    if status_code and status_code >= 500:
+        return "technical"
+    return fallback_kind
 
 
 @dataclass(frozen=True)
@@ -84,32 +109,78 @@ async def record_service_incident(
     kind: str,
     message: str,
     status_code: int | None = None,
+    provider: str | None = None,
 ) -> None:
+    """
+    Записывает инцидент в Redis и асинхронно в БД.
+    provider — конкретный провайдер (anthropic, deepseek, и т.д.) когда service — агрегат (gpt, image_gen).
+    """
     if redis_client is None:
         return
     now = datetime.now(timezone.utc)
+    # Автоматически уточняем kind по HTTP-коду, если передан нейтральный kind
+    resolved_kind = kind
+    if status_code and kind in ("error", "user_error", "api_error"):
+        resolved_kind = incident_kind_for_status(status_code, kind)
     payload = {
         "service": service,
-        "kind": kind,
+        "kind": resolved_kind,
         "message": (message or "")[:500],
         "status_code": status_code,
+        "provider": provider,
         "at": now.isoformat(),
     }
     try:
         pipe = redis_client.pipeline()
         pipe.incr(_day_key(service, _day_str(now)))
         pipe.expire(_day_key(service, _day_str(now)), _DAY_TTL_SEC)
+        # Также считаем по конкретному провайдеру (если задан)
+        if provider and provider != service:
+            pipe.incr(_day_key(provider, _day_str(now)))
+            pipe.expire(_day_key(provider, _day_str(now)), _DAY_TTL_SEC)
         pipe.lpush(_RECENT_KEY, json.dumps(payload, ensure_ascii=False))
         pipe.ltrim(_RECENT_KEY, 0, _RECENT_MAX - 1)
         await pipe.execute()
     except Exception:
         logger.exception("record_service_incident failed")
 
-    # Email-оповещение в фоне — не блокирует запрос пользователя
+    # Асинхронно сохраняем в БД и шлём email — не блокируем запрос пользователя
     import asyncio as _asyncio
     _asyncio.create_task(
-        _safe_notify(redis_client, service, kind, message, status_code)
+        _safe_notify(redis_client, service, resolved_kind, message, status_code)
     )
+    _asyncio.create_task(
+        _save_incident_to_db(service=service, kind=resolved_kind, message=payload["message"],
+                             status_code=status_code, provider=provider, at=now)
+    )
+
+
+async def _save_incident_to_db(
+    *,
+    service: str,
+    kind: str,
+    message: str,
+    status_code: int | None,
+    provider: str | None,
+    at: datetime,
+) -> None:
+    """Параллельная запись инцидента в БД для долгосрочного хранения."""
+    try:
+        from app.core.database import async_session_factory
+        from app.models.service_incident import ServiceIncidentRecord
+        async with async_session_factory() as session:
+            record = ServiceIncidentRecord(
+                service=service,
+                kind=kind,
+                message=message[:500],
+                status_code=status_code,
+                provider=provider,
+                occurred_at=at,
+            )
+            session.add(record)
+            await session.commit()
+    except Exception:
+        logger.debug("_save_incident_to_db failed (non-critical)", exc_info=True)
 
 
 async def _safe_notify(
@@ -143,6 +214,20 @@ async def _sum_counts(
     return total
 
 
+def _kind_label(kind: str, status_code) -> str:
+    if kind == "billing":
+        return "💳 Деньги/лимит"
+    if kind == "technical":
+        return "🔴 Технический сбой"
+    if kind == "fallback_activated":
+        return "⚠️ Переключение на резерв"
+    if kind == "all_providers_failed":
+        return "❌ Все провайдеры недоступны"
+    if status_code:
+        return f"HTTP {status_code}"
+    return kind or "ошибка"
+
+
 async def get_incidents_dashboard(
     redis_client: redis.Redis | None,
     *,
@@ -166,13 +251,17 @@ async def get_incidents_dashboard(
             continue
         svc = str(data.get("service") or "unknown")
         services_seen.add(svc)
+        kind_val = str(data.get("kind") or "")
         recent.append(
             {
                 "service": svc,
                 "service_label": SERVICE_LABELS.get(svc, svc),
-                "kind": str(data.get("kind") or ""),
+                "kind": kind_val,
+                "kind_label": _kind_label(kind_val, data.get("status_code")),
                 "message": str(data.get("message") or ""),
                 "status_code": data.get("status_code"),
+                "provider": data.get("provider"),
+                "provider_label": SERVICE_LABELS.get(str(data.get("provider") or ""), data.get("provider")),
                 "at": data.get("at"),
             }
         )
