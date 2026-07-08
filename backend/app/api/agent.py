@@ -1069,8 +1069,10 @@ async def verify_secretary_group(
         cfg["interaction_mode"] = "support"
         cfg["delivery_mode"] = "group"
         from sqlalchemy.orm.attributes import flag_modified as _fm_sec
+        from app.models.agent import AgentRole as _AR
         agent.config = cfg
         agent.max_chat_id = group_id
+        agent.role = _AR.DM_ASSISTANT.value  # нужна колонка role для поиска в group_interactive
         _fm_sec(agent, "config")
 
         # Activate agent if still in DRAFT/COLLECTING
