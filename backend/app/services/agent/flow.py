@@ -173,7 +173,7 @@ async def create_agent_thread(
         agent_seq=seq,
     )
     max_uid = int(user.max_user_id) if user.max_user_id else 0
-    agent_config: dict = {"checklist": {}}
+    agent_config: dict = {"checklist": {}, "is_new": True}
     if template:
         agent_config["template"] = template
 

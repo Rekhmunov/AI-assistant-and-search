@@ -287,6 +287,7 @@ async def patch_agent_config(
         if key.startswith("poster_") or key in ("support_instructions",):
             cfg[key] = value
     from sqlalchemy.orm.attributes import flag_modified
+    cfg.pop("is_new", None)  # первое сохранение конфига — тред появляется в истории
     agent.config = cfg
     flag_modified(agent, "config")
     await db.commit()
@@ -938,6 +939,7 @@ async def verify_poster_channel(
 
         # Both bot and user are admins — save and activate
         cfg["poster_channel_id"] = str(channel_id)
+        cfg.pop("is_new", None)  # канал подтверждён = первое действие, тред появляется в истории
         from sqlalchemy.orm.attributes import flag_modified as _flag_mod
         agent.config = cfg
         _flag_mod(agent, "config")
@@ -1064,6 +1066,9 @@ async def verify_secretary_group(
             except Exception as _ce:
                 logger.warning("verify-group: rule compile failed: %s", _ce)
 
+        cfg.pop("is_new", None)  # подключение группы = первое действие, тред появляется в истории
+        agent.config = cfg
+        _fm_sec(agent, "config")
         await db.commit()
         return {
             "ok": True,
@@ -1485,6 +1490,13 @@ async def create_reminder(
     except ValueError as exc:
         await db.rollback()
         raise HTTPException(status_code=422, detail=f"Ошибка активации: {exc}")
+
+    # Первое напоминание — снимаем флаг «новый» с hub-агента, тред появляется в истории
+    hub_cfg = dict(hub_agent.config or {})
+    if hub_cfg.pop("is_new", None) is not None:
+        from sqlalchemy.orm.attributes import flag_modified as _flag_modified
+        hub_agent.config = hub_cfg
+        _flag_modified(hub_agent, "config")
 
     await db.commit()
     await db.refresh(sub_agent)

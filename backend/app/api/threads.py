@@ -66,6 +66,7 @@ async def list_threads(
         or_(
             AgentInstance.config["template"].astext == "assistant",
             AgentInstance.config["is_sub_reminder"].astext == "true",
+            AgentInstance.config["is_new"].astext == "true",
         ),
     )
     q = (
