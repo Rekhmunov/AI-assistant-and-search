@@ -43,6 +43,7 @@ class PerplexitySearchEvent:
     related_questions: list[str] = field(default_factory=list)
     usage: dict[str, Any] | None = None
     model: str | None = None
+    images: list[dict[str, Any]] = field(default_factory=list)  # [{image_url, origin_url, title, width, height}]
 
 
 def is_perplexity_provider(provider_id: str) -> bool:
@@ -198,6 +199,9 @@ class PerplexityProvider(PromptedLLMMixin, LLMProvider):
             "temperature": 0.2,
             # Pro запросы читают больше источников (high), lite — быстрее (low)
             "search_context_size": "high" if model == "pro" else "low",
+            # Картинки из поиска Perplexity (только для Pro — они тяжелее)
+            "return_images": model == "pro",
+            "image_results_enhanced_relevance": True,
         }
         recency = (self.settings.perplexity_search_recency_filter or "").strip()
         if recency:
@@ -206,6 +210,7 @@ class PerplexityProvider(PromptedLLMMixin, LLMProvider):
         last_sources: list[SearchSource] | None = None
         last_related: list[str] = []
         last_usage: dict[str, Any] | None = None
+        last_images: list[dict[str, Any]] = []
         sources_sent = False
 
         try:
@@ -239,6 +244,11 @@ class PerplexityProvider(PromptedLLMMixin, LLMProvider):
                             last_usage = event.get("usage")
                         if event.get("model"):
                             model_id = str(event["model"])
+                        if event.get("images"):
+                            last_images = [
+                                img for img in event["images"]
+                                if isinstance(img, dict) and img.get("image_url")
+                            ]
 
                         text, sources, related = self._parse_stream_event(event)
                         if sources:
@@ -273,10 +283,11 @@ class PerplexityProvider(PromptedLLMMixin, LLMProvider):
         self._last_related_questions = last_related[:3]
         if last_sources and not sources_sent:
             yield PerplexitySearchEvent(sources=last_sources, model=model_id)
-        if last_related or last_usage:
+        if last_related or last_usage or last_images:
             yield PerplexitySearchEvent(
                 related_questions=last_related,
                 usage=last_usage,
+                images=last_images,
                 model=model_id,
             )
 

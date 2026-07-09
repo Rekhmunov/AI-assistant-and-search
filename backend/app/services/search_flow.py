@@ -809,20 +809,26 @@ class SearchFlowService:
                         )
                     if isinstance(llm, PerplexityProvider):
                         images_emitted = False
+                        perplexity_images: list[dict] = []
                         async for event in llm.stream_search_answer(
                             llm_query,
                             llm_history,
                             model=route.answer_model,  # type: ignore[arg-type]
                             prior_sources_block=prior_sources_block,
                         ):
+                            # Картинки от Perplexity API
+                            if event.images:
+                                perplexity_images = event.images
                             if image_task is not None and not images_emitted and image_task.done():
                                 images_emitted = True
-                                try:
-                                    imgs = entity_images_to_json(image_task.result())
-                                    if imgs:
-                                        entity_images_json = imgs
-                                except Exception:
-                                    logger.exception("Entity image search failed (non-fatal)")
+                                if not perplexity_images:
+                                    # Используем Яндекс только если Perplexity не дал картинок
+                                    try:
+                                        imgs = entity_images_to_json(image_task.result())
+                                        if imgs:
+                                            entity_images_json = imgs
+                                    except Exception:
+                                        logger.exception("Entity image search failed (non-fatal)")
                             if event.sources and not sources:
                                 sources = diversify_sources_by_domain(
                                     event.sources,
@@ -839,7 +845,22 @@ class SearchFlowService:
                             if event.text:
                                 full_answer += event.text
                                 yield sse_event("token", {"text": event.text})
-                        if image_task is not None and not images_emitted:
+                        # Если Perplexity вернул картинки — используем их
+                        if perplexity_images:
+                            entity_images_json = [
+                                {
+                                    "url": img.get("image_url", ""),
+                                    "title": img.get("title", ""),
+                                    "page_url": img.get("origin_url", img.get("image_url", "")),
+                                    "width": img.get("width"),
+                                    "height": img.get("height"),
+                                }
+                                for img in perplexity_images
+                                if img.get("image_url")
+                            ]
+                            if image_task is not None and not image_task.done():
+                                image_task.cancel()
+                        elif image_task is not None and not images_emitted:
                             try:
                                 raw = await asyncio.wait_for(
                                     image_task,
