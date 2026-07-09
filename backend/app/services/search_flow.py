@@ -49,7 +49,7 @@ from app.services.document_answer_enforce import (
     edit_document_prompt_addon,
     ensure_markdown_document_answer,
 )
-from app.services.llm_flow_router import resolve_service_flow
+from app.services.llm_flow_router import resolve_service_flow, resolve_service_flow_perplexity_pro
 from app.services.history_summarizer import summarize_history_if_needed
 from app.services.yandex_image_search import YandexImageSearchService
 from app.services.perplexity import PERPLEXITY_PROVIDER_ID, PerplexityProvider
@@ -269,13 +269,29 @@ class SearchFlowService:
             early_prior = list(msgs_result.scalars().all())
 
         flow_ctx = build_thread_context(early_prior)
-        flow = await resolve_service_flow(
-            llm_lite,
-            user_text_preview,
-            flow_ctx,
-            has_attachments=bool(attachment_ids),
-            user_plan=user.plan,
+
+        # Для Pro + Perplexity используем упрощённый роутер:
+        # Perplexity сам решает искать или нет — роутер только отличает
+        # текстовые запросы от спецопераций (картинки, видео, файлы).
+        _use_perplexity_router = (
+            user.plan == Plan.PRO
+            and llm_provider_id == PERPLEXITY_PROVIDER_ID
         )
+        if _use_perplexity_router:
+            flow = await resolve_service_flow_perplexity_pro(
+                llm_lite,
+                user_text_preview,
+                flow_ctx,
+                has_attachments=bool(attachment_ids),
+            )
+        else:
+            flow = await resolve_service_flow(
+                llm_lite,
+                user_text_preview,
+                flow_ctx,
+                has_attachments=bool(attachment_ids),
+                user_plan=user.plan,
+            )
 
         # Perplexity + свежий/новостной запрос → переключаем на Yandex Search + agent LLM.
         # Активно только когда Pro LLM = Perplexity и Yandex настроен.

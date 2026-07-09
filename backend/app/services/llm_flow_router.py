@@ -34,6 +34,34 @@ ServiceFlow = Literal[
 
 _FLOW_JSON_RE = re.compile(r"\{[\s\S]*\}")
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Упрощённый роутер для Pro + Perplexity
+# Perplexity сам решает искать или нет — нам важно только отличить
+# текстовый запрос от спецопераций (картинки, видео, файлы).
+# ─────────────────────────────────────────────────────────────────────────────
+_PERPLEXITY_ROUTER_SYSTEM = """Ты маршрутизатор запросов. Определи категорию.
+
+Верни ТОЛЬКО JSON без markdown:
+{
+  "flow": "perplexity" | "image_generate" | "image_edit" | "image_compose" | "video_generate" | "export_chat_document" | "compress_pdf" | "convert_pdf" | "compress_image" | "image_to_pdf" | "split_pdf",
+  "reason": "кратко по-русски"
+}
+
+Правила:
+- perplexity — ВСЁ остальное: вопросы, поиск, анализ, написание текста, код, советы, объяснения, чат. Сюда относится подавляющее большинство запросов.
+- image_generate — создать/нарисовать новое изображение с нуля (нет прикреплённого фото для редактирования). Маркеры: «нарисуй», «сгенерируй картинку/изображение», «создай иллюстрацию».
+- image_edit — ТОЛЬКО когда в треде уже есть сгенерированное изображение И пользователь просит его изменить: «сделай ч/б», «добавь шляпу», «измени фон».
+- image_compose — пользователь прикрепил 2+ изображения И просит объединить/скомпоновать их.
+- video_generate — создать видеоролик/видеоклип. Маркеры: «сгенерируй видео», «создай ролик».
+- export_chat_document — оформить УЖЕ написанный в треде текст в документ. Маркеры: «оформи как документ», «скачать», «экспортировать».
+- compress_pdf / convert_pdf / split_pdf — работа с PDF-файлом (сжать, конвертировать в JPG, разбить).
+- compress_image — сжать прикреплённое изображение.
+- image_to_pdf — конвертировать изображение в PDF.
+
+При малейшем сомнении → perplexity."""
+
+_PERPLEXITY_ROUTER_JSON_RE = re.compile(r"\{[\s\S]*\}")
+
 
 @dataclass
 class LlmFlowDecision:
@@ -288,3 +316,75 @@ async def resolve_service_flow(
         user_plan,
         has_thread_history=ctx.is_continuation,
     )
+
+
+async def resolve_service_flow_perplexity_pro(
+    llm: ChatLLM,
+    query: str,
+    ctx: ThreadContext,
+    *,
+    has_attachments: bool,
+    attachment_types: list[str] | None = None,
+) -> LlmFlowDecision:
+    """
+    Упрощённый роутер для Pro-пользователей с провайдером Perplexity.
+    Perplexity сам решает искать или нет — нам нужно только отличить
+    текстовый запрос от спецопераций (картинки/видео/файлы).
+    """
+    q = normalize_user_query(query)
+    history = format_history_compact(ctx.history, max_turns=3, max_chars=300)
+
+    user_block = f"Запрос пользователя:\n{q}"
+    if has_attachments:
+        types_hint = ", ".join(attachment_types or []) or "файл"
+        user_block += f"\n[Прикреплены вложения: {types_hint}]"
+    if history:
+        user_block += f"\n\nКонтекст треда:\n{history}"
+
+    messages = [
+        {"role": "system", "text": _PERPLEXITY_ROUTER_SYSTEM},
+        {"role": "user", "text": user_block},
+    ]
+
+    _fallback = LlmFlowDecision(
+        flow="search_rag", needs_search=True, answer_model="pro",
+        reason="perplexity_router_fallback",
+    )
+
+    try:
+        raw = await llm.complete_text(messages, model="lite", max_tokens=128, temperature=0.0)
+        m = _PERPLEXITY_ROUTER_JSON_RE.search(raw or "")
+        if not m:
+            return _fallback
+        data = json.loads(m.group())
+        flow_val = str(data.get("flow") or "perplexity").strip()
+        reason = str(data.get("reason") or "perplexity_router")[:200]
+
+        logger.warning(
+            "PERPLEXITY_ROUTER raw=%s flow=%s",
+            (raw or "")[:150], flow_val,
+        )
+
+        # Текстовые запросы → Perplexity sonar-pro (needs_search=True)
+        if flow_val == "perplexity" or flow_val not in (
+            "image_generate", "image_edit", "image_compose",
+            "video_generate", "export_chat_document",
+            "compress_pdf", "convert_pdf", "compress_image",
+            "image_to_pdf", "split_pdf",
+        ):
+            return LlmFlowDecision(
+                flow="search_rag", needs_search=True, answer_model="pro", reason=reason,
+            )
+
+        # Спецоперации — стандартные флоу
+        _SPEC_FLOWS_NEEDS_SEARCH = frozenset({"export_chat_document"})
+        return LlmFlowDecision(
+            flow=flow_val,  # type: ignore[arg-type]
+            needs_search=flow_val in _SPEC_FLOWS_NEEDS_SEARCH,
+            answer_model="pro",
+            reason=reason,
+        )
+
+    except Exception:
+        logger.exception("perplexity router failed, using fallback")
+        return _fallback
