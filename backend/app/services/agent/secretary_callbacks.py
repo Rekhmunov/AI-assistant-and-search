@@ -139,7 +139,18 @@ async def _handle_clarify(
     from app.services.agent.agent_records import store_record
     from sqlalchemy.orm.attributes import flag_modified as _fm
 
-    category_name = ":".join(parts[3:]) if len(parts) > 3 else ""
+    # Формат: secretary:clarify:{agent_id}:{category_name}
+    # или:    secretary:clarify:{agent_id}:{entity_name}:{option_variant}
+    if len(parts) < 4:
+        await bot.answer_callback(callback_id, "Ошибка: категория не указана")
+        return False
+    if len(parts) >= 5:
+        # require_clarification: category = "entity_name (вариант)"
+        entity_name = parts[3]
+        option_variant = ":".join(parts[4:])
+        category_name = f"{entity_name} ({option_variant})"
+    else:
+        category_name = parts[3]
     if not category_name:
         await bot.answer_callback(callback_id, "Ошибка: категория не указана")
         return False
@@ -183,7 +194,8 @@ async def _handle_clarify(
         next_amt_str = str(int(next_amt)) if next_amt and next_amt == int(next_amt) else str(next_amt or "")
         pending_chat_id = pending.get("chat_id")
         await bot.send_message(None, confirm_text, chat_id=pending_chat_id)
-        await _send_clarify_buttons(bot, agent, entities, next_token, next_amt_str, chat_id=pending_chat_id)
+        from app.services.agent.secretary_executor import _send_clarify_item_buttons as _scib
+        await _scib(bot, agent, entities, remaining[0], next_amt_str, chat_id=pending_chat_id)
     else:
         _set_pending(agent, None)
         await db.commit()
@@ -226,7 +238,8 @@ async def _handle_clarify_cancel(
         next_token = next_item.get("token", "")
         next_amt_str = str(int(next_amt)) if next_amt and next_amt == int(next_amt) else str(next_amt or "")
         pending_chat_id = pending.get("chat_id")
-        await _send_clarify_buttons(bot, agent, entities, next_token, next_amt_str, chat_id=pending_chat_id)
+        from app.services.agent.secretary_executor import _send_clarify_item_buttons as _scib2
+        await _scib2(bot, agent, entities, remaining[0], next_amt_str, chat_id=pending_chat_id)
     else:
         _set_pending(agent, None)
         _fm(agent, "config")

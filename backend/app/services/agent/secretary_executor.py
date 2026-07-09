@@ -364,9 +364,8 @@ async def execute_secretary_message(
         else:
             # Пользователь написал снова нераспознанное — повторяем кнопки
             amt = current.get("amount")
-            token_val = current.get("token", "")
             amt_str = str(int(amt)) if amt and amt == int(amt) else str(amt or "")
-            await _send_clarify_buttons(bot, agent, entities, token_val, amt_str, chat_id)
+            await _send_clarify_item_buttons(bot, agent, entities, current, amt_str, chat_id)
             return ExecutorResult(text="", handled=True)
 
     # ─── 3. Обработка pending: период отчёта ─────────────────────────────────
@@ -473,12 +472,11 @@ async def execute_secretary_message(
 
         # Нужно уточнение варианта (например белая/серая стежка)
         if entity.get("require_clarification") and entity.get("clarification_options"):
-            options = "/".join(entity["clarification_options"])
-            q = entity.get("clarification_question") or f"Уточните вариант для «{entity['name']}»:"
             clarify_queue.append({
                 "amount": amount,
                 "token": rest,
-                "question": f"❓ {q} ({options})",
+                "entity_name": entity["name"],
+                "clarification_options": entity["clarification_options"],
             })
             continue
 
@@ -504,9 +502,8 @@ async def execute_secretary_message(
         _set_pending(agent, {"type": "clarify_entity", "queue": clarify_queue, "chat_id": chat_id})
         first = clarify_queue[0]
         amt = first["amount"]
-        token_val = first["token"]
         amt_str = str(int(amt)) if amt == int(amt) else str(amt)
-        await _send_clarify_buttons(bot, agent, entities, token_val, amt_str, chat_id)
+        await _send_clarify_item_buttons(bot, agent, entities, first, amt_str, chat_id)
         return ExecutorResult(text="", handled=True)
 
     if recorded_count == 0 and not clarify_queue:
@@ -524,22 +521,50 @@ async def _send_clarify_buttons(
     amt_str: str,
     chat_id: int,
 ) -> None:
-    """
-    Отправляет сообщение с inline-кнопками подходящих категорий + кнопка Отмена.
-    Формат payload кнопки: secretary:clarify:{agent_id}:{category_name}
-    Формат кнопки отмены: secretary:clarify_cancel:{agent_id}
-    """
-    candidates = _find_closest_entities(token, entities)
-    agent_id_str = str(agent.id)
+    """Отправляет кнопки для неизвестной категории (обёртка для совместимости с callbacks)."""
+    item = {"token": token}
+    await _send_clarify_item_buttons(bot, agent, entities, item, amt_str, chat_id)
 
-    # Кнопка на каждую категорию — по одной в строке
-    buttons: list[list[dict]] = [
-        [{"type": "callback", "text": e["name"], "payload": f"secretary:clarify:{agent_id_str}:{e['name']}"}]
-        for e in candidates
-    ]
-    # Кнопка отмены — последняя
-    buttons.append([{"type": "callback", "text": "❌ Отмена", "payload": f"secretary:clarify_cancel:{agent_id_str}"}])
+
+async def _send_clarify_item_buttons(
+    bot: MaxBotService,
+    agent: AgentInstance,
+    entities: list[dict],
+    item: dict,
+    amt_str: str,
+    chat_id: int,
+) -> None:
+    """
+    Отправляет inline-кнопки в зависимости от типа уточнения:
+    - require_clarification (есть clarification_options) → кнопки с вариантами из options
+    - unknown entity → кнопки с подходящими категориями
+    Всегда добавляет кнопку ❌ Отмена.
+    """
+    agent_id_str = str(agent.id)
+    token = item.get("token", "")
+    options = item.get("clarification_options")  # варианты для require_clarification
+    entity_name = item.get("entity_name")        # имя категории при require_clarification
+
+    if options and entity_name:
+        # Тип: require_clarification — показываем варианты конкретной категории
+        buttons: list[list[dict]] = [
+            [{"type": "callback", "text": opt,
+              "payload": f"secretary:clarify:{agent_id_str}:{entity_name}:{opt}"}]
+            for opt in options
+        ]
+        msg = f"Уточните вариант для «{entity_name}» (сумма {amt_str}):"
+    else:
+        # Тип: unknown entity — показываем подходящие категории
+        candidates = _find_closest_entities(token, entities)
+        buttons = [
+            [{"type": "callback", "text": e["name"],
+              "payload": f"secretary:clarify:{agent_id_str}:{e['name']}"}]
+            for e in candidates
+        ]
+        msg = f"Не удалось распознать категорию для суммы {amt_str}. Выберите нужную категорию ниже:"
+
+    buttons.append([{"type": "callback", "text": "❌ Отмена",
+                     "payload": f"secretary:clarify_cancel:{agent_id_str}"}])
 
     keyboard = MaxBotService.make_keyboard_attachment(buttons)
-    msg = f"Не удалось распознать категорию для суммы {amt_str}. Выберите нужную категорию ниже:"
     await bot.send_message(None, msg, attachments=[keyboard], chat_id=chat_id)
