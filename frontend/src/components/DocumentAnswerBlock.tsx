@@ -4,11 +4,12 @@ import { t } from "../i18n";
 import { formatChartSpecForCopy, parseChartSpec } from "../lib/parseChartSpec";
 import { truncateDocTitle } from "../lib/truncateDocTitle";
 import { AnswerChart } from "./AnswerChart";
-import { BlockToolbarActions } from "./BlockToolbarActions";
+import { BlockActionsMenu } from "./BlockActionsMenu";
 import { MarkdownDocumentPreview } from "./MarkdownDocumentPreview";
 
-const COLLAPSE_CHAR_THRESHOLD = 1200;
-const COLLAPSED_MAX_VH = 50;
+// Документы не схлопываем — показываем полностью
+const COLLAPSE_CHAR_THRESHOLD = Infinity;
+const COLLAPSED_MAX_VH = 100;
 
 type Props = {
   markdownParts: string[];
@@ -67,13 +68,14 @@ export function DocumentAnswerBlock({ markdownParts, charts, partial }: Props) {
   return (
     <div className="markdown-document-block">
       <div className="markdown-document-header">
+        <span className="markdown-document-type-label">Документ</span>
         <span className="markdown-document-title" title={title}>
           {displayTitle}
         </span>
-        <BlockToolbarActions
-          className="markdown-document-actions"
-          copyText={copyText}
-          docx={{ content: combinedMarkdown, titleHint: title }}
+        <BlockActionsMenu
+          content={combinedMarkdown}
+          titleHint={title}
+          className="markdown-document-actions block-actions-menu-btn"
         />
       </div>
       <div
