@@ -80,6 +80,43 @@ def _match_entity(token: str, entities: list[dict]) -> dict | None:
     return best
 
 
+def _find_closest_entities(token: str, entities: list[dict]) -> list[dict]:
+    """
+    Возвращает список подходящих категорий для показа кнопками.
+    Сначала ищем частичные совпадения по токену → если ничего нет, возвращаем все.
+    Дубликаты по имени убираем.
+    """
+    token_low = _normalize(token)
+    # Слова из токена — ищем хотя бы одно совпадение
+    words = [w for w in token_low.split() if len(w) >= 2]
+    matched: list[dict] = []
+    seen_names: set[str] = set()
+
+    for entity in entities:
+        name = entity.get("name", "")
+        if name in seen_names:
+            continue
+        triggers = [_normalize(t) for t in entity.get("triggers", [])]
+        # Точное или частичное совпадение: токен ↔ триггер, или слово из токена ↔ триггер
+        is_match = (
+            any(t in token_low or token_low in t for t in triggers)
+            or any(any(w in t or t in w for t in triggers) for w in words)
+        )
+        if is_match:
+            matched.append(entity)
+            seen_names.add(name)
+
+    # Нет совпадений — показываем все категории (пусть пользователь выберет сам)
+    if not matched:
+        for entity in entities:
+            name = entity.get("name", "")
+            if name not in seen_names:
+                matched.append(entity)
+                seen_names.add(name)
+
+    return matched
+
+
 def _split_inline_entries(line: str) -> list[str]:
     """
     Разбивает строку вида '1000 ПЗР 2000 упаковка' на отдельные записи.
@@ -317,20 +354,20 @@ async def execute_secretary_message(
                 next_amt = next_item.get("amount")
                 next_token = next_item.get("token", "")
                 next_amt_str = str(int(next_amt)) if next_amt == int(next_amt) else str(next_amt)
-                if "question" in remaining[0]:
-                    clarify_text = remaining[0]["question"] + f" (сумма: {next_amt_str})"
-                else:
-                    unknown_msg = responses.get("on_unknown_entity", "❓ Не распознана категория '{token}'. Уточните:")
-                    clarify_text = unknown_msg.format(token=next_token[:50]) + f" (сумма: {next_amt_str})"
-                return ExecutorResult(text=f"{result_text}\n{clarify_text}")
+                # Сначала подтверждаем текущую запись, потом отправляем кнопки для следующей
+                await bot.send_message(None, result_text, chat_id=chat_id)
+                await _send_clarify_buttons(bot, agent, entities, next_token, next_amt_str, chat_id)
+                return ExecutorResult(text="", handled=True)
             else:
                 _set_pending(agent, None)
                 return ExecutorResult(text=result_text)
         else:
-            return ExecutorResult(
-                text=f"❓ Не нашёл подходящую категорию для «{text.strip()}». "
-                     f"Пожалуйста, уточните категорию из списка."
-            )
+            # Пользователь написал снова нераспознанное — повторяем кнопки
+            amt = current.get("amount")
+            token_val = current.get("token", "")
+            amt_str = str(int(amt)) if amt and amt == int(amt) else str(amt or "")
+            await _send_clarify_buttons(bot, agent, entities, token_val, amt_str, chat_id)
+            return ExecutorResult(text="", handled=True)
 
     # ─── 3. Обработка pending: период отчёта ─────────────────────────────────
     pending_report = _get_pending_period(agent)
@@ -462,23 +499,47 @@ async def execute_secretary_message(
             logger.warning("secretary: failed to send confirmation for %s: %s", entity["name"], send_exc)
         recorded_count += 1
 
-    # Если есть записи требующие уточнения — сохраняем очередь и спрашиваем первую
+    # Если есть записи требующие уточнения — сохраняем очередь и отправляем кнопки
     if clarify_queue:
-        _set_pending(agent, {"type": "clarify_entity", "queue": clarify_queue})
+        _set_pending(agent, {"type": "clarify_entity", "queue": clarify_queue, "chat_id": chat_id})
         first = clarify_queue[0]
         amt = first["amount"]
-        token = first["token"]
+        token_val = first["token"]
         amt_str = str(int(amt)) if amt == int(amt) else str(amt)
-        if "question" in first:
-            clarify_text = first["question"] + f" (сумма: {amt_str})"
-        else:
-            unknown_msg = responses.get("on_unknown_entity", "❓ Не распознана категория '{token}'. Уточните:")
-            clarify_text = unknown_msg.format(token=token[:50]) + f" (сумма: {amt_str})"
-        # Подтверждения уже отправлены через send_message — возвращаем только уточнение
-        return ExecutorResult(text=clarify_text)
+        await _send_clarify_buttons(bot, agent, entities, token_val, amt_str, chat_id)
+        return ExecutorResult(text="", handled=True)
 
     if recorded_count == 0 and not clarify_queue:
         return None
 
     # Все подтверждения отправлены отдельными сообщениями — ничего не добавляем
     return ExecutorResult(text="", handled=True)
+
+
+async def _send_clarify_buttons(
+    bot: MaxBotService,
+    agent: AgentInstance,
+    entities: list[dict],
+    token: str,
+    amt_str: str,
+    chat_id: int,
+) -> None:
+    """
+    Отправляет сообщение с inline-кнопками подходящих категорий + кнопка Отмена.
+    Формат payload кнопки: secretary:clarify:{agent_id}:{category_name}
+    Формат кнопки отмены: secretary:clarify_cancel:{agent_id}
+    """
+    candidates = _find_closest_entities(token, entities)
+    agent_id_str = str(agent.id)
+
+    # Кнопка на каждую категорию — по одной в строке
+    buttons: list[list[dict]] = [
+        [{"type": "callback", "text": e["name"], "payload": f"secretary:clarify:{agent_id_str}:{e['name']}"}]
+        for e in candidates
+    ]
+    # Кнопка отмены — последняя
+    buttons.append([{"type": "callback", "text": "❌ Отмена", "payload": f"secretary:clarify_cancel:{agent_id_str}"}])
+
+    keyboard = MaxBotService.make_keyboard_attachment(buttons)
+    msg = f"Не удалось распознать категорию для суммы {amt_str}. Выберите нужную категорию ниже:"
+    await bot.send_message(None, msg, attachments=[keyboard], chat_id=chat_id)

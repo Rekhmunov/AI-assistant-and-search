@@ -2,7 +2,9 @@
 Обработка inline-кнопок агента «Учет затрат».
 
 Форматы payload:
-  secretary:delete:{agent_id}:{record_id}   — удалить запись
+  secretary:delete:{agent_id}:{record_id}        — удалить запись
+  secretary:clarify:{agent_id}:{category_name}   — выбрать категорию для уточнения
+  secretary:clarify_cancel:{agent_id}            — отменить ввод затраты
 """
 from __future__ import annotations
 
@@ -66,6 +68,12 @@ async def handle_secretary_callback(
     if action == "delete":
         return await _handle_delete(db, bot, agent, callback_id, parts)
 
+    if action == "clarify":
+        return await _handle_clarify(db, bot, agent, callback_id, parts, clicker_user_id)
+
+    if action == "clarify_cancel":
+        return await _handle_clarify_cancel(db, bot, agent, callback_id, clicker_user_id)
+
     await bot.answer_callback(callback_id)
     return False
 
@@ -118,3 +126,112 @@ async def _handle_delete(
     return True
 
 
+async def _handle_clarify(
+    db: AsyncSession,
+    bot: MaxBotService,
+    agent: AgentInstance,
+    callback_id: str,
+    parts: list[str],
+    clicker_user_id: int | None,
+) -> bool:
+    """Пользователь нажал кнопку с категорией — записываем затрату."""
+    from app.services.agent.secretary_executor import _get_pending, _set_pending, _send_clarify_buttons
+    from app.services.agent.agent_records import store_record
+    from sqlalchemy.orm.attributes import flag_modified as _fm
+
+    category_name = ":".join(parts[3:]) if len(parts) > 3 else ""
+    if not category_name:
+        await bot.answer_callback(callback_id, "Ошибка: категория не указана")
+        return False
+
+    pending = _get_pending(agent)
+    if not pending or pending.get("type") != "clarify_entity":
+        await bot.answer_callback(callback_id, "Уточнение уже не актуально")
+        return False
+
+    queue: list[dict] = pending.get("queue", [])
+    if not queue:
+        _set_pending(agent, None)
+        await bot.answer_callback(callback_id)
+        return False
+
+    first = queue[0]
+    amount = first.get("amount")
+    token = first.get("token", "")
+
+    store_record(agent, "records", {
+        "category": category_name,
+        "amount": amount,
+        "note": token,
+    })
+    _fm(agent, "config")
+
+    amt_str = str(int(amount)) if amount and amount == int(amount) else str(amount or "")
+    confirm_text = f"✅ Записано: {category_name} — {amt_str}"
+
+    remaining = queue[1:]
+    if remaining:
+        _set_pending(agent, {"type": "clarify_entity", "queue": remaining})
+        await db.commit()
+        await bot.answer_callback(callback_id, "✅ Записано")
+        # Следующая нераспознанная — отправляем кнопки
+        rules = (agent.config or {}).get("compiled_rules", {})
+        entities = rules.get("entities", [])
+        next_item = remaining[0]
+        next_amt = next_item.get("amount")
+        next_token = next_item.get("token", "")
+        next_amt_str = str(int(next_amt)) if next_amt and next_amt == int(next_amt) else str(next_amt or "")
+        pending_chat_id = pending.get("chat_id")
+        await bot.send_message(None, confirm_text, chat_id=pending_chat_id)
+        await _send_clarify_buttons(bot, agent, entities, next_token, next_amt_str, chat_id=pending_chat_id)
+    else:
+        _set_pending(agent, None)
+        await db.commit()
+        await bot.answer_callback(callback_id, "✅ Записано")
+        # Редактируем сообщение с кнопками — заменяем на подтверждение без кнопок
+        await bot.answer_callback(callback_id)
+
+    logger.info("secretary_callback: clarify saved category=%s amount=%s agent=%s", category_name, amount, agent.id)
+    return True
+
+
+async def _handle_clarify_cancel(
+    db: AsyncSession,
+    bot: MaxBotService,
+    agent: AgentInstance,
+    callback_id: str,
+    clicker_user_id: int | None,
+) -> bool:
+    """Пользователь нажал Отмена — пропускаем первый элемент очереди."""
+    from app.services.agent.secretary_executor import _get_pending, _set_pending, _send_clarify_buttons
+    from sqlalchemy.orm.attributes import flag_modified as _fm
+
+    pending = _get_pending(agent)
+    if not pending or pending.get("type") != "clarify_entity":
+        await bot.answer_callback(callback_id)
+        return False
+
+    queue: list[dict] = pending.get("queue", [])
+    remaining = queue[1:] if queue else []
+
+    if remaining:
+        _set_pending(agent, {"type": "clarify_entity", "queue": remaining})
+        _fm(agent, "config")
+        await db.commit()
+        await bot.answer_callback(callback_id, "Отменено")
+        rules = (agent.config or {}).get("compiled_rules", {})
+        entities = rules.get("entities", [])
+        next_item = remaining[0]
+        next_amt = next_item.get("amount")
+        next_token = next_item.get("token", "")
+        next_amt_str = str(int(next_amt)) if next_amt and next_amt == int(next_amt) else str(next_amt or "")
+        pending_chat_id = pending.get("chat_id")
+        await _send_clarify_buttons(bot, agent, entities, next_token, next_amt_str, chat_id=pending_chat_id)
+    else:
+        _set_pending(agent, None)
+        _fm(agent, "config")
+        await db.commit()
+        await bot.answer_callback(callback_id, "Отменено")
+
+    logger.info("secretary_callback: clarify_cancel agent=%s", agent.id)
+    return True
