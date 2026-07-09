@@ -271,8 +271,26 @@ async def confirm_pro_payment(
 
 
 @router.post("/webhook")
-async def yookassa_webhook(request: Request, db: Annotated[AsyncSession, Depends(get_db)]):
+async def yookassa_webhook(
+    request: Request,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    redis_client: redis.Redis = Depends(get_redis),
+):
     """Handle YooKassa payment notifications (verified via YooKassa API)."""
+    # Rate limit: не более 60 вызовов в минуту с одного IP
+    client_ip = request.client.host if request.client else "unknown"
+    rl_key = f"rl:yookassa_webhook:{client_ip}"
+    try:
+        count = await redis_client.incr(rl_key)
+        if count == 1:
+            await redis_client.expire(rl_key, 60)
+        if count > 60:
+            raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Too many requests")
+    except HTTPException:
+        raise
+    except Exception:
+        pass  # Redis недоступен — пропускаем rate limit
+
     settings = get_settings()
     try:
         body: dict[str, Any] = await request.json()

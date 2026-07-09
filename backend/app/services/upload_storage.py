@@ -25,10 +25,24 @@ def save_upload_bytes(user_id: UUID, file_id: UUID, data: bytes, ext: str) -> st
     return rel
 
 
+def _safe_path(storage_key: str) -> Path | None:
+    """Возвращает Path только если он не выходит за пределы upload_storage_dir (защита от path traversal)."""
+    root = _root()
+    path = (root / storage_key).resolve()
+    try:
+        path.relative_to(root.resolve())
+    except ValueError:
+        logger.error("path traversal attempt blocked: storage_key=%r", storage_key)
+        return None
+    return path
+
+
 def load_upload_bytes(storage_key: str | None) -> bytes | None:
     if not storage_key:
         return None
-    path = _root() / storage_key
+    path = _safe_path(storage_key)
+    if path is None:
+        return None
     if not path.is_file():
         logger.warning("upload file missing on disk: %s", storage_key)
         return None
@@ -38,7 +52,10 @@ def load_upload_bytes(storage_key: str | None) -> bytes | None:
 def delete_upload_file(storage_key: str | None) -> None:
     if not storage_key:
         return
-    path = _root() / storage_key
+    path = _safe_path(storage_key)
+    if path is None:
+        return
+    path = path  # уже проверен _safe_path
     try:
         path.unlink(missing_ok=True)
     except OSError:

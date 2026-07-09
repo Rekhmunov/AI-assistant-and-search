@@ -259,6 +259,19 @@ class SearchFlowService:
 
         early_prior: list[Message] = []
         if thread_id:
+            # Проверяем владение тредом ПРЕЖДЕ чем загружать сообщения.
+            # Без этой проверки IDOR: чужой thread_id → чужие сообщения уйдут в LLM для роутинга.
+            from app.models.thread import Thread as _Thread, ThreadType as _TT
+            owned_thread_check = await db.execute(
+                select(_Thread).where(
+                    _Thread.id == thread_id,
+                    _Thread.user_id == user.id,
+                    _Thread.deleted_at.is_(None),
+                )
+            )
+            if owned_thread_check.scalar_one_or_none() is None:
+                yield sse_event("error", {"code": "not_found", "message": "Тред не найден"})
+                return
             msgs_result = await db.execute(
                 select(Message)
                 .where(

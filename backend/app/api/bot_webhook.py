@@ -133,7 +133,12 @@ def _verify_webhook_secret(
 ) -> None:
     settings = get_settings()
     expected = settings.max_bot_webhook_secret.strip()
-    provided = (x_max_bot_api_secret or x_webhook_secret or query_secret or "").strip()
+    # query_secret не принимаем в production — secret в URL попадает в логи
+    if settings.environment.strip().lower() == "production" and query_secret:
+        logger.warning("WEBHOOK: secret via query string rejected in production (use headers)")
+    provided = (x_max_bot_api_secret or x_webhook_secret or "").strip()
+    if not provided and query_secret and settings.environment.strip().lower() != "production":
+        provided = query_secret.strip()
 
     # Секрет обязателен в любом окружении если задан.
     # В продакшне — всегда обязателен.
