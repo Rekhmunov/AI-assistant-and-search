@@ -196,6 +196,8 @@ class PerplexityProvider(PromptedLLMMixin, LLMProvider):
             "language_preference": "ru",
             "max_tokens": 2800,
             "temperature": 0.2,
+            # Pro запросы читают больше источников (high), lite — быстрее (low)
+            "search_context_size": "high" if model == "pro" else "low",
         }
         recency = (self.settings.perplexity_search_recency_filter or "").strip()
         if recency:
