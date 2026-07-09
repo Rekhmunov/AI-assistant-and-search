@@ -37,8 +37,13 @@ MESSAGE_CONTENT_MAX = 12_000
 
 
 def _plan_str(user: User) -> str:
+    """Возвращает эффективный план с учётом истечения срока."""
+    from datetime import datetime, timezone
     plan = user.plan
     if plan is None:
+        return Plan.FREE.value
+    # Если Pro истёк — показываем как Free (без записи в БД — только для отображения)
+    if plan == Plan.PRO and user.plan_expires_at and user.plan_expires_at < datetime.now(timezone.utc):
         return Plan.FREE.value
     if isinstance(plan, Plan):
         return plan.value

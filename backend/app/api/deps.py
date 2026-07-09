@@ -173,8 +173,25 @@ async def _resolve_authenticated_user(
     if creds and creds.credentials:
         user = await _user_from_access_token(db, creds.credentials)
         if user:
+            await _maybe_downgrade_expired_plan(db, user)
             return user
-    return await _user_from_refresh_cookie(db, refresh_token, redis_client)
+    user = await _user_from_refresh_cookie(db, refresh_token, redis_client)
+    if user:
+        await _maybe_downgrade_expired_plan(db, user)
+    return user
+
+
+async def _maybe_downgrade_expired_plan(db: AsyncSession, user: "User") -> None:
+    """Понижает план с Pro на Free если срок истёк. Сохраняет изменение в БД."""
+    from datetime import datetime, timezone as _tz
+    from app.models.user import Plan
+    if user.plan == Plan.PRO and user.plan_expires_at and user.plan_expires_at < datetime.now(_tz.utc):
+        user.plan = Plan.FREE
+        user.plan_expires_at = None
+        try:
+            await db.commit()
+        except Exception:
+            await db.rollback()
 
 
 @dataclass

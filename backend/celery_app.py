@@ -39,6 +39,10 @@ celery.conf.update(
             "task": "purge_deleted_accounts",
             "schedule": crontab(hour=4, minute=45),
         },
+        "downgrade-expired-pro": {
+            "task": "downgrade_expired_pro_subscriptions",
+            "schedule": crontab(minute=0),  # каждый час в :00
+        },
         "dispatch-poster-scheduled": {
             "task": "dispatch_poster_scheduled",
             "schedule": crontab(minute="*/5"),  # каждые 5 минут

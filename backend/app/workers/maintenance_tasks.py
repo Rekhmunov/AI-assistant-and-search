@@ -157,3 +157,44 @@ async def _purge_deleted_accounts_async() -> int:
 
     logger.info("purge_deleted_accounts: removed %s users", purged)
     return purged
+
+
+@celery.task(name="downgrade_expired_pro_subscriptions")
+def downgrade_expired_pro_task() -> None:
+    asyncio.run(_downgrade_expired_pro_async())
+
+
+async def _downgrade_expired_pro_async() -> int:
+    """Понижает план с Pro на Free для всех пользователей с истёкшим plan_expires_at."""
+    from datetime import datetime, timezone
+    from sqlalchemy import update
+    from app.models.user import Plan
+
+    settings_module = __import__("app.core.config", fromlist=["get_settings"])
+    settings = settings_module.get_settings()
+    engine = create_async_engine(settings.database_url)
+    session_factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    downgraded = 0
+
+    try:
+        async with session_factory() as db:
+            now = datetime.now(timezone.utc)
+            result = await db.execute(
+                update(
+                    __import__("app.models.user", fromlist=["User"]).User
+                )
+                .where(
+                    __import__("app.models.user", fromlist=["User"]).User.plan == Plan.PRO,
+                    __import__("app.models.user", fromlist=["User"]).User.plan_expires_at.isnot(None),
+                    __import__("app.models.user", fromlist=["User"]).User.plan_expires_at < now,
+                )
+                .values(plan=Plan.FREE, plan_expires_at=None)
+            )
+            downgraded = result.rowcount or 0
+            await db.commit()
+    finally:
+        await engine.dispose()
+
+    if downgraded:
+        logger.info("downgrade_expired_pro: downgraded %s users from Pro to Free", downgraded)
+    return downgraded
