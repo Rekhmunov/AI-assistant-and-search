@@ -1,14 +1,16 @@
 export type AnswerMarkdownBlock =
-  | { type: "heading"; text: string }
+  | { type: "heading"; level: 1 | 2 | 3 | 4 | 5 | 6; text: string }
   | { type: "paragraph"; text: string }
   | { type: "ul"; items: string[] }
-  | { type: "ol"; items: string[] };
+  | { type: "ol"; items: string[] }
+  | { type: "blockquote"; lines: string[] };
 
-const HEADING_RE = /^#{1,6}\s+(.+)$/;
+const HEADING_RE = /^(#{1,6})\s+(.+)$/;
 const UL_RE = /^[*+\-]\s+(.+)$/;
 const OL_RE = /^\d+[.)]\s+(.+)$/;
 const BOLD_ONLY_RE = /^\*\*(.+)\*\*$/;
 const UNDERONLY_RE = /^__(.+)__$/;
+const BLOCKQUOTE_RE = /^>\s*(.*)/;
 
 function isBlockStarter(line: string): boolean {
   const trimmed = line.trim();
@@ -18,7 +20,8 @@ function isBlockStarter(line: string): boolean {
     UL_RE.test(trimmed) ||
     OL_RE.test(trimmed) ||
     BOLD_ONLY_RE.test(trimmed) ||
-    UNDERONLY_RE.test(trimmed)
+    UNDERONLY_RE.test(trimmed) ||
+    BLOCKQUOTE_RE.test(trimmed)
   );
 }
 
@@ -26,14 +29,17 @@ function normalizeHeadingText(text: string): string {
   return text.replace(/^\d+[.)]\s+/, "").trim();
 }
 
-function parseHeading(line: string): string | null {
+function parseHeadingBlock(line: string): { level: 1|2|3|4|5|6; text: string } | null {
   const trimmed = line.trim();
   const hash = trimmed.match(HEADING_RE);
-  if (hash) return normalizeHeadingText(hash[1]);
+  if (hash) {
+    const level = Math.min(hash[1].length, 6) as 1|2|3|4|5|6;
+    return { level, text: normalizeHeadingText(hash[2]) };
+  }
   const bold = trimmed.match(BOLD_ONLY_RE);
-  if (bold) return normalizeHeadingText(bold[1]);
+  if (bold) return { level: 3, text: normalizeHeadingText(bold[1]) };
   const under = trimmed.match(UNDERONLY_RE);
-  if (under) return normalizeHeadingText(under[1]);
+  if (under) return { level: 3, text: normalizeHeadingText(under[1]) };
   return null;
 }
 
@@ -50,10 +56,26 @@ export function parseAnswerMarkdownBlocks(text: string): AnswerMarkdownBlock[] {
     while (i < lines.length && !lines[i].trim()) i += 1;
     if (i >= lines.length) break;
 
-    const heading = parseHeading(lines[i]);
+    const heading = parseHeadingBlock(lines[i]);
     if (heading) {
-      blocks.push({ type: "heading", text: heading });
+      blocks.push({ type: "heading", level: heading.level, text: heading.text });
       i += 1;
+      continue;
+    }
+
+    // Blockquote
+    if (BLOCKQUOTE_RE.test(lines[i].trim())) {
+      const bqLines: string[] = [];
+      while (i < lines.length) {
+        const bqMatch = lines[i].trim().match(BLOCKQUOTE_RE);
+        if (bqMatch) {
+          bqLines.push(bqMatch[1]);
+          i += 1;
+        } else {
+          break;
+        }
+      }
+      if (bqLines.length) blocks.push({ type: "blockquote", lines: bqLines });
       continue;
     }
 
@@ -62,9 +84,9 @@ export function parseAnswerMarkdownBlocks(text: string): AnswerMarkdownBlock[] {
     const olMatch = trimmed.match(OL_RE);
 
     if (olMatch) {
-      const nextTrimmed = i + 1 < lines.length ? lines[i + 1].trim() : "";
-      if (!OL_RE.test(nextTrimmed)) {
-        blocks.push({ type: "heading", text: normalizeHeadingText(olMatch[1]) });
+    const nextTrimmed = i + 1 < lines.length ? lines[i + 1].trim() : "";
+        if (!OL_RE.test(nextTrimmed)) {
+        blocks.push({ type: "heading", level: 3, text: normalizeHeadingText(olMatch[1]) });
         i += 1;
         continue;
       }

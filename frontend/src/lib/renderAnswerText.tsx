@@ -56,11 +56,32 @@ function renderMarkdownBlock(
     const { text, indices } = parseParagraphCitations(block.text);
     const body = renderInlineText(text, `${keyPrefix}-h`);
     if (!body.length && indices.length === 0) return null;
+    const level = block.level ?? 2;
+    const Tag = level <= 2 ? "h2" : level === 3 ? "h3" : "h4" as keyof JSX.IntrinsicElements;
+    const cls = `answer-heading answer-heading--h${level}`;
     return (
-      <h2 className="answer-heading">
+      <Tag className={cls}>
         <span className="answer-heading-body">{body}</span>
         {renderBlockSources(indices, sources)}
-      </h2>
+      </Tag>
+    );
+  }
+
+  if (block.type === "blockquote") {
+    return (
+      <blockquote className="answer-blockquote">
+        {block.lines.map((line, i) => {
+          const { text, indices } = parseParagraphCitations(line);
+          const body = renderInlineText(text, `${keyPrefix}-bq-${i}`);
+          if (!body.length) return null;
+          return (
+            <p key={i} className="answer-blockquote-line">
+              <span>{body}</span>
+              {renderBlockSources(indices, sources)}
+            </p>
+          );
+        })}
+      </blockquote>
     );
   }
 
