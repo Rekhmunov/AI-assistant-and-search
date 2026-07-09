@@ -67,6 +67,10 @@ function renderMarkdownBlock(
     );
   }
 
+  if (block.type === "hr") {
+    return <hr className="answer-hr" />;
+  }
+
   if (block.type === "blockquote") {
     return (
       <blockquote className="answer-blockquote">

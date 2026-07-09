@@ -3,7 +3,8 @@ export type AnswerMarkdownBlock =
   | { type: "paragraph"; text: string }
   | { type: "ul"; items: string[] }
   | { type: "ol"; items: string[] }
-  | { type: "blockquote"; lines: string[] };
+  | { type: "blockquote"; lines: string[] }
+  | { type: "hr" };
 
 const HEADING_RE = /^(#{1,6})\s+(.+)$/;
 const UL_RE = /^[*+\-]\s+(.+)$/;
@@ -11,6 +12,7 @@ const OL_RE = /^\d+[.)]\s+(.+)$/;
 const BOLD_ONLY_RE = /^\*\*(.+)\*\*$/;
 const UNDERONLY_RE = /^__(.+)__$/;
 const BLOCKQUOTE_RE = /^>\s*(.*)/;
+const HR_RE = /^([*\-_])\s*\1\s*\1[\s\1]*$/;
 
 function isBlockStarter(line: string): boolean {
   const trimmed = line.trim();
@@ -21,7 +23,8 @@ function isBlockStarter(line: string): boolean {
     OL_RE.test(trimmed) ||
     BOLD_ONLY_RE.test(trimmed) ||
     UNDERONLY_RE.test(trimmed) ||
-    BLOCKQUOTE_RE.test(trimmed)
+    BLOCKQUOTE_RE.test(trimmed) ||
+    HR_RE.test(trimmed)
   );
 }
 
@@ -55,6 +58,13 @@ export function parseAnswerMarkdownBlocks(text: string): AnswerMarkdownBlock[] {
   while (i < lines.length) {
     while (i < lines.length && !lines[i].trim()) i += 1;
     if (i >= lines.length) break;
+
+    // Horizontal rule: ---, ***, ___
+    if (HR_RE.test(lines[i].trim())) {
+      blocks.push({ type: "hr" });
+      i += 1;
+      continue;
+    }
 
     const heading = parseHeadingBlock(lines[i]);
     if (heading) {

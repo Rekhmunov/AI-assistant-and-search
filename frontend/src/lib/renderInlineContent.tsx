@@ -11,13 +11,30 @@ type InlineToken =
   | { type: "plain"; text: string }
   | { type: "bold"; text: string }
   | { type: "italic"; text: string }
+  | { type: "bold_italic"; text: string }
+  | { type: "strikethrough"; text: string }
   | { type: "link"; label: string; href: string }
   | { type: "code"; text: string };
 
 function tokenizeInline(text: string): InlineToken[] {
   const tokens: InlineToken[] = [];
-  // Порядок важен: code > bold > italic > md-link
-  const re = /(`[^`\n]+`|\*\*[^*\n]+\*\*|__[^_\n]+__|(?<![*])\*(?![*])[^*\n]+\*(?![*])|_[^_\n]+_|\[[^\]]+\]\([^)]+\))/g;
+  // Порядок: code > bold-italic > bold > strikethrough > italic > md-link
+  // Ссылки: URL может содержать () — используем сбалансированную эвристику
+  const re = new RegExp(
+    "(`[^`\\n]+`" +
+    "|\\*\\*\\*[^*\\n]+\\*\\*\\*" +           // bold-italic ***
+    "|___[^_\\n]+___" +                         // bold-italic ___
+    "|\\*\\*[^*\\n]+\\*\\*" +                   // bold **
+    "|__[^_\\n]+__" +                           // bold __
+    "|~~[^~\\n]+~~" +                           // strikethrough
+    "|!\\[[^\\]]*\\]\\([^)]+\\)" +              // image — strip
+    "|\\[[^\\]]+\\]\\(https?://[^)\\s]*(?:\\([^)]*\\)[^)\\s]*)*\\)" + // link with balanced ()
+    "|\\[[^\\]]+\\]\\([^)\\s]+\\)" +            // link simple
+    "|(?<![*])\\*(?![*])[^*\\n]+\\*(?![*])" +  // italic *
+    "|_[^_\\n]+_" +                             // italic _
+    ")",
+    "g"
+  );
   let last = 0;
   let m: RegExpExecArray | null;
 
@@ -26,10 +43,16 @@ function tokenizeInline(text: string): InlineToken[] {
     const raw = m[0];
     if (raw.startsWith("`")) {
       tokens.push({ type: "code", text: raw.slice(1, -1) });
+    } else if (raw.startsWith("***") || raw.startsWith("___")) {
+      tokens.push({ type: "bold_italic", text: raw.slice(3, -3) });
     } else if (raw.startsWith("**") || raw.startsWith("__")) {
       tokens.push({ type: "bold", text: raw.slice(2, -2) });
+    } else if (raw.startsWith("~~")) {
+      tokens.push({ type: "strikethrough", text: raw.slice(2, -2) });
+    } else if (raw.startsWith("![")) {
+      // Image: strip entirely (don't show broken image links)
     } else if (raw.startsWith("[")) {
-      const lm = raw.match(/^\[([^\]]+)\]\(([^)]+)\)$/);
+      const lm = raw.match(/^\[([^\]]+)\]\((.+)\)$/);
       if (lm) tokens.push({ type: "link", label: lm[1], href: lm[2] });
       else tokens.push({ type: "plain", text: raw });
     } else {
@@ -85,6 +108,10 @@ export function renderInlineContent(text: string, keyPrefix: string): ReactNode[
       nodes.push(<strong key={k} className="answer-bold">{tok.text}</strong>);
     } else if (tok.type === "italic") {
       nodes.push(<em key={k} className="answer-italic">{tok.text}</em>);
+    } else if (tok.type === "bold_italic") {
+      nodes.push(<strong key={k} className="answer-bold"><em className="answer-italic">{tok.text}</em></strong>);
+    } else if (tok.type === "strikethrough") {
+      nodes.push(<s key={k} className="answer-strike">{tok.text}</s>);
     } else if (tok.type === "link") {
       const safe = normalizeLinkHref(tok.href);
       if (safe) {

@@ -4568,6 +4568,12 @@ body:has(.page-thread) {
 
 .answer-bold { font-weight: 600; }
 .answer-italic { font-style: italic; }
+.answer-strike { text-decoration: line-through; opacity: 0.7; }
+.answer-hr {
+  border: none;
+  border-top: 1px solid var(--border, #e5e7eb);
+  margin: 1em 0;
+}
 
 .answer-blockquote {
   margin: 0.75em 0;
