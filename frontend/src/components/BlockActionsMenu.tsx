@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, Download } from "lucide-react";
 import {
   exportAnswerBlockToDocx,
   exportAnswerBlockToMarkdown,
@@ -181,6 +181,7 @@ export function BlockActionsMenu({ content, titleHint, className = "block-action
             setOpen((v) => !v);
           }}
         >
+          <Download width={18} height={18} strokeWidth={1.8} aria-hidden />
           <span className="block-actions-menu-label">{t("downloadDocument")}</span>
           <span className="block-actions-menu-chevron-wrap" aria-hidden>
             <ChevronIcon open={open} />

@@ -4057,6 +4057,18 @@ body:has(.page-thread) {
   animation: speak-pulse 1.4s ease-in-out infinite;
 }
 
+/* BlockActionsMenu встроенный в AnswerFooter — выглядит как иконка */
+.answer-export-menu-btn {
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  justify-content: center;
+}
+.answer-export-menu-btn .block-actions-menu-label,
+.answer-export-menu-btn .block-actions-menu-chevron-wrap {
+  display: none;
+}
+
 @keyframes speak-pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.55; }

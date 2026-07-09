@@ -10,6 +10,7 @@ import { useAuthStore } from "../store/authStore";
 import { AnswerFeedback } from "./AnswerFeedback";
 import { SourcesPanel } from "./SourcesPanel";
 import { SourcesTriggerButton } from "./SourcesTriggerButton";
+import { BlockActionsMenu } from "./BlockActionsMenu";
 
 type Props = {
   answer: string;
@@ -157,6 +158,13 @@ export function AnswerFooter({
           )}
           {messageId && UUID_RE.test(messageId) && (
             <AnswerFeedback messageId={messageId} token={token ?? null} initialFeedback={userFeedback} />
+          )}
+          {answerHasText(answer) && !generatedDocument && (
+            <BlockActionsMenu
+              content={answer}
+              titleHint={title}
+              className="answer-icon-btn answer-export-menu-btn"
+            />
           )}
         </div>
 
