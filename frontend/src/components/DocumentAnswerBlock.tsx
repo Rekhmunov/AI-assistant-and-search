@@ -7,9 +7,9 @@ import { AnswerChart } from "./AnswerChart";
 import { BlockActionsMenu } from "./BlockActionsMenu";
 import { MarkdownDocumentPreview } from "./MarkdownDocumentPreview";
 
-// Документы не схлопываем — показываем полностью
-const COLLAPSE_CHAR_THRESHOLD = Infinity;
-const COLLAPSED_MAX_VH = 100;
+// Документы длиннее порога сворачиваются
+const COLLAPSE_CHAR_THRESHOLD = 2000;
+const PREVIEW_CHARS = 800;
 
 type Props = {
   markdownParts: string[];
@@ -48,6 +48,13 @@ function buildCopyText(markdownParts: string[], charts: string[]): string {
   return chunks.join("\n\n");
 }
 
+function getPreviewMarkdown(combined: string): string {
+  if (combined.length <= PREVIEW_CHARS) return combined;
+  const sub = combined.slice(0, PREVIEW_CHARS);
+  const lastPara = sub.lastIndexOf("\n\n");
+  return (lastPara > 200 ? sub.slice(0, lastPara) : sub) + "\n\n…";
+}
+
 export function DocumentAnswerBlock({ markdownParts, charts, partial }: Props) {
   const title = useMemo(() => resolveTitle(markdownParts), [markdownParts]);
   const displayTitle = useMemo(() => truncateDocTitle(title), [title]);
@@ -57,6 +64,7 @@ export function DocumentAnswerBlock({ markdownParts, charts, partial }: Props) {
   const contentLen = combinedMarkdown.length + charts.join("").length;
   const shouldCollapse = contentLen > COLLAPSE_CHAR_THRESHOLD;
   const [expanded, setExpanded] = useState(!shouldCollapse);
+  const previewMarkdown = useMemo(() => getPreviewMarkdown(combinedMarkdown), [combinedMarkdown]);
 
   const chartSpecs = useMemo(
     () => charts.map((raw) => ({ raw, spec: partial ? null : parseChartSpec(raw) })),
@@ -78,15 +86,11 @@ export function DocumentAnswerBlock({ markdownParts, charts, partial }: Props) {
           className="markdown-document-actions block-actions-menu-btn"
         />
       </div>
-      <div
-        className={`markdown-document-body${shouldCollapse && !expanded ? " markdown-document-body--collapsed" : ""}`}
-        style={
-          shouldCollapse && !expanded ? { maxHeight: `${COLLAPSED_MAX_VH}vh` } : undefined
-        }
-      >
+      <div className="markdown-document-body">
         {Array.from({ length: maxSlots }, (_, slot) => {
-          const md = markdownParts[slot];
-          const chart = chartSpecs[slot];
+          const mdFull = markdownParts[slot];
+          const md = !expanded && slot === 0 && shouldCollapse ? previewMarkdown : mdFull;
+          const chart = expanded || slot === 0 ? chartSpecs[slot] : null;
           if (!md && !chart) return null;
           return (
             <div key={`doc-slot-${slot}`} className="document-answer-slot">

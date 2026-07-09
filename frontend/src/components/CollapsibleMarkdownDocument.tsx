@@ -5,15 +5,24 @@ import { truncateDocTitle } from "../lib/truncateDocTitle";
 import { BlockActionsMenu } from "./BlockActionsMenu";
 import { MarkdownDocumentPreview } from "./MarkdownDocumentPreview";
 
-// Документы не схлопываем — показываем полностью
-const COLLAPSE_CHAR_THRESHOLD = Infinity;
-const COLLAPSED_MAX_VH = 80;
+// Документы длиннее порога сворачиваются — показывают preview + кнопку «Развернуть»
+const COLLAPSE_CHAR_THRESHOLD = 2000;
+// Сколько символов показывать в свёрнутом виде (обрезаем по границе абзаца)
+const PREVIEW_CHARS = 800;
 
 type Props = {
   title: string;
   content: string;
   collapsible?: boolean;
 };
+
+function getPreviewContent(content: string): string {
+  if (content.length <= PREVIEW_CHARS) return content;
+  // Обрезаем по ближайшей границе абзаца (пустая строка)
+  const sub = content.slice(0, PREVIEW_CHARS);
+  const lastPara = sub.lastIndexOf("\n\n");
+  return (lastPara > 200 ? sub.slice(0, lastPara) : sub) + "\n\n…";
+}
 
 export function CollapsibleMarkdownDocument({ title, content, collapsible }: Props) {
   const shouldCollapse = useMemo(
@@ -22,6 +31,7 @@ export function CollapsibleMarkdownDocument({ title, content, collapsible }: Pro
   );
   const [expanded, setExpanded] = useState(!shouldCollapse);
   const displayTitle = useMemo(() => truncateDocTitle(title), [title]);
+  const previewContent = useMemo(() => getPreviewContent(content), [content]);
 
   return (
     <div className="markdown-document-block">
@@ -36,15 +46,8 @@ export function CollapsibleMarkdownDocument({ title, content, collapsible }: Pro
           className="markdown-document-actions block-actions-menu-btn"
         />
       </div>
-      <div
-        className={`markdown-document-body${shouldCollapse && !expanded ? " markdown-document-body--collapsed" : ""}`}
-        style={
-          shouldCollapse && !expanded
-            ? { maxHeight: `${COLLAPSED_MAX_VH}vh` }
-            : undefined
-        }
-      >
-        <MarkdownDocumentPreview content={content} />
+      <div className="markdown-document-body">
+        <MarkdownDocumentPreview content={expanded ? content : previewContent} />
       </div>
       {shouldCollapse ? (
         <button
