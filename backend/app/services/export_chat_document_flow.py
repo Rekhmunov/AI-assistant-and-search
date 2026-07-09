@@ -123,7 +123,7 @@ async def stream_export_chat_document_turn(
     markdown_payload = {
         "title": title,
         "content": markdown,
-        "collapsible": len(markdown) > 1200,
+        "collapsible": False,  # документы показываем полностью, не схлопываем
     }
     attachments_payload = [
         {

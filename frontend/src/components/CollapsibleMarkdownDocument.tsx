@@ -2,11 +2,12 @@ import { useMemo, useState } from "react";
 import { ChevronUp, ChevronDown } from "lucide-react";
 import { t } from "../i18n";
 import { truncateDocTitle } from "../lib/truncateDocTitle";
-import { BlockToolbarActions } from "./BlockToolbarActions";
+import { BlockActionsMenu } from "./BlockActionsMenu";
 import { MarkdownDocumentPreview } from "./MarkdownDocumentPreview";
 
-const COLLAPSE_CHAR_THRESHOLD = 1200;
-const COLLAPSED_MAX_VH = 50;
+// Документы не схлопываем — показываем полностью
+const COLLAPSE_CHAR_THRESHOLD = Infinity;
+const COLLAPSED_MAX_VH = 80;
 
 type Props = {
   title: string;
@@ -25,13 +26,14 @@ export function CollapsibleMarkdownDocument({ title, content, collapsible }: Pro
   return (
     <div className="markdown-document-block">
       <div className="markdown-document-header">
+        <span className="markdown-document-type-label">Документ</span>
         <span className="markdown-document-title" title={title}>
           {displayTitle}
         </span>
-        <BlockToolbarActions
-          className="markdown-document-actions"
-          copyText={content}
-          docx={{ content, titleHint: title }}
+        <BlockActionsMenu
+          content={content}
+          titleHint={title}
+          className="markdown-document-actions block-actions-menu-btn"
         />
       </div>
       <div

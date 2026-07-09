@@ -39,7 +39,9 @@ export function CodeBlock({ code, lang, partial }: Props) {
   return (
     <div className={`answer-code-block${partial ? " answer-code-block--partial" : ""}`}>
       <div className="answer-code-header">
+        {label !== "markdown" && label !== "md" && (
         <span className="answer-code-lang">{label}</span>
+      )}
         <BlockToolbarActions
           className="answer-code-actions"
           copyText={code}

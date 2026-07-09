@@ -3718,10 +3718,20 @@ body:has(.page-thread) {
   overflow: visible;
 }
 
+.markdown-document-type-label {
+  flex-shrink: 0;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--muted);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
 .markdown-document-title {
   flex: 1 1 auto;
   min-width: 0;
-  max-width: 42%;
+  max-width: 55%;
   font-size: 0.8125rem;
   font-weight: 600;
   color: var(--text);
