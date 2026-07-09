@@ -808,9 +808,10 @@ async def handle_assistant_dm(
         keyboard = MaxBotService.make_keyboard_attachment(rows)
 
         # ── Загружаем изображения в MAX ДО отправки ответа ──
+        # Entity images из поиска в DM не отправляем — только текстовый ответ.
+        # Изображения остаются в треде мини-аппки.
+        # Генерация картинок (image_gen_flow) обрабатывается отдельно и не затронута.
         image_attachments: list[dict] = []
-        if images:
-            image_attachments = await _upload_images_to_max(bot, images, settings, db=db)
 
         # ── Отправляем ответ ──
         # Правило: ✅ не показываем. Статусное сообщение всегда становится первой
