@@ -58,6 +58,22 @@ async def stream_image_generation_turn(
     display_content = normalize_user_query(query).strip()
     image_size = "2K" if high_quality else "1K"
 
+    # Если промпт — только мета-инструкция без описания объекта,
+    # Gemini возвращает текст вместо картинки.
+    # Оставляем только описательную часть после ключевых слов-команд.
+    import re as _re
+    _cmd_re = _re.compile(
+        r"^(нарисуй|сгенерируй|создай|изобрази|нарисуй\s+мне|сделай\s+картинку|"
+        r"генерируй|сгенерируй\s+картинку|нарисуй\s+картинку|нарисуй\s+изображение|"
+        r"создай\s+изображение|создай\s+картинку)\s*",
+        _re.I,
+    )
+    clean_prompt = _cmd_re.sub("", display_content).strip()
+    # Если после удаления команды что-то осталось — используем как описание
+    # Если ничего нет (только "нарисуй") — оставляем исходный display_content
+    if clean_prompt:
+        display_content = clean_prompt
+
     if user.plan != Plan.PRO:
         yield sse_event(
             "error",
