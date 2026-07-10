@@ -246,7 +246,7 @@ async def _create_reminder_sub_agent(
         thread_id=sub_thread.id,
         user_id=user.id,
         max_user_id=max_uid,
-        role=AgentRole.DM_ASSISTANT.value,
+        role=AgentRole.PERSONAL_REMINDER.value,  # activate_agent_direct требует PERSONAL_REMINDER для DM
         status=AgentStatus.DRAFT.value,
         config=sub_cfg,
     )

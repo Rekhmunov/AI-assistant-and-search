@@ -180,28 +180,26 @@ async def _handle_clarify(
     amt_str = str(int(amount)) if amount and amount == int(amount) else str(amount or "")
     confirm_text = f"✅ Записано: {category_name} — {amt_str}"
 
+    pending_chat_id = pending.get("chat_id")
     remaining = queue[1:]
     if remaining:
-        _set_pending(agent, {"type": "clarify_entity", "queue": remaining})
+        # Сохраняем chat_id при переходе к следующему элементу очереди
+        _set_pending(agent, {"type": "clarify_entity", "queue": remaining, "chat_id": pending_chat_id})
         await db.commit()
         await bot.answer_callback(callback_id, "✅ Записано")
-        # Следующая нераспознанная — отправляем кнопки
+        await bot.send_message(None, confirm_text, chat_id=pending_chat_id)
         rules = (agent.config or {}).get("compiled_rules", {})
         entities = rules.get("entities", [])
-        next_item = remaining[0]
-        next_amt = next_item.get("amount")
-        next_token = next_item.get("token", "")
+        next_amt = remaining[0].get("amount")
         next_amt_str = str(int(next_amt)) if next_amt and next_amt == int(next_amt) else str(next_amt or "")
-        pending_chat_id = pending.get("chat_id")
-        await bot.send_message(None, confirm_text, chat_id=pending_chat_id)
         from app.services.agent.secretary_executor import _send_clarify_item_buttons as _scib
         await _scib(bot, agent, entities, remaining[0], next_amt_str, chat_id=pending_chat_id)
     else:
         _set_pending(agent, None)
         await db.commit()
         await bot.answer_callback(callback_id, "✅ Записано")
-        # Редактируем сообщение с кнопками — заменяем на подтверждение без кнопок
-        await bot.answer_callback(callback_id)
+        # Отправляем подтверждение в чат
+        await bot.send_message(None, confirm_text, chat_id=pending_chat_id)
 
     logger.info("secretary_callback: clarify saved category=%s amount=%s agent=%s", category_name, amount, agent.id)
     return True
@@ -226,18 +224,17 @@ async def _handle_clarify_cancel(
     queue: list[dict] = pending.get("queue", [])
     remaining = queue[1:] if queue else []
 
+    pending_chat_id = pending.get("chat_id")
     if remaining:
-        _set_pending(agent, {"type": "clarify_entity", "queue": remaining})
+        # Сохраняем chat_id при переходе к следующему элементу
+        _set_pending(agent, {"type": "clarify_entity", "queue": remaining, "chat_id": pending_chat_id})
         _fm(agent, "config")
         await db.commit()
         await bot.answer_callback(callback_id, "Отменено")
         rules = (agent.config or {}).get("compiled_rules", {})
         entities = rules.get("entities", [])
-        next_item = remaining[0]
-        next_amt = next_item.get("amount")
-        next_token = next_item.get("token", "")
+        next_amt = remaining[0].get("amount")
         next_amt_str = str(int(next_amt)) if next_amt and next_amt == int(next_amt) else str(next_amt or "")
-        pending_chat_id = pending.get("chat_id")
         from app.services.agent.secretary_executor import _send_clarify_item_buttons as _scib2
         await _scib2(bot, agent, entities, remaining[0], next_amt_str, chat_id=pending_chat_id)
     else:
