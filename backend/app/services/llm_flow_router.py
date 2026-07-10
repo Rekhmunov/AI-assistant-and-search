@@ -30,6 +30,7 @@ ServiceFlow = Literal[
     "image_to_pdf",
     "split_pdf",
     "video_generate",
+    "create_reminder",
 ]
 
 _FLOW_JSON_RE = re.compile(r"\{[\s\S]*\}")
@@ -43,7 +44,7 @@ _PERPLEXITY_ROUTER_SYSTEM = """Ты маршрутизатор запросов.
 
 Верни ТОЛЬКО JSON без markdown:
 {
-  "flow": "perplexity" | "chat" | "image_generate" | "image_edit" | "image_compose" | "video_generate" | "export_chat_document" | "compress_pdf" | "convert_pdf" | "compress_image" | "image_to_pdf" | "split_pdf",
+  "flow": "perplexity" | "chat" | "image_generate" | "image_edit" | "image_compose" | "video_generate" | "export_chat_document" | "compress_pdf" | "convert_pdf" | "compress_image" | "image_to_pdf" | "split_pdf" | "create_reminder",
   "reason": "кратко по-русски"
 }
 
@@ -61,6 +62,9 @@ _PERPLEXITY_ROUTER_SYSTEM = """Ты маршрутизатор запросов.
 - export_chat_document — оформить написанный в треде текст как документ.
 - compress_pdf / convert_pdf / split_pdf — ТОЛЬКО когда прикреплён файл И есть явная команда.
 - compress_image / image_to_pdf — ТОЛЬКО когда прикреплён файл И есть явная команда.
+- create_reminder — пользователь просит создать напоминание для себя с конкретным временем/интервалом.
+  Маркеры: «напомни мне», «поставь напоминание», «напомни завтра/через час/в 15:00».
+  НЕ использовать для вопросов о возможностях (→ chat).
 
 При сомнении → perplexity."""
 
@@ -80,7 +84,7 @@ _ROUTER_SYSTEM = """Ты маршрутизатор запросов в Glosix (
 
 Верни ТОЛЬКО JSON без markdown:
 {
-  "flow": "search_rag" | "chat" | "image_generate" | "image_edit" | "image_compose" | "export_chat_document" | "compress_pdf" | "convert_pdf" | "compress_image" | "image_to_pdf" | "split_pdf" | "video_generate",
+  "flow": "search_rag" | "chat" | "image_generate" | "image_edit" | "image_compose" | "export_chat_document" | "compress_pdf" | "convert_pdf" | "compress_image" | "image_to_pdf" | "split_pdf" | "video_generate" | "create_reminder",
   "needs_search": true/false,
   "answer_model": "lite" | "pro",
   "reason": "кратко по-русски",
@@ -141,6 +145,10 @@ force_yandex = false:
 - video_generate — пользователь просит создать/сгенерировать ВИДЕО, видеоролик, видеоклип, анимацию.
   Явные маркеры: «сгенерируй видео», «создай видеоролик», «сделай видео», «видеоклип», «анимацию».
   НЕ использовать для изображений (→ image_generate) или вопросов о видео (→ search_rag).
+- create_reminder — пользователь просит создать напоминание для себя.
+  Явные маркеры: «напомни мне», «поставь напоминание», «напоминание на», «remind me», «не забыть», «напомни завтра», «напомни через».
+  Обязательно: есть конкретное время или интервал («завтра», «через час», «в 15:00», «каждый понедельник»).
+  НЕ использовать если это просто вопрос о том как работают напоминания (→ chat).
   compress_pdf, convert_pdf, split_pdf, compress_image, image_to_pdf — файловые операции. Правила выбора — в блоке «ФАЙЛОВЫЕ ОПЕРАЦИИ» ниже.
 
 ВАЖНО — вопросы о возможностях сервиса → chat:
@@ -227,6 +235,7 @@ def _parse_flow_response(raw: str) -> LlmFlowDecision | None:
         "image_to_pdf",
         "split_pdf",
         "video_generate",
+        "create_reminder",
     ):
         return None
     needs_search = bool(data.get("needs_search"))
@@ -381,7 +390,7 @@ async def resolve_service_flow_perplexity_pro(
             "chat", "image_generate", "image_edit", "image_compose",
             "video_generate", "export_chat_document",
             "compress_pdf", "convert_pdf", "compress_image",
-            "image_to_pdf", "split_pdf",
+            "image_to_pdf", "split_pdf", "create_reminder",
         ):
             return LlmFlowDecision(
                 flow="search_rag", needs_search=True, answer_model="pro", reason=reason,
