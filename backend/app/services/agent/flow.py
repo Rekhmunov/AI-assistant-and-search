@@ -88,6 +88,53 @@ async def _user_message(db: AsyncSession, thread: Thread, content: str) -> Messa
     return msg
 
 
+async def _run_expert_turn(
+    db: AsyncSession,
+    redis_client,
+    user,
+    agent,
+    all_messages: list,
+    limiter,
+    thread: Thread,
+    *,
+    on_status=None,
+) -> Message:
+    """
+    Прямой LLM-вызов для активного expert-агента.
+    Применяет expert_instruction из конфига как системный промпт.
+    """
+    from app.services.agent.agent_runtime import get_runtime_llm_provider, build_history_for_llm
+    from app.services.agent.templates.expert import EXPERT_RUNTIME_PROMPT
+
+    cfg = dict(agent.config or {})
+    instructions = str(cfg.get("expert_instruction") or "").strip()
+    system_prompt = EXPERT_RUNTIME_PROMPT.replace(
+        "{system_instruction}",
+        f"Инструкция пользователя:\n{instructions}" if instructions
+        else "(инструкция не задана — отвечай как универсальный ассистент)",
+    )
+
+    if on_status:
+        await on_status("Думаю…")
+
+    try:
+        from app.services.providers.factory import resolve_agent_providers
+        llm, _, _, _, _ = await resolve_agent_providers(db, redis_client, user=user)
+        # Формируем историю диалога
+        history = [
+            {"role": msg.role, "text": msg.content or ""}
+            for msg in all_messages
+            if msg.content and msg.role in ("user", "assistant")
+        ]
+        messages = [{"role": "system", "text": system_prompt}] + history
+        reply = await llm.complete_text(messages, model="pro", max_tokens=4096, temperature=0.4)
+    except Exception as exc:
+        logger.exception("_run_expert_turn failed thread=%s", thread.id)
+        reply = "Не удалось обработать запрос. Попробуйте ещё раз."
+
+    return await _assistant_reply(db, thread, reply or "…")
+
+
 async def _activate_assistant_agent(
     db: AsyncSession,
     user: User,
@@ -441,6 +488,17 @@ async def _handle_agent_message_body(
         select(Message).where(Message.thread_id == thread.id).order_by(Message.created_at.asc())
     )
     all_messages = list(msgs_result.scalars().all())
+
+    # Expert-агент: если активен — прямой LLM вызов с инструкцией пользователя.
+    # Не проходим через onboarding_loop с JSON-чеклистом — он для настройки, не для чата.
+    _agent_template_check = str((agent.config or {}).get("template") or "")
+    if _agent_template_check == "expert" and agent.status == AgentStatus.ACTIVE.value:
+        assistant = await _run_expert_turn(
+            db, redis_client, user, agent, all_messages, limiter, thread, on_status=status_cb
+        )
+        await db.commit()
+        return user_msg, assistant, agent
+
     try:
         llm_result = await run_onboarding_loop(
             db,
