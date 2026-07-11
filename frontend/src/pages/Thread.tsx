@@ -912,6 +912,14 @@ export function Thread() {
                   streaming: false,
                 };
               }
+              if (code === "content_blocked") {
+                return {
+                  ...turn,
+                  answer: msg || "Генерация заблокирована: модель не может создать это изображение. Попробуйте изменить описание.",
+                  errorCode: "content_blocked",
+                  streaming: false,
+                };
+              }
               if (
                 code === "doc_gen_rate_limit" ||
                 code === "doc_gen_guest_limit" ||

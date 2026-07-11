@@ -214,6 +214,18 @@ async def _generate_nano_banana_once(
     if not response.is_success:
         body = response.text[:400]
         logger.warning("NanaBanana API error %d: %s", response.status_code, body)
+        # Специальная обработка: Gemini блокирует генерацию реальных людей и unsafe-контент
+        if response.status_code == 400 and (
+            "Image generation blocked" in body
+            or "blocked for unspecified reasons" in body
+            or "Unable to show the generated image" in body
+        ):
+            raise ImageGenerationError(
+                "content_blocked",
+                "Генерация заблокирована: модель не может создать это изображение. "
+                "Возможные причины: изображение реального человека, защищённый контент или нарушение правил использования. "
+                "Попробуйте изменить описание.",
+            )
         raise ImageGenerationError(
             "api_error",
             f"Nano Banana API вернул ошибку {response.status_code}: {body[:120]}",

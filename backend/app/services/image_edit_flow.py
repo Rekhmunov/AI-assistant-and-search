@@ -283,13 +283,18 @@ async def stream_image_edit_turn(
     if gen_exception:
         exc = gen_exception[0]
         await record_service_incident(redis_client, service="image_gen",
-                                      kind="edit_failed", message=str(exc))
+                                      kind=exc.code if hasattr(exc, "code") else "edit_failed",
+                                      message=str(exc))
         await limiter.release_search(user_id_str, user, cost=3)
         await clear_search_pending(redis_client, thread.id)
-        yield sse_event("error", {
-            "code": "image_gen_failed",
-            "message": f"Не удалось {'объединить' if compose_mode else 'отредактировать'} изображение: {exc}",
-        })
+        # Для content_blocked — показываем понятное объяснение, не техническую ошибку
+        if hasattr(exc, "code") and exc.code == "content_blocked":
+            yield sse_event("error", {"code": "content_blocked", "message": str(exc)})
+        else:
+            yield sse_event("error", {
+                "code": "image_gen_failed",
+                "message": f"Не удалось {'объединить' if compose_mode else 'отредактировать'} изображение. Попробуйте изменить описание.",
+            })
         return
 
     if not gen_result or not gen_result[0].image_bytes:

@@ -248,21 +248,26 @@ async def stream_image_generation_turn(
 
     except Exception as exc:
         logger.exception("image generation failed")
+        exc_code = exc.code if hasattr(exc, "code") else "exception"
         await record_service_incident(
             redis_client,
             service="image_gen",
-            kind="exception",
+            kind=exc_code,
             message=str(exc),
         )
         await limiter.release_search(user_id_str, user, cost=img_cost)
         await clear_search_pending(redis_client, thread.id)
-        yield sse_event(
-            "error",
-            {
-                "code": "image_gen_failed",
-                "message": "Не удалось сгенерировать изображение. Попробуйте ещё раз.",
-            },
-        )
+        # content_blocked — понятное объяснение пользователю
+        if exc_code == "content_blocked":
+            yield sse_event("error", {"code": "content_blocked", "message": str(exc)})
+        else:
+            yield sse_event(
+                "error",
+                {
+                    "code": "image_gen_failed",
+                    "message": "Не удалось сгенерировать изображение. Попробуйте ещё раз.",
+                },
+            )
         return
 
     # --- Ниже: успешный путь; except выше уже вернулся при ошибке ---
