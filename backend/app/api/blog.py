@@ -69,25 +69,18 @@ async def public_post_view(
     redis=Depends(get_redis),
 ):
     """
-    Инкрементирует счётчик просмотров статьи.
-    Защита от накрутки: один IP — один просмотр в 24 часа.
-    Redis-ключ: blog:views:{post_id} — буфер, сбрасывается в БД каждые 20 просмотров.
+    Инкрементирует счётчик просмотров статьи при каждом заходе.
+    Redis-буфер сбрасывается в БД каждые 5 просмотров.
     """
     post = await get_post_by_slug(db, slug, locale=DEFAULT_LOCALE)
     if not post or post.status != "published":
         return  # тихо игнорируем
 
-    ip = client_ip(request)
-    dedup_key = f"blog:view_ip:{post.id}:{ip}"
-    already_viewed = await redis.set(dedup_key, "1", nx=True, ex=86400)  # 24 часа
-    if not already_viewed:
-        return  # уже считали этот IP сегодня
-
     counter_key = f"blog:views:{post.id}"
     count = await redis.incr(counter_key)
 
-    # Каждые 20 просмотров — сбрасываем в БД атомарно
-    FLUSH_EVERY = 20
+    # Каждые 5 просмотров — сбрасываем в БД
+    FLUSH_EVERY = 5
     if count % FLUSH_EVERY == 0:
         await redis.set(counter_key, 0)
         await db.execute(
