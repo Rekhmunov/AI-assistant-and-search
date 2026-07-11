@@ -117,25 +117,40 @@ async def _run_expert_turn(
     if on_status:
         await on_status("Думаю…")
 
+    from app.models.user import Plan as _Plan
+    user_id_str = str(user.id)
+
+    # Проверяем лимит запросов (1 кредит)
+    allowed, _used, _limit = await limiter.check_search_limit(user_id_str, user.plan, user=user)
+    if not allowed:
+        return await _assistant_reply(
+            db, thread,
+            "Достигнут дневной лимит запросов. Попробуйте завтра или перейдите на Pro.",
+        )
+
+    # Free → lite-модель, Pro → pro-модель
+    model_tier = "pro" if user.plan == _Plan.PRO else "lite"
+
     try:
         from app.services.providers.factory import resolve_agent_providers
         llm, _, _, _, _ = await resolve_agent_providers(db, redis_client, user=user)
-        # Передаём историю только если настройка включена (по умолчанию True)
         use_history = cfg.get("expert_use_history", True)
         history_msgs = [
             {"role": msg.role, "text": msg.content or ""}
             for msg in (all_messages[:-1] if use_history else [])
             if msg.content and msg.role in ("user", "assistant")
         ]
-        # Текущий вопрос — последнее user-сообщение
         last_user_msg = next(
             (m for m in reversed(all_messages) if m.role == "user" and m.content), None
         )
         current_msgs = [{"role": "user", "text": last_user_msg.content}] if last_user_msg else []
         messages = [{"role": "system", "text": system_prompt}] + history_msgs + current_msgs
-        reply = await llm.complete_text(messages, model="pro", max_tokens=4096, temperature=0.4)
+        reply = await llm.complete_text(
+            messages, model=model_tier, max_tokens=4096, temperature=0.4
+        )
     except Exception as exc:
         logger.exception("_run_expert_turn failed thread=%s", thread.id)
+        await limiter.release_search(user_id_str, user)
         reply = "Не удалось обработать запрос. Попробуйте ещё раз."
 
     return await _assistant_reply(db, thread, reply or "…")
