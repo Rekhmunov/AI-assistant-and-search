@@ -318,6 +318,11 @@ async def patch_agent_config(
             value = value[:8000]
         if key.startswith("poster_") or key in ("support_instructions", "expert_instruction"):
             cfg[key] = value
+    # Активируем expert-агента при первом сохранении инструкции
+    if cfg.get("template") == "expert" and cfg.get("expert_instruction"):
+        from app.models.agent import AgentStatus as _AS
+        if agent.status in (_AS.DRAFT.value, "draft"):
+            agent.status = _AS.ACTIVE.value
     from sqlalchemy.orm.attributes import flag_modified
     cfg.pop("is_new", None)  # первое сохранение конфига — тред появляется в истории
     agent.config = cfg

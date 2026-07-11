@@ -23,6 +23,11 @@ export function ExpertSettingsPanel({ threadId, initialConfig }: Props) {
   const [instruction, setInstruction] = useState(
     String(initialConfig?.expert_instruction ?? "")
   );
+
+  // Синхронизируем если initialConfig загрузился асинхронно
+  useEffect(() => {
+    setInstruction(String(initialConfig?.expert_instruction ?? ""));
+  }, [initialConfig?.expert_instruction]);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState("");

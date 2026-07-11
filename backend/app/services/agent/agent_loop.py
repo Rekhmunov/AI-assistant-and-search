@@ -156,6 +156,16 @@ async def run_onboarding_loop(
                 .replace("{current_date}", _date)
             )
             logger.info("Agent using template=%s RUNTIME prompt (agent is active)", template)
+        elif template == "expert" and agent.status == _AgentStatus.ACTIVE.value:
+            from app.services.agent.templates.expert import EXPERT_RUNTIME_PROMPT
+            _cfg = dict(agent.config or {})
+            _instructions = str(_cfg.get("expert_instruction") or "").strip()
+            specialized_prompt = EXPERT_RUNTIME_PROMPT.replace(
+                "{system_instruction}",
+                f"Инструкция пользователя:\n{_instructions}" if _instructions
+                else "(инструкция не задана — отвечай как универсальный ассистент)",
+            )
+            logger.info("Agent using template=expert RUNTIME prompt (agent is active)")
         elif template == "poster" and agent.status == _AgentStatus.ACTIVE.value:
             from app.services.agent.templates.poster import POSTER_RUNTIME_PROMPT
             from datetime import datetime, timezone as _tz
