@@ -231,35 +231,6 @@ export function ExpertSettingsPanel({ threadId, initialConfig }: Props) {
             {error && <p className="error" style={{ marginTop: 8 }}>{error}</p>}
           </div>
 
-          <div className="expert-settings-examples">
-            <p className="expert-settings-examples-title">Быстрый старт:</p>
-            <div className="expert-settings-chips">
-              {[
-                "Опытный копирайтер",
-                "Юрист (РФ)",
-                "SEO-специалист",
-                "Ментор по продукту",
-                "Переводчик EN↔RU",
-                "Редактор текстов",
-                "Финансовый советник",
-                "Программист Python",
-              ].map((label) => (
-                <button
-                  key={label}
-                  type="button"
-                  className="expert-chip"
-                  onClick={() => {
-                    void touchThread();
-                    setInstruction((prev) =>
-                      prev ? `${prev}\n\nТы — ${label}.` : `Ты — ${label}.`
-                    );
-                  }}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-          </div>
         </>
       )}
     </div>
