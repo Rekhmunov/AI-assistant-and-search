@@ -27,7 +27,10 @@ export function ExpertSettingsPanel({ threadId, initialConfig }: Props) {
 
   const saved_instruction = String(initialConfig?.expert_instruction ?? "");
   const [instruction, setInstruction] = useState(saved_instruction);
-  const [editing, setEditing] = useState(!saved_instruction); // открыт если ещё не задана
+  const [useHistory, setUseHistory] = useState(
+    initialConfig?.expert_use_history !== false // по умолчанию true
+  );
+  const [editing, setEditing] = useState(!saved_instruction);
   const [saving, setSaving] = useState(false);
   const [savedOk, setSavedOk] = useState(false);
   const [error, setError] = useState("");
@@ -36,8 +39,9 @@ export function ExpertSettingsPanel({ threadId, initialConfig }: Props) {
   useEffect(() => {
     const val = String(initialConfig?.expert_instruction ?? "");
     setInstruction(val);
+    setUseHistory(initialConfig?.expert_use_history !== false);
     if (!val) setEditing(true);
-  }, [initialConfig?.expert_instruction]);
+  }, [initialConfig?.expert_instruction, initialConfig?.expert_use_history]);
 
   const authHeaders = {
     "Content-Type": "application/json",
@@ -51,7 +55,7 @@ export function ExpertSettingsPanel({ threadId, initialConfig }: Props) {
       const res = await fetch(`${API_BASE}/api/agent/threads/${threadId}/config`, {
         method: "PATCH",
         headers: authHeaders,
-        body: JSON.stringify({ expert_instruction: instruction }),
+        body: JSON.stringify({ expert_instruction: instruction, expert_use_history: useHistory }),
       });
       if (!res.ok) throw new Error(await res.text());
       setSavedOk(true);
@@ -144,6 +148,23 @@ export function ExpertSettingsPanel({ threadId, initialConfig }: Props) {
               maxLength={8000}
               autoFocus
             />
+            <label className="expert-history-toggle">
+              <input
+                type="checkbox"
+                checked={useHistory}
+                onChange={(e) => {
+                  void touchThread();
+                  setUseHistory(e.target.checked);
+                }}
+              />
+              <span>Использовать историю переписки</span>
+              <span className="expert-history-hint">
+                {useHistory
+                  ? "Агент помнит предыдущие сообщения"
+                  : "Каждое сообщение — независимое"}
+              </span>
+            </label>
+
             <div className="expert-settings-footer">
               <div className="expert-settings-footer-left">
                 <span className="expert-settings-chars">{instruction.length} / 8000</span>

@@ -120,13 +120,19 @@ async def _run_expert_turn(
     try:
         from app.services.providers.factory import resolve_agent_providers
         llm, _, _, _, _ = await resolve_agent_providers(db, redis_client, user=user)
-        # Формируем историю диалога
-        history = [
+        # Передаём историю только если настройка включена (по умолчанию True)
+        use_history = cfg.get("expert_use_history", True)
+        history_msgs = [
             {"role": msg.role, "text": msg.content or ""}
-            for msg in all_messages
+            for msg in (all_messages[:-1] if use_history else [])
             if msg.content and msg.role in ("user", "assistant")
         ]
-        messages = [{"role": "system", "text": system_prompt}] + history
+        # Текущий вопрос — последнее user-сообщение
+        last_user_msg = next(
+            (m for m in reversed(all_messages) if m.role == "user" and m.content), None
+        )
+        current_msgs = [{"role": "user", "text": last_user_msg.content}] if last_user_msg else []
+        messages = [{"role": "system", "text": system_prompt}] + history_msgs + current_msgs
         reply = await llm.complete_text(messages, model="pro", max_tokens=4096, temperature=0.4)
     except Exception as exc:
         logger.exception("_run_expert_turn failed thread=%s", thread.id)

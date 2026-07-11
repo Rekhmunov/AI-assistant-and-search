@@ -347,10 +347,10 @@ async def get_thread(
                         agent_config["max_chat_id"] = agent.max_chat_id
                     agent_config["agent_status"] = agent.status
                 elif template == "expert":
-                    # Expert: expose instruction field
                     agent_config = {
                         "template": "expert",
                         "expert_instruction": cfg.get("expert_instruction", ""),
+                        "expert_use_history": cfg.get("expert_use_history", True),
                         "agent_status": agent.status,
                     }
                 else:
