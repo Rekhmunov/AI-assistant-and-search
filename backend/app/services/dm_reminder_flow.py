@@ -94,7 +94,9 @@ async def stream_create_reminder_turn(
         return
 
     # ── 3. Найти или создать hub-агент напоминаний ─────────────────────────
-    hub_agent = await _find_or_create_reminder_hub(db, user)
+    # Commit не делаем внутри — один общий commit после создания sub-agent
+    # чтобы hub не появлялся в истории пустым
+    hub_agent = await _find_or_create_reminder_hub(db, user, defer_commit=True)
 
     # ── 4. Создать sub-agent напоминания ───────────────────────────────────
     try:
@@ -149,7 +151,9 @@ async def _extract_reminder_params(llm, query: str) -> dict | None:
         return None
 
 
-async def _find_or_create_reminder_hub(db: AsyncSession, user: User) -> AgentInstance:
+async def _find_or_create_reminder_hub(
+    db: AsyncSession, user: User, *, defer_commit: bool = False
+) -> AgentInstance:
     """Находит активный hub-агент напоминаний пользователя или создаёт новый."""
     result = await db.execute(
         select(AgentInstance).where(
@@ -191,8 +195,10 @@ async def _find_or_create_reminder_hub(db: AsyncSession, user: User) -> AgentIns
     cfg.pop("is_new", None)
     agent.config = cfg
     flag_modified(agent, "config")
-    await db.commit()
-    await db.refresh(agent)
+    await db.flush()  # flush чтобы получить ID, commit — позже (после sub-agent)
+    if not defer_commit:
+        await db.commit()
+        await db.refresh(agent)
     return agent
 
 
