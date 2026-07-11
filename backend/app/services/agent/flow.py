@@ -133,8 +133,11 @@ async def _run_expert_turn(
 
     try:
         from app.services.providers.factory import resolve_agent_providers
-        llm, _, _, _, _ = await resolve_agent_providers(db, redis_client, user=user)
+        llm, search_provider, _, _, _ = await resolve_agent_providers(db, redis_client, user=user)
+
         use_history = cfg.get("expert_use_history", True)
+        use_search = cfg.get("expert_use_search", False)
+
         history_msgs = [
             {"role": msg.role, "text": msg.content or ""}
             for msg in (all_messages[:-1] if use_history else [])
@@ -144,6 +147,25 @@ async def _run_expert_turn(
             (m for m in reversed(all_messages) if m.role == "user" and m.content), None
         )
         current_msgs = [{"role": "user", "text": last_user_msg.content}] if last_user_msg else []
+
+        # Поиск в интернете — добавляем результаты в системный промпт
+        if use_search and search_provider and last_user_msg:
+            try:
+                if on_status:
+                    await on_status("Ищу в интернете…")
+                search_results = await search_provider.search(last_user_msg.content, max_results=5)
+                if search_results:
+                    snippets = "\n\n".join(
+                        f"[{i+1}] {r.title}: {r.snippet}"
+                        for i, r in enumerate(search_results[:5])
+                        if r.snippet
+                    )
+                    system_prompt += (
+                        f"\n\nАктуальные данные из веб-поиска (используй как источник):\n{snippets}"
+                    )
+            except Exception as search_exc:
+                logger.warning("expert search failed: %s", search_exc)
+
         messages = [{"role": "system", "text": system_prompt}] + history_msgs + current_msgs
         reply = await llm.complete_text(
             messages, model=model_tier, max_tokens=4096, temperature=0.4

@@ -316,7 +316,7 @@ async def patch_agent_config(
         # expert_instruction: limit to 8000 chars
         if key == "expert_instruction" and isinstance(value, str):
             value = value[:8000]
-        if key.startswith("poster_") or key in ("support_instructions", "expert_instruction", "expert_use_history"):
+        if key.startswith("poster_") or key in ("support_instructions", "expert_instruction", "expert_use_history", "expert_use_search"):
             cfg[key] = value
     # Активируем expert-агента при первом сохранении инструкции
     if cfg.get("template") == "expert" and cfg.get("expert_instruction"):
