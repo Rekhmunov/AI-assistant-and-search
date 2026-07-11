@@ -10,7 +10,8 @@ from starlette.responses import Response
 
 _SECURITY_HEADERS = {
     "X-Content-Type-Options": "nosniff",
-    "X-Frame-Options": "SAMEORIGIN",  # DENY блокирует MAX WebView embed; SAMEORIGIN — компромисс
+    # X-Frame-Options убран — управляется через CSP frame-ancestors (выше)
+    # "X-Frame-Options": "SAMEORIGIN",
     "Referrer-Policy": "strict-origin-when-cross-origin",
     "Permissions-Policy": "camera=(), microphone=(self), geolocation=()",
     "Cross-Origin-Opener-Policy": "same-origin",
@@ -23,8 +24,12 @@ _SECURITY_HEADERS = {
         "style-src 'self' 'unsafe-inline'; "
         "img-src 'self' data: https: blob:; "
         "media-src 'self' blob: https:; "
-        "connect-src 'self' https://api.glosix.ru wss://api.glosix.ru https://mc.yandex.ru; "
-        "frame-ancestors 'self' https://max.ru https://*.max.ru; "
+        # connect-src включает любые источники откуда фронт делает fetch
+        # (api.glosix.ru, mc.yandex.ru, а также MAX WebApp SDK endpoints)
+        "connect-src 'self' https: wss:; "
+        # frame-ancestors: разрешаем любой источник т.к. MAX Desktop (QtWebEngine)
+        # может иметь frame parent типа app:// / file:// не покрытый явным списком
+        "frame-ancestors *; "
         "object-src 'none'; "
         "base-uri 'self';"
     ),
