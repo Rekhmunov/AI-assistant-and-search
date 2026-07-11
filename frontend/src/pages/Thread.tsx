@@ -1551,8 +1551,26 @@ export function Thread() {
         </button>
       )}
 
-      {/* Agent threads: no composer — mobile shows "Новый поиск +", desktop shows nothing */}
-      {isAgentThread && !isDesktop ? (
+      {/* Expert agent: show composer for chatting with the agent */}
+      {isAgentThread && thread?.title?.startsWith("Мой эксперт") ? (
+        <SearchComposer
+          value={composerQuery}
+          onChange={setComposerQuery}
+          onSubmit={(p) => {
+            setComposerQuery("");
+            void runAgentMessage(p.query, threadId, p.attachmentIds ?? []);
+          }}
+          disabled={agentLoading}
+          placeholder="Напишите сообщение эксперту…"
+          attachments={attachments}
+          onAttachmentsChange={setAttachments}
+          requireTextWithAttachments={false}
+          layoutMode={isDesktop ? "default" : "threadMobile"}
+          onNewChat={isDesktop ? undefined : () => navigate("/")}
+          agentMode
+        />
+      ) : isAgentThread && !isDesktop ? (
+        /* Other agent threads on mobile: "Новый поиск +" */
         <div className="mobile-new-thread-bar mobile-new-thread-bar--docked mobile-new-thread-bar--agent">
           <MobileNewThreadButton variant="labeled" onClick={() => navigate("/")} />
         </div>
@@ -1564,17 +1582,17 @@ export function Thread() {
             setComposerQuery("");
             onComposerSubmit(p);
           }}
-          disabled={isAgentThread ? agentLoading : streaming}
-          placeholder={isAgentThread ? t("agentComposerPlaceholder") : t("askFollowUp")}
+          disabled={streaming}
+          placeholder={t("askFollowUp")}
           attachments={attachments}
           onAttachmentsChange={setAttachments}
-          requireTextWithAttachments={isAgentThread || (!isAgentThread && turns.length === 0)}
+          requireTextWithAttachments={turns.length === 0}
           layoutMode={isDesktop ? "default" : "threadMobile"}
           onNewChat={isDesktop ? undefined : () => navigate("/")}
           onAgentClick={startNewAgentThread}
           agentStarting={agentStarting}
           agentError={agentError}
-          agentMode={isAgentThread}
+          agentMode={false}
         />
       ) : null}
       </div>
