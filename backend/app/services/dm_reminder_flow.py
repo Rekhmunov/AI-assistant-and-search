@@ -155,33 +155,34 @@ async def _find_or_create_reminder_hub(
     db: AsyncSession, user: User, *, defer_commit: bool = False
 ) -> AgentInstance:
     """Находит активный hub-агент напоминаний пользователя или создаёт новый."""
+    # Ищем существующий hub: любой статус кроме cancelled
+    # (включая draft — такой hub был создан но не активирован через UI)
     result = await db.execute(
         select(AgentInstance).where(
             AgentInstance.user_id == user.id,
-            AgentInstance.status == AgentStatus.ACTIVE.value,
+            AgentInstance.status != AgentStatus.CANCELLED.value,
             AgentInstance.config["template"].astext == "reminder",
-            # Это hub, не sub-reminder
-            AgentInstance.config["is_sub_reminder"].astext.is_(None),
         ).order_by(AgentInstance.created_at.asc())
     )
-    hub = result.scalars().first()
-
-    # Попробуем через is_sub_reminder = false
-    if not hub:
-        result2 = await db.execute(
-            select(AgentInstance).where(
-                AgentInstance.user_id == user.id,
-                AgentInstance.status == AgentStatus.ACTIVE.value,
-                AgentInstance.config["template"].astext == "reminder",
-            ).order_by(AgentInstance.created_at.asc())
-        )
-        for agent in result2.scalars().all():
-            cfg = agent.config or {}
-            if not cfg.get("is_sub_reminder"):
-                hub = agent
-                break
+    hub = None
+    for agent in result.scalars().all():
+        cfg = agent.config or {}
+        if not cfg.get("is_sub_reminder"):
+            hub = agent
+            break
 
     if hub:
+        # Если hub в draft — активируем его (был создан но не настроен через UI)
+        if hub.status == AgentStatus.DRAFT.value:
+            from sqlalchemy.orm.attributes import flag_modified as _fm
+            hub.status = AgentStatus.ACTIVE.value
+            cfg = dict(hub.config or {})
+            cfg.pop("is_new", None)
+            hub.config = cfg
+            _fm(hub, "config")
+            if not defer_commit:
+                await db.commit()
+                await db.refresh(hub)
         return hub
 
     # Создаём новый hub
