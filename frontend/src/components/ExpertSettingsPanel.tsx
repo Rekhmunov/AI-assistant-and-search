@@ -222,7 +222,7 @@ export function ExpertSettingsPanel({ threadId, initialConfig }: Props) {
                   type="button"
                   className="btn-primary"
                   onClick={handleSave}
-                  disabled={saving || !instruction.trim()}
+                  disabled={saving}
                 >
                   {saving ? "Сохранение…" : savedOk ? "✅ Сохранено" : "Сохранить"}
                 </button>

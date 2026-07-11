@@ -103,7 +103,6 @@ async def _run_expert_turn(
     Прямой LLM-вызов для активного expert-агента.
     Применяет expert_instruction из конфига как системный промпт.
     """
-    from app.services.agent.agent_runtime import get_runtime_llm_provider, build_history_for_llm
     from app.services.agent.templates.expert import EXPERT_RUNTIME_PROMPT
 
     cfg = dict(agent.config or {})
@@ -118,17 +117,9 @@ async def _run_expert_turn(
         await on_status("Думаю…")
 
     from app.models.user import Plan as _Plan
-    user_id_str = str(user.id)
-
-    # Проверяем лимит запросов (1 кредит)
-    allowed, _used, _limit = await limiter.check_search_limit(user_id_str, user.plan, user=user)
-    if not allowed:
-        return await _assistant_reply(
-            db, thread,
-            "Достигнут дневной лимит запросов. Попробуйте завтра или перейдите на Pro.",
-        )
 
     # Free → lite-модель, Pro → pro-модель
+    # Кредит уже списан родительским handle_agent_message — не списываем повторно
     model_tier = "pro" if user.plan == _Plan.PRO else "lite"
 
     try:
@@ -153,7 +144,7 @@ async def _run_expert_turn(
             try:
                 if on_status:
                     await on_status("Ищу в интернете…")
-                search_results = await search_provider.search(last_user_msg.content, max_results=5)
+                search_results = await search_provider.search(last_user_msg.content, limit=5)
                 if search_results:
                     snippets = "\n\n".join(
                         f"[{i+1}] {r.title}: {r.snippet}"
@@ -172,7 +163,6 @@ async def _run_expert_turn(
         )
     except Exception as exc:
         logger.exception("_run_expert_turn failed thread=%s", thread.id)
-        await limiter.release_search(user_id_str, user)
         reply = "Не удалось обработать запрос. Попробуйте ещё раз."
 
     return await _assistant_reply(db, thread, reply or "…")
