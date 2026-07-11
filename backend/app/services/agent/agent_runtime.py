@@ -77,6 +77,13 @@ async def run_max_interactive_loop(
             .replace("{support_instructions}", instructions or "(инструкция не задана)")
             .replace("{current_date}", current_date)
         )
+    elif override_runtime_prompt is None and template == "expert":
+        from app.services.agent.templates.expert import EXPERT_RUNTIME_PROMPT
+        instructions = str(cfg.get("expert_instruction") or "").strip()
+        override_runtime_prompt = EXPERT_RUNTIME_PROMPT.replace(
+            "{system_instruction}",
+            f"Инструкция пользователя:\n{instructions}" if instructions else "(инструкция не задана — отвечай как универсальный ассистент)",
+        )
     elif override_runtime_prompt is None and template == "poster":
         from app.services.agent.templates.poster import POSTER_RUNTIME_PROMPT
         from app.services.agent.poster_executor import _build_style_from_config

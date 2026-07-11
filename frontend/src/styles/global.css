@@ -8449,6 +8449,90 @@ a.blog-sidebar-title:hover {
 /* ── Poster Settings Panel ──────────────────────────────────── */
 .poster-settings-wrap { margin: 0 0 16px; }
 
+/* ── Expert Settings Panel ────────────────────────────────────────────── */
+.expert-settings-panel {
+  background: var(--bg);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.expert-settings-header {
+  padding: 14px 16px 10px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.expert-settings-title {
+  margin: 0 0 4px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text);
+}
+.expert-settings-sub {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+.expert-settings-body {
+  padding: 12px 16px;
+}
+.expert-settings-textarea {
+  width: 100%;
+  min-height: 160px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.875rem;
+  line-height: 1.55;
+  resize: vertical;
+  box-sizing: border-box;
+  font-family: inherit;
+}
+.expert-settings-textarea::placeholder { color: var(--muted); opacity: 0.7; }
+.expert-settings-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 8px;
+  gap: 8px;
+}
+.expert-settings-chars {
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+.expert-settings-examples {
+  padding: 10px 16px 14px;
+  border-top: 1px solid var(--border-subtle);
+}
+.expert-settings-examples-title {
+  margin: 0 0 8px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.expert-settings-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.expert-chip {
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.expert-chip:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+  border-color: var(--accent, #20808d);
+}
+
 /* Desktop agent form: narrower panel, centered */
 @media (min-width: 900px) {
   .page-thread:not(.page-thread--mobile) .poster-settings-wrap,

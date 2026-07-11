@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
-import { Bell, ChevronRight, ClipboardList, Megaphone } from "lucide-react";
+import { Bell, ChevronRight, ClipboardList, Megaphone, BrainCircuit } from "lucide-react";
 import { createAgentThreadWithTemplate } from "../api/client";
 import { MobilePageHeader } from "../components/MobilePageHeader";
 import { MobileNewThreadButton } from "../components/MobileNewThreadButton";
@@ -38,6 +38,12 @@ const TEMPLATE_META: Record<string, Omit<AgentTemplate, "id" | "title">> = {
     icon: <Megaphone size={26} strokeWidth={1.8} />,
     color: "#ea580c",
   },
+  expert: {
+    description: "Ассистент с постоянной инструкцией. Задайте роль или правила — он запомнит их навсегда.",
+    badges: ["Постоянная инструкция", "Любая роль", "Поиск + генерация"],
+    icon: <BrainCircuit size={26} strokeWidth={1.8} />,
+    color: "#0ea5e9",
+  },
 };
 
 // Фоллбэк если API недоступен — все шаблоны видны
@@ -45,6 +51,7 @@ const FALLBACK_TEMPLATES: AgentTemplate[] = [
   { id: "reminder", title: "Напоминания", ...TEMPLATE_META.reminder },
   { id: "secretary", title: "Учет затрат", ...TEMPLATE_META.secretary },
   { id: "poster", title: "Постинг", ...TEMPLATE_META.poster },
+  { id: "expert", title: "Мой эксперт", ...TEMPLATE_META.expert },
 ];
 
 export function AgentsPage() {

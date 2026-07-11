@@ -26,6 +26,7 @@ import { AgentActivityLogPanel } from "../components/AgentActivityLogPanel";
 import { PosterSettingsPanel } from "../components/PosterSettingsPanel";
 import { ReminderSettingsPanel } from "../components/ReminderSettingsPanel";
 import { SecretarySettingsPanel } from "../components/SecretarySettingsPanel";
+import { ExpertSettingsPanel } from "../components/ExpertSettingsPanel";
 import { AgentThinkingPanel } from "../components/AgentThinkingPanel";
 import type { AgentThinkingEvent } from "../api/client";
 import { CollapsibleMarkdownDocument } from "../components/CollapsibleMarkdownDocument";
@@ -1219,6 +1220,16 @@ export function Thread() {
           {isAgentThread && threadId && thread?.title?.startsWith("Учет затрат") && (
             <div className="poster-settings-wrap">
               <SecretarySettingsPanel
+                threadId={threadId}
+                initialConfig={thread?.agent_config ?? {}}
+              />
+            </div>
+          )}
+
+          {/* Expert agent: show instruction editor */}
+          {isAgentThread && threadId && thread?.title?.startsWith("Мой эксперт") && (
+            <div className="poster-settings-wrap">
+              <ExpertSettingsPanel
                 threadId={threadId}
                 initialConfig={thread?.agent_config ?? {}}
               />

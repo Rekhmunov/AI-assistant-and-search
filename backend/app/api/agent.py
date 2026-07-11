@@ -313,7 +313,10 @@ async def patch_agent_config(
         if key in ("poster_topics", "poster_topic_list") and isinstance(value, (str, list)):
             if isinstance(value, str) and len(value) > _MAX_POST_TEXT_LEN:
                 value = value[:_MAX_POST_TEXT_LEN]
-        if key.startswith("poster_") or key in ("support_instructions",):
+        # expert_instruction: limit to 8000 chars
+        if key == "expert_instruction" and isinstance(value, str):
+            value = value[:8000]
+        if key.startswith("poster_") or key in ("support_instructions", "expert_instruction"):
             cfg[key] = value
     from sqlalchemy.orm.attributes import flag_modified
     cfg.pop("is_new", None)  # первое сохранение конфига — тред появляется в истории

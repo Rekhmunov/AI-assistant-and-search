@@ -346,6 +346,13 @@ async def get_thread(
                     if agent.max_chat_id and not agent_config.get("max_chat_id"):
                         agent_config["max_chat_id"] = agent.max_chat_id
                     agent_config["agent_status"] = agent.status
+                elif template == "expert":
+                    # Expert: expose instruction field
+                    agent_config = {
+                        "template": "expert",
+                        "expert_instruction": cfg.get("expert_instruction", ""),
+                        "agent_status": agent.status,
+                    }
                 else:
                     # Only expose poster_* fields (safe subset of agent config)
                     agent_config = {k: v for k, v in cfg.items() if k.startswith("poster_") or k == "template"}
