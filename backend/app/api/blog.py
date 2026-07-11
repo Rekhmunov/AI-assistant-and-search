@@ -66,29 +66,21 @@ async def public_post_view(
     slug: str,
     request: Request,
     db: Annotated[AsyncSession, Depends(get_db)],
-    redis=Depends(get_redis),
 ):
     """
     Инкрементирует счётчик просмотров статьи при каждом заходе.
-    Redis-буфер сбрасывается в БД каждые 5 просмотров.
+    Пишем в БД сразу — чтобы глазок обновлялся немедленно.
     """
     post = await get_post_by_slug(db, slug, locale=DEFAULT_LOCALE)
     if not post or post.status != "published":
         return  # тихо игнорируем
 
-    counter_key = f"blog:views:{post.id}"
-    count = await redis.incr(counter_key)
-
-    # Каждые 5 просмотров — сбрасываем в БД
-    FLUSH_EVERY = 5
-    if count % FLUSH_EVERY == 0:
-        await redis.set(counter_key, 0)
-        await db.execute(
-            update(BlogPost)
-            .where(BlogPost.id == post.id)
-            .values(view_count=BlogPost.view_count + FLUSH_EVERY)
-        )
-        await db.commit()
+    await db.execute(
+        update(BlogPost)
+        .where(BlogPost.id == post.id)
+        .values(view_count=BlogPost.view_count + 1)
+    )
+    await db.commit()
 
 
 @router.get("/posts/{slug}/comments", response_model=list[BlogCommentOut])
