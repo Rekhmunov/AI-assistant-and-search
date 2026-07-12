@@ -40,6 +40,7 @@ export function SecretarySettingsPanel({ threadId, initialConfig }: Props) {
   const [categories, setCategories]       = useState("");
   const [catDirty, setCatDirty]           = useState(false);
   const [compiledOk, setCompiledOk]       = useState<boolean | null>(null);
+  const [compiling, setCompiling]         = useState(false);
 
   const CAT_LIMIT = 4000;
 
@@ -109,7 +110,7 @@ export function SecretarySettingsPanel({ threadId, initialConfig }: Props) {
 
   // ── Save categories ───────────────────────────────────────────────────────
   async function saveCategories() {
-    setSaving(true); setSaveOk(false); setSaveError(""); setCompiledOk(null);
+    setSaving(true); setSaveOk(false); setSaveError(""); setCompiledOk(null); setCompiling(false);
     try {
       const cats = categories.trim();
       const instructions = cats.toLowerCase().startsWith("категории затрат:")
@@ -123,8 +124,12 @@ export function SecretarySettingsPanel({ threadId, initialConfig }: Props) {
         const d = await res.json();
         setSaveOk(true);
         setCatDirty(false);
+        if (d.compiling) {
+          setCompiling(true);
+          setTimeout(() => setCompiling(false), 15000);
+        }
         if (typeof d.compiled_rules === "boolean") setCompiledOk(d.compiled_rules);
-        setTimeout(() => { setSaveOk(false); setCompiledOk(null); }, 5000);
+        setTimeout(() => { setSaveOk(false); setCompiledOk(null); }, 8000);
       } else {
         setSaveError("Ошибка сохранения");
       }
@@ -257,17 +262,15 @@ export function SecretarySettingsPanel({ threadId, initialConfig }: Props) {
 
         {/* ── Footer: Save ─────────────────────────────────────────────────── */}
         <div className="poster-settings__footer">
-          {saving && (
+          {!saving && saveOk && compiling && (
             <span style={{ fontSize: "0.82rem", color: "var(--text-secondary, #888)", flex: 1 }}>
-              Сохранение и компиляция правил…
+              ✅ Сохранено — правила компилируются…
             </span>
           )}
-          {!saving && saveOk && (
+          {!saving && saveOk && !compiling && (
             <span style={{ fontSize: "0.85rem", color: "#276749", flex: 1 }}>
-              {compiledOk === true
-                ? "✅ Сохранено, правила обновлены"
-                : compiledOk === false
-                ? "✅ Сохранено (правила не скомпилированы — подключите группу)"
+              {compiledOk === false
+                ? "✅ Сохранено (подключите группу для активации правил)"
                 : "✅ Сохранено"}
             </span>
           )}

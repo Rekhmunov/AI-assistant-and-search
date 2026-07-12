@@ -325,42 +325,59 @@ async def patch_agent_config(
         if agent.status in (_AS.DRAFT.value, "draft"):
             agent.status = _AS.ACTIVE.value
 
-    # Для secretary-агента: перекомпилируем правила при изменении категорий.
+    # Для secretary-агента: запускаем перекомпиляцию правил в фоне.
     # Условие: шаблон «secretary», сохраняется support_instructions, уже есть max_chat_id.
-    compiled_ok: bool | None = None
-    if (
+    run_compilation = (
         cfg.get("template") == "secretary"
         and "support_instructions" in body
         and cfg.get("max_chat_id")
-    ):
-        support_instructions = str(cfg.get("support_instructions") or "").strip()
-        if support_instructions:
-            try:
-                from app.services.providers.factory import resolve_agent_providers
-                from app.services.agent.secretary_compiler import compile_secretary_rules
-                llm, _, _, _, _ = await resolve_agent_providers(db, redis_client, user=user)
-                rules = await compile_secretary_rules(llm, support_instructions)
-                if rules:
-                    cfg["compiled_rules"] = rules
-                    compiled_ok = True
-                    logger.info(
-                        "patch_agent_config: recompiled secretary rules for agent=%s, entities=%s",
-                        agent.id, len(rules.get("entities", [])),
-                    )
-                else:
-                    compiled_ok = False
-            except Exception as _ce:
-                logger.warning("patch_agent_config: rule compile failed: %s", _ce)
-                compiled_ok = False
+        and str(cfg.get("support_instructions") or "").strip()
+    )
 
     from sqlalchemy.orm.attributes import flag_modified
     cfg.pop("is_new", None)  # первое сохранение конфига — тред появляется в истории
     agent.config = cfg
     flag_modified(agent, "config")
     await db.commit()
+
+    if run_compilation:
+        import asyncio as _asyncio
+        from app.core.database import async_session_factory as _sf
+        _agent_id = agent.id
+        _instructions = str(cfg.get("support_instructions") or "").strip()
+        _user = user
+
+        async def _compile_bg() -> None:
+            try:
+                from app.services.providers.factory import resolve_agent_providers
+                from app.services.agent.secretary_compiler import compile_secretary_rules
+                from app.models.agent import AgentInstance as _AI
+                from sqlalchemy import select as _sel
+                from sqlalchemy.orm.attributes import flag_modified as _fm2
+                async with _sf() as _db:
+                    llm, _, _, _, _ = await resolve_agent_providers(_db, redis_client, user=_user)
+                    rules = await compile_secretary_rules(llm, _instructions)
+                    if rules:
+                        res2 = await _db.execute(_sel(_AI).where(_AI.id == _agent_id))
+                        _agent2 = res2.scalar_one_or_none()
+                        if _agent2:
+                            _cfg2 = dict(_agent2.config or {})
+                            _cfg2["compiled_rules"] = rules
+                            _agent2.config = _cfg2
+                            _fm2(_agent2, "config")
+                            await _db.commit()
+                            logger.info(
+                                "secretary bg-compile OK agent=%s entities=%s",
+                                _agent_id, len(rules.get("entities", [])),
+                            )
+            except Exception as _ce:
+                logger.warning("secretary bg-compile failed agent=%s: %s", _agent_id, _ce)
+
+        _asyncio.create_task(_compile_bg())
+
     resp: dict = {"ok": True, "config": {k: v for k, v in cfg.items() if k.startswith("poster_") and k not in _BLOCKED_KEYS}}
-    if compiled_ok is not None:
-        resp["compiled_rules"] = compiled_ok
+    if run_compilation:
+        resp["compiling"] = True  # фоновая компиляция запущена
     return resp
 
 
