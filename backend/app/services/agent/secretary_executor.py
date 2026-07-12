@@ -383,17 +383,17 @@ async def execute_secretary_message(
                 "chat_id": chat_id,
             })
             confirm = responses.get("on_success", "✅ Записано в категорию: {category}")
-            amt_str = str(int(amount)) if amount == int(amount) else str(amount)
+            amt_str = str(int(amount)) if amount is not None and amount == int(amount) else str(amount or "")
             result_text = confirm.format(amount=amt_str, category=entity["name"])
 
             # Остаток очереди
             remaining = queue[1:]
             if remaining:
-                _set_pending(agent, {"type": "clarify_entity", "queue": remaining})
+                _set_pending(agent, {"type": "clarify_entity", "queue": remaining, "chat_id": chat_id})
                 next_item = remaining[0]
                 next_amt = next_item.get("amount")
                 next_token = next_item.get("token", "")
-                next_amt_str = str(int(next_amt)) if next_amt == int(next_amt) else str(next_amt)
+                next_amt_str = str(int(next_amt)) if next_amt is not None and next_amt == int(next_amt) else str(next_amt or "")
                 # Сначала подтверждаем текущую запись, потом отправляем кнопки для следующей
                 await bot.send_message(None, result_text, chat_id=chat_id)
                 await _send_clarify_buttons(bot, agent, entities, next_token, next_amt_str, chat_id)
@@ -479,7 +479,7 @@ async def execute_secretary_message(
 
     # ─── 5. Запись данных ─────────────────────────────────────────────────────
     lines = _extract_lines(text)
-    logger.warning("SECRETARY_DEBUG: extracted lines=%s from text=%r", lines, text[:80])
+    logger.debug("secretary: extracted lines=%s from text=%r", lines, text[:80])
     if not lines:
         return None
 
@@ -528,7 +528,7 @@ async def execute_secretary_message(
             "chat_id": chat_id,
         })
         confirm = responses.get("on_success", "✅ Записано в категорию: {category}")
-        amt_str = str(int(amount)) if amount == int(amount) else str(amount)
+        amt_str = str(int(amount)) if amount is not None and amount == int(amount) else str(amount or "")
         msg = confirm.format(amount=amt_str, category=entity["name"])
         # Отправляем подтверждение — ошибка отправки не должна отменять запись
         try:
@@ -542,7 +542,7 @@ async def execute_secretary_message(
         _set_pending(agent, {"type": "clarify_entity", "queue": clarify_queue, "chat_id": chat_id})
         first = clarify_queue[0]
         amt = first["amount"]
-        amt_str = str(int(amt)) if amt == int(amt) else str(amt)
+        amt_str = str(int(amt)) if amt is not None and amt == int(amt) else str(amt or "")
         await _send_clarify_item_buttons(bot, agent, entities, first, amt_str, chat_id)
         return ExecutorResult(text="", handled=True)
 

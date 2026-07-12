@@ -1138,33 +1138,56 @@ async def verify_secretary_group(
         if agent.status in (_AS.DRAFT.value, "draft", _AS.COLLECTING.value, "collecting"):
             agent.status = _AS.ACTIVE.value
 
-        # Recompile rules if categories are configured
+        # Запускаем компиляцию правил в фоне (не блокируем ответ)
         support_instructions = str(cfg.get("support_instructions") or "").strip()
-        compiled_ok = False
-        if support_instructions:
-            try:
-                from app.services.providers.factory import resolve_agent_providers
-                from app.services.agent.secretary_compiler import compile_secretary_rules
-                llm, _, _, _, _ = await resolve_agent_providers(db, redis_client, user=user)
-                rules = await compile_secretary_rules(llm, support_instructions)
-                if rules:
-                    cfg["compiled_rules"] = rules
-                    agent.config = cfg
-                    _fm_sec(agent, "config")
-                    compiled_ok = True
-            except Exception as _ce:
-                logger.warning("verify-group: rule compile failed: %s", _ce)
+        run_compile_bg = bool(support_instructions)
 
         cfg.pop("is_new", None)  # подключение группы = первое действие, тред появляется в истории
         agent.config = cfg
         _fm_sec(agent, "config")
         await db.commit()
+
+        if run_compile_bg:
+            import asyncio as _asyncio2
+            from app.core.database import async_session_factory as _sf2
+            _ag_id2 = agent.id
+            _instr2 = support_instructions
+            _user2 = user
+
+            async def _compile_bg2() -> None:
+                try:
+                    from app.services.providers.factory import resolve_agent_providers as _rap2
+                    from app.services.agent.secretary_compiler import compile_secretary_rules as _csr2
+                    from app.models.agent import AgentInstance as _AI2
+                    from sqlalchemy import select as _sel2
+                    from sqlalchemy.orm.attributes import flag_modified as _fm3
+                    async with _sf2() as _db2:
+                        llm2, _, _, _, _ = await _rap2(_db2, redis_client, user=_user2)
+                        rules2 = await _csr2(llm2, _instr2)
+                        if rules2:
+                            r2 = await _db2.execute(_sel2(_AI2).where(_AI2.id == _ag_id2))
+                            _ag2 = r2.scalar_one_or_none()
+                            if _ag2:
+                                _c2 = dict(_ag2.config or {})
+                                _c2["compiled_rules"] = rules2
+                                _ag2.config = _c2
+                                _fm3(_ag2, "config")
+                                await _db2.commit()
+                                logger.info(
+                                    "verify-group bg-compile OK agent=%s entities=%s",
+                                    _ag_id2, len(rules2.get("entities", [])),
+                                )
+                except Exception as _ce2:
+                    logger.warning("verify-group bg-compile failed agent=%s: %s", _ag_id2, _ce2)
+
+            _asyncio2.create_task(_compile_bg2())
+
         return {
             "ok": True,
             "bot_is_admin": bool(probe.get("bot_is_admin")),
             "chat_name": probe.get("title") or probe.get("chat_name", ""),
             "group_id": group_id,
-            "compiled_rules": compiled_ok,
+            "compiling": run_compile_bg,
             "error": "",
         }
     except Exception as exc:

@@ -148,7 +148,13 @@ export function SecretarySettingsPanel({ threadId, initialConfig }: Props) {
       });
       const d = await res.json();
       setVerifyResult(d);
-      if (d.ok) setGroupInput(String(d.group_id || groupInput.trim()));
+      if (d.ok) {
+        setGroupInput(String(d.group_id || groupInput.trim()));
+        if (d.compiling && categories.trim()) {
+          setCompiling(true);
+          setTimeout(() => setCompiling(false), 15000);
+        }
+      }
     } catch { setVerifyResult({ ok: false, error: "Ошибка соединения" }); }
     finally { setVerifyLoading(false); }
   }
@@ -213,6 +219,7 @@ export function SecretarySettingsPanel({ threadId, initialConfig }: Props) {
           {groupOk ? (
             <span style={{ fontSize: "0.82rem", color: "#276749" }}>
               ✅ Подключено{groupName ? `: ${groupName}` : ""}
+              {compiling && <span style={{ color: "var(--text-secondary, #888)", marginLeft: 6 }}>— правила компилируются…</span>}
             </span>
           ) : verifyResult && !verifyResult.ok ? (
             <span className="poster-settings__error">

@@ -174,7 +174,7 @@ async def compile_secretary_rules(
     try:
         raw = await llm.complete_text(messages, model="pro", max_tokens=6000, temperature=0.2)
         raw = (raw or "").strip()
-        logger.warning("COMPILER raw first 300: %s", raw[:300])
+        logger.debug("secretary compiler raw first 300: %s", raw[:300])
 
         # Убираем markdown если LLM обернул
         if raw.startswith("```"):
