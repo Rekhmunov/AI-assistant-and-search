@@ -42,6 +42,7 @@ from app.services.entity_image_routing import resolve_entity_image_query, wants_
 from app.services.image_gen_flow import stream_image_generation_turn
 from app.services.video_gen_flow import stream_video_generation_turn
 from app.services.dm_reminder_flow import stream_create_reminder_turn
+from app.services.scan_document_flow import stream_scan_document_turn
 from app.services.message_attachments import attachments_json_from_files
 from app.services.export_chat_document_flow import stream_export_chat_document_turn
 from app.services.answer_sanitize import strip_trailing_empty_code_fences
@@ -364,6 +365,13 @@ class SearchFlowService:
         if flow.flow == "create_reminder":
             async for event in stream_create_reminder_turn(
                 db, user, query, redis_client, llm_lite,
+            ):
+                yield event
+            return
+
+        if flow.flow == "scan_document":
+            async for event in stream_scan_document_turn(
+                db, user, attachment_ids or [], thread_id, redis_client, query,
             ):
                 yield event
             return

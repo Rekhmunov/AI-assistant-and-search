@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
-import { Bell, ChevronRight, ClipboardList, Megaphone, BrainCircuit } from "lucide-react";
+import { Bell, ChevronRight, ClipboardList, Megaphone, BrainCircuit, ScanLine } from "lucide-react";
 import { createAgentThreadWithTemplate } from "../api/client";
 import { MobilePageHeader } from "../components/MobilePageHeader";
 import { MobileNewThreadButton } from "../components/MobileNewThreadButton";
@@ -44,6 +44,12 @@ const TEMPLATE_META: Record<string, Omit<AgentTemplate, "id" | "title">> = {
     icon: <BrainCircuit size={26} strokeWidth={1.8} />,
     color: "#0ea5e9",
   },
+  scanner: {
+    description: "Сфотографируйте договор, чек, паспорт или рукопись — получите готовый PDF. Автовыравнивание, улучшение качества, сжатие.",
+    badges: ["Фото → PDF", "Автовыравнивание", "Несколько страниц"],
+    icon: <ScanLine size={26} strokeWidth={1.8} />,
+    color: "#059669",
+  },
 };
 
 // Фоллбэк если API недоступен — все шаблоны видны
@@ -52,6 +58,7 @@ const FALLBACK_TEMPLATES: AgentTemplate[] = [
   { id: "secretary", title: "Учет затрат", ...TEMPLATE_META.secretary },
   { id: "poster", title: "Постинг", ...TEMPLATE_META.poster },
   { id: "expert", title: "Мой эксперт", ...TEMPLATE_META.expert },
+  { id: "scanner", title: "Сканер документов", ...TEMPLATE_META.scanner },
 ];
 
 export function AgentsPage() {

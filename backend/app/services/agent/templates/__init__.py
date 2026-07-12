@@ -5,6 +5,7 @@ from app.services.agent.templates.secretary import SECRETARY_SETUP_PROMPT, SECRE
 from app.services.agent.templates.assistant import ASSISTANT_SETUP_PROMPT, ASSISTANT_WELCOME
 from app.services.agent.templates.poster import POSTER_SETUP_PROMPT, POSTER_WELCOME
 from app.services.agent.templates.expert import EXPERT_SETUP_PROMPT, EXPERT_WELCOME
+from app.services.agent.templates.scanner import SCANNER_SETUP_PROMPT, SCANNER_WELCOME
 
 TEMPLATE_PROMPTS: dict[str, str] = {
     "reminder": REMINDER_SETUP_PROMPT,
@@ -12,6 +13,7 @@ TEMPLATE_PROMPTS: dict[str, str] = {
     "assistant": ASSISTANT_SETUP_PROMPT,
     "poster": POSTER_SETUP_PROMPT,
     "expert": EXPERT_SETUP_PROMPT,
+    "scanner": SCANNER_SETUP_PROMPT,
 }
 
 TEMPLATE_WELCOMES: dict[str, str] = {
@@ -20,6 +22,7 @@ TEMPLATE_WELCOMES: dict[str, str] = {
     "assistant": ASSISTANT_WELCOME,
     "poster": POSTER_WELCOME,
     "expert": EXPERT_WELCOME,
+    "scanner": SCANNER_WELCOME,
 }
 
 # Название шаблона — используется как prefix в заголовке треда: «Напоминания 1»
@@ -29,6 +32,7 @@ TEMPLATE_TITLES: dict[str, str] = {
     "assistant": "Личный ассистент",
     "poster": "Постинг",
     "expert": "Мой эксперт",
+    "scanner": "Сканер документов",
 }
 
 

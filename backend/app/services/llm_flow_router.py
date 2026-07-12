@@ -31,6 +31,7 @@ ServiceFlow = Literal[
     "split_pdf",
     "video_generate",
     "create_reminder",
+    "scan_document",
 ]
 
 _FLOW_JSON_RE = re.compile(r"\{[\s\S]*\}")

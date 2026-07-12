@@ -8555,6 +8555,43 @@ a.blog-sidebar-title:hover {
 .expert-attach-btn:hover:not(:disabled) { background: var(--surface-hover); color: var(--text); }
 .expert-attach-btn:disabled { opacity: 0.5; cursor: default; }
 
+/* Scanner agent welcome panel */
+.scanner-welcome-panel {
+  padding: 16px;
+  background: var(--surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  margin-bottom: 4px;
+}
+.scanner-welcome-icon {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 12px;
+  color: #059669;
+}
+.scanner-welcome-title {
+  margin: 0 0 10px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  text-align: center;
+  color: var(--text);
+}
+.scanner-welcome-steps {
+  margin: 0 0 12px;
+  padding: 0 0 0 18px;
+  font-size: 0.85rem;
+  line-height: 1.8;
+  color: var(--text-secondary);
+}
+.scanner-welcome-tip {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--muted);
+  background: var(--bg);
+  padding: 8px 10px;
+  border-radius: 8px;
+}
+
 .expert-history-toggle {
   display: flex;
   align-items: center;

@@ -27,6 +27,7 @@ import { PosterSettingsPanel } from "../components/PosterSettingsPanel";
 import { ReminderSettingsPanel } from "../components/ReminderSettingsPanel";
 import { SecretarySettingsPanel } from "../components/SecretarySettingsPanel";
 import { ExpertSettingsPanel } from "../components/ExpertSettingsPanel";
+import { ScannerSettingsPanel } from "../components/ScannerSettingsPanel";
 import { AgentThinkingPanel } from "../components/AgentThinkingPanel";
 import type { AgentThinkingEvent } from "../api/client";
 import { CollapsibleMarkdownDocument } from "../components/CollapsibleMarkdownDocument";
@@ -1226,6 +1227,13 @@ export function Thread() {
             </div>
           )}
 
+          {/* Scanner agent: show usage instructions */}
+          {isAgentThread && threadId && thread?.title?.startsWith("Сканер документов") && (
+            <div className="poster-settings-wrap">
+              <ScannerSettingsPanel />
+            </div>
+          )}
+
           {/* Expert agent: show instruction editor */}
           {isAgentThread && threadId && thread?.title?.startsWith("Мой эксперт") && (
             <div className="poster-settings-wrap">
@@ -1551,8 +1559,8 @@ export function Thread() {
         </button>
       )}
 
-      {/* Expert agent: show composer for chatting with the agent */}
-      {isAgentThread && thread?.title?.startsWith("Мой эксперт") ? (
+      {/* Expert / Scanner agents: show composer */}
+      {isAgentThread && (thread?.title?.startsWith("Мой эксперт") || thread?.title?.startsWith("Сканер документов")) ? (
         <SearchComposer
           value={composerQuery}
           onChange={setComposerQuery}
@@ -1561,7 +1569,7 @@ export function Thread() {
             void runAgentMessage(p.query, threadId, p.attachmentIds ?? []);
           }}
           disabled={agentLoading}
-          placeholder="Напишите сообщение эксперту…"
+          placeholder={thread?.title?.startsWith("Сканер") ? "Прикрепите фото документа…" : "Напишите сообщение эксперту…"}
           attachments={attachments}
           onAttachmentsChange={setAttachments}
           requireTextWithAttachments={false}
