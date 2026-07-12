@@ -443,6 +443,33 @@ class SearchFlowService:
                 yield event
             return
 
+        if flow.flow == "image_to_pdf":
+            from app.services.image_to_pdf_flow import stream_image_to_pdf_turn
+            async for event in stream_image_to_pdf_turn(
+                db, user, limiter, query, thread_id, redis_client,
+                attachment_ids=attachment_ids,
+            ):
+                yield event
+            return
+
+        if flow.flow == "compress_image":
+            from app.services.image_compress_flow import stream_image_compress_turn
+            async for event in stream_image_compress_turn(
+                db, user, limiter, query, thread_id, redis_client,
+                attachment_ids=attachment_ids,
+            ):
+                yield event
+            return
+
+        if flow.flow == "split_pdf":
+            from app.services.pdf_split_flow import stream_pdf_split_turn
+            async for event in stream_pdf_split_turn(
+                db, user, limiter, query, thread_id, redis_client,
+                attachment_ids=attachment_ids,
+            ):
+                yield event
+            return
+
         allowed, used, limit = await limiter.check_search_limit(
             user_id_str, user.plan, user, client_ip=client_ip
         )
