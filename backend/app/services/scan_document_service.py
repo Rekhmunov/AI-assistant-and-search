@@ -1,11 +1,10 @@
 """
 Сервис сканирования документов: фото → оптимизированный PDF.
 Этапы:
-  1. Обнаружение краёв документа (OpenCV contours)
+  1. Обнаружение краёв: Hough Lines + findContours (двойная попытка)
   2. Перспективная коррекция (warpPerspective)
-  3. Улучшение изображения (adaptive threshold + denoise)
-  4. Упаковка в PDF (img2pdf)
-  5. Сжатие PDF (PyMuPDF)
+  3. Улучшение: Sauvola binarization для текста, CLAHE для цвета
+  4. Упаковка в PDF (img2pdf) + сжатие (PyMuPDF)
 """
 
 from __future__ import annotations
@@ -18,7 +17,6 @@ import numpy as np
 
 logger = logging.getLogger(__name__)
 
-# Максимальный размер стороны при обработке (px)
 _MAX_DIM = 2480  # A4 при 300 dpi
 
 
@@ -40,40 +38,82 @@ def _order_points(pts: np.ndarray) -> np.ndarray:
     """Упорядочивает 4 точки: tl, tr, br, bl."""
     rect = np.zeros((4, 2), dtype="float32")
     s = pts.sum(axis=1)
-    rect[0] = pts[np.argmin(s)]   # top-left
-    rect[2] = pts[np.argmax(s)]   # bottom-right
+    rect[0] = pts[np.argmin(s)]
+    rect[2] = pts[np.argmax(s)]
     diff = np.diff(pts, axis=1)
-    rect[1] = pts[np.argmin(diff)]  # top-right
-    rect[3] = pts[np.argmax(diff)]  # bottom-left
+    rect[1] = pts[np.argmin(diff)]
+    rect[3] = pts[np.argmax(diff)]
     return rect
 
 
 def _find_document_contour(gray: np.ndarray) -> np.ndarray | None:
-    """Находит 4 угла документа на изображении."""
+    """
+    Двойная попытка найти 4 угла документа:
+    1. findContours — быстро, хорошо на тёмном/контрастном фоне
+    2. HoughLinesP — лучше на светлом фоне, когда контур не замкнут
+    """
     import cv2
 
+    h, w = gray.shape
+    img_area = h * w
+
     blurred = cv2.GaussianBlur(gray, (5, 5), 0)
-    edged = cv2.Canny(blurred, 30, 100)
+    edged = cv2.Canny(blurred, 30, 120)
     edged = cv2.dilate(edged, None, iterations=2)
     edged = cv2.erode(edged, None, iterations=1)
 
+    # ── Попытка 1: контурный поиск ──────────────────────────────────────────
     contours, _ = cv2.findContours(edged, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     contours = sorted(contours, key=cv2.contourArea, reverse=True)[:10]
-
     for contour in contours:
         peri = cv2.arcLength(contour, True)
         approx = cv2.approxPolyDP(contour, 0.02 * peri, True)
         if len(approx) == 4:
-            # Убедимся что контур достаточно большой (>10% площади)
             area = cv2.contourArea(approx)
-            img_area = gray.shape[0] * gray.shape[1]
-            if area > img_area * 0.10:
+            if area > img_area * 0.15:
+                logger.debug("scan: contour method succeeded")
                 return approx.reshape(4, 2).astype("float32")
+
+    # ── Попытка 2: Hough Lines (работает когда фон светлый/пёстрый) ─────────
+    min_line_len = int(min(h, w) * 0.25)
+    lines = cv2.HoughLinesP(
+        edged, 1, np.pi / 180,
+        threshold=60,
+        minLineLength=min_line_len,
+        maxLineGap=20,
+    )
+    if lines is None or len(lines) < 4:
+        return None
+
+    pts = lines[:, 0, :].reshape(-1, 2).astype("float32")
+    hull = cv2.convexHull(pts)
+    if hull is None or len(hull) < 4:
+        return None
+
+    peri = cv2.arcLength(hull, True)
+    approx = cv2.approxPolyDP(hull, 0.05 * peri, True)
+    if len(approx) == 4:
+        area = cv2.contourArea(approx)
+        if area > img_area * 0.10:
+            logger.debug("scan: Hough method succeeded (%d lines)", len(lines))
+            return approx.reshape(4, 2).astype("float32")
+
+    # Fallback: 4 крайние точки hull
+    pts_hull = hull.reshape(-1, 2).astype("float32")
+    tl = pts_hull[np.argmin(pts_hull[:, 0] + pts_hull[:, 1])]
+    tr = pts_hull[np.argmax(pts_hull[:, 0] - pts_hull[:, 1])]
+    br = pts_hull[np.argmax(pts_hull[:, 0] + pts_hull[:, 1])]
+    bl = pts_hull[np.argmin(pts_hull[:, 0] - pts_hull[:, 1])]
+    quad = np.array([tl, tr, br, bl], dtype="float32")
+    if cv2.contourArea(quad) > img_area * 0.10:
+        logger.debug("scan: Hough hull corners used")
+        return quad
+
     return None
 
 
 def _perspective_correct(image: np.ndarray, pts: np.ndarray) -> np.ndarray:
-    """Применяет перспективную коррекцию по 4 точкам."""
+    """Перспективная коррекция по 4 точкам."""
     import cv2
 
     rect = _order_points(pts)
@@ -92,57 +132,68 @@ def _perspective_correct(image: np.ndarray, pts: np.ndarray) -> np.ndarray:
     ], dtype="float32")
 
     M = cv2.getPerspectiveTransform(rect, dst)
-    warped = cv2.warpPerspective(image, M, (max_w, max_h))
-    return warped
+    return cv2.warpPerspective(image, M, (max_w, max_h))
 
 
 def _enhance_document(image: np.ndarray, mode: str = "auto") -> np.ndarray:
     """
-    Улучшает качество документа.
-    mode: 'auto' | 'bw' | 'gray' | 'color'
+    Улучшение качества документа.
+    Для текста — Sauvola binarization (лучше adaptive threshold при неравномерном освещении).
+    Для цветных документов — CLAHE в LAB-пространстве.
     """
     import cv2
 
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if len(image.shape) == 3 else image
 
-    # Денойзинг
-    denoised = cv2.fastNlMeansDenoising(gray, h=10)
+    # Лёгкий денойзинг
+    denoised = cv2.fastNlMeansDenoising(gray, h=8)
 
     if mode == "bw":
-        # Чёрно-белый режим — лучший для текстовых документов
-        enhanced = cv2.adaptiveThreshold(
-            denoised, 255,
-            cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-            cv2.THRESH_BINARY, 21, 10
-        )
-        return cv2.cvtColor(enhanced, cv2.COLOR_GRAY2BGR)
+        return cv2.cvtColor(_sauvola_binarize(denoised), cv2.COLOR_GRAY2BGR)
 
     if mode == "gray":
         clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
-        enhanced = clahe.apply(denoised)
-        return cv2.cvtColor(enhanced, cv2.COLOR_GRAY2BGR)
+        return cv2.cvtColor(clahe.apply(denoised), cv2.COLOR_GRAY2BGR)
 
-    # auto: анализируем — если текстовый → bw, иначе цвет с коррекцией
+    # auto: определяем тип документа по стандартному отклонению
     std_dev = float(np.std(denoised))
-    if std_dev < 60:
-        # Низкий контраст → вероятно текстовый документ
-        enhanced = cv2.adaptiveThreshold(
-            denoised, 255,
-            cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-            cv2.THRESH_BINARY, 21, 10
-        )
-        return cv2.cvtColor(enhanced, cv2.COLOR_GRAY2BGR)
+    if std_dev < 65:
+        # Текстовый документ — Sauvola (умный адаптивный порог)
+        logger.debug("scan: text mode, using Sauvola binarization (std=%.1f)", std_dev)
+        return cv2.cvtColor(_sauvola_binarize(denoised), cv2.COLOR_GRAY2BGR)
 
-    # Цветной документ — CLAHE + деnoising в цвете
+    # Цветной документ — CLAHE
+    logger.debug("scan: color mode, using CLAHE (std=%.1f)", std_dev)
     if len(image.shape) == 3:
         lab = cv2.cvtColor(image, cv2.COLOR_BGR2LAB)
         l_ch, a_ch, b_ch = cv2.split(lab)
-        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+        clahe = cv2.createCLAHE(clipLimit=2.5, tileGridSize=(8, 8))
         l_ch = clahe.apply(l_ch)
         enhanced_lab = cv2.merge([l_ch, a_ch, b_ch])
         return cv2.cvtColor(enhanced_lab, cv2.COLOR_LAB2BGR)
 
     return image
+
+
+def _sauvola_binarize(gray: np.ndarray) -> np.ndarray:
+    """
+    Sauvola binarization — адаптивный порог учитывающий локальное среднее и дисперсию.
+    Значительно лучше adaptiveThreshold при неравномерном освещении и тенях.
+    """
+    try:
+        from skimage.filters import threshold_sauvola
+        thresh = threshold_sauvola(gray, window_size=25, k=0.2)
+        binary = (gray > thresh).astype(np.uint8) * 255
+        return binary
+    except ImportError:
+        # Fallback на adaptiveThreshold если scikit-image не установлен
+        import cv2
+        logger.warning("scan: scikit-image not available, using adaptiveThreshold")
+        return cv2.adaptiveThreshold(
+            gray, 255,
+            cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+            cv2.THRESH_BINARY, 21, 10
+        )
 
 
 def _resize_if_needed(image: np.ndarray) -> np.ndarray:
@@ -158,10 +209,7 @@ def _resize_if_needed(image: np.ndarray) -> np.ndarray:
 
 
 def process_image_to_scanned(image_bytes: bytes) -> bytes:
-    """
-    Основной пайплайн: bytes(фото) → bytes(обработанный JPEG).
-    Возвращает обработанное изображение.
-    """
+    """Основной пайплайн: bytes(фото) → bytes(обработанный JPEG)."""
     import cv2
 
     nparr = np.frombuffer(image_bytes, np.uint8)
@@ -172,33 +220,28 @@ def process_image_to_scanned(image_bytes: bytes) -> bytes:
     image = _resize_if_needed(image)
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
-    # Попытка найти контур документа
     contour = _find_document_contour(gray)
     if contour is not None:
-        logger.info("scan: document contour found, applying perspective correction")
+        logger.info("scan: applying perspective correction")
         image = _perspective_correct(image, contour)
     else:
-        logger.info("scan: contour not found, using full image")
-        # Без коррекции — просто обрабатываем как есть
+        logger.info("scan: no contour found, processing full image")
 
-    # Улучшение изображения
     enhanced = _enhance_document(image, mode="auto")
 
-    # Кодируем в JPEG с хорошим качеством
-    _, jpeg_bytes = cv2.imencode(".jpg", enhanced, [cv2.IMWRITE_JPEG_QUALITY, 85])
+    _, jpeg_bytes = cv2.imencode(".jpg", enhanced, [cv2.IMWRITE_JPEG_QUALITY, 88])
     return jpeg_bytes.tobytes()
 
 
 def images_to_pdf(image_bytes_list: list[bytes]) -> bytes:
-    """Упаковывает список JPEG-байтов в PDF через img2pdf."""
+    """Упаковывает список JPEG-байтов в PDF."""
     import img2pdf
-
     return img2pdf.convert(image_bytes_list)
 
 
 def compress_pdf(pdf_bytes: bytes) -> bytes:
     """Сжимает PDF через PyMuPDF. garbage=2 для лучшей совместимости с мобильными."""
-    import fitz  # PyMuPDF
+    import fitz
 
     doc = fitz.open(stream=pdf_bytes, filetype="pdf")
     buf = io.BytesIO()
@@ -208,24 +251,20 @@ def compress_pdf(pdf_bytes: bytes) -> bytes:
 
 
 def scan_images_to_pdf(images: list[bytes]) -> ScanResult:
-    """
-    Полный пайплайн: список фото → ScanResult с PDF.
-    """
+    """Полный пайплайн: список фото → ScanResult с PDF."""
     if not images:
         raise ScanError("no_images", "Нет изображений для обработки")
 
     original_total = sum(len(b) for b in images)
-
     processed_images: list[bytes] = []
+
     for i, img_bytes in enumerate(images):
         logger.info("scan: processing page %d/%d", i + 1, len(images))
         processed = process_image_to_scanned(img_bytes)
         processed_images.append(processed)
 
-    # Упаковка в PDF
     pdf_bytes = images_to_pdf(processed_images)
 
-    # Сжатие
     try:
         compressed = compress_pdf(pdf_bytes)
     except Exception as exc:
