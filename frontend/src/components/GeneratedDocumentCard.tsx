@@ -36,13 +36,25 @@ function SingleDocumentRow({ doc }: { doc: GeneratedDocumentInfo }) {
             Файл удалён (срок хранения истёк)
           </span>
         ) : (
-          <button
-            type="button"
-            className="btn btn-secondary generated-document-card-download"
-            onClick={() => void downloadRemoteFile(openUrl, filename)}
-          >
-            {t("downloadDocument")}
-          </button>
+          <div className="generated-document-card-actions">
+            <button
+              type="button"
+              className="btn btn-secondary generated-document-card-download"
+              onClick={() => void downloadRemoteFile(openUrl, filename)}
+            >
+              {t("downloadDocument")}
+            </button>
+            {openUrl && (
+              <a
+                href={openUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="btn btn-secondary generated-document-card-open"
+              >
+                Открыть
+              </a>
+            )}
+          </div>
         )}
       </div>
     </div>

@@ -2392,8 +2392,16 @@ body:has(.page-thread) {
   word-break: break-word;
 }
 
-.generated-document-card-download {
+.generated-document-card-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
   align-self: flex-start;
+}
+.generated-document-card-download,
+.generated-document-card-open {
+  align-self: flex-start;
+  text-decoration: none;
 }
 
 /* Multi-file ZIP card */

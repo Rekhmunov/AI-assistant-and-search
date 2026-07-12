@@ -197,12 +197,12 @@ def images_to_pdf(image_bytes_list: list[bytes]) -> bytes:
 
 
 def compress_pdf(pdf_bytes: bytes) -> bytes:
-    """Сжимает PDF через PyMuPDF."""
+    """Сжимает PDF через PyMuPDF. garbage=2 для лучшей совместимости с мобильными."""
     import fitz  # PyMuPDF
 
     doc = fitz.open(stream=pdf_bytes, filetype="pdf")
     buf = io.BytesIO()
-    doc.save(buf, garbage=4, deflate=True, clean=True)
+    doc.save(buf, garbage=2, deflate=True)
     doc.close()
     return buf.getvalue()
 
