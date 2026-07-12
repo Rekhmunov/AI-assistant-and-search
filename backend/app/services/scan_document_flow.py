@@ -103,6 +103,21 @@ async def stream_scan_document_turn(
         yield sse_event("error", {"code": "load_error", "message": "Не удалось загрузить изображения."})
         return
 
+    # Если это агент-сканер — активируем и снимаем is_new (тред появится в истории)
+    if thread_id:
+        from sqlalchemy import select as _sel2
+        from app.models.agent import AgentInstance as _AI2, AgentStatus as _AS2
+        from sqlalchemy.orm.attributes import flag_modified as _fm2
+        _ar = await db.execute(_sel2(_AI2).where(_AI2.thread_id == thread_id, _AI2.user_id == user.id))
+        _ag = _ar.scalar_one_or_none()
+        if _ag and (_ag.config or {}).get("template") == "scanner":
+            _cfg2 = dict(_ag.config or {})
+            _cfg2.pop("is_new", None)
+            _ag.config = _cfg2
+            _fm2(_ag, "config")
+            if _ag.status in (_AS2.DRAFT.value, _AS2.COLLECTING.value, "draft", "collecting"):
+                _ag.status = _AS2.ACTIVE.value
+
     # Запускаем обработку в thread executor (CPU-intensive)
     yield sse_event("token", {"text": "\nВыравниваю и улучшаю качество…"})
 
