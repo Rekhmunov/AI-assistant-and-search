@@ -37,7 +37,6 @@ async def stream_scan_document_turn(
     from app.services.scan_document_service import (
         ScanError, images_to_pdf, compress_pdf, process_image_with_ai,
     )
-    from app.services.image_gen_service import resolve_image_gen_provider_id
     from app.services.upload_storage import load_upload_bytes, save_upload_bytes
 
     settings = get_settings()
@@ -49,9 +48,6 @@ async def stream_scan_document_turn(
             "message": "Прикрепите одно или несколько фото документа.",
         })
         return
-
-    # ── Разрешаем провайдер генерации изображений ─────────────────────────
-    provider_id = await resolve_image_gen_provider_id(db, redis_client)
 
     # ── Проверяем лимит (как для генерации картинок) ───────────────────────
     limiter = RateLimiter(redis_client)
@@ -171,7 +167,7 @@ async def stream_scan_document_turn(
             yield sse_event("token", {"text": f"\nСтраница {i+1}/{total_pages}…"})
         try:
             processed = await process_image_with_ai(
-                img_bytes, provider_id=provider_id, settings=settings
+                img_bytes, settings=settings
             )
             processed_images.append(processed)
         except ScanError as exc:
