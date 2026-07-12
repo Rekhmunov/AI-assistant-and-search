@@ -78,12 +78,11 @@ async def process_image_with_ai(
 
 
 def _get_provider_order(primary: str) -> list[str]:
-    """Возвращает порядок провайдеров с фоллбэком."""
-    if primary == "nanab2":
-        return ["nanab2", "gigachat"]
-    if primary == "gigachat":
-        return ["gigachat", "nanab2"]
-    return [primary, "nanab2", "gigachat"]
+    """
+    Сканирование требует img2img — только NanaBanana поддерживает.
+    GigaChat — text2image, не поддерживает редактирование фото документа.
+    """
+    return ["nanab2"]
 
 
 async def _call_provider(provider_id: str, image_bytes: bytes, settings) -> bytes:
@@ -132,10 +131,10 @@ async def _process_via_gigachat(image_bytes: bytes, settings) -> bytes:
         "выровняй перспективу, убери тени, сделай текст чётким и контрастным, "
         "белый фон и чёрный текст."
     )
-    result_bytes = await generate_gigachat_image(prompt, settings=settings)
-    if not result_bytes:
+    result = await generate_gigachat_image(prompt, settings=settings)
+    if not result or not result.image_bytes:
         raise ImageGenerationError("empty_response", "GigaChat не вернул изображение")
-    return result_bytes
+    return result.image_bytes
 
 
 def images_to_pdf(image_bytes_list: list[bytes]) -> bytes:

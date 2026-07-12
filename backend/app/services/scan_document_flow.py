@@ -41,6 +41,7 @@ async def stream_scan_document_turn(
     from app.services.upload_storage import load_upload_bytes, save_upload_bytes
 
     settings = get_settings()
+    # (get_rate_limiter не используется — лимитер создаётся напрямую ниже)
 
     if not attachment_ids:
         yield sse_event("error", {
@@ -53,7 +54,6 @@ async def stream_scan_document_turn(
     provider_id = await resolve_image_gen_provider_id(db, redis_client)
 
     # ── Проверяем лимит (как для генерации картинок) ───────────────────────
-    from app.api.deps import get_rate_limiter
     limiter = RateLimiter(redis_client)
     user_id_str = str(user.id)
 
@@ -145,6 +145,7 @@ async def stream_scan_document_turn(
             _fm(_ag, "config")
             if _ag.status in (_AS.DRAFT.value, _AS.COLLECTING.value, "draft", "collecting"):
                 _ag.status = _AS.ACTIVE.value
+            await db.commit()  # тред появится в истории даже при ошибке скана
 
     # ── Загружаем байты изображений ────────────────────────────────────────
     images_bytes: list[bytes] = []
