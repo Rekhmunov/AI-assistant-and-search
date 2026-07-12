@@ -1114,14 +1114,16 @@ export function Thread() {
     })();
   }, [initialQuery, initialFiles, id, runSearch, token, location.state, isAgentThread]);
 
+  const isScannerThread = Boolean(thread?.title?.startsWith("Сканер документов"));
+
   const onComposerSubmit = (payload: {
     query: string;
     attachmentIds: string[];
     attachments: ComposerAttachment[];
   }) => {
-    if (isAgentThread) {
+    if (isAgentThread && !isScannerThread) {
       // В агентском треде ВСЕ сообщения идут в агент — без keyword-роутинга.
-      // Агент сам решает что делать: выполнить сразу или настроить автоматизацию.
+      // Исключение: Scanner — он работает через search_flow (с вложениями-изображениями).
       void runAgentMessage(payload.query, threadId, payload.attachmentIds);
       return;
     }
