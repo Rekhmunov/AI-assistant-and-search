@@ -151,7 +151,7 @@ async def stream_scan_document_turn(
         filename=filename,
         mime_type="application/pdf",
         size_bytes=len(scan_result.pdf_bytes),
-        media_kind="document",
+        media_kind="generated_doc",
         storage_key=storage_key,
         extracted_text="",
         expires_at=datetime.now(timezone.utc) + timedelta(hours=72),
