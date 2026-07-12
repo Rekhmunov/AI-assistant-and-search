@@ -176,24 +176,28 @@ def _enhance_document(image: np.ndarray, mode: str = "auto") -> np.ndarray:
 
 
 def _sauvola_binarize(gray: np.ndarray) -> np.ndarray:
-    """
-    Sauvola binarization — адаптивный порог учитывающий локальное среднее и дисперсию.
-    Значительно лучше adaptiveThreshold при неравномерном освещении и тенях.
-    """
+    """Sauvola binarization с полным fallback на adaptiveThreshold при любой ошибке."""
+    import cv2
+
+    def _adaptive() -> np.ndarray:
+        return cv2.adaptiveThreshold(
+            gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 21, 10
+        )
+
     try:
         from skimage.filters import threshold_sauvola
-        thresh = threshold_sauvola(gray, window_size=25, k=0.2)
-        binary = (gray > thresh).astype(np.uint8) * 255
-        return binary
+        h, w = gray.shape[:2]
+        win = min(25, (min(h, w) // 4) * 2 + 1)
+        if win < 3:
+            return _adaptive()
+        thresh = threshold_sauvola(gray, window_size=win, k=0.2)
+        return (gray > thresh).astype(np.uint8) * 255
     except ImportError:
-        # Fallback на adaptiveThreshold если scikit-image не установлен
-        import cv2
         logger.warning("scan: scikit-image not available, using adaptiveThreshold")
-        return cv2.adaptiveThreshold(
-            gray, 255,
-            cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-            cv2.THRESH_BINARY, 21, 10
-        )
+        return _adaptive()
+    except Exception as exc:
+        logger.warning("scan: Sauvola failed (%s), fallback to adaptiveThreshold", exc)
+        return _adaptive()
 
 
 def _resize_if_needed(image: np.ndarray) -> np.ndarray:
@@ -229,7 +233,9 @@ def process_image_to_scanned(image_bytes: bytes) -> bytes:
 
     enhanced = _enhance_document(image, mode="auto")
 
-    _, jpeg_bytes = cv2.imencode(".jpg", enhanced, [cv2.IMWRITE_JPEG_QUALITY, 88])
+    ok, jpeg_bytes = cv2.imencode(".jpg", enhanced, [cv2.IMWRITE_JPEG_QUALITY, 88])
+    if not ok or jpeg_bytes is None:
+        raise ScanError("encode_failed", "Не удалось закодировать изображение")
     return jpeg_bytes.tobytes()
 
 
