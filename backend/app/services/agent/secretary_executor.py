@@ -66,18 +66,58 @@ def _normalize(text: str) -> str:
 
 
 def _match_entity(token: str, entities: list[dict]) -> dict | None:
-    """Находит сущность по токену в triggers. Учитывает длину (более специфичные сначала)."""
+    """
+    Находит сущность по токену в triggers.
+    Алгоритм (по приоритету):
+      1. Точное совпадение триггера с токеном (t == token_low).
+         Если ровно одна сущность — возвращаем её.
+         Если несколько — неоднозначность, возвращаем None (→ кнопки выбора).
+      2. Триггер входит в токен (t in token_low): выбираем самый длинный.
+         Если несколько сущностей с одинаковым лучшим длиной — неоднозначность → None.
+    Намеренно НЕ используем `token_low in t` (триггер шире токена),
+    чтобы не допустить ложных совпадений («стежка» → «стежка непромокаемая»).
+    """
     token_low = _normalize(token)
-    best: dict | None = None
-    best_len = 0
+
+    # — Шаг 1: точные совпадения —
+    exact: list[dict] = []
+    seen_exact: set[str] = set()
     for entity in entities:
+        name = entity.get("name", "")
+        if name in seen_exact:
+            continue
+        for trigger in entity.get("triggers", []):
+            if _normalize(trigger) == token_low:
+                exact.append(entity)
+                seen_exact.add(name)
+                break
+    if len(exact) == 1:
+        return exact[0]
+    if len(exact) > 1:
+        return None  # Неоднозначность — покажем кнопки
+
+    # — Шаг 2: триггер входит в токен (t in token_low) —
+    # Собираем все сущности, у которых хоть один триггер входит в токен;
+    # берём самый длинный триггер на сущность.
+    partial: dict[str, tuple[dict, int]] = {}  # name → (entity, best_len)
+    for entity in entities:
+        name = entity.get("name", "")
         for trigger in entity.get("triggers", []):
             t = _normalize(trigger)
-            if t in token_low or token_low in t:
-                if len(trigger) > best_len:
-                    best = entity
-                    best_len = len(trigger)
-    return best
+            if t in token_low and len(t) >= 2:
+                cur_len = partial.get(name, (None, 0))[1]
+                if len(t) > cur_len:
+                    partial[name] = (entity, len(t))
+
+    if not partial:
+        return None
+
+    # Выбираем сущности с максимальным значением best_len
+    max_len = max(v[1] for v in partial.values())
+    winners = [v[0] for v in partial.values() if v[1] == max_len]
+    if len(winners) == 1:
+        return winners[0]
+    return None  # Несколько сущностей с одинаковым best_len → кнопки
 
 
 def _find_closest_entities(token: str, entities: list[dict]) -> list[dict]:

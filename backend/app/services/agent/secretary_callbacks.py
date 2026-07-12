@@ -126,6 +126,48 @@ async def _handle_delete(
     return True
 
 
+def _resolve_pending_from_memory(agent: AgentInstance) -> dict | None:
+    """
+    Запасной вариант для агентов без compiled_rules.
+    LLM сохраняет «pending_entry: <сумма> <текст>» в agent memory (facts).
+    Восстанавливаем из этого структуру, совместимую с clarify_entity.
+    """
+    import re as _re
+    from app.services.agent.agent_spec import load_agent_spec
+
+    spec = load_agent_spec(agent)
+    for fact in spec.facts:
+        if fact.lower().startswith("pending_entry:"):
+            rest = fact[len("pending_entry:"):].strip()
+            # Пытаемся извлечь число из строки вида «5000 стежка» или «стежка 5000»
+            m = _re.search(r"(\d[\d\s]*(?:[.,]\d+)?)", rest)
+            if m:
+                try:
+                    amount_str = m.group(1).replace(" ", "").replace(",", ".")
+                    amount = float(amount_str)
+                    token = (rest[: m.start()] + rest[m.end() :]).strip()
+                except ValueError:
+                    amount = None
+                    token = rest
+            else:
+                amount = None
+                token = rest
+            return {
+                "type": "clarify_entity",
+                "queue": [{"amount": amount, "token": token}],
+                "chat_id": None,  # Не известен; callback'у придётся обойтись без него
+            }
+    return None
+
+
+def _clear_pending_entry_from_memory(agent: AgentInstance) -> None:
+    """Удаляет pending_entry из agent memory после завершения уточнения."""
+    from app.services.agent.agent_spec import load_agent_spec, save_agent_spec
+    spec = load_agent_spec(agent)
+    spec.facts = [f for f in spec.facts if not f.lower().startswith("pending_entry")]
+    save_agent_spec(agent, spec)
+
+
 async def _handle_clarify(
     db: AsyncSession,
     bot: MaxBotService,
@@ -157,8 +199,12 @@ async def _handle_clarify(
 
     pending = _get_pending(agent)
     if not pending or pending.get("type") != "clarify_entity":
-        await bot.answer_callback(callback_id, "Уточнение уже не актуально")
-        return False
+        # Запасной путь: агент без compiled_rules (LLM-путь).
+        # LLM сохраняет «pending_entry: <сумма> <текст>» в agent memory (facts).
+        pending = _resolve_pending_from_memory(agent)
+        if not pending:
+            await bot.answer_callback(callback_id, "Уточнение уже не актуально")
+            return False
 
     queue: list[dict] = pending.get("queue", [])
     if not queue:
@@ -175,6 +221,7 @@ async def _handle_clarify(
         "amount": amount,
         "note": token,
     })
+    _clear_pending_entry_from_memory(agent)
     _fm(agent, "config")
 
     amt_str = str(int(amount)) if amount and amount == int(amount) else str(amount or "")
@@ -187,7 +234,8 @@ async def _handle_clarify(
         _set_pending(agent, {"type": "clarify_entity", "queue": remaining, "chat_id": pending_chat_id})
         await db.commit()
         await bot.answer_callback(callback_id, "✅ Записано")
-        await bot.send_message(None, confirm_text, chat_id=pending_chat_id)
+        if pending_chat_id:
+            await bot.send_message(None, confirm_text, chat_id=pending_chat_id)
         rules = (agent.config or {}).get("compiled_rules", {})
         entities = rules.get("entities", [])
         next_amt = remaining[0].get("amount")
@@ -199,7 +247,8 @@ async def _handle_clarify(
         await db.commit()
         await bot.answer_callback(callback_id, "✅ Записано")
         # Отправляем подтверждение в чат
-        await bot.send_message(None, confirm_text, chat_id=pending_chat_id)
+        if pending_chat_id:
+            await bot.send_message(None, confirm_text, chat_id=pending_chat_id)
 
     logger.info("secretary_callback: clarify saved category=%s amount=%s agent=%s", category_name, amount, agent.id)
     return True
@@ -218,8 +267,10 @@ async def _handle_clarify_cancel(
 
     pending = _get_pending(agent)
     if not pending or pending.get("type") != "clarify_entity":
-        await bot.answer_callback(callback_id)
-        return False
+        pending = _resolve_pending_from_memory(agent)
+        if not pending:
+            await bot.answer_callback(callback_id)
+            return False
 
     queue: list[dict] = pending.get("queue", [])
     remaining = queue[1:] if queue else []
@@ -239,6 +290,7 @@ async def _handle_clarify_cancel(
         await _scib2(bot, agent, entities, remaining[0], next_amt_str, chat_id=pending_chat_id)
     else:
         _set_pending(agent, None)
+        _clear_pending_entry_from_memory(agent)
         _fm(agent, "config")
         await db.commit()
         await bot.answer_callback(callback_id, "Отменено")

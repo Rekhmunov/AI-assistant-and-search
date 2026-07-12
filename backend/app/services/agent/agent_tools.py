@@ -87,7 +87,7 @@ async def execute_agent_tool(
                 bot=bot,
             )
         if name == "max_send_message":
-            return await _tool_max_send_message(bot, safe_args)
+            return await _tool_max_send_message(bot, safe_args, agent=agent)
         if name == "max_confirm_record":
             return await _tool_max_confirm_record(bot, agent, safe_args)
         if name == "max_send_date_picker":
@@ -395,15 +395,84 @@ async def _tool_max_send_file(
         return {"ok": False, "tool": "max_send_file", "error": str(exc)[:300]}
 
 
-async def _tool_max_send_message(bot: MaxBotService, args: dict) -> dict:
+def _parse_clarify_text(text: str) -> tuple[str | None, list[str]]:
+    """
+    Разбирает текст уточнения категории в формате:
+      ❓ К какой категории отнести «...»?
+      • Категория 1
+      • Категория 2
+      Напиши «Отмена», если ...
+
+    Возвращает (заголовок, [категория1, категория2, ...]) или (None, []) если формат не совпадает.
+    """
+    import re as _re
+    lines = [l.strip() for l in text.strip().splitlines() if l.strip()]
+    if not lines:
+        return None, []
+    header = lines[0]
+    # Проверяем, что первая строка — вопрос о категории
+    if not (header.startswith("❓") or ("к какой категории" in header.lower()) or ("категори" in header.lower())):
+        return None, []
+    categories = []
+    for line in lines[1:]:
+        # Строки вида «• Категория» или «- Категория» или «1. Категория»
+        m = _re.match(r"^[•\-\*]\s+(.+)$", line) or _re.match(r"^\d+[.)]\s+(.+)$", line)
+        if m:
+            cat = m.group(1).strip()
+            # Пропускаем строку «Напиши «Отмена»...» и подобные
+            if "напиши" in cat.lower() or "отмена" in cat.lower() or len(cat) > 80:
+                continue
+            categories.append(cat)
+    return header, categories
+
+
+async def _tool_max_send_message(
+    bot: MaxBotService,
+    args: dict,
+    *,
+    agent: "AgentInstance | None" = None,
+) -> dict:
     text = str(args["text"])
     user_id: int | None = args.get("user_id")
     chat_id: int | None = args.get("chat_id")
 
+    # Для агента «Учет затрат»: перехватываем текст с предложением выбора категории
+    # и заменяем его на inline-клавиатуру с кнопками.
+    if agent is not None and str((agent.config or {}).get("template") or "") == "secretary":
+        header, categories = _parse_clarify_text(text)
+        if header and categories:
+            agent_id_str = str(agent.id)
+            rows = [
+                [{"type": "callback", "text": cat,
+                  "payload": f"secretary:clarify:{agent_id_str}:{cat}"}]
+                for cat in categories
+            ]
+            rows.append([{"type": "callback", "text": "❌ Отмена",
+                          "payload": f"secretary:clarify_cancel:{agent_id_str}"}])
+            keyboard = MaxBotService.make_keyboard_attachment(rows)
+            # Упрощаем заголовок: убираем префикс «❓» если он уже есть
+            clean_header = header.lstrip("❓").strip()
+            dest_user = int(user_id) if user_id is not None else None
+            dest_chat = int(chat_id) if chat_id is not None else None
+            if dest_user is not None:
+                send = await bot.send_message(dest_user, clean_header, attachments=[keyboard], notify=True)
+                result: dict = {"user_id": user_id, "message_id": send.message_id}
+                if not send.ok:
+                    result["error"] = send.error
+                    result["error_human"] = explain_max_send_error(send.error, user_id=dest_user)
+                return {"ok": send.ok, "tool": "max_send_message", "result": result}
+            else:
+                send = await bot.send_message(None, clean_header, attachments=[keyboard], chat_id=dest_chat, notify=False)
+                result = {"chat_id": chat_id, "message_id": send.message_id}
+                if not send.ok:
+                    result["error"] = send.error
+                    result["error_human"] = explain_max_send_error(send.error, chat_id=dest_chat)
+                return {"ok": send.ok, "tool": "max_send_message", "result": result}
+
     if user_id is not None:
         # Личное сообщение: MAX API требует user_id, не chat_id
         send = await bot.send_message(int(user_id), text, notify=True)
-        result: dict = {"user_id": user_id, "message_id": send.message_id}
+        result = {"user_id": user_id, "message_id": send.message_id}
         if not send.ok:
             result["error"] = send.error
             result["error_human"] = explain_max_send_error(send.error, user_id=int(user_id))
