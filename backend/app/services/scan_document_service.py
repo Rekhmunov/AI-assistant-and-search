@@ -85,7 +85,12 @@ def _find_document_contour(gray: np.ndarray) -> np.ndarray | None:
     if lines is None or len(lines) < 4:
         return None
 
-    pts = lines[:, 0, :].reshape(-1, 2).astype("float32")
+    # OpenCV 4: lines shape (N,1,4); OpenCV 5: shape (N,4)
+    lines_flat = lines.reshape(-1, 4)
+    pts = lines_flat[:, :2].reshape(-1, 2).astype("float32")
+    # Добавляем вторые концы отрезков
+    pts2 = lines_flat[:, 2:4].reshape(-1, 2).astype("float32")
+    pts = np.vstack([pts, pts2])
     hull = cv2.convexHull(pts)
     if hull is None or len(hull) < 4:
         return None
