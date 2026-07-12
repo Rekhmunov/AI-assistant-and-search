@@ -13,13 +13,19 @@ from dataclasses import dataclass
 logger = logging.getLogger(__name__)
 
 _SCAN_PROMPT = (
-    "This is a photo of a document. Please process it as a professional document scanner would:\n"
-    "1. Straighten the perspective so the document appears flat and rectangular\n"
-    "2. Remove shadows and uneven lighting\n"
-    "3. Enhance text contrast — make text sharp, dark and clearly readable\n"
-    "4. Produce a clean white background with black text\n"
-    "5. Keep the full document visible without cropping any content\n"
-    "Return only the processed document image, nothing else."
+    "This is a photo of a document placed on a surface (table, desk, floor, etc). "
+    "Process it exactly as a professional document scanner would:\n"
+    "1. CROP: Remove all background — table, desk, hands, surrounding objects. "
+    "Keep only the document itself, cropped tightly to its edges.\n"
+    "2. ROTATE: If the document is rotated (90°, 180°, sideways or any angle), "
+    "rotate it so text reads normally — upright vertical portrait orientation.\n"
+    "3. PERSPECTIVE: Straighten any perspective distortion so the document "
+    "appears perfectly flat and rectangular as if scanned on a flatbed scanner.\n"
+    "4. LIGHTING: Remove shadows, uneven lighting and glare across the document surface.\n"
+    "5. CONTRAST: Enhance text contrast — make text sharp, dark and clearly readable "
+    "with a clean white background.\n"
+    "Return only the final processed document image, nothing else. "
+    "No background, no borders, just the document."
 )
 
 
