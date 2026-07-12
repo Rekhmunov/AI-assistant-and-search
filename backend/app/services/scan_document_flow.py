@@ -157,30 +157,60 @@ async def stream_scan_document_turn(
 
     # ── Обработка через AI ─────────────────────────────────────────────────
     total_pages = len(images_bytes)
-    yield sse_event("token", {"text": f"Обрабатываю {total_pages} фото через ИИ…"})
+    _SCAN_STATUSES = [
+        "Распознаю границы документа…",
+        "Выравниваю перспективу…",
+        "Убираю тени и блики…",
+        "Повышаю чёткость и контраст…",
+        "Финальная обработка…",
+    ]
+    _STATUS_INTERVAL = 3.0
 
     processed_images: list[bytes] = []
     original_total = sum(len(b) for b in images_bytes)
 
     for i, img_bytes in enumerate(images_bytes):
-        if total_pages > 1:
-            yield sse_event("token", {"text": f"\nСтраница {i+1}/{total_pages}…"})
-        try:
-            processed = await process_image_with_ai(
-                img_bytes, settings=settings
-            )
-            processed_images.append(processed)
-        except ScanError as exc:
+        page_prefix = f"Страница {i+1}/{total_pages}: " if total_pages > 1 else ""
+
+        ai_done = asyncio.Event()
+        ai_result: list[bytes] = []
+        ai_error: list[Exception] = []
+
+        async def _run_ai(b=img_bytes):
+            try:
+                r = await process_image_with_ai(b, settings=settings)
+                ai_result.append(r)
+            except Exception as exc:
+                ai_error.append(exc)
+            finally:
+                ai_done.set()
+
+        ai_task = asyncio.create_task(_run_ai())
+
+        status_idx = 0
+        while not ai_done.is_set():
+            msg = page_prefix + _SCAN_STATUSES[min(status_idx, len(_SCAN_STATUSES) - 1)]
+            yield sse_event("image_gen_status", {"status": msg})
+            try:
+                await asyncio.wait_for(asyncio.shield(ai_done.wait()), timeout=_STATUS_INTERVAL)
+            except asyncio.TimeoutError:
+                status_idx += 1
+
+        await ai_task
+
+        if ai_error:
+            exc = ai_error[0]
             await _release_limit(limiter, user, user_id_str)
-            yield sse_event("error", {"code": exc.code, "message": str(exc)})
-            return
-        except Exception as exc:
-            logger.exception("scan_document_flow: AI processing failed")
-            await _release_limit(limiter, user, user_id_str)
-            yield sse_event("error", {"code": "scan_failed", "message": "Ошибка при обработке изображения."})
+            if isinstance(exc, ScanError):
+                yield sse_event("error", {"code": exc.code, "message": str(exc)})
+            else:
+                logger.exception("scan_document_flow: AI processing failed")
+                yield sse_event("error", {"code": "scan_failed", "message": "Ошибка при обработке изображения."})
             return
 
-    yield sse_event("token", {"text": "\nУпаковываю в PDF…"})
+        processed_images.append(ai_result[0])
+
+    yield sse_event("image_gen_status", {"status": "Упаковываю в PDF…"})
 
     # ── Упаковка в PDF ─────────────────────────────────────────────────────
     try:
