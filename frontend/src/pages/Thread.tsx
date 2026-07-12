@@ -1559,8 +1559,8 @@ export function Thread() {
         </button>
       )}
 
-      {/* Expert / Scanner agents: show composer */}
-      {isAgentThread && (thread?.title?.startsWith("Мой эксперт") || thread?.title?.startsWith("Сканер документов")) ? (
+      {/* Expert agent: composer via runAgentMessage */}
+      {isAgentThread && thread?.title?.startsWith("Мой эксперт") ? (
         <SearchComposer
           value={composerQuery}
           onChange={setComposerQuery}
@@ -1569,13 +1569,31 @@ export function Thread() {
             void runAgentMessage(p.query, threadId, p.attachmentIds ?? []);
           }}
           disabled={agentLoading}
-          placeholder={thread?.title?.startsWith("Сканер") ? "Прикрепите фото документа…" : "Напишите сообщение эксперту…"}
+          placeholder="Напишите сообщение эксперту…"
           attachments={attachments}
           onAttachmentsChange={setAttachments}
           requireTextWithAttachments={false}
           layoutMode={isDesktop ? "default" : "threadMobile"}
           onNewChat={isDesktop ? undefined : () => navigate("/")}
           agentMode
+        />
+      ) : isAgentThread && thread?.title?.startsWith("Сканер документов") ? (
+        /* Scanner agent: composer via regular search flow (with attachments → scan_document) */
+        <SearchComposer
+          value={composerQuery}
+          onChange={setComposerQuery}
+          onSubmit={(p) => {
+            setComposerQuery("");
+            onComposerSubmit(p);
+          }}
+          disabled={streaming}
+          placeholder="Прикрепите фото документа…"
+          attachments={attachments}
+          onAttachmentsChange={setAttachments}
+          requireTextWithAttachments={false}
+          layoutMode={isDesktop ? "default" : "threadMobile"}
+          onNewChat={isDesktop ? undefined : () => navigate("/")}
+          agentMode={false}
         />
       ) : isAgentThread && !isDesktop ? (
         /* Other agent threads on mobile: "Новый поиск +" */

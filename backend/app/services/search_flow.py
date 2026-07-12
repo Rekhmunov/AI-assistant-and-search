@@ -259,6 +259,32 @@ class SearchFlowService:
         fact_pipeline = FactPipeline(search, llm_lite)
         user_text_preview = normalize_user_query(query)
 
+        # Детерминированный диспатч: агент-сканер + вложения-изображения → scan_document
+        if attachment_ids and thread_id:
+            from sqlalchemy import select as _select
+            from app.models.agent import AgentInstance as _AI
+            from app.models.uploaded_file import UploadedFile as _UF
+            _agent_res = await db.execute(
+                _select(_AI).where(_AI.thread_id == thread_id)
+            )
+            _scanner_agent = _agent_res.scalar_one_or_none()
+            if _scanner_agent and (_scanner_agent.config or {}).get("template") == "scanner":
+                # Проверяем что хотя бы одно вложение — изображение
+                _files_res = await db.execute(
+                    _select(_UF).where(
+                        _UF.id.in_(attachment_ids),
+                        _UF.user_id == user.id,
+                    )
+                )
+                _files = list(_files_res.scalars().all())
+                _has_images = any((f.mime_type or "").startswith("image/") for f in _files)
+                if _has_images:
+                    async for event in stream_scan_document_turn(
+                        db, user, attachment_ids, thread_id, redis_client, query,
+                    ):
+                        yield event
+                    return
+
         early_prior: list[Message] = []
         if thread_id:
             # Проверяем владение тредом ПРЕЖДЕ чем загружать сообщения.

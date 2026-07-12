@@ -47,7 +47,9 @@ async def stream_scan_document_turn(
             UploadedFile.user_id == user.id,
         )
     )
-    files = list(result.scalars().all())
+    files_by_id = {str(f.id): f for f in result.scalars().all()}
+    # Сохраняем порядок из attachment_ids
+    files = [files_by_id[str(aid)] for aid in attachment_ids if str(aid) in files_by_id]
     image_files = [f for f in files if (f.mime_type or "").startswith("image/")]
 
     if not image_files:
@@ -127,10 +129,11 @@ async def stream_scan_document_turn(
     from app.core.config import get_settings
     settings = get_settings()
 
+    filename = f"scan_{file_id.hex[:8]}.pdf"
     out_file = UF(
         id=file_id,
         user_id=user.id,
-        filename=f"scan_{file_id.hex[:8]}.pdf",
+        filename=filename,
         mime_type="application/pdf",
         size_bytes=len(scan_result.pdf_bytes),
         media_kind="document",
@@ -151,7 +154,7 @@ async def stream_scan_document_turn(
     )
     yield sse_event("token", {"text": summary})
 
-    # Сохраняем ответ ассистента
+    # Сохраняем ответ ассистента с вложением в стандартном формате
     from app.models.message import Message, MessageRole
     assistant_msg = Message(
         thread_id=thread.id,
@@ -159,9 +162,10 @@ async def stream_scan_document_turn(
         content=f"Обработал {scan_result.page_count} стр. → PDF {scan_result.output_size_kb} КБ",
         attachments=[{
             "id": str(file_id),
-            "filename": f"scan_{file_id.hex[:8]}.pdf",
-            "kind": "pdf",
-            "download_url": download_url,
+            "filename": filename,
+            "kind": "document",
+            "url": download_url,
+            "size_kb": scan_result.output_size_kb,
         }],
     )
     db.add(assistant_msg)
@@ -169,9 +173,10 @@ async def stream_scan_document_turn(
     thread.last_message_at = datetime.now(timezone.utc)
     await db.commit()
 
-    yield sse_event("file_ready", {
+    # document_ready — стандартный ивент для документов (как в pdf_compress_flow)
+    yield sse_event("document_ready", {
         "file_id": str(file_id),
-        "filename": f"scan_{file_id.hex[:8]}.pdf",
+        "filename": filename,
         "download_url": download_url,
         "size_kb": scan_result.output_size_kb,
         "pages": scan_result.page_count,
