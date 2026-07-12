@@ -134,7 +134,7 @@ async def analyze_instruction_gaps(llm, instruction: str) -> tuple[dict | None, 
         {"role": "user", "text": f"Инструкция:\n\n{instruction}"},
     ]
     try:
-        raw = await llm.complete_text(messages, model="pro", max_tokens=3000, temperature=0.2)
+        raw = await llm.complete_text(messages, model="pro", max_tokens=6000, temperature=0.2)
         raw = (raw or "").strip()
         if raw.startswith("```"):
             lines = raw.split("\n")
@@ -172,7 +172,7 @@ async def compile_secretary_rules(
     ]
 
     try:
-        raw = await llm.complete_text(messages, model="pro", max_tokens=3000, temperature=0.2)
+        raw = await llm.complete_text(messages, model="pro", max_tokens=6000, temperature=0.2)
         raw = (raw or "").strip()
         logger.warning("COMPILER raw first 300: %s", raw[:300])
 
