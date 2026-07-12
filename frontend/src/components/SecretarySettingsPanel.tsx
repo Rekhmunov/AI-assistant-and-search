@@ -35,10 +35,13 @@ export function SecretarySettingsPanel({ threadId, initialConfig }: Props) {
   const touchThread = useTouchThread(threadId, token);
 
   // ── Config state ─────────────────────────────────────────────────────────
-  const [enabled, setEnabled]           = useState(true);
-  const [groupInput, setGroupInput]     = useState("");
-  const [categories, setCategories]     = useState("");
-  const [catDirty, setCatDirty]         = useState(false);
+  const [enabled, setEnabled]             = useState(true);
+  const [groupInput, setGroupInput]       = useState("");
+  const [categories, setCategories]       = useState("");
+  const [catDirty, setCatDirty]           = useState(false);
+  const [compiledOk, setCompiledOk]       = useState<boolean | null>(null);
+
+  const CAT_LIMIT = 4000;
 
   // Group status
   const [verifyLoading, setVerifyLoading] = useState(false);
@@ -106,7 +109,7 @@ export function SecretarySettingsPanel({ threadId, initialConfig }: Props) {
 
   // ── Save categories ───────────────────────────────────────────────────────
   async function saveCategories() {
-    setSaving(true); setSaveOk(false); setSaveError("");
+    setSaving(true); setSaveOk(false); setSaveError(""); setCompiledOk(null);
     try {
       const cats = categories.trim();
       const instructions = cats.toLowerCase().startsWith("категории затрат:")
@@ -116,8 +119,15 @@ export function SecretarySettingsPanel({ threadId, initialConfig }: Props) {
         method: "PATCH", headers: headers(),
         body: JSON.stringify({ support_instructions: instructions }),
       });
-      if (res.ok) { setSaveOk(true); setCatDirty(false); setTimeout(() => setSaveOk(false), 3000); }
-      else setSaveError("Ошибка сохранения");
+      if (res.ok) {
+        const d = await res.json();
+        setSaveOk(true);
+        setCatDirty(false);
+        if (typeof d.compiled_rules === "boolean") setCompiledOk(d.compiled_rules);
+        setTimeout(() => { setSaveOk(false); setCompiledOk(null); }, 5000);
+      } else {
+        setSaveError("Ошибка сохранения");
+      }
     } catch { setSaveError("Ошибка соединения"); }
     finally { setSaving(false); }
   }
@@ -218,16 +228,26 @@ export function SecretarySettingsPanel({ threadId, initialConfig }: Props) {
 
         {/* ── Категории затрат ────────────────────────────────────────────── */}
         <div className="poster-field">
-          <label className="poster-field__label">
-            Категории затрат <span className="poster-field__required">*</span>
-          </label>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 }}>
+            <label className="poster-field__label" style={{ marginBottom: 0 }}>
+              Категории затрат <span className="poster-field__required">*</span>
+            </label>
+            <span style={{
+              fontSize: "0.75rem",
+              color: categories.length > CAT_LIMIT * 0.9 ? (categories.length >= CAT_LIMIT ? "#e53e3e" : "#d97706") : "var(--text-secondary, #888)",
+              flexShrink: 0,
+            }}>
+              {categories.length} / {CAT_LIMIT}
+            </span>
+          </div>
           <textarea
             className="poster-field__textarea"
             rows={6}
             placeholder={"Аренда\nЗарплата\nТранспорт\nМатериалы\nРеклама"}
             value={categories}
             disabled={f}
-            onChange={e => { void touchThread(); setCategories(e.target.value); setCatDirty(true); setSaveError(""); }}
+            maxLength={CAT_LIMIT}
+            onChange={e => { void touchThread(); setCategories(e.target.value); setCatDirty(true); setSaveError(""); setCompiledOk(null); }}
           />
           <span className="poster-field__hint">
             Каждая категория с новой строки или через «;»
@@ -237,9 +257,18 @@ export function SecretarySettingsPanel({ threadId, initialConfig }: Props) {
 
         {/* ── Footer: Save ─────────────────────────────────────────────────── */}
         <div className="poster-settings__footer">
-          {saveOk && (
+          {saving && (
+            <span style={{ fontSize: "0.82rem", color: "var(--text-secondary, #888)", flex: 1 }}>
+              Сохранение и компиляция правил…
+            </span>
+          )}
+          {!saving && saveOk && (
             <span style={{ fontSize: "0.85rem", color: "#276749", flex: 1 }}>
-              ✅ Сохранено
+              {compiledOk === true
+                ? "✅ Сохранено, правила обновлены"
+                : compiledOk === false
+                ? "✅ Сохранено (правила не скомпилированы — подключите группу)"
+                : "✅ Сохранено"}
             </span>
           )}
           <button

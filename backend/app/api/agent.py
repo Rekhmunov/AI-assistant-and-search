@@ -271,6 +271,7 @@ async def patch_agent_config(
     body: dict,
     db: Annotated[AsyncSession, Depends(get_db)],
     user: Annotated[User, Depends(get_current_user)],
+    redis_client: redis.Redis = Depends(get_redis),
 ):
     """Update agent config from settings form (poster agent)."""
     result = await db.execute(
@@ -323,12 +324,44 @@ async def patch_agent_config(
         from app.models.agent import AgentStatus as _AS
         if agent.status in (_AS.DRAFT.value, "draft"):
             agent.status = _AS.ACTIVE.value
+
+    # Для secretary-агента: перекомпилируем правила при изменении категорий.
+    # Условие: шаблон «secretary», сохраняется support_instructions, уже есть max_chat_id.
+    compiled_ok: bool | None = None
+    if (
+        cfg.get("template") == "secretary"
+        and "support_instructions" in body
+        and cfg.get("max_chat_id")
+    ):
+        support_instructions = str(cfg.get("support_instructions") or "").strip()
+        if support_instructions:
+            try:
+                from app.services.providers.factory import resolve_agent_providers
+                from app.services.agent.secretary_compiler import compile_secretary_rules
+                llm, _, _, _, _ = await resolve_agent_providers(db, redis_client, user=user)
+                rules = await compile_secretary_rules(llm, support_instructions)
+                if rules:
+                    cfg["compiled_rules"] = rules
+                    compiled_ok = True
+                    logger.info(
+                        "patch_agent_config: recompiled secretary rules for agent=%s, entities=%s",
+                        agent.id, len(rules.get("entities", [])),
+                    )
+                else:
+                    compiled_ok = False
+            except Exception as _ce:
+                logger.warning("patch_agent_config: rule compile failed: %s", _ce)
+                compiled_ok = False
+
     from sqlalchemy.orm.attributes import flag_modified
     cfg.pop("is_new", None)  # первое сохранение конфига — тред появляется в истории
     agent.config = cfg
     flag_modified(agent, "config")
     await db.commit()
-    return {"ok": True, "config": {k: v for k, v in cfg.items() if k.startswith("poster_") and k not in _BLOCKED_KEYS}}
+    resp: dict = {"ok": True, "config": {k: v for k, v in cfg.items() if k.startswith("poster_") and k not in _BLOCKED_KEYS}}
+    if compiled_ok is not None:
+        resp["compiled_rules"] = compiled_ok
+    return resp
 
 
 @router.get("/threads/{thread_id}/post-history")
