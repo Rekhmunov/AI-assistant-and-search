@@ -20,6 +20,9 @@ from app.services.app_settings import sync_settings_cache
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    import logging
+
+    _log = logging.getLogger(__name__)
     try:
         async with async_session_factory() as db:
             await ensure_bootstrap_admin(db)
@@ -29,9 +32,14 @@ async def lifespan(app: FastAPI):
             await sync_settings_cache(db, redis_client)
             await db.commit()
     except Exception:
-        import logging
+        _log.exception("Startup bootstrap failed")
 
-        logging.getLogger(__name__).exception("Startup bootstrap failed")
+    try:
+        from app.services.bot_webhook_setup import ensure_max_webhook_registered
+
+        await ensure_max_webhook_registered()
+    except Exception:
+        _log.exception("MAX webhook registration at startup failed")
     yield
 
 

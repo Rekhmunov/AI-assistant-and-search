@@ -119,6 +119,34 @@ async def execute_agent_tool(
                     "chat_id": runtime_chat_id,
                     "record_id": record_id,
                 })
+                outbound_ok = bool(confirm_result.get("ok"))
+                if not outbound_ok:
+                    # Клавиатура иногда падает с attachment.not.ready — пробуем текст без кнопки
+                    logger.warning(
+                        "Secretary confirm with keyboard failed agent=%s chat=%s: %s",
+                        agent.id,
+                        runtime_chat_id,
+                        (confirm_result.get("error") or confirm_result.get("result") or "")[:200],
+                    )
+                    plain_send = await bot.send_message(
+                        None,
+                        confirm_text,
+                        chat_id=runtime_chat_id,
+                        notify=False,
+                    )
+                    outbound_ok = plain_send.ok
+                    if outbound_ok:
+                        confirm_result = {
+                            "ok": True,
+                            "result": {"message_id": plain_send.message_id, "chat_id": runtime_chat_id},
+                        }
+                    else:
+                        logger.warning(
+                            "Secretary plain confirm failed agent=%s chat=%s: %s",
+                            agent.id,
+                            runtime_chat_id,
+                            (plain_send.error or "")[:200],
+                        )
                 # Сохраняем message_id подтверждения в запись для последующего редактирования
                 confirm_msg_id = (confirm_result.get("result") or {}).get("message_id")
                 if confirm_msg_id and record_id:
@@ -130,7 +158,9 @@ async def execute_agent_tool(
                 _spec = load_agent_spec(agent)
                 _spec.facts = [f for f in _spec.facts if not f.lower().startswith("pending_entry")]
                 save_agent_spec(agent, _spec)
-                result["outbound_sent"] = True
+                # outbound_sent только если MAX реально доставил подтверждение — иначе агент молчит
+                if outbound_ok:
+                    result["outbound_sent"] = True
             return result
         if name == "query_agent_records":
             return _tool_query_records(agent, safe_args)
