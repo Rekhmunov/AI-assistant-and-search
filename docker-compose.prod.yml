@@ -68,6 +68,7 @@ services:
       start_period: 90s
     volumes:
       - upload_data:/data/uploads
+      - /opt/aisearch/certs:/opt/aisearch/certs:ro
     networks:
       - internal
 
@@ -90,6 +91,7 @@ services:
       - redis
     volumes:
       - upload_data:/data/uploads
+      - /opt/aisearch/certs:/opt/aisearch/certs:ro
     command: celery -A celery_app worker --beat --loglevel=info
     networks:
       - internal

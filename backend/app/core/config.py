@@ -30,6 +30,9 @@ class Settings(BaseSettings):
     follow_ups_post_done_timeout_sec: float = 4.0
 
     bot_token: str = ""
+    # MAX Bot API (dev.max.ru): с 19.07.2026 — platform-api2.max.ru + Russian Trusted Root CA
+    max_bot_api_base: str = "https://platform-api2.max.ru"
+    max_ca_bundle_file: str = ""
     # Shared secret for POST /api/bot/webhook (MAX → our API). Empty = allowed only outside production.
     max_bot_webhook_secret: str = ""
     jwt_secret: str = "change-me-in-production"

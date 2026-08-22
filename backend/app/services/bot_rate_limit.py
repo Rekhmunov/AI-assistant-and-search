@@ -1,7 +1,7 @@
 """
 Ограничение частоты запросов к MAX Bot API.
 
-Официальный лимит: 30 rps на platform-api.max.ru (dev.max.ru/docs-api).
+Официальный лимит: 30 rps на platform-api2.max.ru (dev.max.ru/docs-api).
 Держим запас, чтобы не получить 429 и блокировку токена.
 """
 

@@ -36,12 +36,30 @@ def _record_bot_incident(status_code: int, message: str) -> None:
 
 logger = logging.getLogger(__name__)
 
-# https://dev.max.ru/docs-api — platform-api.max.ru, Authorization header, 30 rps
-BOT_API_BASE = "https://platform-api.max.ru"
+# https://dev.max.ru/docs-api — platform-api2.max.ru (с 19.07.2026), Authorization header, 30 rps
+DEFAULT_MAX_BOT_API_BASE = "https://platform-api2.max.ru"
 
 # Пауза после upload перед send (attachment.not.ready — dev.max.ru/docs-api/methods/POST/uploads)
 UPLOAD_TO_SEND_DELAY_SEC = 1.0
 FILE_UPLOAD_TO_SEND_DELAY_SEC = 2.5
+
+
+def _max_api_base(settings: Settings) -> str:
+    base = (settings.max_bot_api_base or "").strip().rstrip("/")
+    return base or DEFAULT_MAX_BOT_API_BASE
+
+
+def _max_ssl_verify(settings: Settings) -> bool | str:
+    """Russian Trusted Root CA для platform-api2.max.ru (см. dev.max.ru/docs-api/changelog-api)."""
+    for candidate in (settings.max_ca_bundle_file, settings.gigachat_ca_bundle_file):
+        path = (candidate or "").strip()
+        if path:
+            return path
+    return True
+
+
+def _max_http_client(settings: Settings, **kwargs) -> httpx.AsyncClient:
+    return httpx.AsyncClient(verify=_max_ssl_verify(settings), **kwargs)
 
 
 @dataclass
@@ -55,6 +73,12 @@ class BotSendResult:
 class MaxBotService:
     def __init__(self, settings: Settings | None = None):
         self.settings = settings or get_settings()
+
+    def _api_base(self) -> str:
+        return _max_api_base(self.settings)
+
+    def _http_client(self, **kwargs) -> httpx.AsyncClient:
+        return _max_http_client(self.settings, **kwargs)
 
     def _auth_headers(self, *, json_body: bool = True) -> dict[str, str]:
         token = self.settings.bot_token.strip()
@@ -99,9 +123,9 @@ class MaxBotService:
         for attempt in range(max_attempts):
             try:
                 async def _post():
-                    async with httpx.AsyncClient(timeout=30.0) as client:
+                    async with self._http_client(timeout=30.0) as client:
                         return await client.post(
-                            f"{BOT_API_BASE}/messages",
+                            f"{self._api_base()}/messages",
                             params=params,
                             headers=self._auth_headers(),
                             json=body,
@@ -210,9 +234,9 @@ class MaxBotService:
 
         try:
             async def _put():
-                async with httpx.AsyncClient(timeout=15.0) as client:
+                async with self._http_client(timeout=15.0) as client:
                     return await client.put(
-                        f"{BOT_API_BASE}/messages",
+                        f"{self._api_base()}/messages",
                         params={"message_id": mid},
                         headers=self._auth_headers(),
                         json=body,
@@ -243,9 +267,9 @@ class MaxBotService:
                 body["notification"] = notification[:200]
 
             async def _post():
-                async with httpx.AsyncClient(timeout=15.0) as client:
+                async with self._http_client(timeout=15.0) as client:
                     return await client.post(
-                        f"{BOT_API_BASE}/answers",
+                        f"{self._api_base()}/answers",
                         params={"callback_id": callback_id},
                         headers=self._auth_headers(),
                         json=body,
@@ -273,9 +297,9 @@ class MaxBotService:
         for attempt in range(max_attempts):
             try:
                 async def _delete():
-                    async with httpx.AsyncClient(timeout=30.0) as client:
+                    async with self._http_client(timeout=30.0) as client:
                         return await client.delete(
-                            f"{BOT_API_BASE}/messages",
+                            f"{self._api_base()}/messages",
                             params={"message_id": mid},
                             headers=self._auth_headers(json_body=False),
                         )
@@ -320,9 +344,9 @@ class MaxBotService:
         headers = self._auth_headers(json_body=False)
 
         async def _init_upload():
-            async with httpx.AsyncClient(timeout=120.0) as client:
+            async with self._http_client(timeout=120.0) as client:
                 return await client.post(
-                    f"{BOT_API_BASE}/uploads",
+                    f"{self._api_base()}/uploads",
                     params={"type": media_type},
                     headers=headers,
                 )
@@ -344,7 +368,7 @@ class MaxBotService:
         logger.warning("MAX upload_media: uploading %d bytes as %s content_type=%s", len(data), filename, content_type)
 
         async def _upload_file():
-            async with httpx.AsyncClient(timeout=120.0) as client:
+            async with self._http_client(timeout=120.0) as client:
                 return await client.post(
                     upload_url,
                     files={"data": (filename, data, content_type)},
@@ -408,9 +432,9 @@ class MaxBotService:
             params["from"] = int(from_timestamp)
 
         async def _get():
-            async with httpx.AsyncClient(timeout=30.0) as client:
+            async with self._http_client(timeout=30.0) as client:
                 return await client.get(
-                    f"{BOT_API_BASE}/messages",
+                    f"{self._api_base()}/messages",
                     params=params,
                     headers=self._auth_headers(json_body=False),
                 )
@@ -441,9 +465,9 @@ class MaxBotService:
             return []
 
         async def _get():
-            async with httpx.AsyncClient(timeout=30.0) as client:
+            async with self._http_client(timeout=30.0) as client:
                 return await client.get(
-                    f"{BOT_API_BASE}/messages",
+                    f"{self._api_base()}/messages",
                     params={"message_ids": ids_param},
                     headers=self._auth_headers(json_body=False),
                 )
@@ -470,7 +494,7 @@ class MaxBotService:
         headers = {"Authorization": token} if token else {}
 
         try:
-            async with httpx.AsyncClient(timeout=60.0, follow_redirects=True) as client:
+            async with self._http_client(timeout=60.0, follow_redirects=True) as client:
                 response = await client.get(url, headers=headers)
         except httpx.HTTPError as exc:
             logger.warning("MAX download_url failed %s: %s", url[:80], exc)
@@ -479,7 +503,7 @@ class MaxBotService:
             return response.content
         if token:
             try:
-                async with httpx.AsyncClient(timeout=60.0, follow_redirects=True) as client:
+                async with self._http_client(timeout=60.0, follow_redirects=True) as client:
                     response = await client.get(url)
                 if response.is_success:
                     return response.content
@@ -493,9 +517,9 @@ class MaxBotService:
             return None
 
         async def _get():
-            async with httpx.AsyncClient(timeout=30.0) as client:
+            async with self._http_client(timeout=30.0) as client:
                 return await client.get(
-                    f"{BOT_API_BASE}/me",
+                    f"{self._api_base()}/me",
                     headers=self._auth_headers(json_body=False),
                 )
 
@@ -518,9 +542,9 @@ class MaxBotService:
             return None
 
         async def _get():
-            async with httpx.AsyncClient(timeout=30.0) as client:
+            async with self._http_client(timeout=30.0) as client:
                 return await client.get(
-                    f"{BOT_API_BASE}/chats/{int(chat_id)}",
+                    f"{self._api_base()}/chats/{int(chat_id)}",
                     headers=self._auth_headers(json_body=False),
                 )
 
@@ -560,9 +584,9 @@ class MaxBotService:
             params["user_ids"] = ",".join(str(int(uid)) for uid in user_ids)
 
         async def _get():
-            async with httpx.AsyncClient(timeout=30.0) as client:
+            async with self._http_client(timeout=30.0) as client:
                 return await client.get(
-                    f"{BOT_API_BASE}/chats/{int(chat_id)}/members",
+                    f"{self._api_base()}/chats/{int(chat_id)}/members",
                     params=params,
                     headers=self._auth_headers(json_body=False),
                 )
@@ -637,9 +661,9 @@ class MaxBotService:
             return None
 
         async def _get():
-            async with httpx.AsyncClient(timeout=30.0) as client:
+            async with self._http_client(timeout=30.0) as client:
                 return await client.get(
-                    f"{BOT_API_BASE}/chats/{slug}",
+                    f"{self._api_base()}/chats/{slug}",
                     headers=self._auth_headers(json_body=False),
                 )
 
@@ -698,9 +722,9 @@ class MaxBotService:
 
         try:
             async def _post():
-                async with httpx.AsyncClient(timeout=30.0) as client:
+                async with self._http_client(timeout=30.0) as client:
                     return await client.post(
-                        f"{BOT_API_BASE}/subscriptions",
+                        f"{self._api_base()}/subscriptions",
                         headers=self._auth_headers(),
                         json=body,
                     )
@@ -724,9 +748,9 @@ class MaxBotService:
             return []
 
         async def _get():
-            async with httpx.AsyncClient(timeout=30.0) as client:
+            async with self._http_client(timeout=30.0) as client:
                 return await client.get(
-                    f"{BOT_API_BASE}/subscriptions",
+                    f"{self._api_base()}/subscriptions",
                     headers=self._auth_headers(json_body=False),
                 )
 
@@ -760,9 +784,9 @@ class MaxBotService:
         body = {"commands": commands}
         try:
             async def _patch():
-                async with httpx.AsyncClient(timeout=15.0) as client:
+                async with self._http_client(timeout=15.0) as client:
                     return await client.patch(
-                        f"{BOT_API_BASE}/me",
+                        f"{self._api_base()}/me",
                         headers=self._auth_headers(),
                         json=body,
                     )
