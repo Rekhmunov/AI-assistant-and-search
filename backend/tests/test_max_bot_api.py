@@ -7,6 +7,7 @@ from app.services.bot import (
     DEFAULT_MAX_CA_BUNDLE_PATHS,
     _max_api_base,
     _max_ssl_verify,
+    _max_ssl_verify_for_url,
     DEFAULT_MAX_BOT_API_BASE,
 )
 
@@ -54,3 +55,14 @@ def test_bundled_max_ca_cert_exists_in_repo():
     assert repo_cert.is_file()
     assert "BEGIN CERTIFICATE" in repo_cert.read_text(encoding="ascii")
     assert any(p.endswith("russian_trusted_root_ca.pem") for p in DEFAULT_MAX_CA_BUNDLE_PATHS)
+
+
+def test_max_ssl_verify_for_url_uses_ministry_ca_only_for_api_base(tmp_path):
+    max_cert = tmp_path / "max.pem"
+    max_cert.write_text("-----BEGIN CERTIFICATE-----\nmax\n-----END CERTIFICATE-----\n")
+    s = Settings(
+        max_bot_api_base="https://platform-api2.max.ru",
+        max_ca_bundle_file=str(max_cert),
+    )
+    assert _max_ssl_verify_for_url(s, "https://platform-api2.max.ru/uploads") == str(max_cert)
+    assert _max_ssl_verify_for_url(s, "https://fu.oneme.ru/api/upload.do") is True

@@ -40,7 +40,7 @@ logger = logging.getLogger(__name__)
 # https://dev.max.ru/docs-api — platform-api2.max.ru (с 19.07.2026), Authorization header, 30 rps
 DEFAULT_MAX_BOT_API_BASE = "https://platform-api2.max.ru"
 
-# Russian Trusted Root CA (Минцифры) — platform-api2.max.ru и CDN загрузок MAX
+# Russian Trusted Root CA (Минцифры) — только platform-api2.max.ru; CDN oneme.ru — системные CA
 DEFAULT_MAX_CA_BUNDLE_PATHS = (
     "/opt/aisearch/certs/russian_trusted_root_ca.pem",
     "/app/certs/russian_trusted_root_ca.pem",
@@ -69,8 +69,20 @@ def _max_ssl_verify(settings: Settings) -> bool | str:
     return True
 
 
+def _max_ssl_verify_for_url(settings: Settings, url: str) -> bool | str:
+    """platform-api2 — Минцифры CA; CDN oneme.ru и прочие хосты — системные корни."""
+    base = _max_api_base(settings).rstrip("/")
+    if (url or "").startswith(base):
+        return _max_ssl_verify(settings)
+    return True
+
+
 def _max_http_client(settings: Settings, **kwargs) -> httpx.AsyncClient:
     return httpx.AsyncClient(verify=_max_ssl_verify(settings), **kwargs)
+
+
+def _max_http_client_for_url(settings: Settings, url: str, **kwargs) -> httpx.AsyncClient:
+    return httpx.AsyncClient(verify=_max_ssl_verify_for_url(settings, url), **kwargs)
 
 
 @dataclass
@@ -90,6 +102,9 @@ class MaxBotService:
 
     def _http_client(self, **kwargs) -> httpx.AsyncClient:
         return _max_http_client(self.settings, **kwargs)
+
+    def _http_client_for_url(self, url: str, **kwargs) -> httpx.AsyncClient:
+        return _max_http_client_for_url(self.settings, url, **kwargs)
 
     def _auth_headers(self, *, json_body: bool = True) -> dict[str, str]:
         token = self.settings.bot_token.strip()
@@ -379,7 +394,7 @@ class MaxBotService:
         logger.warning("MAX upload_media: uploading %d bytes as %s content_type=%s", len(data), filename, content_type)
 
         async def _upload_file():
-            async with self._http_client(timeout=120.0) as client:
+            async with self._http_client_for_url(upload_url, timeout=120.0) as client:
                 return await client.post(
                     upload_url,
                     files={"data": (filename, data, content_type)},
@@ -505,7 +520,7 @@ class MaxBotService:
         headers = {"Authorization": token} if token else {}
 
         try:
-            async with self._http_client(timeout=60.0, follow_redirects=True) as client:
+            async with self._http_client_for_url(url, timeout=60.0, follow_redirects=True) as client:
                 response = await client.get(url, headers=headers)
         except httpx.HTTPError as exc:
             logger.warning("MAX download_url failed %s: %s", url[:80], exc)
@@ -514,7 +529,7 @@ class MaxBotService:
             return response.content
         if token:
             try:
-                async with self._http_client(timeout=60.0, follow_redirects=True) as client:
+                async with self._http_client_for_url(url, timeout=60.0, follow_redirects=True) as client:
                     response = await client.get(url)
                 if response.is_success:
                     return response.content
