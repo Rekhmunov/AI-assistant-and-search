@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import mimetypes
+import os
 from dataclasses import dataclass
 
 import httpx
@@ -39,6 +40,12 @@ logger = logging.getLogger(__name__)
 # https://dev.max.ru/docs-api — platform-api2.max.ru (с 19.07.2026), Authorization header, 30 rps
 DEFAULT_MAX_BOT_API_BASE = "https://platform-api2.max.ru"
 
+# Russian Trusted Root CA (Минцифры) — platform-api2.max.ru и CDN загрузок MAX
+DEFAULT_MAX_CA_BUNDLE_PATHS = (
+    "/opt/aisearch/certs/russian_trusted_root_ca.pem",
+    "/app/certs/russian_trusted_root_ca.pem",
+)
+
 # Пауза после upload перед send (attachment.not.ready — dev.max.ru/docs-api/methods/POST/uploads)
 UPLOAD_TO_SEND_DELAY_SEC = 1.0
 FILE_UPLOAD_TO_SEND_DELAY_SEC = 2.5
@@ -51,9 +58,13 @@ def _max_api_base(settings: Settings) -> str:
 
 def _max_ssl_verify(settings: Settings) -> bool | str:
     """Russian Trusted Root CA для platform-api2.max.ru (см. dev.max.ru/docs-api/changelog-api)."""
-    for candidate in (settings.max_ca_bundle_file, settings.gigachat_ca_bundle_file):
+    for candidate in (
+        settings.max_ca_bundle_file,
+        settings.gigachat_ca_bundle_file,
+        *DEFAULT_MAX_CA_BUNDLE_PATHS,
+    ):
         path = (candidate or "").strip()
-        if path:
+        if path and os.path.isfile(path):
             return path
     return True
 

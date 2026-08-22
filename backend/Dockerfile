@@ -14,6 +14,8 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
+RUN mkdir -p /opt/aisearch/certs \
+    && cp /app/certs/russian_trusted_root_ca.pem /opt/aisearch/certs/russian_trusted_root_ca.pem
 
 ENV PYTHONPATH=/app
 
